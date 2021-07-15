@@ -25,6 +25,5 @@ jobs:
             mingw-w64-x86_64-toolchain
       - uses: actions/checkout@v2
       - run: |
-          which gcc
-          cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
+          cmake -G "MSYS Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build --config ${{env.BUILD_TYPE}}
