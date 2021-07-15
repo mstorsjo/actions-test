@@ -1,5 +1,9 @@
 name: GitHub Actions Demo
 on: [push]
+
+env:
+  BUILD_TYPE: Release
+
 jobs:
   Explore-GitHub-Actions:
     runs-on: ubuntu-latest
@@ -23,7 +27,7 @@ jobs:
           ls ${{ github.workspace }}
       - run: echo "🍏 This job's status is ${{ job.status }}."
 
-  Build-fdk-aac:
+  fdk-aac-automake:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -34,3 +38,11 @@ jobs:
           ./configure
           make -j$(nproc)
       - run: pwd
+
+  fdk-aac-cmake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/fdk-aac
+          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
