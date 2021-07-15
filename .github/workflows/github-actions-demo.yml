@@ -26,17 +26,22 @@ jobs:
           update: true
           install: >-
             git
-            make
             ${{matrix.prefix}}-toolchain
             ${{matrix.prefix}}-cmake
+            ${{matrix.prefix}}-make
             ${{matrix.prefix}}-ninja
       - uses: actions/checkout@v2
       - run: |
-          # Either -G Ninja or -G "MSYS Makefiles"; the default generator is
-          # for MSVC project files.
+          # One has to specify -G to cmake; the default generator is for MSVC
+          # project files. Specify either Ninja, "MSYS Makefiles" or "MinGW
+          # Makefiles". MSYS Makefiles requires installing the "make" package
+          # (and building invokes "make"), MinGW Makefiles requires
+          # ${{matrix.prefix}}-make and invokes "mingw32-make".
+
           # Use relative paths to the source dirs; github.workspace contains
           # paths with backslashes which need to be converted/quoted for
           # the msys shell.
-          cmake -G "Ninja" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
+
+          cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build --config ${{env.BUILD_TYPE}}
 
