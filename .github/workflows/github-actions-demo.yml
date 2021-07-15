@@ -12,7 +12,7 @@ jobs:
         shell: msys2 {0}
     strategy:
       matrix:
-        system: ['mingw32', 'mingw64', 'ucrt64', 'clang64']
+        system: ['mingw32', 'mingw64', 'clang64']
     steps:
       - uses: msys2/setup-msys2@v2
         with:
@@ -25,5 +25,6 @@ jobs:
             mingw-w64-x86_64-toolchain
       - uses: actions/checkout@v2
       - run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/fdk-aac -DBUILD_PROGRAMS=YES
-          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+          which gcc
+          cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build --config ${{env.BUILD_TYPE}}
