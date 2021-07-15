@@ -69,3 +69,25 @@ jobs:
             /opt/fdk-aac/bin/*
           retention-days: 7
 
+  fdk-aac-llvm-mingw-win:
+    runs-on: windows-latest
+    steps:
+      - run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20210423/llvm-mingw-20210423-ucrt-x86_64.zip
+          unzip llvm-mingw-20210423-ucrt-x86_64.zip
+          rm llvm-mingw-*.zip
+          mv llvm-mingw-* c:\llvm-mingw
+          echo "c:\llvm-mingw\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=aarch64-w64-mingw32-clang++ -DCMAKE_INSTALL_PREFIX=c:\fdk-aac
+          cmake --build build --config ${{env.BUILD_TYPE}}
+          cmake --build build --config ${{env.BUILD_TYPE}} --target install
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: binaries
+          path: |
+            c:\fdk-aac\bin\*
+          retention-days: 7
+
