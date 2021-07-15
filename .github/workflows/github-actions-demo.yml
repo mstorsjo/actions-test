@@ -60,7 +60,7 @@ jobs:
           ./autogen.sh
           ./configure --host=aarch64-w64-mingw32 --enable-example --prefix=/opt/fdk-aac
           make -j$(nproc)
-          make install
+          make install-strip
 
       - uses: actions/upload-artifact@v2
         with:
