@@ -14,10 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         include: [
-          { msystem: MINGW64, prefix: mingw-w64-x86_64, can-fail: false },
-          { msystem: MINGW32, prefix: mingw-w64-i686, can-fail: false },
-          { msystem: UCRT64, prefix: mingw-w64-ucrt-x86_64, can-fail: false },
-          { msystem: CLANG64, prefix: mingw-w64-clang-x86_64, can-fail: false },
+          { msystem: mingw64, prefix: mingw-w64-x86_64 },
+          { msystem: mingw32, prefix: mingw-w64-i686 },
+          { msystem: ucrt64, prefix: mingw-w64-ucrt-x86_64 },
+          { msystem: clang64, prefix: mingw-w64-clang-x86_64 },
         ]
     steps:
       - uses: msys2/setup-msys2@v2
@@ -32,10 +32,11 @@ jobs:
             ${{matrix.prefix}}-ninja
       - uses: actions/checkout@v2
       - run: |
-          which gcc || true
-          gcc --version || true
-          which ninja || true
-          which cmake || true
+          # Either -G Ninja or -G "MSYS Makefiles"; the default generator is
+          # for MSVC project files.
+          # Use relative paths to the source dirs; github.workspace contains
+          # paths with backslashes which need to be converted/quoted for
+          # the msys shell.
           cmake -G "Ninja" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build --config ${{env.BUILD_TYPE}}
 
