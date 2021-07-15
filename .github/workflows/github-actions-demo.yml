@@ -35,7 +35,7 @@ jobs:
           pwd
           cd fdk-aac
           ./autogen.sh
-          ./configure
+          ./configure --enable-example
           make -j$(nproc)
       - run: pwd
 
@@ -44,5 +44,21 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/fdk-aac
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+  fdk-aac-cmake-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+  fdk-aac-cmake-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
