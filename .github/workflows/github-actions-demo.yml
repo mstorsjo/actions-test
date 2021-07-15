@@ -78,9 +78,11 @@ jobs:
           rm llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: |
+          choco install -y ninja
       - uses: actions/checkout@v2
       - run: |
-          cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=aarch64-w64-mingw32-clang++ -DCMAKE_INSTALL_PREFIX=c:\fdk-aac
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=aarch64-w64-mingw32-clang++ -DCMAKE_INSTALL_PREFIX=c:\fdk-aac
           cmake --build build --config ${{env.BUILD_TYPE}}
           cmake --build build --config ${{env.BUILD_TYPE}} --target install
 
