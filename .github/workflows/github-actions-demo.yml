@@ -13,19 +13,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        system: ['mingw32', 'mingw64', 'clang64']
+        include: [
+          { msystem: MINGW64, toolchain: mingw-w64-x86_64-toolchain, can-fail: false },
+          { msystem: MINGW32, toolchain: mingw-w64-i686-toolchain, can-fail: false },
+          { msystem: UCRT64, toolchain: mingw-w64-ucrt-x86_64-toolchain, can-fail: false },
+          { msystem: CLANG64, toolchain: mingw-w64-clang-x86_64-toolchain, can-fail: false },
+        ]
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: ${{matrix.system}}
+          msystem: ${{matrix.msystem}}
           update: true
           install: >-
             git
             make
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-toolchain
+            ${{matrix.toolchain}}
       - uses: actions/checkout@v2
       - run: |
-          cmake -G "MSYS Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
+          which gcc || true
+          gcc --version || true
+          which ninja || true
+          which cmake || true
+          cmake -G "Ninja" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build --config ${{env.BUILD_TYPE}}
+
+#            mingw-w64-x86_64-cmake
+#            mingw-w64-x86_64-ninja
