@@ -42,6 +42,6 @@ jobs:
           # paths with backslashes which need to be converted/quoted for
           # the msys shell.
 
-          cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build --config ${{env.BUILD_TYPE}}
 
