@@ -65,31 +65,6 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_CROSSCOMPILING=TRUE -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror"
           cmake --build build
 
-  msys-autotools:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: clang64
-          update: true
-          install: >-
-            git
-            mingw-w64-clang-x86_64-toolchain
-            automake
-            autoconf
-            libtool
-            make
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          cd fdk-aac
-          ./autogen.sh
-          ./configure --enable-example
-          make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
-
   msys-cmake:
     runs-on: windows-latest
     defaults:
@@ -110,48 +85,6 @@ jobs:
         run: |
           cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror"
           cmake --build build
-
-  msys-cmake-gnumake:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          update: true
-          install: >-
-            git
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            make
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          cmake -G "Unix Makefiles" -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror"
-          cmake --build build
-
-  msys-cmake-gnumake2:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          update: true
-          install: >-
-            git
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            make
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          cmake -G "Unix Makefiles" -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror"
-          make -j$(nproc)
 
   msvc-cmake:
     runs-on: windows-latest
