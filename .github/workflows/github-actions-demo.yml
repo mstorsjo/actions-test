@@ -130,13 +130,6 @@ jobs:
         run: |
           cmake -B build fdk-aac -DBUILD_PROGRAMS=YES -A ARM64
           cmake --build build --config Release
-      - uses: actions/upload-artifact@v2
-        with:
-          name: binaries
-          path: |
-            build/Release/*.dll
-            build/Release/*.exe
-          retention-days: 7
 
   llvm-mingw:
     runs-on: ubuntu-latest
