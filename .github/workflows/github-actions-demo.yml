@@ -26,7 +26,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
           brew install automake
           cd fdk-aac
           ./autogen.sh
@@ -37,7 +38,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build
 
@@ -45,7 +47,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
+          sudo apt-get install g++-mingw-w64-x86-64
           cd fdk-aac
           ./autogen.sh
           ./configure --enable-example --host=x86_64-w64-mingw32
@@ -55,7 +59,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
+          sudo apt-get install g++-mingw-w64-x86-64
           cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_CROSSCOMPILING=TRUE -DCMAKE_SYSTEM_NAME=Windows
           cmake --build build
 
@@ -74,9 +80,11 @@ jobs:
             mingw-w64-clang-x86_64-toolchain
             automake
             autoconf
+            libtool
             make
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
           cd fdk-aac
           ./autogen.sh
           ./configure --enable-example
@@ -164,9 +172,7 @@ jobs:
           path: ffmpeg
       - name: Build FFmpeg
         run: |
-          pwd
-          ls
-          ls ..
+          sudo apt-get install nasm
           cd ffmpeg
           PKG_CONFIG_PATH=$(pwd)/../prefix/lib/pkgconfig ./configure --enable-libfdk-aac --enable-nonfree
           make -j$(nproc)
