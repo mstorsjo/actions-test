@@ -1,56 +1,154 @@
 name: GitHub Actions Demo
 on: [push]
 
-env:
-  BUILD_TYPE: Release
-
 jobs:
-  fdk-aac-cmake-msys:
+  linux-autotools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cd fdk-aac
+          ./autogen.sh
+          ./configure --enable-example
+          make -j$(nproc)
+
+  linux-cmake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build
+
+  macos-autotools:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cd fdk-aac
+          ./autogen.sh
+          ./configure --enable-example
+          make -j$(nproc)
+
+  macos-cmake:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build
+
+  mingw-cross-autotools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cd fdk-aac
+          ./autogen.sh
+          ./configure --enable-example --host=x86_64-w64-mingw32
+          make -j$(nproc)
+
+  mingw-cross-cmake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_CROSSCOMPILING=TRUE -DCMAKE_SYSTEM_NAME=Windows
+          cmake --build build
+
+  msys-autotools:
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: [
-          { msystem: mingw64, prefix: mingw-w64-x86_64 },
-          { msystem: mingw32, prefix: mingw-w64-i686 },
-          { msystem: ucrt64, prefix: mingw-w64-ucrt-x86_64 },
-          { msystem: clang64, prefix: mingw-w64-clang-x86_64 },
-        ]
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: ${{matrix.msystem}}
+          msystem: clang64
           update: true
           install: >-
             git
-            ${{matrix.prefix}}-toolchain
-            ${{matrix.prefix}}-cmake
-            ${{matrix.prefix}}-make
-            ${{matrix.prefix}}-ninja
+            mingw-w64-clang-x86_64-toolchain
+            make
       - uses: actions/checkout@v2
       - run: |
-          # One has to specify -G to cmake; the default generator is for MSVC
-          # project files. Specify either Ninja, "MSYS Makefiles" or "MinGW
-          # Makefiles". MSYS Makefiles requires installing the "make" package
-          # (and building invokes "make"), MinGW Makefiles requires
-          # ${{matrix.prefix}}-make and invokes "mingw32-make".
+          cd fdk-aac
+          ./autogen.sh
+          ./configure --enable-example
+          make -j$(nproc)
 
-          # Use relative paths to the source dirs; github.workspace contains
-          # paths with backslashes which need to be converted/quoted for
-          # the msys shell.
+  msys-cmake:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          update: true
+          install: >-
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build
 
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES
-          cmake --build build --config ${{env.BUILD_TYPE}}
+  msvc-cmake:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build
 
-  fdk-aac-llvm-mingw:
+  msvc-cmake-ninja:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build
+
+  msvc-cmake-arm64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -A ARM64
+          cmake --build build
+      - uses: actions/upload-artifact@v2
+        with:
+          name: binaries
+          path: |
+            build/Release/*.dll
+            build/Release/*.exe
+          retention-days: 7
+
+  msvc-cmake-arm64-ninja:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -A ARM64
+          cmake --build build
+      - uses: actions/upload-artifact@v2
+        with:
+          name: binaries
+          path: |
+            build/Release/*.dll
+            build/Release/*.exe
+          retention-days: 7
+
+  llvm-mingw:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          wget https://github.com/mstorsjo/llvm-mingw/releases/download/20210423/llvm-mingw-20210423-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxvf llvm-mingw-20210423-ucrt-ubuntu-18.04-x86_64.tar.xz
+          wget https://github.com/mstorsjo/llvm-mingw/releases/download/20211002/llvm-mingw-20211002-ucrt-ubuntu-18.04-x86_64.tar.xz
+          tar -Jxvf llvm-mingw-20211002-ucrt-ubuntu-18.04-x86_64.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
@@ -58,38 +156,26 @@ jobs:
       - run: |
           cd fdk-aac
           ./autogen.sh
-          ./configure --host=aarch64-w64-mingw32 --enable-example --prefix=/opt/fdk-aac
+          ./configure --host=aarch64-w64-mingw32 --enable-example
           make -j$(nproc)
-          make install-strip
 
-      - uses: actions/upload-artifact@v2
-        with:
-          name: binaries
-          path: |
-            /opt/fdk-aac/bin/*
-          retention-days: 7
-
-  fdk-aac-llvm-mingw-win:
-    runs-on: windows-latest
+  linux-ffmpeg:
+    runs-on: ubuntu-latest
     steps:
-      - run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20210423/llvm-mingw-20210423-ucrt-x86_64.zip
-          unzip llvm-mingw-20210423-ucrt-x86_64.zip
-          rm llvm-mingw-*.zip
-          mv llvm-mingw-* c:\llvm-mingw
-          echo "c:\llvm-mingw\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - run: |
-          choco install -y ninja
       - uses: actions/checkout@v2
       - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=aarch64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=aarch64-w64-mingw32-clang++ -DCMAKE_INSTALL_PREFIX=c:\fdk-aac
-          cmake --build build --config ${{env.BUILD_TYPE}}
-          cmake --build build --config ${{env.BUILD_TYPE}} --target install
-
-      - uses: actions/upload-artifact@v2
+          cd fdk-aac
+          ./autogen.sh
+          ./configure --enable-example --prefix=$(pwd)/../prefix
+          make -j$(nproc)
+          make -j$(nproc) install
+      - name: Checkout FFmpeg
+        uses: actions/checkout@v2
         with:
-          name: binaries
-          path: |
-            c:\fdk-aac\bin\*
-          retention-days: 7
+          repository: ffmpeg/ffmpeg
+          path: ffmpeg
+      - run: |
+          cd ffmpeg
+          PKG_CONFIG_PATH=$(pwd)/../prefix/lib/pkgconfig ./configure --enable-libfdk-aac --enable-nonfree
+          make -j$(nproc)
 
