@@ -11,7 +11,6 @@ jobs:
           cd fdk-aac
           ./autogen.sh
           CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --enable-example
-          echo make -j$(nproc)
           make -j$(nproc)
 
   linux-cmake:
@@ -89,7 +88,6 @@ jobs:
           cd fdk-aac
           ./autogen.sh
           CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --enable-example
-          echo make -j$(nproc)
           make -j$(nproc)
 
   msys-cmake:
