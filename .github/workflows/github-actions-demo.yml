@@ -10,8 +10,8 @@ jobs:
         run: |
           cd fdk-aac
           ./autogen.sh
-          CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --enable-example
-          make -j$(nproc)
+          ./configure --enable-example
+          make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
 
   linux-cmake:
     runs-on: ubuntu-latest
@@ -31,8 +31,8 @@ jobs:
           brew install automake
           cd fdk-aac
           ./autogen.sh
-          CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --enable-example
-          make -j$(nproc)
+          ./configure --enable-example
+          make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
 
   macos-cmake:
     runs-on: macos-latest
@@ -52,8 +52,8 @@ jobs:
           sudo apt-get install g++-mingw-w64-x86-64
           cd fdk-aac
           ./autogen.sh
-          CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --enable-example --host=x86_64-w64-mingw32
-          make -j$(nproc)
+          ./configure --enable-example --host=x86_64-w64-mingw32
+          make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
 
   mingw-cross-cmake:
     runs-on: ubuntu-latest
@@ -87,8 +87,8 @@ jobs:
         run: |
           cd fdk-aac
           ./autogen.sh
-          CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --enable-example
-          make -j$(nproc)
+          ./configure --enable-example
+          make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
 
   msys-cmake:
     runs-on: windows-latest
@@ -144,8 +144,8 @@ jobs:
         run: |
           cd fdk-aac
           ./autogen.sh
-          CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror" ./configure --host=aarch64-w64-mingw32 --enable-example
-          make -j$(nproc)
+          ./configure --host=aarch64-w64-mingw32 --enable-example
+          make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
 
   linux-ffmpeg:
     runs-on: ubuntu-latest
