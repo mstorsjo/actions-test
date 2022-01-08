@@ -6,7 +6,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
           cd fdk-aac
           ./autogen.sh
           ./configure --enable-example
@@ -16,8 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build
 
   macos-autotools:
@@ -25,6 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: |
+          brew install automake
           cd fdk-aac
           ./autogen.sh
           ./configure --enable-example
@@ -35,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build
 
   mingw-cross-autotools:
@@ -53,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_CROSSCOMPILING=TRUE -DCMAKE_SYSTEM_NAME=Windows
+          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_CROSSCOMPILING=TRUE -DCMAKE_SYSTEM_NAME=Windows
           cmake --build build
 
   msys-autotools:
@@ -69,6 +72,8 @@ jobs:
           install: >-
             git
             mingw-w64-clang-x86_64-toolchain
+            automake
+            autoconf
             make
       - uses: actions/checkout@v2
       - run: |
@@ -93,7 +98,8 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build
+        run: |
           cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build
 
@@ -101,40 +107,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
-          cmake --build build
-
-  msvc-cmake-ninja:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-      - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
-          cmake --build build
+      - name: Build
+        run: |
+          cmake -B build fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build --config Release
 
   msvc-cmake-arm64:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -A ARM64
-          cmake --build build
-      - uses: actions/upload-artifact@v2
-        with:
-          name: binaries
-          path: |
-            build/Release/*.dll
-            build/Release/*.exe
-          retention-days: 7
-
-  msvc-cmake-arm64-ninja:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-      - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -A ARM64
-          cmake --build build
+      - name: Build
+        run: |
+          cmake -B build fdk-aac -DBUILD_PROGRAMS=YES -A ARM64
+          cmake --build build --config Release
       - uses: actions/upload-artifact@v2
         with:
           name: binaries
@@ -146,14 +131,16 @@ jobs:
   llvm-mingw:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - name: Install llvm-mingw
+        run: |
           wget https://github.com/mstorsjo/llvm-mingw/releases/download/20211002/llvm-mingw-20211002-ucrt-ubuntu-18.04-x86_64.tar.xz
           tar -Jxvf llvm-mingw-20211002-ucrt-ubuntu-18.04-x86_64.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build fdk-aac
+        run: |
           cd fdk-aac
           ./autogen.sh
           ./configure --host=aarch64-w64-mingw32 --enable-example
@@ -163,7 +150,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: |
+      - name: Build fdk-aac
+        run: |
           cd fdk-aac
           ./autogen.sh
           ./configure --enable-example --prefix=$(pwd)/../prefix
@@ -174,7 +162,11 @@ jobs:
         with:
           repository: ffmpeg/ffmpeg
           path: ffmpeg
-      - run: |
+      - name: Build FFmpeg
+        run: |
+          pwd
+          ls
+          ls ..
           cd ffmpeg
           PKG_CONFIG_PATH=$(pwd)/../prefix/lib/pkgconfig ./configure --enable-libfdk-aac --enable-nonfree
           make -j$(nproc)
