@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Build
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror"
           cmake --build build
 
   mingw-cross-autotools:
