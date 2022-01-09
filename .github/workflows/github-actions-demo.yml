@@ -95,6 +95,18 @@ jobs:
           cmake -B build fdk-aac -DBUILD_PROGRAMS=YES
           cmake --build build --config Release
 
+  msvc-cmake-ninja-arm:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm
+      - name: Build
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release fdk-aac -DBUILD_PROGRAMS=YES
+          cmake --build build
+
   msvc-cmake-arm64:
     runs-on: windows-latest
     steps:
