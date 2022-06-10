@@ -1,103 +1,22 @@
 name: GitHub Actions Demo
-on: [push]
+on:
+  push:
+  schedule:
+    - cron: '09 21 * * *'
 
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Check latest version
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> $GITHUB_ENV
+          echo MINGW_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> $GITHUB_ENV
+          echo ASSERT_PARAMS=--enable-asserts >> $GITHUB_ENV
       - name: Build
         run: |
           sudo apt-get install ninja-build
           cd llvm-mingw
-          ./build-all.sh $(pwd)/../install/llvm-mingw --disable-clang-tools-extra --disable-lldb
-          cd ../install
-          tar -Jcvf ../llvm-mingw-linux.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v2
-        with:
-          name: linux-toolchain
-          path: |
-            llvm-mingw-linux.tar.xz
-          retention-days: 7
-
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          brew install ninja
-          cd llvm-mingw
-          # MACOS_REDIST=1, but that's much slower, and breaks due to
-          # python being available, but only in native form.
-          ./build-all.sh $(pwd)/../install/llvm-mingw --disable-clang-tools-extra --disable-lldb
-          cd ../install
-          tar -Jcvf ../llvm-mingw-macos.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v2
-        with:
-          name: macos-toolchain
-          path: |
-            llvm-mingw-linux.tar.xz
-          retention-days: 7
-
-  msys:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        sys:
-          - mingw64
-          - clang64
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{matrix.sys}}
-          update: true
-          install: >-
-            git
-            make
-          pacboy: >-
-            toolchain:p
-            cmake:p
-            ninja:p
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          cd llvm-mingw
-          ./build-all.sh $(pwd)/../install --disable-clang-tools-extra --disable-lldb
-          cd ../install
-          tar -Jcvf ../llvm-mingw-msys-${{matrix.sys}}.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v2
-        with:
-          name: msys-${{matrix.sys}}-toolchain
-          path: |
-            llvm-mingw-msys-${{matrix.sys}}.tar.xz
-          retention-days: 7
-
-  cross:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install old llvm-mingw
-        run: |
-          wget https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxvf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          sudo apt-get install autoconf-archive
-          cd llvm-mingw
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/../llvm-mingw-aarch64 aarch64 --with-python
-          cd ..
-          zip -9r llvm-mingw-aarch64.zip llvm-mingw-aarch64
-      - uses: actions/upload-artifact@v2
-        with:
-          name: cross-aarch64-toolchain
-          path: |
-            llvm-mingw-aarch64.zip
-          retention-days: 7
+          ./build-all.sh $(pwd)/../install/llvm-mingw --disable-clang-tools-extra --disable-lldb $ASSERT_PARAMS

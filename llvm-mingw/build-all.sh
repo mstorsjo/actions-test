@@ -59,6 +59,7 @@ for dep in git curl cmake; do
 done
 
 ./build-llvm.sh $PREFIX $LLVM_ARGS
+exit 0
 ./build-lldb-mi.sh $PREFIX
 if [ -z "$FULL_LLVM" ]; then
     ./strip-llvm.sh $PREFIX

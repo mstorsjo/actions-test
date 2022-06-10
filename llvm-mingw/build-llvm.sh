@@ -76,7 +76,7 @@ while [ $# -gt 0 ]; do
 done
 
 echo LLVM_VERSION $LLVM_VERSION ASSERTS $ASSERTS
-exit 1
+exit 0
 
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
