@@ -10,7 +10,7 @@ jobs:
         run: |
           sudo apt-get install ninja-build
           cd llvm-mingw
-          ./build-all.sh $(pwd)/../install/llvm-mingw
+          ./build-all.sh $(pwd)/../install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd ../install
           tar -Jcvf ../llvm-mingw-linux.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
@@ -28,7 +28,9 @@ jobs:
         run: |
           brew install ninja
           cd llvm-mingw
-          MACOS_REDIST=1 ./build-all.sh $(pwd)/../install/llvm-mingw
+          # MACOS_REDIST=1, but that's much slower, and breaks due to
+          # python being available, but only in native form.
+          ./build-all.sh $(pwd)/../install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd ../install
           tar -Jcvf ../llvm-mingw-macos.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
@@ -65,7 +67,7 @@ jobs:
       - name: Build
         run: |
           cd llvm-mingw
-          ./build-all.sh $(pwd)/../install
+          ./build-all.sh $(pwd)/../install --disable-clang-tools-extra --disable-lldb
 
   cross:
     runs-on: ubuntu-latest
