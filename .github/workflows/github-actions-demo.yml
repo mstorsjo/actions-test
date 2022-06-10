@@ -18,10 +18,16 @@ jobs:
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
-      - name: Run tests
+      - name: Building & testing ffmpeg
         run: |
-          cd llvm-mingw
-          RUN_I686=false RUN_X86_64=wine64 ./run-tests.sh /opt/llvm-mingw
+          sudo apt-get install nasm
+          git clone https://github.com/ffmpeg/ffmpeg/
+          mkdir ffmpeg-build
+          cd ffmpeg-build
+          ../ffmpeg/configure --arch=x86_64 --target-os=mingw32 --cross-prefix=x86_64-w64-mingw32- --target-exec=wine64 --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
+          make -j$(nproc)
+          make fate-rsync
+          make -j$(nproc) fate
 
   msys:
     runs-on: windows-latest
@@ -34,7 +40,13 @@ jobs:
           msystem: mingw64
           update: false
           install: >-
+            git
             unzip
+            make
+            rsync
+            diffutils
+          pacboy: >-
+            nasm:p
       - name: Install old llvm-mingw
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-x86_64.zip
@@ -43,7 +55,13 @@ jobs:
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
-      - name: Run tests
+      - name: Building & testing ffmpeg
         run: |
-          cd llvm-mingw
-          ./run-tests.sh /llvm-mingw
+          export PATH=/llvm-mingw/bin:$PATH
+          git clone https://github.com/ffmpeg/ffmpeg/
+          mkdir ffmpeg-build
+          cd ffmpeg-build
+          ../ffmpeg/configure --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
+          make -j$(nproc)
+          make fate-rsync
+          make -j$(nproc) fate
