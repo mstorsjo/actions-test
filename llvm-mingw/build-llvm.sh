@@ -74,6 +74,10 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+echo LLVM_VERSION $LLVM_VERSION ASSERTS $ASSERTS
+exit 1
+
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
