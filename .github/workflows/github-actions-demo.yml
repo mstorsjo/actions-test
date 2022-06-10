@@ -37,7 +37,7 @@ jobs:
         with:
           name: macos-toolchain
           path: |
-            llvm-mingw-linux.tar.xz
+            llvm-mingw-macos.tar.xz
           retention-days: 7
 
   msys:
