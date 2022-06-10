@@ -68,6 +68,14 @@ jobs:
         run: |
           cd llvm-mingw
           ./build-all.sh $(pwd)/../install --disable-clang-tools-extra --disable-lldb
+          cd ../install
+          tar -Jcvf ../llvm-mingw-msys-${{matrix.sys}}.tar.xz llvm-mingw
+      - uses: actions/upload-artifact@v2
+        with:
+          name: msys-${{matrix.sys}}-toolchain
+          path: |
+            llvm-mingw-msys-${{matrix.sys}}.tar.xz
+          retention-days: 7
 
   cross:
     runs-on: ubuntu-latest
