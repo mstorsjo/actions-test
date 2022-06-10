@@ -15,7 +15,7 @@ jobs:
           tar -Jcvf ../llvm-mingw-linux.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
         with:
-          name: linux toolchain
+          name: linux-toolchain
           path: |
             llvm-mingw-linux.tar.xz
           retention-days: 7
@@ -35,7 +35,7 @@ jobs:
           tar -Jcvf ../llvm-mingw-macos.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
         with:
-          name: macos toolchain
+          name: macos-toolchain
           path: |
             llvm-mingw-linux.tar.xz
           retention-days: 7
@@ -89,7 +89,7 @@ jobs:
           zip -9r llvm-mingw-aarch64.zip llvm-mingw-aarch64
       - uses: actions/upload-artifact@v2
         with:
-          name: windows aarch64 toolchain
+          name: cross-aarch64-toolchain
           path: |
             llvm-mingw-aarch64.zip
           retention-days: 7
