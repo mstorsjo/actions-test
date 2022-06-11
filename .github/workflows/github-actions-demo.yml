@@ -59,7 +59,7 @@ jobs:
           install: >-
             git
             make
-            xz
+            tar
           pacboy: >-
             toolchain:p
             cmake:p
