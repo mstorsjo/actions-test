@@ -51,7 +51,6 @@ jobs:
         sys:
           - mingw64
           - clang64
-          - xz
     steps:
       - uses: msys2/setup-msys2@v2
         with:
@@ -60,6 +59,7 @@ jobs:
           install: >-
             git
             make
+            xz
           pacboy: >-
             toolchain:p
             cmake:p
