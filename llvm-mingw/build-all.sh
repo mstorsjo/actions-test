@@ -31,7 +31,11 @@ while [ $# -gt 0 ]; do
     --disable-dylib)
         LLVM_ARGS="$LLVM_ARGS $1"
         ;;
-    --disable-lldb|--disable-clang-tools-extra)
+    --disable-lldb)
+        LLVM_ARGS="$LLVM_ARGS $1"
+        NO_LLDB=1
+        ;;
+    --disable-clang-tools-extra)
         LLVM_ARGS="$LLVM_ARGS $1"
         ;;
     --with-default-msvcrt=*)
@@ -59,7 +63,9 @@ for dep in git curl cmake; do
 done
 
 ./build-llvm.sh $PREFIX $LLVM_ARGS
-./build-lldb-mi.sh $PREFIX
+if [ -z "$NO_LLDB" ]; then
+    ./build-lldb-mi.sh $PREFIX
+fi
 if [ -z "$FULL_LLVM" ]; then
     ./strip-llvm.sh $PREFIX
 fi
