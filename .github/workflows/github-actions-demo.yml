@@ -2,73 +2,16 @@ name: GitHub Actions Demo
 on: [push]
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install wine
-        run: |
-          # dpkg --add-architecture i386 to install 32 bit wine fails currently
-          sudo apt-get update && sudo apt-get install wine64-development
-          wine64 wineboot
-      - name: Install old llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout FFmpeg
-        uses: actions/checkout@v2
-        with:
-          repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building & testing ffmpeg
-        run: |
-          sudo apt-get install nasm
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --arch=x86_64 --target-os=mingw32 --cross-prefix=x86_64-w64-mingw32- --target-exec=wine64 --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
-          make -j$(nproc)
-          make fate-rsync
-          make -j$(nproc) fate
-
-  linux-cross:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - i686
-          - x86_64
-          - armv7
-          - aarch64
-    steps:
-      - name: Install old llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout FFmpeg
-        uses: actions/checkout@v2
-        with:
-          repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building ffmpeg
-        run: |
-          sudo apt-get install nasm
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
-          make -j$(nproc)
-
   msys:
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
     steps:
+      - name: Avoid git mutating files on checkout
+        shell: cmd
+        run: |
+          git config --global core.autocrlf false
       - uses: msys2/setup-msys2@v2
         with:
           msystem: mingw64
@@ -80,13 +23,6 @@ jobs:
             diffutils
           pacboy: >-
             nasm:p
-      - name: Install old llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-x86_64.zip
-          unzip -q llvm-mingw-20220323-ucrt-x86_64.zip
-          rm llvm-mingw-*.zip
-          mv llvm-mingw-* /llvm-mingw
-          echo /llvm-mingw/bin >> $GITHUB_PATH
       - name: Checkout FFmpeg
         uses: actions/checkout@v2
         with:
@@ -94,10 +30,4 @@ jobs:
           path: ffmpeg
       - name: Building & testing ffmpeg
         run: |
-          export PATH=/llvm-mingw/bin:$PATH
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --samples=../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
-          make -j$(nproc)
-          make fate-rsync
-          make -j$(nproc) fate
+          file ffmpeg/tests/ref/fate/sub-lrc-remux
