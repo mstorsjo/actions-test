@@ -18,10 +18,14 @@ jobs:
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
+      - name: Checkout FFmpeg
+        uses: actions/checkout@v2
+        with:
+          repository: ffmpeg/ffmpeg
+          path: ffmpeg
       - name: Building & testing ffmpeg
         run: |
           sudo apt-get install nasm
-          git clone https://github.com/ffmpeg/ffmpeg/
           mkdir ffmpeg-build
           cd ffmpeg-build
           ../ffmpeg/configure --arch=x86_64 --target-os=mingw32 --cross-prefix=x86_64-w64-mingw32- --target-exec=wine64 --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
@@ -40,7 +44,6 @@ jobs:
           msystem: mingw64
           update: false
           install: >-
-            git
             unzip
             make
             rsync
@@ -55,10 +58,14 @@ jobs:
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
+      - name: Checkout FFmpeg
+        uses: actions/checkout@v2
+        with:
+          repository: ffmpeg/ffmpeg
+          path: ffmpeg
       - name: Building & testing ffmpeg
         run: |
           export PATH=/llvm-mingw/bin:$PATH
-          git clone https://github.com/ffmpeg/ffmpeg/
           mkdir ffmpeg-build
           cd ffmpeg-build
           ../ffmpeg/configure --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
