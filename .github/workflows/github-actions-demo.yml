@@ -17,7 +17,6 @@ jobs:
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
       - name: Checkout FFmpeg
         uses: actions/checkout@v2
         with:
@@ -57,7 +56,6 @@ jobs:
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
       - name: Checkout FFmpeg
         uses: actions/checkout@v2
         with:
