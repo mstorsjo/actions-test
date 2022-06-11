@@ -32,6 +32,37 @@ jobs:
           make fate-rsync
           make -j$(nproc) fate
 
+  linux-cross:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - armv7
+          - aarch64
+    steps:
+      - name: Install old llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout FFmpeg
+        uses: actions/checkout@v2
+        with:
+          repository: ffmpeg/ffmpeg
+          path: ffmpeg
+      - name: Building ffmpeg
+        run: |
+          sudo apt-get install nasm
+          mkdir ffmpeg-build
+          cd ffmpeg-build
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
+          make -j$(nproc)
+
   msys:
     runs-on: windows-latest
     defaults:
