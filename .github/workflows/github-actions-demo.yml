@@ -35,7 +35,7 @@ jobs:
         with:
           repository: ffmpeg/ffmpeg
           path: ffmpeg
-      - name: Cache Gradle packages
+      - name: Cache fate samples
         uses: actions/cache@v3
         with:
           key: fate-samples
