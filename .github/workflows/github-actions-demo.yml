@@ -2,67 +2,6 @@ name: GitHub Actions Demo
 on: [push]
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install wine
-        run: |
-          # dpkg --add-architecture i386 to install 32 bit wine fails currently
-          sudo apt-get update && sudo apt-get install wine64-development
-          wine64 wineboot
-      - name: Install old llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout FFmpeg
-        uses: actions/checkout@v2
-        with:
-          repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building & testing ffmpeg
-        run: |
-          sudo apt-get install nasm
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --arch=x86_64 --target-os=mingw32 --cross-prefix=x86_64-w64-mingw32- --target-exec=wine64 --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
-          make -j$(nproc)
-          make fate-rsync
-          make -j$(nproc) fate
-
-  linux-cross:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - i686
-          - x86_64
-          - armv7
-          - aarch64
-    steps:
-      - name: Install old llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout FFmpeg
-        uses: actions/checkout@v2
-        with:
-          repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building ffmpeg
-        run: |
-          sudo apt-get install nasm
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
-          make -j$(nproc)
-
   msys:
     runs-on: windows-latest
     defaults:
@@ -74,35 +13,12 @@ jobs:
           msystem: mingw64
           update: false
           install: >-
-            unzip
-            make
-            rsync
-            diffutils
-          pacboy: >-
-            nasm:p
-      - name: Install old llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-x86_64.zip
-          unzip -q llvm-mingw-20220323-ucrt-x86_64.zip
-          rm llvm-mingw-*.zip
-          mv llvm-mingw-* /llvm-mingw
-          echo /llvm-mingw/bin >> $GITHUB_PATH
+            git
       - name: Checkout FFmpeg
         uses: actions/checkout@v2
         with:
           repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building & testing ffmpeg
+          path: ffmpeg-action
+      - name: Clone ffmpeg
         run: |
-          export PATH=/llvm-mingw/bin:$PATH
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --samples=$(pwd)/../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422,sub-cc,sub-cc-realtime,sub-cc-scte20"
-          make -j$(nproc)
-          make fate-rsync
-          make -j$(nproc) V=1 fate-sub-cc || true
-          cat tests/data/fate/sub-cc.err || true
-          make -j$(nproc) V=1 fate-sub-lrc-remux || true
-          cat tests/data/fate/sub-lrc-remux.err || true
-          #make -j$(nproc) fate
-          #cat tests/data/fate/sub-cc.err || true
+          git clone https://github.com/ffmpeg/ffmpeg ffmpeg-msys
