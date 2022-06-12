@@ -1,8 +1,6 @@
 name: GitHub Actions Demo
 on:
   push:
-  schedule:
-    - cron: '09 21 * * *'
 
 jobs:
   linux:
@@ -10,11 +8,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Check latest version
-        if: ${{ github.event_name == 'schedule' }}
+        if: github.event_name == 'push'
         run: |
-          echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> $GITHUB_ENV
-          echo MINGW_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> $GITHUB_ENV
+          LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}')
+          echo LLVM_VERSION=$LLVM_VERSION >> $GITHUB_ENV
+          MINGW_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}')
+          echo MINGW_VERSION=$MINGW_VERSION >> $GITHUB_ENV
           echo ASSERT_PARAMS=--enable-asserts >> $GITHUB_ENV
+          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_VERSION
       - name: Build
         run: |
           sudo apt-get install ninja-build
