@@ -54,7 +54,6 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{matrix.sys}}
-          update: true
           install: >-
             git
             make
@@ -67,14 +66,7 @@ jobs:
       - name: Build
         run: |
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
-          cd install
-          tar -Jcf ../llvm-mingw-msys-${{matrix.sys}}.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v2
-        with:
-          name: msys-${{matrix.sys}}-toolchain
-          path: |
-            llvm-mingw-msys-${{matrix.sys}}.tar.xz
-          retention-days: 7
+          ./run-tests.sh $(pwd)/install/llvm-mingw
 
   linux-cross:
     needs: [linux]
@@ -89,15 +81,12 @@ jobs:
           - aarch64
     steps:
       - uses: actions/download-artifact@v3
-        continue-on-error: true
         with:
           name: linux-toolchain
       - name: Unpacking cross toolchain
         run: |
-          mkdir temp
-          cd temp
-          tar -Jxvf ../llvm-mingw-linux.tar.xz
-          rm ../llvm-mingw-linux.tar.xz
+          tar -Jxvf llvm-mingw-linux.tar.xz
+          rm llvm-mingw-linux.tar.xz
           sudo mv llvm-mingw /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
