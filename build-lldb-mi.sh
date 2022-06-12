@@ -45,10 +45,13 @@ if [ ! -d lldb-mi ]; then
 fi
 
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
+    echo Fetching lldb-mi $LLDB_MI_VERSION
     cd lldb-mi
     [ -z "$SYNC" ] || git fetch
     git checkout $LLDB_MI_VERSION
     cd ..
+else
+    echo Using existing checkout of lldb-mi
 fi
 
 if [ -n "$(which ninja)" ]; then

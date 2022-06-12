@@ -63,11 +63,14 @@ fi
 
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT_LIBFFI" ]; then
     cd libffi
+    echo Fetching libffi $LIBFFI_VERSION
     [ -z "$SYNC" ] || git fetch
     git reset --hard
     git checkout $LIBFFI_VERSION
     autoreconf -vfi
     cd ..
+else
+    echo Using existing checkout of libffi
 fi
 
 if [ -z "$HOST" ]; then
@@ -81,9 +84,12 @@ if [ -z "$HOST" ]; then
 
     if [ -n "$SYNC" ] || [ -n "$CHECKOUT_PYTHON_NATIVE" ]; then
         cd cpython-native
+        echo Fetching cpython $PYTHON_VERSION
         [ -z "$SYNC" ] || git fetch
         git checkout $PYTHON_VERSION
         cd ..
+    else
+        echo Using existing checkout of cpython
     fi
 
     [ -z "$CHECKOUT_ONLY" ] || exit 0
@@ -116,12 +122,15 @@ if [ ! -d cpython-mingw ]; then
 fi
 
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT_PYTHON" ]; then
+    echo Fetching cpython-mingw $PYTHON_VERSION_MINGW
     cd cpython-mingw
     [ -z "$SYNC" ] || git fetch
     git reset --hard
     git checkout $PYTHON_VERSION_MINGW
     autoreconf -vfi
     cd ..
+else
+    echo Using existing checkout of cpython-mingw
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0

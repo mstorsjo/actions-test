@@ -55,8 +55,11 @@ fi
 cd mingw-w64
 
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
+    echo Fetching mingw-w64 $MINGW_W64_VERSION
     [ -z "$SYNC" ] || git fetch
     git checkout $MINGW_W64_VERSION
+else
+    echo Using existing checkout of mingw-w64
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0

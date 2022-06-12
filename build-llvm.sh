@@ -101,6 +101,7 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
     # (Redoing a shallow fetch will refetch the data even if the commit
     # already exists locally, unless fetching a tag with the "tag"
     # argument.)
+    echo Fetching llvm-project $LLVM_VERSION
     if git cat-file -e "$LLVM_VERSION" 2> /dev/null; then
         # Exists; just check it out
         git checkout "$LLVM_VERSION"
@@ -121,6 +122,8 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
         esac
     fi
     cd ..
+else
+    echo Using existing checkout of llvm-project
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0

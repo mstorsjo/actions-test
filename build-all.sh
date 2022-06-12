@@ -45,6 +45,10 @@ while [ $# -gt 0 ]; do
         MINGW_ARGS="$MINGW_ARGS $1"
         ;;
     *)
+        if [ -n "$PREFIX" ]; then
+            echo Unrecognized parameter $1
+            exit 1
+        fi
         PREFIX="$1"
         ;;
     esac
