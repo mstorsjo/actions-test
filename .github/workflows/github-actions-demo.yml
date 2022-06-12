@@ -11,7 +11,7 @@ jobs:
           sudo apt-get install ninja-build
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
-          tar -Jcvf ../llvm-mingw-linux.tar.xz llvm-mingw
+          tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
         with:
           name: linux-toolchain
@@ -30,7 +30,7 @@ jobs:
           # python being available, but only in native form.
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
-          tar -Jcvf ../llvm-mingw-macos.tar.xz llvm-mingw
+          tar -Jcf ../llvm-mingw-macos.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
         with:
           name: macos-toolchain
@@ -67,7 +67,7 @@ jobs:
         run: |
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
-          tar -Jcvf ../llvm-mingw-msys-${{matrix.sys}}.tar.xz llvm-mingw
+          tar -Jcf ../llvm-mingw-msys-${{matrix.sys}}.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
         with:
           name: msys-${{matrix.sys}}-toolchain
@@ -81,7 +81,7 @@ jobs:
       - name: Install old llvm-mingw
         run: |
           wget https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxvf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
@@ -91,7 +91,7 @@ jobs:
           sudo apt-get install autoconf-archive
           ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-aarch64 aarch64 --with-python
           cd install
-          zip -9r ../llvm-mingw-aarch64.zip llvm-mingw-aarch64
+          zip -9rq ../llvm-mingw-aarch64.zip llvm-mingw-aarch64
       - uses: actions/upload-artifact@v2
         with:
           name: cross-aarch64-toolchain
