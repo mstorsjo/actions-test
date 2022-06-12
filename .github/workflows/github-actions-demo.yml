@@ -102,3 +102,109 @@ jobs:
           path: |
             llvm-mingw-${{matrix.arch}}.zip
           retention-days: 7
+
+  test-toolchain:
+    needs: [linux-cross]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            unzip
+      - uses: actions/download-artifact@v3
+        with:
+          name: windows-x86_64-toolchain
+      - name: Unpacking toolchain
+        run: |
+          unzip -q llvm-mingw-x86_64.zip
+          rm llvm-mingw-x86_64.zip
+          mv llvm-mingw-* /llvm-mingw
+          echo /llvm-mingw/bin >> $GITHUB_PATH
+      - uses: actions/checkout@v2
+      - name: Build
+        run: |
+          ./run-tests.sh /llvm-mingw
+
+  linux-test-cross-build-ffmpeg:
+    needs: [linux]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - armv7
+          - aarch64
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: linux-toolchain
+      - name: Unpacking cross toolchain
+        run: |
+          tar -Jxvf llvm-mingw-linux.tar.xz
+          rm llvm-mingw-linux.tar.xz
+          sudo mv llvm-mingw /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v2
+        with:
+          repository: ffmpeg/ffmpeg
+          path: ffmpeg
+      - name: Building ffmpeg
+        run: |
+          sudo apt-get install nasm
+          mkdir ffmpeg-build
+          cd ffmpeg-build
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
+          make -j$(nproc)
+
+  test-ffmpeg:
+    needs: [linux-cross]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Avoid git checking out files with CRLF
+        shell: cmd
+        run: |
+          git config --global core.autocrlf false
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          update: false
+          install: >-
+            unzip
+            make
+            rsync
+            diffutils
+          pacboy: >-
+            nasm:p
+      - uses: actions/download-artifact@v3
+        with:
+          name: windows-x86_64-toolchain
+      - name: Unpacking toolchain
+        run: |
+          unzip -q llvm-mingw-x86_64.zip
+          rm llvm-mingw-x86_64.zip
+          mv llvm-mingw-* /llvm-mingw
+          echo /llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v2
+        with:
+          repository: ffmpeg/ffmpeg
+          path: ffmpeg
+      - name: Building & testing ffmpeg
+        run: |
+          export PATH=/llvm-mingw/bin:$PATH
+          mkdir ffmpeg-build
+          cd ffmpeg-build
+          ../ffmpeg/configure --samples=../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
+          make -j$(nproc)
+          make fate-rsync
+          make -j$(nproc) fate
