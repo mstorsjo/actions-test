@@ -26,9 +26,10 @@ jobs:
       - name: Build
         run: |
           brew install ninja
-          # MACOS_REDIST=1, but that's much slower, and breaks due to
-          # python being available, but only in native form.
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          # Building with MACOS_REDIST=1 (building universal binaries) without
+          # --disable-lldb fails in Github Actions, because python is available
+          # (and gets picked up), but only exists in native form.
+          MACOS_REDIST=1 ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
           tar -Jcf ../llvm-mingw-macos.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
