@@ -76,26 +76,40 @@ jobs:
             llvm-mingw-msys-${{matrix.sys}}.tar.xz
           retention-days: 7
 
-  cross:
+  linux-cross:
+    needs: [linux]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - armv7
+          - aarch64
     steps:
-      - name: Install old llvm-mingw
+      - uses: actions/download-artifact@v3
+        continue-on-error: true
+        with:
+          name: linux-toolchain
+      - name: Unpacking cross toolchain
         run: |
-          wget https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxf llvm-mingw-20220323-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
+          mkdir temp
+          cd temp
+          tar -Jxvf ../llvm-mingw-linux.tar.xz
+          rm ../llvm-mingw-linux.tar.xz
+          sudo mv llvm-mingw /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
       - name: Build
         run: |
           sudo apt-get install autoconf-archive
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-aarch64 aarch64 --with-python
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} --with-python
           cd install
-          zip -9rq ../llvm-mingw-aarch64.zip llvm-mingw-aarch64
+          zip -9rq ../llvm-mingw-${{matrix.arch}}.zip llvm-mingw-${{matrix.arch}}
       - uses: actions/upload-artifact@v2
         with:
-          name: cross-aarch64-toolchain
+          name: windows-${{matrix.arch}}-toolchain
           path: |
-            llvm-mingw-aarch64.zip
+            llvm-mingw-${{matrix.arch}}.zip
           retention-days: 7
