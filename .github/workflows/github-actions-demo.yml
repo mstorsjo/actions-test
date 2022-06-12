@@ -1,15 +1,35 @@
 name: GitHub Actions Demo
-on: [push]
+on:
+  push:
+  schedule:
+    - cron: '20 08 * * *'
 
 jobs:
+  # Build a cross compiler for Linux, targeting Windows.
+  #
+  # The scheduled builds are made with the latest git version of llvm-project
+  # and mingw-w64. When using random git snapshot builds of llvm, there's
+  # always a risk for bugs - thus build such versions with assertions enabled,
+  # to better catch such bugs early. This makes the first-stage toolchain built
+  # here in scheduled builds somewhat slower.
   linux:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Check latest version
+        if: github.event_name == 'schedule'
+        run: |
+          LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}')
+          MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}')
+          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION, with assertions enabled
+          echo LLVM_VERSION=$LLVM_VERSION >> $GITHUB_ENV
+          echo MINGW_W64_VERSION=$MINGW_W64_VERSION >> $GITHUB_ENV
+          echo ASSERT_PARAMS=--enable-asserts >> $GITHUB_ENV
       - name: Build
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb $ASSERT_PARAMS
           cd install
           tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
@@ -19,9 +39,19 @@ jobs:
             llvm-mingw-linux.tar.xz
           retention-days: 7
 
+  # Build a cross compiler for macOS, targeting Windows.
   macos:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     runs-on: macos-latest
     steps:
+      - name: Check latest version
+        if: github.event_name == 'schedule'
+        run: |
+          LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}')
+          MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}')
+          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION
+          echo LLVM_VERSION=$LLVM_VERSION >> $GITHUB_ENV
+          echo MINGW_W64_VERSION=$MINGW_W64_VERSION >> $GITHUB_ENV
       - uses: actions/checkout@v2
       - name: Build
         run: |
@@ -39,7 +69,12 @@ jobs:
             llvm-mingw-macos.tar.xz
           retention-days: 7
 
+  # Test building the toolchain on msys2 (in the mingw64 and clang64
+  # environments). The binaries built here rely on the runtime libraries from
+  # the host environment (libstdc++ or libc++). No artifacts are stored from
+  # these builds, but llvm-mingw's tests are run.
   msys:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     runs-on: windows-latest
     defaults:
       run:
@@ -62,13 +97,30 @@ jobs:
             toolchain:p
             cmake:p
             ninja:p
+      - name: Check latest version
+        if: github.event_name == 'schedule'
+        run: |
+          LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}')
+          MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}')
+          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION
+          echo LLVM_VERSION=$LLVM_VERSION >> $GITHUB_ENV
+          echo MINGW_W64_VERSION=$MINGW_W64_VERSION >> $GITHUB_ENV
       - uses: actions/checkout@v2
       - name: Build
         run: |
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           ./run-tests.sh $(pwd)/install/llvm-mingw
 
+  # Use the Linux cross compilers built in the first step to cross compile
+  # llvm and make a proper standalone toolchain for Windows (for all 4
+  # architectures). The binaries built here match actual releases quite closely.
+  #
+  # For scheduled builds, the first stage compiler was built with assertions
+  # enabled, but this stage is built without assertions - so the end packaged
+  # build should be as fast as normal releases (with the intent that the first
+  # stage compiler should build enough code to find many bugs.)
   linux-cross:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     needs: [linux]
     runs-on: ubuntu-latest
     strategy:
@@ -89,6 +141,16 @@ jobs:
           rm llvm-mingw-linux.tar.xz
           sudo mv llvm-mingw /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Check latest version
+        if: github.event_name == 'schedule'
+        run: |
+          LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}')
+          MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}')
+          PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.9.11$' | awk '{print $1}')
+          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION cpython-mingw $PYTHON_VERSION_MINGW
+          echo LLVM_VERSION=$LLVM_VERSION >> $GITHUB_ENV
+          echo MINGW_W64_VERSION=$MINGW_W64_VERSION >> $GITHUB_ENV
+          echo PYTHON_VERSION_MINGW=$PYTHON_VERSION_MINGW >> $GITHUB_ENV
       - uses: actions/checkout@v2
       - name: Build
         run: |
@@ -103,7 +165,9 @@ jobs:
             llvm-mingw-${{matrix.arch}}.zip
           retention-days: 7
 
+  # Run llvm-mingw's tests on x86_64 with the cross-built toolchain from above.
   test-toolchain:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     needs: [linux-cross]
     runs-on: windows-latest
     defaults:
@@ -129,7 +193,12 @@ jobs:
         run: |
           ./run-tests.sh /llvm-mingw
 
+  # Test cross-building ffmpeg for all 4 targeted architectures from linux.
+  # This is done only on scheduled builds, to give them a bit more testing
+  # (for bugs that can be caught by failed asserts in the compiler), to find
+  # such regressions early.
   linux-test-cross-build-ffmpeg:
+    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/actions-test')
     needs: [linux]
     runs-on: ubuntu-latest
     strategy:
@@ -163,7 +232,12 @@ jobs:
           ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
           make -j$(nproc)
 
+  # Test building ffmpeg for natively on x86_64 Windows and run its tests,
+  # to find cases of compiler bugs don't show up as failed asserts in the
+  # compiler itslef, but that only show up at runtime. This is only done
+  # for scheduled builds.
   test-ffmpeg:
+    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/actions-test')
     needs: [linux-cross]
     runs-on: windows-latest
     defaults:
