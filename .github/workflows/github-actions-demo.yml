@@ -29,11 +29,12 @@ jobs:
           echo PYTHON_VERSION_MINGW=$PYTHON_VERSION_MINGW >> versions
           cat versions >> $GITHUB_ENV
           echo ASSERT_PARAMS=--enable-asserts >> $GITHUB_ENV
+          mkdir -p install/llvm-mingw
+          cp versions install/llvm-mingw
       - name: Build
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb $ASSERT_PARAMS
-          if [ -f versions ]; then cp versions install/llvm-mingw; fi
           cd install
           tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
       - uses: actions/upload-artifact@v2
