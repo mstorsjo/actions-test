@@ -2,7 +2,7 @@ name: GitHub Actions Demo
 on:
   push:
   schedule:
-    - cron: '20 08 * * *'
+    - cron: '40 12 * * *'
 
 jobs:
   # Build a cross compiler for Linux, targeting Windows.
