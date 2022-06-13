@@ -8,7 +8,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Build
         run: |
-          sudo apt-get install ninja-build
+          sudo apt-get update && sudo apt-get install ninja-build
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
           tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Build
         run: |
-          sudo apt-get install autoconf-archive
+          sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
           ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} --with-python
           cd install
           zip -9rq ../llvm-mingw-${{matrix.arch}}.zip llvm-mingw-${{matrix.arch}}
@@ -157,7 +157,7 @@ jobs:
           path: ffmpeg
       - name: Building ffmpeg
         run: |
-          sudo apt-get install nasm
+          sudo apt-get update && sudo apt-get install nasm
           mkdir ffmpeg-build
           cd ffmpeg-build
           ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
