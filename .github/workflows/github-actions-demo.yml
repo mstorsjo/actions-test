@@ -141,7 +141,7 @@ jobs:
           name: linux-toolchain
       - name: Unpacking cross toolchain
         run: |
-          tar -Jxvf llvm-mingw-linux.tar.xz
+          tar -Jxf llvm-mingw-linux.tar.xz
           rm llvm-mingw-linux.tar.xz
           sudo mv llvm-mingw /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
@@ -215,7 +215,7 @@ jobs:
           name: linux-toolchain
       - name: Unpacking cross toolchain
         run: |
-          tar -Jxvf llvm-mingw-linux.tar.xz
+          tar -Jxf llvm-mingw-linux.tar.xz
           rm llvm-mingw-linux.tar.xz
           sudo mv llvm-mingw /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
