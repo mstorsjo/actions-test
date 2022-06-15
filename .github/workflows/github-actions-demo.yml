@@ -1,8 +1,8 @@
 name: GitHub Actions Demo
 on:
   push:
-  schedule:
-    - cron: '40 12 * * *'
+  #schedule:
+  #  - cron: '40 12 * * *'
 
 jobs:
   get-versions:
