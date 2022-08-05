@@ -3,7 +3,7 @@ on:
   push:
 
 jobs:
-  llvm-mingw-win:
+  llvm-mingw:
     runs-on: windows-latest
     steps:
       - name: Download and unpack llvm-mingw
@@ -13,144 +13,61 @@ jobs:
           del llvm-mingw-*-ucrt-x86_64.zip
           ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
           echo "$($pwd.Path)\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Checkout llvm-mingw
+          echo "$($pwd.Path)\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Checkout llvm-project
         uses: actions/checkout@v2
         with:
-          repository: mstorsjo/llvm-mingw
-          path: llvm-mingw-src
-      - name: Build and run executable
+          repository: llvm/llvm-project
+          path: llvm-project
+      - name: Build and test libcxx
         run: |
-          x86_64-w64-mingw32-gcc --version
-          x86_64-w64-mingw32-gcc llvm-mingw-src/test/hello.c -o hello.exe
-          .\hello
+          cd llvm-project
+          mkdir build
+          cd build
+          cmake ../runtimes `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DLIBCXX_ENABLE_WERROR=YES `
+            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
+            -DLIBCXX_CXX_ABI=libcxxabi `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++ `
+            -DLIBCXX_TARGET_INFO="libcxx.test.target_info.MingwLocalTI" `
+            -DLIBCXXABI_ENABLE_SHARED=NO `
+            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
+            -DLIBCXX_USE_COMPILER_RT=YES `
+            -DLIBCXXABI_USE_COMPILER_RT=YES `
+            -DLIBUNWIND_USE_COMPILER_RT=YES `
+            -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
+            -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1"
+            #-C "${MONOREPO_ROOT}/libcxx/cmake/caches/MinGW.cmake"
+          ninja
+          ninja check-cxx
 
-  llvm-mingw-win-pwsh:
+  clang-cl:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: pwsh
     steps:
-      - name: Download and unpack llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
-          Expand-Archive llvm-mingw-*-ucrt-x86_64.zip -DestinationPath .
-          del llvm-mingw-*-ucrt-x86_64.zip
-          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
-          "$($pwd.Path)\llvm-mingw\bin" >> $env:GITHUB_PATH
-      - name: Checkout llvm-mingw
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Checkout llvm-project
         uses: actions/checkout@v2
         with:
-          repository: mstorsjo/llvm-mingw
-          path: llvm-mingw-src
-      - name: Build and run executable
+          repository: llvm/llvm-project
+          path: llvm-project
+      - name: Build and test libcxx
         run: |
-          x86_64-w64-mingw32-gcc --version
-          x86_64-w64-mingw32-gcc llvm-mingw-src/test/hello.c -o hello.exe
-          .\hello
-
-  llvm-mingw-win-cmd:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - name: Download and unpack llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
-          powershell Expand-Archive llvm-mingw-*-ucrt-x86_64.zip -DestinationPath .
-          del llvm-mingw-*-ucrt-x86_64.zip
-          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
-          echo %cd%\llvm-mingw\bin >> %GITHUB_PATH%
-      - name: Inspect env
-        shell: cmd
-        run: |
-          echo PATH:
-          echo %PATH%
-          echo GITHUB_PATH:
-          echo %GITHUB_PATH%
-          echo GITHUB_PATH contents
-          type %GITHUB_PATH%
-      - name: Checkout llvm-mingw
-        uses: actions/checkout@v2
-        with:
-          repository: mstorsjo/llvm-mingw
-          path: llvm-mingw-src
-      - name: Build and run executable
-        run: |
-          where x86_64-w64-mingw32-gcc
-          x86_64-w64-mingw32-gcc --version
-          x86_64-w64-mingw32-gcc llvm-mingw-src/test/hello.c -o hello.exe
-          hello
-
-  llvm-mingw-msys:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: msys
-          update: false
-          install: >-
-            unzip
-      - name: Download and unpack llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
-          unzip -q llvm-mingw-*-ucrt-x86_64.zip
-          rm llvm-mingw-*-ucrt-x86_64.zip
-          mv llvm-mingw-20220802-ucrt-x86_64 /llvm-mingw
-          #echo /llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout llvm-mingw
-        uses: actions/checkout@v2
-        with:
-          repository: mstorsjo/llvm-mingw
-          path: llvm-mingw
-      - name: Build and run executable
-        run: |
-          # The msys2 shell doesn't inherit the PATH from the outside
-          # (including what was set up via $GITHUB_PATH)
-          export PATH=/llvm-mingw/bin:$PATH
-          x86_64-w64-mingw32-gcc --version
-          x86_64-w64-mingw32-gcc llvm-mingw/test/hello.c -o hello.exe
-          ./hello
-
-  llvm-mingw-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxvf llvm-mingw-20220802-ucrt-ubuntu-18.04-x86_64.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout llvm-mingw
-        uses: actions/checkout@v2
-        with:
-          repository: mstorsjo/llvm-mingw
-          path: llvm-mingw
-      - name: Test building
-        run: |
-          x86_64-w64-mingw32-gcc --version
-          x86_64-w64-mingw32-gcc llvm-mingw/test/hello.c -o hello.exe
-
-  llvm-mingw-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Install llvm-mingw
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-macos-universal.tar.xz
-          tar -Jxvf llvm-mingw-20220802-ucrt-macos-universal.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout llvm-mingw
-        uses: actions/checkout@v2
-        with:
-          repository: mstorsjo/llvm-mingw
-          path: llvm-mingw
-      - name: Test building
-        run: |
-          x86_64-w64-mingw32-gcc --version
-          x86_64-w64-mingw32-gcc llvm-mingw/test/hello.c -o hello.exe
+          cd llvm-project
+          mkdir build
+          cd build
+          cmake ../runtimes `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DLIBCXX_ENABLE_WERROR=YES `
+            -DLLVM_ENABLE_RUNTIMES=libcxx `
+            -DCMAKE_C_COMPILER=clang-cl `
+            -DCMAKE_CXX_COMPILER=clang-cl `
+            -DLIBCXX_ENABLE_FILESYSTEM=YES `
+            -DLIBCXX_EXTRA_SITE_DEFINES="_LIBCPP_HAS_NO_INT128" `
+            -DLIBCXX_TEST_PARAMS="enable_experimental=False"
+          ninja
+          ninja check-cxx
