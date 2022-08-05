@@ -1,311 +1,156 @@
 name: GitHub Actions Demo
 on:
   push:
-  #schedule:
-  #  - cron: '40 12 * * *'
 
 jobs:
-  get-versions:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Touch file
-        run: |
-          touch versions
-      - name: Check latest version
-        if: github.event_name == 'schedule'
-        run: |
-          echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> versions
-          echo MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> versions
-          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.9.11$' | awk '{print $1}') >> versions
-      - uses: actions/upload-artifact@v2
-        with:
-          name: versions
-          path: |
-            versions
-          retention-days: 7
-
-  # Build a cross compiler for Linux, targeting Windows.
-  #
-  # The scheduled builds are made with the latest git version of llvm-project
-  # and mingw-w64. When using random git snapshot builds of llvm, there's
-  # always a risk for bugs - thus build such versions with assertions enabled,
-  # to better catch such bugs early. This makes the first-stage toolchain built
-  # here in scheduled builds somewhat slower.
-  linux:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
-    needs: [get-versions]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v3
-        if: github.event_name == 'schedule'
-        with:
-          name: versions
-      - name: Set build env vars
-        if: github.event_name == 'schedule'
-        run: |
-          . versions
-          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION, with assertions enabled
-          cat versions >> $GITHUB_ENV
-          echo ASSERT_PARAMS=--enable-asserts >> $GITHUB_ENV
-          mkdir -p install/llvm-mingw
-          cp versions install/llvm-mingw
-      - name: Build
-        run: |
-          sudo apt-get update && sudo apt-get install ninja-build
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb $ASSERT_PARAMS
-          cd install
-          tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v2
-        with:
-          name: linux-toolchain
-          path: |
-            llvm-mingw-linux.tar.xz
-          retention-days: 7
-
-  # Build a cross compiler for macOS, targeting Windows.
-  macos:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
-    needs: [get-versions]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/download-artifact@v3
-        if: github.event_name == 'schedule'
-        with:
-          name: versions
-      - name: Set build env vars
-        if: github.event_name == 'schedule'
-        run: |
-          . versions
-          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION
-          cat versions >> $GITHUB_ENV
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          brew install ninja
-          # Building with MACOS_REDIST=1 (building universal binaries) without
-          # --disable-lldb fails in Github Actions, because python is available
-          # (and gets picked up), but only exists in native form.
-          MACOS_REDIST=1 ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
-          cd install
-          tar -Jcf ../llvm-mingw-macos.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v2
-        with:
-          name: macos-toolchain
-          path: |
-            llvm-mingw-macos.tar.xz
-          retention-days: 7
-
-  # Test building the toolchain on msys2 (in the mingw64 and clang64
-  # environments). The binaries built here rely on the runtime libraries from
-  # the host environment (libstdc++ or libc++). No artifacts are stored from
-  # these builds, but llvm-mingw's tests are run.
-  msys:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
-    needs: [get-versions]
+  llvm-mingw-win:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        sys:
-          - mingw64
-          - clang64
     steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{matrix.sys}}
-          install: >-
-            git
-            make
-            tar
-          pacboy: >-
-            toolchain:p
-            cmake:p
-            ninja:p
-      - uses: actions/download-artifact@v3
-        if: github.event_name == 'schedule'
-        with:
-          name: versions
-      - name: Set build env vars
-        if: github.event_name == 'schedule'
+      - name: Download and unpack llvm-mingw
         run: |
-          . versions
-          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION
-          cat versions >> $GITHUB_ENV
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
-          ./run-tests.sh $(pwd)/install/llvm-mingw
-
-  # Use the Linux cross compilers built in the first step to cross compile
-  # llvm and make a proper standalone toolchain for Windows (for all 4
-  # architectures). The binaries built here match actual releases quite closely.
-  #
-  # For scheduled builds, the first stage compiler was built with assertions
-  # enabled, but this stage is built without assertions - so the end packaged
-  # build should be as fast as normal releases (with the intent that the first
-  # stage compiler should build enough code to find many bugs.)
-  linux-cross:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
-    needs: [linux]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - i686
-          - x86_64
-          - armv7
-          - aarch64
-    steps:
-      - uses: actions/download-artifact@v3
-        with:
-          name: linux-toolchain
-      - name: Unpacking cross toolchain
-        run: |
-          tar -Jxf llvm-mingw-linux.tar.xz
-          rm llvm-mingw-linux.tar.xz
-          sudo mv llvm-mingw /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Fetch version
-        if: github.event_name == 'schedule'
-        run: |
-          . /opt/llvm-mingw/versions
-          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION cpython-mingw $PYTHON_VERSION_MINGW
-          cat /opt/llvm-mingw/versions >> $GITHUB_ENV
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} --with-python
-          cd install
-          zip -9rq ../llvm-mingw-${{matrix.arch}}.zip llvm-mingw-${{matrix.arch}}
-      - uses: actions/upload-artifact@v2
-        with:
-          name: windows-${{matrix.arch}}-toolchain
-          path: |
-            llvm-mingw-${{matrix.arch}}.zip
-          retention-days: 7
-
-  # Run llvm-mingw's tests on x86_64 with the cross-built toolchain from above.
-  test-toolchain:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
-    needs: [linux-cross]
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          install: >-
-            unzip
-      - uses: actions/download-artifact@v3
-        with:
-          name: windows-x86_64-toolchain
-      - name: Unpacking toolchain
-        run: |
-          unzip -q llvm-mingw-x86_64.zip
-          rm llvm-mingw-x86_64.zip
-          mv llvm-mingw-* /llvm-mingw
-          echo /llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
-      - name: Build
-        run: |
-          ./run-tests.sh /llvm-mingw
-
-  # Test cross-building ffmpeg for all 4 targeted architectures from linux.
-  # This is done only on scheduled builds, to give them a bit more testing
-  # (for bugs that can be caught by failed asserts in the compiler), to find
-  # such regressions early.
-  linux-test-cross-build-ffmpeg:
-    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/actions-test')
-    needs: [linux]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - i686
-          - x86_64
-          - armv7
-          - aarch64
-    steps:
-      - uses: actions/download-artifact@v3
-        with:
-          name: linux-toolchain
-      - name: Unpacking cross toolchain
-        run: |
-          tar -Jxf llvm-mingw-linux.tar.xz
-          rm llvm-mingw-linux.tar.xz
-          sudo mv llvm-mingw /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout ffmpeg
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
+          Expand-Archive llvm-mingw-*-ucrt-x86_64.zip -DestinationPath .
+          del llvm-mingw-*-ucrt-x86_64.zip
+          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
+          echo "$($pwd.Path)\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Checkout llvm-mingw
         uses: actions/checkout@v2
         with:
-          repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building ffmpeg
+          repository: mstorsjo/llvm-mingw
+          path: llvm-mingw-src
+      - name: Build and run executable
         run: |
-          sudo apt-get update && sudo apt-get install nasm
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl
-          make -j$(nproc)
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc llvm-mingw-src/test/hello.c -o hello.exe
+          .\hello
 
-  # Test building ffmpeg for natively on x86_64 Windows and run its tests,
-  # to find cases of compiler bugs don't show up as failed asserts in the
-  # compiler itslef, but that only show up at runtime. This is only done
-  # for scheduled builds.
-  test-ffmpeg:
-    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/actions-test')
-    needs: [linux-cross]
+  llvm-mingw-win-pwsh:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Download and unpack llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
+          Expand-Archive llvm-mingw-*-ucrt-x86_64.zip -DestinationPath .
+          del llvm-mingw-*-ucrt-x86_64.zip
+          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
+          "$($pwd.Path)\llvm-mingw\bin" >> $env:GITHUB_PATH
+      - name: Checkout llvm-mingw
+        uses: actions/checkout@v2
+        with:
+          repository: mstorsjo/llvm-mingw
+          path: llvm-mingw-src
+      - name: Build and run executable
+        run: |
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc llvm-mingw-src/test/hello.c -o hello.exe
+          .\hello
+
+  llvm-mingw-win-cmd:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Download and unpack llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
+          powershell Expand-Archive llvm-mingw-*-ucrt-x86_64.zip -DestinationPath .
+          del llvm-mingw-*-ucrt-x86_64.zip
+          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
+          echo %cd%\llvm-mingw\bin >> %GITHUB_PATH%
+      - name: Inspect env
+        shell: cmd
+        run: |
+          echo PATH:
+          echo %PATH%
+          echo GITHUB_PATH:
+          echo %GITHUB_PATH%
+          echo GITHUB_PATH contents
+          type %GITHUB_PATH%
+      - name: Checkout llvm-mingw
+        uses: actions/checkout@v2
+        with:
+          repository: mstorsjo/llvm-mingw
+          path: llvm-mingw-src
+      - name: Build and run executable
+        run: |
+          where x86_64-w64-mingw32-gcc
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc llvm-mingw-src/test/hello.c -o hello.exe
+          hello
+
+  llvm-mingw-msys:
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
     steps:
-      - name: Avoid git checking out files with CRLF
-        shell: cmd
-        run: |
-          git config --global core.autocrlf false
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: mingw64
+          msystem: msys
           update: false
           install: >-
             unzip
-            make
-            rsync
-            diffutils
-          pacboy: >-
-            nasm:p
-      - uses: actions/download-artifact@v3
-        with:
-          name: windows-x86_64-toolchain
-      - name: Unpacking toolchain
+      - name: Download and unpack llvm-mingw
         run: |
-          unzip -q llvm-mingw-x86_64.zip
-          rm llvm-mingw-x86_64.zip
-          mv llvm-mingw-* /llvm-mingw
-          echo /llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout ffmpeg
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
+          unzip -q llvm-mingw-*-ucrt-x86_64.zip
+          rm llvm-mingw-*-ucrt-x86_64.zip
+          mv llvm-mingw-20220802-ucrt-x86_64 /llvm-mingw
+          #echo /llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout llvm-mingw
         uses: actions/checkout@v2
         with:
-          repository: ffmpeg/ffmpeg
-          path: ffmpeg
-      - name: Building & testing ffmpeg
+          repository: mstorsjo/llvm-mingw
+          path: llvm-mingw
+      - name: Build and run executable
         run: |
+          # The msys2 shell doesn't inherit the PATH from the outside
+          # (including what was set up via $GITHUB_PATH)
           export PATH=/llvm-mingw/bin:$PATH
-          mkdir ffmpeg-build
-          cd ffmpeg-build
-          ../ffmpeg/configure --samples=../fate-samples --enable-gpl --ignore-tests="vsynth1-mpeg2-422,vsynth2-mpeg2-422,vsynth3-mpeg2-422,vsynth_lena-mpeg2-422,seek-vsynth_lena-mpeg2-422"
-          make -j$(nproc)
-          make fate-rsync
-          make -j$(nproc) fate
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc llvm-mingw/test/hello.c -o hello.exe
+          ./hello
+
+  llvm-mingw-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-ubuntu-18.04-x86_64.tar.xz
+          tar -Jxvf llvm-mingw-20220802-ucrt-ubuntu-18.04-x86_64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout llvm-mingw
+        uses: actions/checkout@v2
+        with:
+          repository: mstorsjo/llvm-mingw
+          path: llvm-mingw
+      - name: Test building
+        run: |
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc llvm-mingw/test/hello.c -o hello.exe
+
+  llvm-mingw-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-macos-universal.tar.xz
+          tar -Jxvf llvm-mingw-20220802-ucrt-macos-universal.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout llvm-mingw
+        uses: actions/checkout@v2
+        with:
+          repository: mstorsjo/llvm-mingw
+          path: llvm-mingw
+      - name: Test building
+        run: |
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc llvm-mingw/test/hello.c -o hello.exe
