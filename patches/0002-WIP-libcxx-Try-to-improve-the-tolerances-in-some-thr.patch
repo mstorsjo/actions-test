@@ -1,0 +1,91 @@
+From 838eb64a2d164c8330ee30e4ebc95d9f993a7ccc Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 9 Aug 2022 11:56:46 +0300
+Subject: [PATCH 2/2] WIP: [libcxx] Try to improve the tolerances in some
+ threading tests
+
+---
+ .../mutex_try_to_lock.pass.cpp                        | 10 +++++++++-
+ .../try_lock_shared.pass.cpp                          | 11 +++++++++--
+ .../try_lock_shared.pass.cpp                          |  2 +-
+ 3 files changed, 19 insertions(+), 4 deletions(-)
+
+diff --git a/libcxx/test/std/thread/thread.mutex/thread.lock/thread.lock.shared/thread.lock.shared.cons/mutex_try_to_lock.pass.cpp b/libcxx/test/std/thread/thread.mutex/thread.lock/thread.lock.shared/thread.lock.shared.cons/mutex_try_to_lock.pass.cpp
+index d3555747b51a..8d43b4f1ec1c 100644
+--- a/libcxx/test/std/thread/thread.mutex/thread.lock/thread.lock.shared/thread.lock.shared.cons/mutex_try_to_lock.pass.cpp
++++ b/libcxx/test/std/thread/thread.mutex/thread.lock/thread.lock.shared/thread.lock.shared.cons/mutex_try_to_lock.pass.cpp
+@@ -36,6 +36,13 @@ typedef Clock::duration duration;
+ typedef std::chrono::milliseconds ms;
+ typedef std::chrono::nanoseconds ns;
+ 
++
++#if !defined(TEST_HAS_SANITIZERS)
++ms Tolerance = ms(200);
++#else
++ms Tolerance = ms(200 * 5);
++#endif
++
+ void f()
+ {
+     time_point t0 = Clock::now();
+@@ -56,10 +63,11 @@ void f()
+         std::shared_lock<std::shared_timed_mutex> lk(m, std::try_to_lock);
+         if (lk.owns_lock())
+             break;
++        std::this_thread::yield();
+     }
+     time_point t1 = Clock::now();
+     ns d = t1 - t0 - ms(250);
+-    assert(d < ms(200));  // within 200ms
++    assert(d < Tolerance);  // within tolerance
+ }
+ 
+ int main(int, char**)
+diff --git a/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.shared_mutex.requirements/thread.shared_mutex.class/try_lock_shared.pass.cpp b/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.shared_mutex.requirements/thread.shared_mutex.class/try_lock_shared.pass.cpp
+index 98c48adc1a7c..c6d72f90c60e 100644
+--- a/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.shared_mutex.requirements/thread.shared_mutex.class/try_lock_shared.pass.cpp
++++ b/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.shared_mutex.requirements/thread.shared_mutex.class/try_lock_shared.pass.cpp
+@@ -37,6 +37,13 @@ typedef Clock::duration duration;
+ typedef std::chrono::milliseconds ms;
+ typedef std::chrono::nanoseconds ns;
+ 
++
++#if !defined(TEST_HAS_SANITIZERS)
++ms Tolerance = ms(200);
++#else
++ms Tolerance = ms(200 * 5);
++#endif
++
+ void f()
+ {
+     time_point t0 = Clock::now();
+@@ -44,11 +51,11 @@ void f()
+     assert(!m.try_lock_shared());
+     assert(!m.try_lock_shared());
+     while(!m.try_lock_shared())
+-        ;
++        std::this_thread::yield();
+     time_point t1 = Clock::now();
+     m.unlock_shared();
+     ns d = t1 - t0 - ms(250);
+-    assert(d < ms(200));  // within 200ms
++    assert(d < Tolerance);  // within tolerance
+ }
+ 
+ 
+diff --git a/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.sharedtimedmutex.requirements/thread.sharedtimedmutex.class/try_lock_shared.pass.cpp b/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.sharedtimedmutex.requirements/thread.sharedtimedmutex.class/try_lock_shared.pass.cpp
+index fdf5899ad58a..ffb41583df4c 100644
+--- a/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.sharedtimedmutex.requirements/thread.sharedtimedmutex.class/try_lock_shared.pass.cpp
++++ b/libcxx/test/std/thread/thread.mutex/thread.mutex.requirements/thread.sharedtimedmutex.requirements/thread.sharedtimedmutex.class/try_lock_shared.pass.cpp
+@@ -51,7 +51,7 @@ void f()
+     assert(!m.try_lock_shared());
+     assert(!m.try_lock_shared());
+     while(!m.try_lock_shared())
+-        ;
++        std::this_thread::yield();
+     time_point t1 = Clock::now();
+     m.unlock_shared();
+     ns d = t1 - t0 - ms(250);
+-- 
+2.25.1
+

@@ -19,9 +19,16 @@ jobs:
         with:
           repository: llvm/llvm-project
           path: llvm-project
+      - name: Checkout patches
+        uses: actions/checkout@v2
+        with:
+          path: patches
       - name: Build and test libcxx
         run: |
           cd llvm-project
+          git config --global user.name "LLVM MinGW"
+          git config --global user.email root@localhost
+          bash -c "git am -3 --keep-non-patch ../patches/patches/*.patch"
           mkdir build
           cd build
           cmake ../runtimes `
@@ -55,9 +62,16 @@ jobs:
         with:
           repository: llvm/llvm-project
           path: llvm-project
+      - name: Checkout patches
+        uses: actions/checkout@v2
+        with:
+          path: patches
       - name: Build and test libcxx
         run: |
           cd llvm-project
+          git config --global user.name "LLVM MinGW"
+          git config --global user.email root@localhost
+          bash -c "git am -3 --keep-non-patch ../patches/patches/*.patch"
           mkdir build
           cd build
           cmake ../runtimes `

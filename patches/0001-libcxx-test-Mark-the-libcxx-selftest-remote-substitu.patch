@@ -1,0 +1,32 @@
+From adbe725c7f6c18cd4dda5a12a27efcb6461a01c5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 9 Aug 2022 00:48:22 +0300
+Subject: [PATCH 1/2] [libcxx] [test] Mark the
+ libcxx/selftest/remote-substitutions.sh.cpp test as requiring bash in the
+ executor
+
+It's unclear to me why this wasn't tagged this way already in
+87fe0709d4ad7c3128f998f14c66245ebb423e4f / D114612 where the
+feature flag executor-has-no-bash was added, as this test did exist
+in its current form already at that time.
+
+Differential Revision: https://reviews.llvm.org/D131446
+---
+ libcxx/test/libcxx/selftest/remote-substitutions.sh.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libcxx/test/libcxx/selftest/remote-substitutions.sh.cpp b/libcxx/test/libcxx/selftest/remote-substitutions.sh.cpp
+index dfd4f4be4888..da25df993123 100644
+--- a/libcxx/test/libcxx/selftest/remote-substitutions.sh.cpp
++++ b/libcxx/test/libcxx/selftest/remote-substitutions.sh.cpp
+@@ -15,6 +15,7 @@
+ // We also check that the path of test-executables is replaced whether they
+ // appear first in the command-line or not.
+ 
++// UNSUPPORTED: executor-has-no-bash
+ // RUN: %{cxx} %s %{flags} %{compile_flags} %{link_flags} -o %t.exe
+ // RUN: %{exec} %t.exe 0
+ // RUN: %{exec} bash -c '! %t.exe 1'
+-- 
+2.25.1
+
