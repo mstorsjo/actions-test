@@ -24,7 +24,12 @@ jobs:
           cd llvm-project
           mkdir build
           cd build
-          cmake ../runtimes `
+          dir env:
+          echo PATH:
+          echo $Env:PATH
+          (Get-Command python).Path
+          (Get-Command python3).Path
+          cmake --debug-find ../runtimes `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DLIBCXX_ENABLE_WERROR=YES `
@@ -41,35 +46,5 @@ jobs:
             -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
             -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
             #-C "${MONOREPO_ROOT}/libcxx/cmake/caches/MinGW.cmake"
-          ninja
-          python bin/llvm-lit.py -sv ../libcxx/test/std/thread
-          #ninja check-cxx
-
-  clang-cl:
-    runs-on: windows-latest
-    steps:
-      - name: Set up the environment
-        uses: ilammy/msvc-dev-cmd@v1
-      - name: Checkout llvm-project
-        uses: actions/checkout@v2
-        with:
-          repository: llvm/llvm-project
-          path: llvm-project
-      - name: Build and test libcxx
-        run: |
-          cd llvm-project
-          mkdir build
-          cd build
-          cmake ../runtimes `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DLIBCXX_ENABLE_WERROR=YES `
-            -DLLVM_ENABLE_RUNTIMES=libcxx `
-            -DCMAKE_C_COMPILER=clang-cl `
-            -DCMAKE_CXX_COMPILER=clang-cl `
-            -DLIBCXX_ENABLE_FILESYSTEM=YES `
-            -DLIBCXX_EXTRA_SITE_DEFINES="_LIBCPP_HAS_NO_INT128;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT" `
-            -DLIBCXX_TEST_PARAMS="enable_experimental=False"
-          ninja
-          python bin/llvm-lit.py -sv ../libcxx/test/std/thread
-          #ninja check-cxx
+          grep -i executor CMakeCache.txt
+          grep -i python3 CMakeCache.txt
