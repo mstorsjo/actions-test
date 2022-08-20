@@ -32,7 +32,7 @@ jobs:
           cmake --debug-find ../runtimes `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_FIND_REGISTRY=LAST `
+            -DPython3_EXECUTABLE=((Get-Command python3).Path) `
             -DLIBCXX_ENABLE_WERROR=YES `
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
             -DLIBCXX_CXX_ABI=libcxxabi `
