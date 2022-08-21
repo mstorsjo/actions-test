@@ -49,15 +49,13 @@ if [ -z "$RUN_X86" ]; then
     MINGW*|MSYS*)
         NATIVE_X86=1
         # A non-empty string to trigger running, even if no wrapper is needed.
-        RUN_X86_64=" "
-        RUN_I686=" "
+        RUN_X86=" "
         export PATH=.:$PATH
         ;;
     *)
         case $(uname -m) in
         x86_64)
-            : ${RUN_X86_64:=wine}
-            : ${RUN_I686:=wine}
+            RUN_X86=wine
             ;;
         esac
         ;;
@@ -85,14 +83,9 @@ TESTS_IDL="idltest"
 TESTS_OTHER_TARGETS="hello"
 for arch in $ARCHS; do
     case $arch in
-    i686)
-        RUN="$RUN_I686"
-        COPY="$COPY_I686"
-        NATIVE="$NATIVE_X86"
-        ;;
-    x86_64)
-        RUN="$RUN_X86_64"
-        COPY="$COPY_X86_64"
+    i686|x86_64)
+        RUN="$RUN_X86"
+        COPY="$COPY_X86"
         NATIVE="$NATIVE_X86"
         ;;
     armv7)
@@ -256,7 +249,7 @@ for arch in $ARCHS; do
     fi
     for test in $RUN_TESTS; do
         file=$test.exe
-        if [ -n "$RUN" ] && [ "$RUN" != "false" ]; then
+        if [ -n "$RUN" ]; then
             $RUN $file
         fi
     done

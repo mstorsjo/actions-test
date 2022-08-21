@@ -18,7 +18,7 @@ set -e
 
 : ${DEFAULT_WIN32_WINNT:=0x601}
 : ${DEFAULT_MSVCRT:=ucrt}
-: ${MINGW_W64_VERSION:=a3f6d363d534e9d5563a0b7c677889101e6bbd42}
+: ${MINGW_W64_VERSION:=d0dec04461345121f7079d62e07f036ca7446c6c}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -55,17 +55,14 @@ fi
 cd mingw-w64
 
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
-    echo Fetching mingw-w64 $MINGW_W64_VERSION
     [ -z "$SYNC" ] || git fetch
     git checkout $MINGW_W64_VERSION
-else
-    echo Using existing checkout of mingw-w64
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0
 
 MAKE=make
-if [ -n "$(which gmake)" ]; then
+if command -v gmake >/dev/null; then
     MAKE=gmake
 fi
 

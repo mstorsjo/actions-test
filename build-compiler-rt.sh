@@ -47,7 +47,7 @@ if [ ! -d llvm-project/compiler-rt ] || [ -n "$SYNC" ]; then
     CHECKOUT_ONLY=1 ./build-llvm.sh
 fi
 
-if [ -n "$(which ninja)" ]; then
+if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
     NINJA=1
     BUILDCMD=ninja
@@ -95,6 +95,7 @@ for arch in $ARCHS; do
         -DCMAKE_C_COMPILER_TARGET=$arch-windows-gnu \
         -DCOMPILER_RT_DEFAULT_TARGET_ONLY=TRUE \
         -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE \
+        -DLLVM_CONFIG_PATH="" \
         -DSANITIZER_CXX_ABI=libc++ \
         $SRC_DIR
     $BUILDCMD ${CORES+-j$CORES}

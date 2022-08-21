@@ -45,16 +45,13 @@ if [ ! -d lldb-mi ]; then
 fi
 
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
-    echo Fetching lldb-mi $LLDB_MI_VERSION
     cd lldb-mi
     [ -z "$SYNC" ] || git fetch
     git checkout $LLDB_MI_VERSION
     cd ..
-else
-    echo Using existing checkout of lldb-mi
 fi
 
-if [ -n "$(which ninja)" ]; then
+if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
     NINJA=1
     BUILDCMD=ninja
@@ -95,7 +92,6 @@ if [ -n "$HOST" ]; then
     BUILDDIR=$BUILDDIR-$HOST
 
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CROSSCOMPILING=TRUE"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"

@@ -35,7 +35,7 @@ fi
 
 cd llvm-project/openmp
 
-if [ -n "$(which ninja)" ]; then
+if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
     NINJA=1
     BUILDCMD=ninja
@@ -80,7 +80,6 @@ for arch in $ARCHS; do
         -DCMAKE_CXX_COMPILER=$arch-w64-mingw32-clang++ \
         -DCMAKE_RC_COMPILER=$arch-w64-mingw32-windres \
         -DCMAKE_ASM_MASM_COMPILER=llvm-ml \
-        -DCMAKE_CROSSCOMPILING=TRUE \
         -DCMAKE_SYSTEM_NAME=Windows \
         -DCMAKE_AR="$PREFIX/bin/llvm-ar" \
         -DCMAKE_RANLIB="$PREFIX/bin/llvm-ranlib" \

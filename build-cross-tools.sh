@@ -16,18 +16,38 @@
 
 set -e
 
-if [ $# -lt 3 ]; then
-    echo $0 native prefix arch [--with-python]
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --with-python)
+        PYTHON=1
+        ;;
+    --disable-lldb-mi)
+        NO_LLDB_MI=1
+        ;;
+    *)
+        if [ -z "$NATIVE" ]; then
+            NATIVE="$1"
+        elif [ -z "$PREFIX" ]; then
+            PREFIX="$1"
+        elif [ -z "$CROSS_ARCH" ]; then
+            CROSS_ARCH="$1"
+        else
+            echo Unrecognized parameter $1
+            exit 1
+        fi
+        ;;
+    esac
+    shift
+done
+if [ -z "$CROSS_ARCH" ]; then
+    echo $0 native prefix arch [--with-python] [--disable-lldb-mi]
     exit 1
 fi
-NATIVE="$1"
-PREFIX="$2"
-CROSS_ARCH="$3"
 
 export PATH="$NATIVE/bin:$PATH"
 HOST=$CROSS_ARCH-w64-mingw32
 
-if [ "$4" = "--with-python" ]; then
+if [ -n "$PYTHON" ]; then
     PYTHON_NATIVE_PREFIX="$(cd "$(dirname "$0")" && pwd)/python-native"
     [ -d "$PYTHON_NATIVE_PREFIX" ] || rm -rf "$PYTHON_NATIVE_PREFIX"
     ./build-python.sh $PYTHON_NATIVE_PREFIX
@@ -35,11 +55,13 @@ if [ "$4" = "--with-python" ]; then
     ./build-python.sh $PREFIX/python --host=$HOST
     mkdir -p $PREFIX/bin
     cp $PREFIX/python/bin/*.dll $PREFIX/bin
-    LLVM_WITH_PYTHON="--with-python"
+    LLVM_ARGS="$LLVM_ARGS --with-python"
 fi
 
-./build-llvm.sh $PREFIX --host=$HOST $LLVM_WITH_PYTHON
-./build-lldb-mi.sh $PREFIX --host=$HOST
+./build-llvm.sh $PREFIX --host=$HOST $LLVM_ARGS
+if [ -z "$NO_LLDB_MI" ]; then
+    ./build-lldb-mi.sh $PREFIX --host=$HOST
+fi
 ./strip-llvm.sh $PREFIX --host=$HOST
 ./build-mingw-w64-tools.sh $PREFIX --skip-include-triplet-prefix --host=$HOST
 ./install-wrappers.sh $PREFIX --host=$HOST

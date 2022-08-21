@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-14.0.0}
+: ${LLVM_VERSION:=llvmorg-15.0.0-rc1}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -101,7 +101,6 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
     # (Redoing a shallow fetch will refetch the data even if the commit
     # already exists locally, unless fetching a tag with the "tag"
     # argument.)
-    echo Fetching llvm-project $LLVM_VERSION
     if git cat-file -e "$LLVM_VERSION" 2> /dev/null; then
         # Exists; just check it out
         git checkout "$LLVM_VERSION"
@@ -122,13 +121,11 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
         esac
     fi
     cd ..
-else
-    echo Using existing checkout of llvm-project
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0
 
-if [ -n "$(which ninja)" ]; then
+if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
     NINJA=1
     BUILDCMD=ninja
@@ -147,13 +144,13 @@ else
     BUILDCMD=make
 fi
 
+CMAKEFLAGS="$LLVM_CMAKEFLAGS"
+
 if [ -n "$HOST" ]; then
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CROSSCOMPILING=TRUE"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
-    CMAKEFLAGS="$CMAKEFLAGS -DCROSS_TOOLCHAIN_FLAGS_NATIVE="
 
     native=""
     for dir in llvm-project/llvm/build/bin llvm-project/llvm/build-asserts/bin; do
@@ -167,8 +164,8 @@ if [ -n "$HOST" ]; then
             break
         fi
     done
-    if [ -z "$native" ] && [ -n "$(which llvm-tblgen)" ]; then
-        native="$(dirname $(which llvm-tblgen))"
+    if [ -z "$native" ] && command -v llvm-tblgen >/dev/null; then
+        native="$(dirname $(command -v llvm-tblgen))"
         suffix=""
         if [ -x "$native/llvm-tblgen.exe" ]; then
             suffix=".exe"
@@ -189,12 +186,19 @@ if [ -n "$HOST" ]; then
         if [ -x "$native/llvm-config$suffix" ]; then
             CMAKEFLAGS="$CMAKEFLAGS -DLLVM_CONFIG_PATH=$native/llvm-config$suffix"
         fi
+        if [ -x "$native/clang-pseudo-gen$suffix" ]; then
+            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_PSEUDO_GEN=$native/clang-pseudo-gen$suffix"
+        fi
+        if [ -x "$native/clang-tidy-confusable-chars-gen$suffix" ]; then
+            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_TIDY_CONFUSABLE_CHARS_GEN=$native/clang-tidy-confusable-chars-gen$suffix"
+        fi
     fi
-    CROSS_ROOT=$(cd $(dirname $(which $HOST-gcc))/../$HOST && pwd)
+    CROSS_ROOT=$(cd $(dirname $(command -v $HOST-gcc))/../$HOST && pwd)
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH=$CROSS_ROOT"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
 
     # Custom, llvm-mingw specific defaults. We normally set these in
     # the frontend wrappers, but this makes sure they are enabled by
@@ -206,21 +210,23 @@ if [ -n "$HOST" ]; then
     BUILDDIR=$BUILDDIR-$HOST
 
     if [ -n "$WITH_PYTHON" ]; then
-        PYTHON_VER="3.9"
         # The python3-config script requires executing with bash. It outputs
         # an extra trailing space, which the extra 'echo' layer gets rid of.
         EXT_SUFFIX="$(echo $(bash $PREFIX/python/bin/python3-config --extension-suffix))"
+        PYTHON_RELATIVE_PATH="$(cd "$PREFIX" && echo python/lib/python*/site-packages)"
+        PYTHON_INCLUDE_DIR="$(echo $PREFIX/python/include/python*)"
+        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython*.dll.a)"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_ENABLE_PYTHON=ON"
         CMAKEFLAGS="$CMAKEFLAGS -DPYTHON_HOME=$PREFIX/python"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_HOME=../python"
         # Relative to the lldb install root
-        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_RELATIVE_PATH=python/lib/python$PYTHON_VER/site-packages"
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_RELATIVE_PATH=$PYTHON_RELATIVE_PATH"
         # Relative to LLDB_PYTHON_HOME
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_EXE_RELATIVE_PATH=bin/python3.exe"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_EXT_SUFFIX=$EXT_SUFFIX"
 
-        CMAKEFLAGS="$CMAKEFLAGS -DPython3_INCLUDE_DIRS=$PREFIX/python/include/python$PYTHON_VER"
-        CMAKEFLAGS="$CMAKEFLAGS -DPython3_LIBRARIES=$PREFIX/python/lib/libpython$PYTHON_VER.dll.a"
+        CMAKEFLAGS="$CMAKEFLAGS -DPython3_INCLUDE_DIRS=$PYTHON_INCLUDE_DIR"
+        CMAKEFLAGS="$CMAKEFLAGS -DPython3_LIBRARIES=$PYTHON_LIB"
     fi
 elif [ -n "$STAGE2" ]; then
     # Build using an earlier built and installed clang in the target directory
