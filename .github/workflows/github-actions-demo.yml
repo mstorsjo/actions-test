@@ -5,48 +5,64 @@ on:
 jobs:
   llvm-mingw:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            unzip
+            git
+          pacboy: >-
+            cmake:p
+            ninja:p
       - name: Download and unpack llvm-mingw
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
-          Expand-Archive llvm-mingw-*-ucrt-x86_64.zip -DestinationPath .
-          del llvm-mingw-*-ucrt-x86_64.zip
-          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
-          echo "$($pwd.Path)\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "$($pwd.Path)\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=$($pwd.Path -replace "\\","/")/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Checkout llvm-project
+          unzip -q llvm-mingw-*.zip
+          rm llvm-mingw-*.zip
+          mv llvm-mingw-* /llvm-mingw
+          echo /llvm-mingw/bin >> $GITHUB_PATH
+          echo /llvm-mingw/python/bin >> $GITHUB_PATH
+          echo "PYTHON_EXE=$(cygpath -m /llvm-mingw/python/bin/python3.exe)" >> $GITHUB_ENV
+      - name: Checkout src
         uses: actions/checkout@v2
-        with:
-          repository: llvm/llvm-project
-          path: llvm-project
+      - name: Checkout llvm-project
+        run: |
+          CHECKOUT_ONLY=1 LLVM_VERSION=8a002ab99eea0e368dfabf7c20c63be0a6722810 ./build-llvm.sh
       - name: Build and test libcxx
         run: |
+          export PATH=/llvm-mingw/bin:/llvm-mingw/python/bin:$PATH
           cd llvm-project
           mkdir build
           cd build
-          cmake ../runtimes `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DLIBCXX_ENABLE_WERROR=YES `
-            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
-            -DLIBCXX_CXX_ABI=libcxxabi `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++ `
-            -DLIBCXX_TARGET_INFO="libcxx.test.target_info.MingwLocalTI" `
-            -DLIBCXXABI_ENABLE_SHARED=NO `
-            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
-            -DLIBCXX_USE_COMPILER_RT=YES `
-            -DLIBCXXABI_USE_COMPILER_RT=YES `
-            -DLIBUNWIND_USE_COMPILER_RT=YES `
-            -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
+          echo PYTHON_EXE=$PYTHON_EXE
+          cmake ../runtimes \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPython3_EXECUTABLE="$PYTHON_EXE" \
+            -DLIBCXX_ENABLE_WERROR=YES \
+            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+            -DLIBCXX_CXX_ABI=libcxxabi \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLIBCXX_TARGET_INFO="libcxx.test.target_info.MingwLocalTI" \
+            -DLIBCXXABI_ENABLE_SHARED=NO \
+            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES \
+            -DLIBCXX_USE_COMPILER_RT=YES \
+            -DLIBCXXABI_USE_COMPILER_RT=YES \
+            -DLIBUNWIND_USE_COMPILER_RT=YES \
+            -DLIBCXXABI_USE_LLVM_UNWINDER=YES \
             -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
             #-C "${MONOREPO_ROOT}/libcxx/cmake/caches/MinGW.cmake"
+          grep -i python3 CMakeCache.txt
           ninja
           ninja check-cxx
 
   clang-cl:
+    if: false
     runs-on: windows-latest
     steps:
       - name: Set up the environment
