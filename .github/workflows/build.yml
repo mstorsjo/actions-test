@@ -246,8 +246,7 @@ jobs:
         run: |
           Expand-Archive llvm-mingw-x86_64.zip -DestinationPath .
           del llvm-mingw-x86_64.zip
-          ren llvm-mingw-20220802-ucrt-x86_64 llvm-mingw
-          mv llvm-mingw-20220802-ucrt-x86_64 c:\llvm-mingw
+          mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
