@@ -1,8 +1,7 @@
 name: Builds
 on:
-  push:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 11 * * *'
 
 jobs:
   # For scheduled builds, get the commit ids of the latest versions to build.
