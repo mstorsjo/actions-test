@@ -13,9 +13,9 @@ jobs:
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/actions-test/llvm-mingw-x86_64.zip
-          Expand-Archive llvm-mingw-x86_64.zip -DestinationPath .
-          del llvm-mingw-x86_64.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
+          Expand-Archive llvm-mingw-*.zip -DestinationPath .
+          del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
