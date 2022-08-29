@@ -34,13 +34,13 @@ jobs:
           echo /llvm-mingw/python/bin >> $GITHUB_PATH
           echo "PYTHON_EXE=$(cygpath -m /llvm-mingw/python/bin/python3.exe)" >> $GITHUB_ENV
       - uses: actions/checkout@v2
-      - name: Build mingw-w64
-        run: |
-          ARCHS="i686 x86_64" ./build-mingw-w64.sh --skip-include-triplet-prefix /llvm-mingw
-      - name: Checkout llvm-project
+      - name: Build patched mingw-w64
         run: |
           git config --global user.name "LLVM MinGW"
           git config --global user.email root@localhost
+          ARCHS="i686 x86_64" ./build-mingw-w64.sh --skip-include-triplet-prefix /llvm-mingw
+      - name: Checkout llvm-project
+        run: |
           CHECKOUT_ONLY=1 ./build-llvm.sh
       - name: Build and test libcxx
         run: |
