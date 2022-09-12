@@ -295,6 +295,7 @@ cd $BUILDDIR
 # Building LLDB for macOS fails unless building libc++ is enabled at the
 # same time, or unless the LLDB tests are disabled.
 cmake \
+    --debug-find \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DCMAKE_BUILD_TYPE=Release \
