@@ -20,7 +20,7 @@ jobs:
       - name: Check latest version
         if: true
         run: |
-          echo LLVM_VERSION=7e7013c5d4b1b3996c8dba668c5a94bb33b2999b >> versions
+          echo LLVM_VERSION=180e9f60c1f48c11e79fa516e2358d0f0be76ca6 >> versions
           echo MINGW_W64_VERSION=d4a0c84d908243a45255a06dc293d3d7c06db98c >> versions
       - uses: actions/upload-artifact@v2
         with:
