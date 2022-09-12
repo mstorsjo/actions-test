@@ -18,11 +18,10 @@ jobs:
         run: |
           touch versions
       - name: Check latest version
-        if: github.event_name == 'schedule'
+        if: true
         run: |
-          echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> versions
-          echo MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> versions
-          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.10.5$' | awk '{print $1}') >> versions
+          echo LLVM_VERSION=7e7013c5d4b1b3996c8dba668c5a94bb33b2999b >> versions
+          echo MINGW_W64_VERSION=d4a0c84d908243a45255a06dc293d3d7c06db98c >> versions
       - uses: actions/upload-artifact@v2
         with:
           name: versions
@@ -38,11 +37,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v3
-        if: github.event_name == 'schedule'
+        if: true
         with:
           name: versions
       - name: Set build env vars
-        if: github.event_name == 'schedule'
+        if: true
         run: |
           . versions
           echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION, with assertions enabled
