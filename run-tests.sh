@@ -78,6 +78,7 @@ TESTS_CPP_DLL="tlstest-lib throwcatch-lib"
 TESTS_CPP_LINK_DLL="throwcatch-main"
 TESTS_SSP="stacksmash"
 TESTS_ASAN="stacksmash"
+TESTS_FORTIFY="fortify crt-test"
 TESTS_UBSAN="ubsan"
 TESTS_OMP="hello-omp"
 TESTS_UWP="uwp-error"
@@ -108,6 +109,7 @@ for arch in $ARCHS; do
     esac
 
     TEST_DIR="$arch"
+    TESTS_EXTRA=""
     [ -z "$CLEAN" ] || rm -rf $TEST_DIR
     # A leftover libc++.dll from a previous round will cause the linker to find it (and error out) instead of
     # locating libc++.dll.a in a later include directory.
@@ -134,7 +136,6 @@ for arch in $ARCHS; do
     for test in $TESTS_C_LINK_DLL; do
         $arch-w64-mingw32-clang $test.c -o $TEST_DIR/$test.exe -L$TEST_DIR -l${test%-main}-lib
     done
-    TESTS_EXTRA=""
     for test in $TESTS_C_NO_BUILTIN; do
         $arch-w64-mingw32-clang $test.c -o $TEST_DIR/$test-no-builtin.exe -fno-builtin
         TESTS_EXTRA="$TESTS_EXTRA $test-no-builtin"
@@ -167,6 +168,10 @@ for arch in $ARCHS; do
     done
     for test in $TESTS_SSP; do
         $arch-w64-mingw32-clang $test.c -o $TEST_DIR/$test.exe -fstack-protector-strong
+    done
+    for test in $TESTS_FORTIFY; do
+        $arch-w64-mingw32-clang $test.c -o $TEST_DIR/$test-fortify.exe -O2 -D_FORTIFY_SOURCE=2 -lssp
+        TESTS_EXTRA="$TESTS_EXTRA $test-fortify"
     done
     for test in $TESTS_IDL; do
         # This is primary a build-only test, so no need to execute it.
