@@ -3,37 +3,26 @@ on:
   push:
 
 jobs:
-  test-toolchain:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          install: >-
-            unzip
-      - name: Unpack toolchain
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-x86_64.zip
-          unzip -q llvm-mingw-*.zip
-          rm llvm-mingw-*.zip
-          mv llvm-mingw-* /llvm-mingw
-          echo /llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
-      - name: Run tests
-        run: |
-          ./run-tests.sh /llvm-mingw
-
-  test-toolchain-wine:
+  build-vlc:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - armv7
+          - aarch64
     steps:
       - name: Install wine
         run: |
           # dpkg --add-architecture i386 to install 32 bit wine fails currently
           sudo apt-get update && sudo apt-get install wine64-development
-          wine64 wineboot
+          #sudo ln -s /usr/bin/wine64 /usr/bin/wine
+          wine wineboot
+      - name: Install other VLC dependencies
+        run: |
+          sudo apt-get install --no-install-recommends -y automake autoconf autopoint gettext zip nasm yasm ant default-jdk dos2unix gperf python3 flex bison help2man python python3-mako
       - name: Unpack toolchain
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-ubuntu-18.04-x86_64.tar.xz
@@ -41,7 +30,36 @@ jobs:
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
-      - name: Run tests
+      - name: Checkout vlc
         run: |
-          RUN_I686=false RUN_X86_64=wine64 ./run-tests.sh /opt/llvm-mingw
+          git clone https://code.videolan.org/videolan/vlc.git
+          cd vlc
+          git checkout 4100c227d052cf5f804acd67904f698e89946110
+      - name: Build VLC
+        run: |
+          cd vlc
+          cd extras/tools
+          ./bootstrap
+          make -j$(nproc)
+          cd ../..
+          export PATH=$(pwd)/extras/tools/build/bin:$PATH
+          cd contrib
+          mkdir build-${{matrix.arch}}
+          cd build-${{matrix.arch}}
+          ../bootstrap --host=${{matrix.arch}}-w64-mingw32
+          make -j$(nproc)
+          cd ../..
+          export PKG_CONFIG_LIBDIR=$(pwd)/contrib/${{matrix.arch}}-w64-mingw32/lib/pkgconfig
+          ./bootstrap
+          mkdir build-${{matrix.arch}}
+          cd build-${{matrix.arch}}
+          ../extras/package/win32/configure.sh --host=${{matrix.arch}}-w64-mingw32
+          make -j$(nproc)
+          make -j$(nproc) package-win32-zip
+          mv *.zip ../..
+      - uses: actions/upload-artifact@v2
+        with:
+          name: vlc-${{matrix.arch}}
+          path: |
+            *.zip
+          retention-days: 7
