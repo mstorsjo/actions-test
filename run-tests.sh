@@ -259,12 +259,12 @@ for arch in $ARCHS; do
         done
         $COPY $COPYFILES
     fi
-    for test in $RUN_TESTS; do
-        file=$test.exe
-        if [ -n "$RUN" ] && [ "$RUN" != "false" ]; then
+    if [ -n "$RUN" ] && [ "$RUN" != "false" ]; then
+        for test in $RUN_TESTS; do
+            file=$test.exe
             $RUN $file
-        fi
-    done
+        done
+    fi
     cd ..
 done
 echo All tests succeeded
