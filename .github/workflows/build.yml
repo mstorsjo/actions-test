@@ -25,3 +25,23 @@ jobs:
       - name: Run tests
         run: |
           ./run-tests.sh /llvm-mingw
+
+  test-toolchain-wine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install wine
+        run: |
+          # dpkg --add-architecture i386 to install 32 bit wine fails currently
+          sudo apt-get update && sudo apt-get install wine64-development
+          wine64 wineboot
+      - name: Unpack toolchain
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-ubuntu-18.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - uses: actions/checkout@v2
+      - name: Run tests
+        run: |
+          RUN_I686=false RUN_X86_64=wine64 ./run-tests.sh /opt/llvm-mingw
