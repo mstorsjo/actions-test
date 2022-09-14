@@ -1,4 +1,6 @@
 name: Builds
+on:
+  push:
 
 jobs:
   # For scheduled builds, get the commit ids of the latest versions to build.
