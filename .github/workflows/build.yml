@@ -8,6 +8,12 @@ jobs:
     defaults:
       run:
         shell: msys2 {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - i686
     steps:
       - uses: msys2/setup-msys2@v2
         with:
@@ -16,7 +22,7 @@ jobs:
             unzip
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-x86_64.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
           unzip -q llvm-mingw-*.zip
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
@@ -25,6 +31,7 @@ jobs:
       - name: Run tests
         run: |
           ./run-tests.sh /llvm-mingw
+          ./run-lldb-tests.sh /llvm-mingw
 
   test-toolchain-wine:
     runs-on: ubuntu-latest
