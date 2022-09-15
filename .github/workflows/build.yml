@@ -192,6 +192,7 @@ jobs:
           name: msys2-${{matrix.sys}}-toolchain
           path: |
             llvm-mingw-msys2-${{matrix.sys}}.tar.xz
+            test
           retention-days: 7
 
   # Use the Linux cross compilers built in the first step to cross compile
