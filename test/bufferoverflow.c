@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Martin Storsjo
+ * Copyright (c) 2022 Martin Storsjo
  *
  * This file is part of llvm-mingw.
  *

@@ -78,7 +78,7 @@ TESTS_CPP_DLL="tlstest-lib throwcatch-lib"
 TESTS_CPP_LINK_DLL="throwcatch-main"
 TESTS_SSP="stacksmash"
 TESTS_ASAN="stacksmash"
-TESTS_FORTIFY="fortify crt-test"
+TESTS_FORTIFY="bufferoverflow crt-test"
 TESTS_UBSAN="ubsan"
 TESTS_OMP="hello-omp"
 TESTS_UWP="uwp-error"
@@ -113,8 +113,9 @@ for arch in $ARCHS; do
     FAILURE_TESTS=""
     [ -z "$CLEAN" ] || rm -rf $TEST_DIR
     # A leftover libc++.dll from a previous round will cause the linker to find it (and error out) instead of
-    # locating libc++.dll.a in a later include directory.
-    rm -f $TEST_DIR/libc++.dll
+    # locating libc++.dll.a in a later include directory. The same goes with
+    # libunwind.dll.
+    rm -f $TEST_DIR/libc++.dll $TEST_DIR/libunwind.dll
     mkdir -p $TEST_DIR
     for test in $TESTS_C; do
         $arch-w64-mingw32-clang $test.c -o $TEST_DIR/$test.exe
@@ -273,9 +274,11 @@ for arch in $ARCHS; do
             $RUN $file
         done
 
-        # These can be tested on Wine too, but some of the error situations
-        # trigger crashes, which might not work robustly on all exotic Wine
-        # configurations - thus only try them on native Windows.
+        # These don't strictly require running native instead of in Wine
+        # (except for sanitizers, but they are already filtered out at this
+        # point), but some of the error situations trigger crashes, which
+        # might not work robustly on all exotic Wine configurations - thus
+        # only run these tests on native Windows.
         if [ -n "$NATIVE" ]; then
             for test in $FAILURE_TESTS; do
                 file=$test.exe
@@ -303,7 +306,7 @@ for arch in $ARCHS; do
                         # and it can't be redirected, so we can't check for its presence.
                         #grep -q "stack smashing detected" $OUT
                         ;;
-                    fortify-*)
+                    bufferoverflow-*)
                         # GNU libssp writes this directly to the console,
                         # and it can't be redirected, so we can't check for its presence.
                         #grep -q "buffer overflow detected" $OUT
@@ -316,8 +319,8 @@ for arch in $ARCHS; do
                     rm -f $OUT
                 fi
             done
-            # Run all testcases for the fortify test.
-            file=fortify-fortify.exe
+            # Run all testcases for the bufferoverflow test.
+            file=bufferoverflow-fortify.exe
             OUT=cmdoutput
             i=0
             while [ $i -le 10 ]; do
