@@ -45,7 +45,7 @@ jobs:
         if: github.event_name == 'schedule'
         run: |
           . versions
-          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION, with assertions enabled
+          echo Building llvm-project $LLVM_VERSION mingw-w64 $MINGW_W64_VERSION
           cat versions >> $GITHUB_ENV
           mkdir -p install/llvm-mingw
           cp versions install/llvm-mingw
@@ -156,9 +156,15 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{matrix.sys}}
+          # Update so that we get a new enough compiler in the clang64
+          # environment (a version of clang that supports hidden visibility).
+          # The GCC build (in the mingw64 environment) seems to export
+          # slightly fewer symbols and doesn't hit the limit quite yet.
+          update: true
           install: >-
             git
             make
+            diffutils
           pacboy: >-
             toolchain:p
             cmake:p
