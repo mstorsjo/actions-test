@@ -30,7 +30,6 @@ jobs:
       - uses: actions/checkout@v2
       - name: Run tests
         run: |
-          ./run-tests.sh /llvm-mingw
           ./run-lldb-tests.sh /llvm-mingw
 
   test-toolchain-wine:
