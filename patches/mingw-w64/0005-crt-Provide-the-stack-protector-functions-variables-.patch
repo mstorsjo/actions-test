@@ -1,0 +1,108 @@
+From 5128a641d2719f6edaf2c2f60f33ab8195856090 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 13 Sep 2022 14:53:10 +0300
+Subject: [PATCH 5/8] crt: Provide the stack protector functions/variables in
+ libmingwex too
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+While the compiler drivers do add -lssp automatically when
+linking with -fstack-protector-strong, this also allows relying
+entirely on libmingwex. This implementation should be functionally
+equivalent to GCC's libssp for a mingw build configuration.
+
+This allows toolchains that don't otherwise use GCC's runtime libraries
+(such as LLVM based ones) to skip building libssp from GCC (and
+replacing it with empty/dummy libssp.a and libssp_nonshared.a).
+
+Signed-off-by: Martin Storsjö <martin@martin.st>
+---
+ mingw-w64-crt/Makefile.am           |  4 ++--
+ mingw-w64-crt/ssp/stack_chk_fail.c  | 23 +++++++++++++++++++++++
+ mingw-w64-crt/ssp/stack_chk_guard.c | 28 ++++++++++++++++++++++++++++
+ 3 files changed, 53 insertions(+), 2 deletions(-)
+ create mode 100644 mingw-w64-crt/ssp/stack_chk_fail.c
+ create mode 100644 mingw-w64-crt/ssp/stack_chk_guard.c
+
+diff --git a/mingw-w64-crt/Makefile.am b/mingw-w64-crt/Makefile.am
+index 7486f4f58..e7786c592 100644
+--- a/mingw-w64-crt/Makefile.am
++++ b/mingw-w64-crt/Makefile.am
+@@ -563,8 +563,8 @@ src_libmingwex=\
+   misc/wmemset.c         misc/ftw.c                 misc/ftw64.c            misc/mingw-access.c          \
+   \
+   ssp/chk_fail.c         ssp/memcpy_chk.c           ssp/memmove_chk.c       ssp/mempcpy_chk.c \
+-  ssp/memset_chk.c       ssp/strcat_chk.c           ssp/strcpy_chk.c        ssp/strncat_chk.c \
+-  ssp/strncpy_chk.c \
++  ssp/memset_chk.c       ssp/stack_chk_fail.c       ssp/stack_chk_guard.c   ssp/strcat_chk.c \
++  ssp/strcpy_chk.c       ssp/strncat_chk.c          ssp/strncpy_chk.c \
+   \
+   stdio/mingw_pformat.h    \
+   stdio/scanf2-argcount-char.c stdio/scanf2-argcount-wchar.c \
+diff --git a/mingw-w64-crt/ssp/stack_chk_fail.c b/mingw-w64-crt/ssp/stack_chk_fail.c
+new file mode 100644
+index 000000000..5619dd888
+--- /dev/null
++++ b/mingw-w64-crt/ssp/stack_chk_fail.c
+@@ -0,0 +1,23 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <stdio.h>
++#include <io.h>
++#include <stdlib.h>
++#include <windows.h>
++
++void __cdecl __attribute__((__noreturn__)) __stack_chk_fail(void);
++
++void __cdecl __attribute__((__noreturn__)) __stack_chk_fail(void) {
++  static const char msg[] = "*** stack smashing detected ***: terminated\n";
++  write(STDERR_FILENO, msg, strlen(msg));
++  if (IsProcessorFeaturePresent(PF_FASTFAIL_AVAILABLE)) {
++    __fastfail(FAST_FAIL_STACK_COOKIE_CHECK_FAILURE);
++  } else {
++    TerminateProcess(GetCurrentProcess(), STATUS_STACK_BUFFER_OVERRUN);
++    __builtin_unreachable();
++  }
++}
+diff --git a/mingw-w64-crt/ssp/stack_chk_guard.c b/mingw-w64-crt/ssp/stack_chk_guard.c
+new file mode 100644
+index 000000000..0525691e3
+--- /dev/null
++++ b/mingw-w64-crt/ssp/stack_chk_guard.c
+@@ -0,0 +1,28 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <windows.h>
++#include <wincrypt.h>
++
++void *__stack_chk_guard;
++
++static void __cdecl __attribute__((__constructor__)) init(void)
++{
++  HCRYPTPROV crypt = 0;
++  if (__stack_chk_guard != 0)
++    return;
++
++  if (CryptAcquireContext(&crypt, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
++    if (CryptGenRandom(crypt, sizeof(__stack_chk_guard), (BYTE*) &__stack_chk_guard) && __stack_chk_guard != 0) {
++      CryptReleaseContext(crypt, 0);
++      return;
++    }
++    CryptReleaseContext(crypt, 0);
++  }
++  /* Didn't manage to initialize to a strong random value; set any
++   * nonzero pointer instead. */
++  __stack_chk_guard = (void*)0xdeadbeef;
++}
+-- 
+2.25.1
+

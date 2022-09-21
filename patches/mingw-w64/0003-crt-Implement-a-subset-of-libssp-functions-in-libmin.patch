@@ -1,0 +1,317 @@
+From cf036aa454b4870f5e7f124c1d4aa7bd771c5fd5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 13 Sep 2022 13:59:36 +0300
+Subject: [PATCH 3/8] crt: Implement a subset of libssp functions in libmingwex
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is the subset of functions that ends up called when our headers
+are used with _FORTIFY_SOURCE defined. This avoids needing to
+manually pass -lssp in such build configurations.
+
+Signed-off-by: Martin Storsjö <martin@martin.st>
+---
+ mingw-w64-crt/Makefile.am       |  4 ++++
+ mingw-w64-crt/ssp/chk_fail.c    | 23 ++++++++++++++++++
+ mingw-w64-crt/ssp/memcpy_chk.c  | 18 +++++++++++++++
+ mingw-w64-crt/ssp/memmove_chk.c | 18 +++++++++++++++
+ mingw-w64-crt/ssp/mempcpy_chk.c | 19 +++++++++++++++
+ mingw-w64-crt/ssp/memset_chk.c  | 18 +++++++++++++++
+ mingw-w64-crt/ssp/strcat_chk.c  | 36 +++++++++++++++++++++++++++++
+ mingw-w64-crt/ssp/strcpy_chk.c  | 19 +++++++++++++++
+ mingw-w64-crt/ssp/strncat_chk.c | 41 +++++++++++++++++++++++++++++++++
+ mingw-w64-crt/ssp/strncpy_chk.c | 18 +++++++++++++++
+ 10 files changed, 214 insertions(+)
+ create mode 100644 mingw-w64-crt/ssp/chk_fail.c
+ create mode 100644 mingw-w64-crt/ssp/memcpy_chk.c
+ create mode 100644 mingw-w64-crt/ssp/memmove_chk.c
+ create mode 100644 mingw-w64-crt/ssp/mempcpy_chk.c
+ create mode 100644 mingw-w64-crt/ssp/memset_chk.c
+ create mode 100644 mingw-w64-crt/ssp/strcat_chk.c
+ create mode 100644 mingw-w64-crt/ssp/strcpy_chk.c
+ create mode 100644 mingw-w64-crt/ssp/strncat_chk.c
+ create mode 100644 mingw-w64-crt/ssp/strncpy_chk.c
+
+diff --git a/mingw-w64-crt/Makefile.am b/mingw-w64-crt/Makefile.am
+index 23b1ab9f0..7486f4f58 100644
+--- a/mingw-w64-crt/Makefile.am
++++ b/mingw-w64-crt/Makefile.am
+@@ -562,6 +562,10 @@ src_libmingwex=\
+   misc/wmemchr.c         misc/wmemcmp.c             misc/wmemcpy.c          misc/wmemmove.c              misc/wmempcpy.c        \
+   misc/wmemset.c         misc/ftw.c                 misc/ftw64.c            misc/mingw-access.c          \
+   \
++  ssp/chk_fail.c         ssp/memcpy_chk.c           ssp/memmove_chk.c       ssp/mempcpy_chk.c \
++  ssp/memset_chk.c       ssp/strcat_chk.c           ssp/strcpy_chk.c        ssp/strncat_chk.c \
++  ssp/strncpy_chk.c \
++  \
+   stdio/mingw_pformat.h    \
+   stdio/scanf2-argcount-char.c stdio/scanf2-argcount-wchar.c \
+   stdio/vfscanf2.S         stdio/vfwscanf2.S         stdio/vscanf2.S          stdio/vsscanf2.S          stdio/vswscanf2.S \
+diff --git a/mingw-w64-crt/ssp/chk_fail.c b/mingw-w64-crt/ssp/chk_fail.c
+new file mode 100644
+index 000000000..b77213904
+--- /dev/null
++++ b/mingw-w64-crt/ssp/chk_fail.c
+@@ -0,0 +1,23 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <stdio.h>
++#include <io.h>
++#include <stdlib.h>
++#include <windows.h>
++
++void __cdecl __attribute__((__noreturn__)) __chk_fail(void);
++
++void __cdecl __attribute__((__noreturn__)) __chk_fail(void) {
++  static const char msg[] = "*** buffer overflow detected ***: terminated\n";
++  write(STDERR_FILENO, msg, strlen(msg));
++  if (IsProcessorFeaturePresent(PF_FASTFAIL_AVAILABLE)) {
++    __fastfail(FAST_FAIL_STACK_COOKIE_CHECK_FAILURE);
++  } else {
++    TerminateProcess(GetCurrentProcess(), STATUS_STACK_BUFFER_OVERRUN);
++    __builtin_unreachable();
++  }
++}
+diff --git a/mingw-w64-crt/ssp/memcpy_chk.c b/mingw-w64-crt/ssp/memcpy_chk.c
+new file mode 100644
+index 000000000..3dee104c4
+--- /dev/null
++++ b/mingw-w64-crt/ssp/memcpy_chk.c
+@@ -0,0 +1,18 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++void *__cdecl __memcpy_chk(void *dst, void *src, size_t n, size_t bufsize);
++
++void *__cdecl __memcpy_chk(void *dst, void *src, size_t n, size_t bufsize)
++{
++  if (n > bufsize)
++    __chk_fail();
++  return memcpy(dst, src, n);
++}
+diff --git a/mingw-w64-crt/ssp/memmove_chk.c b/mingw-w64-crt/ssp/memmove_chk.c
+new file mode 100644
+index 000000000..9d29fefc9
+--- /dev/null
++++ b/mingw-w64-crt/ssp/memmove_chk.c
+@@ -0,0 +1,18 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++void *__cdecl __memmove_chk(void *dst, void *src, size_t n, size_t bufsize);
++
++void *__cdecl __memmove_chk(void *dst, void *src, size_t n, size_t bufsize)
++{
++  if (n > bufsize)
++    __chk_fail();
++  return memmove(dst, src, n);
++}
+diff --git a/mingw-w64-crt/ssp/mempcpy_chk.c b/mingw-w64-crt/ssp/mempcpy_chk.c
+new file mode 100644
+index 000000000..b8fc6dba3
+--- /dev/null
++++ b/mingw-w64-crt/ssp/mempcpy_chk.c
+@@ -0,0 +1,19 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#define _GNU_SOURCE
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++void *__cdecl __mempcpy_chk(void *dst, void *src, size_t n, size_t bufsize);
++
++void *__cdecl __mempcpy_chk(void *dst, void *src, size_t n, size_t bufsize)
++{
++  if (n > bufsize)
++    __chk_fail();
++  return mempcpy(dst, src, n);
++}
+diff --git a/mingw-w64-crt/ssp/memset_chk.c b/mingw-w64-crt/ssp/memset_chk.c
+new file mode 100644
+index 000000000..358f0a7dc
+--- /dev/null
++++ b/mingw-w64-crt/ssp/memset_chk.c
+@@ -0,0 +1,18 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++void *__cdecl __memset_chk(void *dst, int c, size_t n, size_t bufsize);
++
++void *__cdecl __memset_chk(void *dst, int c, size_t n, size_t bufsize)
++{
++  if (n > bufsize)
++    __chk_fail();
++  return memset(dst, c, n);
++}
+diff --git a/mingw-w64-crt/ssp/strcat_chk.c b/mingw-w64-crt/ssp/strcat_chk.c
+new file mode 100644
+index 000000000..056b6736d
+--- /dev/null
++++ b/mingw-w64-crt/ssp/strcat_chk.c
+@@ -0,0 +1,36 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++char *__cdecl __strcat_chk(char *dst, const char *src, size_t bufsize);
++
++char *__cdecl __strcat_chk(char *dst, const char *src, size_t bufsize)
++{
++  size_t cur_len = strlen(dst);
++  char *orig_dst = dst;
++
++  if (cur_len > bufsize)
++    __chk_fail();
++
++  dst += cur_len;
++  bufsize -= cur_len;
++
++  while (*src) {
++    if (bufsize == 0)
++      __chk_fail();
++    *dst++ = *src++;
++    bufsize--;
++  }
++
++  if (bufsize == 0)
++    __chk_fail();
++  *dst++ = '\0';
++
++  return orig_dst;
++}
+diff --git a/mingw-w64-crt/ssp/strcpy_chk.c b/mingw-w64-crt/ssp/strcpy_chk.c
+new file mode 100644
+index 000000000..2e1b0c241
+--- /dev/null
++++ b/mingw-w64-crt/ssp/strcpy_chk.c
+@@ -0,0 +1,19 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++char *__cdecl __strcpy_chk(char *dst, const char *src, size_t bufsize);
++
++char *__cdecl __strcpy_chk(char *dst, const char *src, size_t bufsize)
++{
++  size_t n = strlen(src);
++  if (n >= bufsize)
++    __chk_fail();
++  return memcpy(dst, src, n + 1);
++}
+diff --git a/mingw-w64-crt/ssp/strncat_chk.c b/mingw-w64-crt/ssp/strncat_chk.c
+new file mode 100644
+index 000000000..2b2bfc1a5
+--- /dev/null
++++ b/mingw-w64-crt/ssp/strncat_chk.c
+@@ -0,0 +1,41 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++char *__cdecl __strncat_chk(char *dst, const char *src, size_t n, size_t bufsize);
++
++char *__cdecl __strncat_chk(char *dst, const char *src, size_t n, size_t bufsize)
++{
++  size_t cur_len = strlen(dst);
++  char *orig_dst = dst;
++  char c;
++
++  if (cur_len > bufsize)
++    __chk_fail();
++
++  dst += cur_len;
++  bufsize -= cur_len;
++
++  while (n > 0) {
++    if (bufsize == 0)
++      __chk_fail();
++    c = *src++;
++    *dst++ = c;
++    n--;
++    bufsize--;
++    if (c == '\0')
++      return orig_dst;
++  }
++
++  if (bufsize == 0)
++    __chk_fail();
++  *dst++ = '\0';
++
++  return orig_dst;
++}
+diff --git a/mingw-w64-crt/ssp/strncpy_chk.c b/mingw-w64-crt/ssp/strncpy_chk.c
+new file mode 100644
+index 000000000..f9e4d297e
+--- /dev/null
++++ b/mingw-w64-crt/ssp/strncpy_chk.c
+@@ -0,0 +1,18 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++#include <string.h>
++
++void __cdecl __chk_fail(void) __attribute__((__noreturn__));
++
++char *__cdecl __strncpy_chk(char *dst, const char *src, size_t n, size_t bufsize);
++
++char *__cdecl __strncpy_chk(char *dst, const char *src, size_t n, size_t bufsize)
++{
++  if (n > bufsize)
++    __chk_fail();
++  return strncpy(dst, src, n);
++}
+-- 
+2.25.1
+
