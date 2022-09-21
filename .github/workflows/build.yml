@@ -20,6 +20,8 @@ jobs:
           msystem: mingw64
           install: >-
             unzip
+            git
+            make
       - name: Unpack toolchain
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
@@ -28,6 +30,9 @@ jobs:
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
+      - name: Build mingw-w64
+        run: |
+          ./build-mingw-w64.sh --skip-include-triplet-prefix /llvm-mingw
       - name: Run tests
         run: |
           ./run-tests.sh /llvm-mingw
@@ -50,6 +55,9 @@ jobs:
           sudo mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v2
+      - name: Build mingw-w64
+        run: |
+          ./build-mingw-w64.sh /opt/llvm-mingw
       - name: Run tests
         run: |
           RUN_I686=false RUN_X86_64=wine64 ./run-tests.sh /opt/llvm-mingw
