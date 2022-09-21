@@ -177,7 +177,7 @@ for arch in $ARCHS; do
         TESTS_EXTRA="$TESTS_EXTRA $test-fortify"
         if [ "$test" != "crt-test" ]; then
             # crt-test doesn't trigger failures
-            true
+            FAILURE_TESTS="$FAILURE_TESTS $test-fortify"
         fi
     done
     for test in $TESTS_IDL; do
@@ -222,6 +222,7 @@ for arch in $ARCHS; do
         # Only run these tests on native windows; asan doesn't run in wine.
         if [ -n "$NATIVE" ]; then
             TESTS_EXTRA="$TESTS_EXTRA $test-asan"
+            FAILURE_TESTS="$FAILURE_TESTS $test-asan"
         fi
     done
     for test in $TESTS_UBSAN; do
@@ -233,6 +234,7 @@ for arch in $ARCHS; do
         esac
         $arch-w64-mingw32-clang $test.c -o $TEST_DIR/$test.exe -fsanitize=undefined -fno-sanitize-recover=all
         TESTS_EXTRA="$TESTS_EXTRA $test"
+        FAILURE_TESTS="$FAILURE_TESTS $test"
     done
     for test in $TESTS_OMP; do
         case $arch in
@@ -278,10 +280,6 @@ for arch in $ARCHS; do
         # might not work robustly on all exotic Wine configurations - thus
         # only run these tests on native Windows.
         if [ -n "$NATIVE" ]; then
-            iter=0
-            while [ $iter -le 1024 ]; do
-                echo iter $iter
-                iter=$(($iter+1))
             for test in $FAILURE_TESTS; do
                 file=$test.exe
                 OUT=cmdoutput
@@ -320,7 +318,6 @@ for arch in $ARCHS; do
                     esac
                     rm -f $OUT
                 fi
-            done
             done
             # Run all testcases for the bufferoverflow test.
             file=bufferoverflow-fortify.exe
