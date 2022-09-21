@@ -122,6 +122,10 @@ for arch in $ARCHS; do
     ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS
     $MAKE -j$CORES
     $MAKE install
+
+    rm -f $PREFIX/$arch-w64-mingw32/lib/libssp*
+    llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp.a
+    llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp_nonshared.a
     cd ..
 done
 cd ..
