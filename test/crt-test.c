@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__MINGW32__)
 #define _GNU_SOURCE
 #endif
 #include <stdio.h>
