@@ -307,7 +307,7 @@ for arch in $ARCHS; do
         # point), but some of the error situations trigger crashes, which
         # might not work robustly on all exotic Wine configurations - thus
         # only run these tests on native Windows.
-        if [ -n "$NATIVE" ]; then
+        if true; then
             for test in $FAILURE_TESTS; do
                 file=$test.exe
                 OUT=cmdoutput
