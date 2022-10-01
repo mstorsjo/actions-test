@@ -18,20 +18,33 @@ set -e
 
 SRC_DIR=../lib/builtins
 BUILD_SUFFIX=
+BUILD_BUILTINS=TRUE
+ENABLE_CFGUARD=1
+CFGUARD_CFLAGS="-mguard=cf"
 
 while [ $# -gt 0 ]; do
     if [ "$1" = "--build-sanitizers" ]; then
         SRC_DIR=..
         BUILD_SUFFIX=-sanitizers
         SANITIZERS=1
+        BUILD_BUILTINS=FALSE
+    elif [ "$1" = "--enable-cfguard" ]; then
+        CFGUARD_CFLAGS="-mguard=cf"
+        ENABLE_CFGUARD=1
+    elif [ "$1" = "--disable-cfguard" ]; then
+        CFGUARD_CFLAGS=
+        ENABLE_CFGUARD=
     else
         PREFIX="$1"
     fi
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo $0 [--build-sanitizers] dest
+    echo "$0 [--build-sanitizers] [--enable-cfguard|--disable-cfguard] dest"
     exit 1
+fi
+if [ -n "$SANITIZERS" ] && [ -n "$ENABLE_CFGUARD" ]; then
+    echo "warning: Sanitizers may not work correctly with Control Flow Guard enabled." 1>&2
 fi
 
 mkdir -p "$PREFIX"
@@ -95,8 +108,11 @@ for arch in $ARCHS; do
         -DCMAKE_C_COMPILER_TARGET=$arch-windows-gnu \
         -DCOMPILER_RT_DEFAULT_TARGET_ONLY=TRUE \
         -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE \
+        -DCOMPILER_RT_BUILD_BUILTINS=$BUILD_BUILTINS \
         -DLLVM_CONFIG_PATH="" \
         -DSANITIZER_CXX_ABI=libc++ \
+        -DCMAKE_C_FLAGS_INIT="$CFGUARD_CFLAGS" \
+        -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \
         $SRC_DIR
     $BUILDCMD ${CORES+-j$CORES}
     $BUILDCMD install
