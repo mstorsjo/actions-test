@@ -260,14 +260,14 @@ for arch in $ARCHS; do
         i686|x86_64) ;;
         *) continue ;;
         esac
-        $arch-w64-mingw32-clang++ $test.cpp -o $TEST_DIR/$test-asan.exe -fsanitize=address -g -gcodeview -Wl,--pdb=
+        $arch-w64-mingw32-clang++ $test.cpp -o $TEST_DIR/$test-asan.exe -fsanitize=address -static -g -gcodeview -Wl,--pdb=
         # Only run these tests on native windows; asan doesn't run in wine.
         if [ -n "$NATIVE" ]; then
             TESTS_EXTRA="$TESTS_EXTRA $test-asan"
         fi
         if [ -n "$HAS_CFGUARD" ]; then
             # Smoke test ASAN with CFGuard to make sure it doesn't trip.
-            $arch-w64-mingw32-clang++ $test.cpp -o $TEST_DIR/$test-asan-cfguard.exe -fsanitize=address -g -gcodeview -Wl,--pdb= -mguard=cf
+            $arch-w64-mingw32-clang++ $test.cpp -o $TEST_DIR/$test-asan-cfguard.exe -fsanitize=address -static -g -gcodeview -Wl,--pdb= -mguard=cf
             if [ -n "$NATIVE" ]; then
                 TESTS_EXTRA="$TESTS_EXTRA $test-asan-cfguard"
             fi
