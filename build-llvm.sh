@@ -241,8 +241,39 @@ if [ -n "$LTO" ]; then
 fi
 
 if [ -n "$MACOS_REDIST" ]; then
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9"
+    : ${MACOS_REDIST_ARCHS:=arm64 x86_64}
+    : ${MACOS_REDIST_VERSION:=10.9}
+    ARCH_LIST=""
+    NATIVE=
+    for arch in $MACOS_REDIST_ARCHS; do
+        if [ -n "$ARCH_LIST" ]; then
+            ARCH_LIST="$ARCH_LIST;"
+        fi
+        ARCH_LIST="$ARCH_LIST$arch"
+        if [ "$(uname -m)" = "$arch" ]; then
+            NATIVE=1
+        fi
+    done
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=$ARCH_LIST"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_REDIST_VERSION"
+    if [ -z "$NATIVE" ]; then
+        # If we're not building for the native arch, flag to CMake that we're
+        # cross compiling, to let it build native versions of tools used
+        # during the build.
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Darwin"
+    fi
+fi
+
+if [ -z "$HOST" ] && [ "$(uname)" = "Darwin" ]; then
+    if [ -n "$LLDB" ]; then
+        # Building LLDB for macOS fails unless building libc++ is enabled at the
+        # same time, or unless the LLDB tests are disabled.
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_INCLUDE_TESTS=OFF"
+        # Don't build our own debugserver - use the system provided one.
+        # The newly built debugserver needs to be properly code signed to work.
+        # This silences a cmake warning.
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_USE_SYSTEM_DEBUGSERVER=ON"
+    fi
 fi
 
 TOOLCHAIN_ONLY=ON
@@ -292,8 +323,7 @@ fi
 [ -z "$CLEAN" ] || rm -rf $BUILDDIR
 mkdir -p $BUILDDIR
 cd $BUILDDIR
-# Building LLDB for macOS fails unless building libc++ is enabled at the
-# same time, or unless the LLDB tests are disabled.
+[ -n "$NO_RECONF" ] || rm -rf CMake*
 cmake \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
@@ -305,7 +335,6 @@ cmake \
     -DLLVM_LINK_LLVM_DYLIB=$LINK_DYLIB \
     -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf" \
     ${HOST+-DLLVM_HOST_TRIPLE=$HOST} \
-    -DLLDB_INCLUDE_TESTS=OFF \
     $CMAKEFLAGS \
     ..
 
