@@ -20,6 +20,7 @@ jobs:
           msystem: mingw64
           install: >-
             unzip
+            make
       - name: Unpack toolchain
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
