@@ -23,7 +23,7 @@ jobs:
             make
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
+          curl -LO https://martin.st/temp/llvm-mingw-${{matrix.arch}}.zip
           unzip -q llvm-mingw-*.zip
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
@@ -45,10 +45,10 @@ jobs:
           wine64 wineboot
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-ubuntu-18.04-x86_64.tar.xz
+          curl -LO https://martin.st/temp/llvm-mingw-linux.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
+          sudo mv llvm-mingw* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v3
       - name: Run tests
