@@ -27,10 +27,20 @@ jobs:
           unzip -q llvm-mingw-*.zip
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
+          cp /llvm-mingw/${{matrix.arch}}-w64-mingw32/bin/*.dll /llvm-mingw/bin
           echo /llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v3
       - name: Run tests
         run: |
+          mkdir test/local
+          cd test/local
+          export PATH=/llvm-mingw/bin:$PATH
+          make -f ../Makefile -j$(nproc)
+          make -f ../Makefile clean
+          make -f ../Makefile test -j$(nproc)
+          make -f ../Makefile clean
+          make -f ../Makefile test -j$(nproc) HAVE_SANITIZERS=1 HAVE_CFGUARD=1 HAVE_OPENMP=1 NATIVE=1
+          cd ../..
           ./run-tests.sh /llvm-mingw
           ./run-lldb-tests.sh /llvm-mingw
 
