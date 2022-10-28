@@ -18,14 +18,29 @@ vpath %.c $(SRC_PATH)
 vpath %.cpp $(SRC_PATH)
 vpath %.idl $(SRC_PATH)
 
+ifneq ($(filter %-mingw32, $(MAKE_HOST)),)
+    # If we're running as mingw32-make, we're executing everything in
+    # cmd.exe, so adapt/filter out things that require a POSIX shell.
+    CMD = 1
+    NATIVE = 1
+    TOUCH_TARGET =
+    RM_F = del
+else
+    TOUCH_TARGET = @touch $@
+    RM_F = rm -f
+endif
+
+# Run with TOOLEXT=.exe to run testing with Windows tools, from Linux make
+# in WSL.
+
 ifneq ($(ARCH),)
     CROSS = $(ARCH)-w64-mingw32-
     CROSS_UWP = $(ARCH)-w64-mingw32uwp-
 endif
-CC = $(CROSS)clang
-CXX = $(CROSS)clang++
-WIDL = $(CROSS)widl
-CC_UWP = $(CROSS_UWP)clang
+CC = $(CROSS)clang$(TOOLEXT)
+CXX = $(CROSS)clang++$(TOOLEXT)
+WIDL = $(CROSS)widl$(TOOLEXT)
+CC_UWP = $(CROSS_UWP)clang$(TOOLEXT)
 
 ifneq ($(COPY),)
     COPY_TARGET = $(COPY) $@
@@ -90,7 +105,9 @@ TARGETS_IDL = $(addsuffix $(EXEEXT), $(TESTS_IDL))
 TARGETS_OTHER_TARGETS = $(addsuffix -mingw32uwp$(EXEEXT), $(TESTS_OTHER_TARGETS))
 TARGETS_UWP = $(addsuffix -mingw32$(EXEEXT), $(TESTS_UWP))
 ifneq ($(HAVE_UWP),)
+ifeq ($(CMD),)
     TARGETS_UWP_FAIL = $(addprefix .tested.build., $(addsuffix -mingw32uwp$(EXEEXT), $(TESTS_UWP)))
+endif
 endif
 TARGETS_ASAN = $(addsuffix -asan$(EXEEXT), $(TESTS_ASAN))
 TARGETS_UBSAN = $(addsuffix $(EXEEXT), $(TESTS_UBSAN))
@@ -223,16 +240,19 @@ endif
 TEST_TARGETS = $(addprefix .tested., $(TESTS))
 
 ifneq ($(NATIVE),)
+ifeq ($(CMD),)
     # These don't strictly require running native instead of in Wine
     # (except for asan, but that's are already filtered out at this
     # point), but some of the error situations trigger crashes, which
     # might not work robustly on all exotic Wine configurations - thus
     # only run these tests on native Windows.
+    # These tests don't support being run in cmd.exe.
     FAILURE_TEST_TARGETS = $(addprefix .failtested., $(FAILURE_TESTS))
     CUSTOM1_FAILURE_TEST_TARGETS = .customtest1.bufferoverflow-fortify$(EXEEXT)
     ifneq ($(HAVE_CFGUARD),)
         CUSTOM2_FAILURE_TEST_TARGETS = .customtest2.cfguard-test$(EXEEXT)
     endif
+endif
 endif
 
 ALL_TEST_TARGETS = $(TEST_TARGETS) $(FAILURE_TEST_TARGETS) $(CUSTOM1_FAILURE_TEST_TARGETS) $(CUSTOM2_FAILURE_TEST_TARGETS)
@@ -243,11 +263,11 @@ test: all $(ALL_TEST_TARGETS)
 
 .copied.%: %
 	$(COPY_DEP)
-	@touch $@
+	$(TOUCH_TARGET)
 
 $(TEST_TARGETS): .tested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTIMES)
 	$(DO_RUN)$<
-	@touch $@
+	$(TOUCH_TARGET)
 
 # GNU libssp writes the error messages directly to the console, and it can't be
 # redirected, so we can't check for the presence of those messages.
@@ -327,6 +347,6 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 	@touch $@
 
 clean:
-	rm -f $(TARGETS) $(EXTRAFILES) $(ALL_TEST_TARGETS) $(COPY_TARGETS) $(LOCAL_RUNTIMES)
+	$(RM_F) $(TARGETS) $(EXTRAFILES) $(ALL_TEST_TARGETS) $(COPY_TARGETS) $(LOCAL_RUNTIMES)
 
 .PHONY: all test clean
