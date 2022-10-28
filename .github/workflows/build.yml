@@ -44,6 +44,33 @@ jobs:
           ./run-tests.sh /llvm-mingw
           ./run-lldb-tests.sh /llvm-mingw
 
+  test-toolchain-cmd:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - i686
+    steps:
+      - name: Unpack toolchain
+        run: |
+          curl -LO https://martin.st/temp/llvm-mingw-${{matrix.arch}}.zip
+          powershell Expand-Archive llvm-mingw-*.zip -DestinationPath .
+          del llvm-mingw-*.zip
+          move llvm-mingw-* ..\toolchain
+          copy ..\toolchain\${{matrix.arch}}-w64-mingw32\bin\*.dll ..\toolchain\bin
+          echo %cd%\..\toolchain\bin>> %GITHUB_PATH%
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: |
+          mkdir test\local
+          cd test\local
+          mingw32-make -f ../Makefile HAVE_SANITIZERS=1 HAVE_CFGUARD=1 HAVE_OPENMP=1 test
+
   # Run llvm-mingw's tests on x86_64 with wine, on Linux.
   test-toolchain-wine:
     runs-on: ubuntu-latest
