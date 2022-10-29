@@ -69,7 +69,7 @@ jobs:
         run: |
           mkdir test\local
           cd test\local
-          mingw32-make -f ../Makefile HAVE_SANITIZERS=1 HAVE_CFGUARD=1 HAVE_OPENMP=1 test
+          mingw32-make -f ../Makefile HAVE_SANITIZERS=1 HAVE_CFGUARD=1 HAVE_OPENMP=1 -O -j4 test
 
   # Run llvm-mingw's tests on x86_64 with wine, on Linux.
   test-toolchain-wine:
