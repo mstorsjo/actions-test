@@ -174,7 +174,7 @@ $(TARGETS_CFGUARD): %$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -mguard=cf
 
 $(TARGETS_FORTIFY): %-fortify$(EXEEXT): %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -O2 -D_FORTIFY_SOURCE=2 -lssp
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -O2 -D_FORTIFY_SOURCE=2
 
 $(TARGETS_ASAN): %-asan$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=address -g -gcodeview -Wl,--pdb=
@@ -217,7 +217,7 @@ ifeq ($(ARCH), i686)
     COMPILER_RT_ARCH = i386
 endif
 
-RUNTIMES = libc++ libunwind libssp-0 libclang_rt.asan_dynamic-$(COMPILER_RT_ARCH) libomp
+RUNTIMES = libc++ libunwind libclang_rt.asan_dynamic-$(COMPILER_RT_ARCH) libomp
 ifneq ($(RUNTIMES_SRC),)
 LOCAL_RUNTIMES = $(patsubst $(RUNTIMES_SRC)/%, %, $(wildcard $(addprefix $(RUNTIMES_SRC)/, $(addsuffix $(DLLEXT), $(RUNTIMES)))))
 
@@ -269,10 +269,6 @@ $(TEST_TARGETS): .tested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTI
 	$(DO_RUN)$<
 	$(TOUCH_TARGET)
 
-# GNU libssp writes the error messages directly to the console, and it can't be
-# redirected, so we can't check for the presence of those messages.
-# grep -q "stack smashing detected" $$OUT || exit 1
-# grep -q "buffer overflow detected" $$OUT || exit 1
 $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTIMES)
 	@echo $(DO_RUN)$< trigger; \
 	OUT=log1-$*; \
@@ -294,8 +290,10 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 			grep -q "signed integer overflow" $$OUT || exit 1; \
 			;; \
 		stacksmash) \
+			grep -q "stack smashing detected" $$OUT || exit 1; \
 			;; \
 		bufferoverflow-*) \
+			grep -q "buffer overflow detected" $$OUT || exit 1; \
 			;; \
 		*) \
 			echo Unhandled failure test $*; \
@@ -306,7 +304,6 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 	fi
 	@touch $@
 
-# grep -q "buffer overflow detected" $$OUT || exit 1
 .customtest1.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTIMES)
 	@i=0; while [ $$i -le 10 ]; do \
 		OUT=log2-$*; \
@@ -321,6 +318,7 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 			ret=$$?; \
 			cat $$OUT; \
 			echo OK: $* $$i failed expectedly, returned $$ret; \
+			grep -q "buffer overflow detected" $$OUT || exit 1; \
 			rm -f $$OUT; \
 		fi; \
 		i=$$(($$i+1)); \
