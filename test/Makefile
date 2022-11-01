@@ -239,7 +239,6 @@ ifeq ($(NATIVE),)
 endif
 TEST_TARGETS = $(addprefix .tested., $(TESTS))
 
-ifneq ($(NATIVE),)
 ifeq ($(CMD),)
     # These don't strictly require running native instead of in Wine
     # (except for asan, but that's are already filtered out at this
@@ -252,7 +251,6 @@ ifeq ($(CMD),)
     ifneq ($(HAVE_CFGUARD),)
         CUSTOM2_FAILURE_TEST_TARGETS = .customtest2.cfguard-test$(EXEEXT)
     endif
-endif
 endif
 
 ALL_TEST_TARGETS = $(TEST_TARGETS) $(FAILURE_TEST_TARGETS) $(CUSTOM1_FAILURE_TEST_TARGETS) $(CUSTOM2_FAILURE_TEST_TARGETS)
