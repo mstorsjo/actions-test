@@ -3,48 +3,47 @@ on:
   push:
 
 jobs:
-  # Run libcxx's tests with the cross-built x86_64 toolchain from above.
-  # (This builds its own copy of libcxx, but it should be pretty much
-  # identical to the one shipped - and tests that the toolchain works
-  # for running the libcxx tests.)
-  # This also forces testing the bundled python executables.
-  test-libcxx:
+  test-openmp:
     runs-on: windows-latest
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-x86_64.zip
-          Expand-Archive llvm-mingw-x86_64.zip -DestinationPath .
-          del llvm-mingw-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-${{matrix.arch}}.zip
+          Expand-Archive llvm-mingw-*.zip -DestinationPath .
+          del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Checkout llvm-project
         run: |
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      - name: Build and test libcxx
+      - name: Build test executables
         run: |
           cd llvm-project
-          mkdir build
-          cd build
-          cmake ../runtimes `
+          mkdir build-tools
+          cd build-tools
+          cmake ../llvm `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DLIBCXX_ENABLE_WERROR=YES `
-            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
-            -DLIBCXX_CXX_ABI=libcxxabi `
+            -DLLVM_TARGETS_TO_BUILD=X86 `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++
+          ninja not FileCheck
+          echo "TOOLS=$PWD\bin" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build and test openmp
+        run: |
+          cd llvm-project
+          mkdir build-openmp
+          cd build-openmp
+          cmake ../openmp `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DOPENMP_LLVM_TOOLS_DIR="$Env:TOOLS" `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
-            -DLIBCXX_TARGET_INFO="libcxx.test.target_info.MingwLocalTI" `
-            -DLIBCXXABI_ENABLE_SHARED=NO `
-            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
-            -DLIBCXX_USE_COMPILER_RT=YES `
-            -DLIBCXXABI_USE_COMPILER_RT=YES `
-            -DLIBUNWIND_USE_COMPILER_RT=YES `
-            -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
-            -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
+            -DCMAKE_ASM_MASM_COMPILER=llvm-ml `
+            -DLIBOMP_ASMFLAGS=-m64
           ninja
-          ninja check-cxx
+          ninja check-openmp
