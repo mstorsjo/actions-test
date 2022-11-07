@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/actions-test/llvm-mingw-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-x86_64.zip
           Expand-Archive llvm-mingw-x86_64.zip -DestinationPath .
           del llvm-mingw-x86_64.zip
           mv llvm-mingw-* c:\llvm-mingw
