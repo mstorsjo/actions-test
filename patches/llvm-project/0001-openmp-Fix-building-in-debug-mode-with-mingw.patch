@@ -1,0 +1,28 @@
+From 41b3425085ddd0701a39e40cc96e2dc854c3828e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Mon, 7 Nov 2022 00:57:07 +0200
+Subject: [PATCH 01/11] [openmp] Fix building in debug mode with mingw
+
+Mingw doesn't provide the _malloc_dbg/_free_dbg functions.
+
+Differential Revision: https://reviews.llvm.org/D137743
+---
+ openmp/runtime/src/kmp_wrapper_malloc.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/openmp/runtime/src/kmp_wrapper_malloc.h b/openmp/runtime/src/kmp_wrapper_malloc.h
+index c027e0b297d0..1f75e88a23b2 100644
+--- a/openmp/runtime/src/kmp_wrapper_malloc.h
++++ b/openmp/runtime/src/kmp_wrapper_malloc.h
+@@ -154,7 +154,7 @@
+ 
+ #if KMP_DEBUG
+ 
+-#if KMP_OS_WINDOWS && _DEBUG
++#if KMP_OS_WINDOWS && _DEBUG && !defined(__MINGW32__)
+ // KMP_DEBUG != _DEBUG. MS debug RTL is available only if _DEBUG is defined.
+ 
+ // Windows* OS has native memory debugging capabilities. Enable them.
+-- 
+2.25.1
+

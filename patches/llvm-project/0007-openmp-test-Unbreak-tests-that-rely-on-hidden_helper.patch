@@ -1,0 +1,62 @@
+From 83cc104230af5b20a68f63189cc21e927b6bef91 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 8 Nov 2022 11:37:15 +0200
+Subject: [PATCH 07/11] [openmp] [test] Unbreak tests that rely on
+ hidden_helper_task on Windows
+
+The hidden helper task is only enabled on Linux (kmp_runtime.cpp
+initializes __kmp_enable_hidden_helper to TRUE for linux but to
+FALSE for any other OS), and the __kmp_stg_parse_use_hidden_helper
+function always makes it disabled on non-Linux OSes too.
+
+Mark tests that rely on the hidden helper tasks as requiring Linux.
+
+Set the initial value of __kmp_hidden_helper_threads_num accordingly
+in a testcase that needs to know it.
+
+Differential Revision: https://reviews.llvm.org/D137749
+---
+ openmp/runtime/test/tasking/hidden_helper_task/affinity.cpp | 1 +
+ openmp/runtime/test/tasking/hidden_helper_task/gtid.cpp     | 1 +
+ openmp/runtime/test/worksharing/for/kmp_sch_simd_guided.c   | 4 ++++
+ 3 files changed, 6 insertions(+)
+
+diff --git a/openmp/runtime/test/tasking/hidden_helper_task/affinity.cpp b/openmp/runtime/test/tasking/hidden_helper_task/affinity.cpp
+index 4816a0192220..b3c3b5cc8e4e 100644
+--- a/openmp/runtime/test/tasking/hidden_helper_task/affinity.cpp
++++ b/openmp/runtime/test/tasking/hidden_helper_task/affinity.cpp
+@@ -1,3 +1,4 @@
++// REQUIRES: linux
+ // RUN: %libomp-cxx-compile
+ // RUN: env LIBOMP_USE_HIDDEN_HELPER_TASK=1 LIBOMP_NUM_HIDDEN_HELPER_THREADS=8 \
+ // RUN:     KMP_HIDDEN_HELPER_AFFINITY=verbose,granularity=socket,compact %libomp-run 2>&1 | FileCheck --check-prefix=SOCKET %s
+diff --git a/openmp/runtime/test/tasking/hidden_helper_task/gtid.cpp b/openmp/runtime/test/tasking/hidden_helper_task/gtid.cpp
+index 881e27df723c..957af59add3e 100644
+--- a/openmp/runtime/test/tasking/hidden_helper_task/gtid.cpp
++++ b/openmp/runtime/test/tasking/hidden_helper_task/gtid.cpp
+@@ -1,5 +1,6 @@
+ // RUN: %libomp-cxx-compile-and-run
+ // RUN: %libomp-cxx-compile && env OMP_NUM_THREADS=1 %libomp-run
++// REQUIRES: linux
+ 
+ /*
+  * This test aims to check whether hidden helper thread has right gtid. We also
+diff --git a/openmp/runtime/test/worksharing/for/kmp_sch_simd_guided.c b/openmp/runtime/test/worksharing/for/kmp_sch_simd_guided.c
+index 5ec46520fe25..8af3e3ef9d7c 100644
+--- a/openmp/runtime/test/worksharing/for/kmp_sch_simd_guided.c
++++ b/openmp/runtime/test/worksharing/for/kmp_sch_simd_guided.c
+@@ -50,7 +50,11 @@ extern int __kmpc_dispatch_next_8(id*, int, void*, void*, void*, void*);
+ static id loc = {0, 2, 0, 0, ";file;func;0;0;;"};
+ // This variable is defined in OpenMP RTL but we can't have it exposed so we
+ // need to redefine it here.
++#ifdef __linux__
+ static int __kmp_hidden_helper_threads_num = 8;
++#else
++static int __kmp_hidden_helper_threads_num = 0;
++#endif
+ 
+ // ---------------------------------------------------------------------------
+ int run_loop_64(i64 loop_lb, i64 loop_ub, i64 loop_st, int loop_chunk) {
+-- 
+2.25.1
+
