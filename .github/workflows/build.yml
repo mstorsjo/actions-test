@@ -5,6 +5,12 @@ on:
 jobs:
   test-openmp:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: i686, asmflag: }
+          - { arch: x86_64, asmflag: -m64 }
     steps:
       - name: Unpack toolchain
         run: |
@@ -44,6 +50,6 @@ jobs:
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
             -DCMAKE_ASM_MASM_COMPILER=llvm-ml `
-            -DLIBOMP_ASMFLAGS=-m64
+            -DLIBOMP_ASMFLAGS=${{matrix.asmflag}}
           ninja
           ninja check-openmp
