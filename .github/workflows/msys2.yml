@@ -29,5 +29,8 @@ jobs:
         pushd build/windows-clang64
         meson ../..
         ninja -v
+        ar t src/util/libmesa_util.a
         touch ../../src/util/u_qsort.cpp
+        ninja -v src/util/libmesa_util.a
+        ar t src/util/libmesa_util.a
         ninja -v # error happend
