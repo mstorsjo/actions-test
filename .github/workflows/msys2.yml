@@ -28,6 +28,6 @@ jobs:
         mkdir -p build/windows-clang64
         pushd build/windows-clang64
         meson ../..
-        ninja
+        ninja -v
         touch ../../src/util/u_qsort.cpp
-        ninja # error happend
+        ninja -v # error happend
