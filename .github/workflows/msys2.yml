@@ -19,15 +19,24 @@ jobs:
         msystem: CLANG64
         install: >-
           git
+          unzip
           mingw-w64-clang-x86_64-meson
           mingw-w64-clang-x86_64-cc
           mingw-w64-clang-x86_64-ninja
+    - name: Install fresh llvm-mingw
+      run: |
+        curl -LO https://martin.st/temp/llvm-mingw-x86_64-221119.zip
+        unzip -q llvm-mingw-*.zip
+        rm llvm-mingw-*.zip
+        mv llvm-mingw-* /llvm-mingw
     - name: Configure and build
       run: |
+        export PATH=/llvm-mingw/bin:$PATH
         echo "Runnning in msys2"
         mkdir -p build/windows-clang64
         pushd build/windows-clang64
-        meson ../..
+        # https://github.com/mesonbuild/meson/issues/8708
+        CC=/llvm-mingw/bin/clang.exe CXX=/llvm-mingw/bin/clang++.exe AR=/llvm-mingw/bin/llvm-ar.exe meson ../..
         ninja -v
         ar t src/util/libmesa_util.a
         touch ../../src/util/u_qsort.cpp
