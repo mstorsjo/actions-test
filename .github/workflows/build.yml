@@ -13,7 +13,7 @@ jobs:
   # slightly more, when we know a separate build of the same version but with
   # assertions enabled, has passed some amount of tests.
   get-versions:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Touch file
@@ -35,7 +35,7 @@ jobs:
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     needs: [get-versions]
     runs-on: ubuntu-latest
     steps:
@@ -75,7 +75,7 @@ jobs:
   # to better catch such bugs early. This makes the first-stage toolchain built
   # here in scheduled builds somewhat slower.
   linux-asserts:
-    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     needs: [get-versions]
     runs-on: ubuntu-latest
     steps:
@@ -195,14 +195,13 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: true
     needs: [linux]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         arch:
-          - i686
           - x86_64
     steps:
       - uses: actions/download-artifact@v3
@@ -240,7 +239,7 @@ jobs:
   # Run llvm-mingw's tests on x86_64 (and i686) with the cross-built x86_64
   # toolchain from above.
   test-toolchain:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     needs: [linux-cross]
     runs-on: windows-latest
     defaults:
@@ -289,7 +288,7 @@ jobs:
     #
     # Some tests fail here on the 15.x release branch, but it should pass
     # with versions from git main.
-    if: false
+    if: true
     needs: [linux-cross]
     runs-on: windows-latest
     strategy:
@@ -297,7 +296,6 @@ jobs:
       matrix:
         arch:
           - x86_64
-          - i686
     steps:
       - uses: actions/download-artifact@v3
         with:
@@ -348,7 +346,7 @@ jobs:
   test-openmp:
     # Some tests fail here on the 15.x release branch, but it should pass
     # with versions from git main.
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     needs: [linux-cross]
     runs-on: windows-latest
     strategy:
