@@ -138,11 +138,43 @@ const char *context = "";
         } \
     } while (0)
 
-#define F(x) strtod(#x, NULL)
-#define L(x) strtol(#x, NULL, 0)
-#define UL(x) strtoul(#x, NULL, 0)
-#define LL(x) strtoll(#x, NULL, 0)
-#define ULL(x) strtoull(#x, NULL, 0)
+char char_wrap_impl(char c) {
+    return c;
+}
+double double_wrap_impl(double f) {
+    return f;
+}
+long long_wrap_impl(long l) {
+    return l;
+}
+unsigned long ulong_wrap_impl(unsigned long u) {
+    return u;
+}
+long long longlong_wrap_impl(long long l) {
+    return l;
+}
+unsigned long long ulonglong_wrap_impl(unsigned long long u) {
+    return u;
+}
+const char *str_wrap_impl(const char *str) {
+    return str;
+}
+
+char (*char_wrap)(char c) = char_wrap_impl;
+double (*double_wrap)(double f) = double_wrap_impl;
+long (*long_wrap)(long l) = long_wrap_impl;
+unsigned long (*ulong_wrap)(unsigned long u) = ulong_wrap_impl;
+long long (*longlong_wrap)(long long l) = longlong_wrap_impl;
+unsigned long long (*ulonglong_wrap)(unsigned long long l) = ulonglong_wrap_impl;
+const char *(*str_wrap)(const char *str) = str_wrap_impl;
+
+#define C(x) char_wrap(x)
+#define F(x) double_wrap(x)
+#define L(x) long_wrap(x)
+#define UL(x) ulong_wrap(x)
+#define LL(x) longlong_wrap(x)
+#define ULL(x) ulonglong_wrap(x ## ULL)
+#define S(x) str_wrap(x)
 
 int vsscanf_wrap(const char* str, const char* fmt, ...) {
     va_list ap;
@@ -153,13 +185,101 @@ int vsscanf_wrap(const char* str, const char* fmt, ...) {
     return ret;
 }
 
+double int_to_double(uint64_t i) {
+    union {
+        uint64_t i;
+        double d;
+    } u;
+    u.i = i;
+    return u.d;
+}
+
 int main(int argc, char* argv[]) {
+    // The plain "NAN" constant in MSVC is negative, while it is positive
+    // in other environments.
+    double pNAN = int_to_double(0x7ff8000000000000ULL);
+    double nNAN = int_to_double(0xfff8000000000000ULL);
+
     char buf[200];
     int i;
     uint64_t myconst = 0xbaadf00dcafe;
+    void *retptr;
 
+    memset(buf, '#', sizeof(buf));
+    retptr = memcpy(buf, S("foo"), L(4));
+    TEST(retptr == buf);
+    TEST_STR(buf, "foo");
+    TEST_INT(buf[5], '#');
+
+#if defined(__GLIBC__) || defined(__MINGW32__)
+    memset(buf, '#', sizeof(buf));
+    retptr = mempcpy(buf, S("foo"), L(4));
+    TEST(retptr == buf + 4);
+    TEST_STR(buf, "foo");
+    TEST_INT(buf[5], '#');
+#endif
+
+    memset(buf, '#', sizeof(buf));
+    memcpy(buf, "foobar", 7);
+    retptr = memmove(buf + 2, S(buf), L(3));
+    TEST(retptr == buf + 2);
+    TEST_STR(buf, "fofoor");
+    TEST_INT(buf[8], '#');
+
+    memset(buf, '#', sizeof(buf));
+    memcpy(buf, "foobar", 7);
+    retptr = memmove(buf, S(buf + 2), L(3));
+    TEST(retptr == buf);
+    TEST_STR(buf, "obabar");
+    TEST_INT(buf[8], '#');
+
+    retptr = memset(buf, C('#'), sizeof(buf) + L(0));
+    TEST(retptr == buf);
+    TEST_INT(buf[0], '#');
+    TEST_INT(buf[sizeof(buf)-1], '#');
+
+    memset(buf, '#', sizeof(buf));
+    retptr = strcpy(buf, S("foo"));
+    TEST(retptr == buf);
+    TEST_STR(buf, "foo");
+    TEST_INT(buf[5], '#');
+
+    memset(buf, '#', sizeof(buf));
+    retptr = strncpy(buf, S("foobar"), L(3));
+    TEST(retptr == buf);
+    TEST_INT(buf[3], '#');
+    buf[3] = '\0';
+    TEST_STR(buf, "foo");
+
+    memset(buf, '#', sizeof(buf));
+    retptr = strncpy(buf, S("foobar"), sizeof(buf) + L(0));
+    TEST(retptr == buf);
+    TEST_STR(buf, "foobar");
+    TEST_INT(buf[sizeof(buf)-1], '\0');
+
+    memset(buf, '#', sizeof(buf));
+    strcpy(buf, "foo");
+    retptr = strcat(buf, S("bar"));
+    TEST(retptr == buf);
+    TEST_STR(buf, "foobar");
+
+    memset(buf, '#', sizeof(buf));
+    strcpy(buf, "foo");
+    retptr = strncat(buf, S("bar"), L(5));
+    TEST(retptr == buf);
+    TEST_STR(buf, "foobar");
+
+    memset(buf, '#', sizeof(buf));
+    strcpy(buf, "foo");
+    retptr = strncat(buf, S("bar"), L(2));
+    TEST(retptr == buf);
+    TEST_STR(buf, "fooba");
+
+    memset(buf, '#', sizeof(buf));
     snprintf(buf, sizeof(buf), "%f", 3.141592654);
     TEST_STR(buf, "3.141593");
+    TEST_INT(buf[sizeof(buf)-1], '#');
+
     snprintf(buf, sizeof(buf), "%e", 42.0);
     TEST_STR(buf, "4.200000e+01");
     snprintf(buf, sizeof(buf), "%a", 42.0);
@@ -1087,12 +1207,18 @@ int main(int argc, char* argv[]) {
     TEST_FLT_ACCURACY(cos(2*F(3.141592654)), 1.0, 0.01); \
     TEST_FLT_NAN_ANY(cos(F(INFINITY))); \
     TEST_FLT_NAN_ANY(cos(F(-INFINITY))); \
-    TEST_FLT_NAN(cos(F(NAN)), F(NAN)); \
-    TEST_FLT_NAN(cos(-F(NAN)), -F(NAN))
+    TEST_FLT_NAN(cos(F(NAN)), F(NAN))
 
     TEST_COS(cos);
     TEST_COS(cosf);
     TEST_COS(cosl);
+
+#ifndef __OPTIMIZE__
+    // GCC and Clang break this test when optimizing.
+    TEST_FLT_NAN(cos(-F(NAN)), -F(NAN));
+    TEST_FLT_NAN(cosf(-F(NAN)), -F(NAN));
+    TEST_FLT_NAN(cosl(-F(NAN)), -F(NAN));
+#endif
 
 #define TEST_SIN(sin) \
     TEST_FLT_ACCURACY(sin(F(0.0)), 0.0, 0.01); \
@@ -1300,8 +1426,8 @@ int main(int argc, char* argv[]) {
     TEST_FLT(fabs((double)F(-3.125)), 3.125); \
     TEST_FLT(fabs((double)F(INFINITY)), INFINITY); \
     TEST_FLT(fabs((double)F(-INFINITY)), INFINITY); \
-    TEST_FLT_NAN(fabs((double)F(NAN)), F(NAN)); \
-    TEST_FLT_NAN(fabs((double)-F(NAN)), F(NAN))
+    TEST_FLT_NAN(fabs((double)F(pNAN)), F(pNAN)); \
+    TEST_FLT_NAN(fabs((double)F(nNAN)), F(pNAN))
 
     TEST_FABS(fabs, double);
     TEST_FABS(fabsf, float);
@@ -1538,13 +1664,13 @@ int main(int argc, char* argv[]) {
     TEST_FLT_ACCURACY(copysign(F(3.125), F(-1)), -3.125, 0.0001); \
     TEST_FLT_ACCURACY(copysign(F(-3.125), F(-1)), -3.125, 0.0001); \
     TEST_FLT_ACCURACY(copysign(F(-3.125), F(1)), 3.125, 0.0001); \
-    TEST_FLT_ACCURACY(copysign(F(3.125), -F(NAN)), -3.125, 0.0001); \
+    TEST_FLT_ACCURACY(copysign(F(3.125), F(nNAN)), -3.125, 0.0001); \
     TEST_FLT(copysign(F(INFINITY), F(1)), INFINITY); \
     TEST_FLT(copysign(F(INFINITY), F(-1)), -INFINITY); \
     TEST_FLT(copysign(F(-INFINITY), F(-1)), -INFINITY); \
     TEST_FLT(copysign(F(-INFINITY), F(1)), INFINITY); \
-    TEST_FLT_NAN(copysign(F(NAN), F(-1)), -F(NAN)); \
-    TEST_FLT_NAN(copysign(-F(NAN), F(NAN)), F(NAN))
+    TEST_FLT_NAN(copysign(F(pNAN), F(-1)), F(nNAN)); \
+    TEST_FLT_NAN(copysign(F(nNAN), F(pNAN)), F(pNAN))
 
     TEST_COPYSIGN(copysign);
     TEST_COPYSIGN(copysignf);
@@ -1596,7 +1722,7 @@ int main(int argc, char* argv[]) {
     TEST_INT(LL(1073741824) / 357913941, 3); // __rt_sdiv64
     TEST_INT(LL(2147483647) / LL(1), 2147483647); // __rt_sdiv64
     TEST_INT(LL(2147483647) / LL(-1), -2147483647); // __rt_sdiv64
-    TEST_INT(LL(-2147483648) / LL(1), -2147483648LL); // __rt_sdiv64
+    TEST_INT(LL(-2147483648LL) / LL(1), -2147483648LL); // __rt_sdiv64
     TEST_INT(LL(0) / LL(2305843009213693952), 0); // __rt_sdiv64
     TEST_INT(LL(0) / LL(2305843009213693953), 0); // __rt_sdiv64
     TEST_INT(LL(0) / LL(2147483648), 0); // __rt_sdiv64
@@ -1682,9 +1808,9 @@ int main(int argc, char* argv[]) {
 
     TEST_INT((unsigned long long)F(4.2), 4);
     TEST_INT((signed long long)F(4.2), 4);
-    TEST_INT((unsigned long long)F(123456789012345678), 123456789012345680ULL);
-    TEST_INT((signed long long)F(123456789012345678), 123456789012345680ULL);
-    TEST_INT((signed long long)F(-123456789012345), -123456789012345LL);
+    TEST_INT((unsigned long long)F(123456789012345678.0), 123456789012345680ULL);
+    TEST_INT((signed long long)F(123456789012345678.0), 123456789012345680ULL);
+    TEST_INT((signed long long)F(-123456789012345.0), -123456789012345LL);
 
     TEST_INT((unsigned long long)(float)F(4.2), 4);
     TEST_INT((signed long long)(float)F(4.2), 4);
@@ -1718,9 +1844,9 @@ int main(int argc, char* argv[]) {
 #ifdef __SIZEOF_INT128__
     TEST_INT((__uint128_t)F(4.2), 4);
     TEST_INT((__int128_t)F(4.2), 4);
-    TEST_INT((__uint128_t)F(123456789012345678), 123456789012345680ULL);
-    TEST_INT((__int128_t)F(123456789012345678), 123456789012345680ULL);
-    TEST_INT((__int128_t)F(-123456789012345), -123456789012345LL);
+    TEST_INT((__uint128_t)F(123456789012345678.0), 123456789012345680ULL);
+    TEST_INT((__int128_t)F(123456789012345678.0), 123456789012345680ULL);
+    TEST_INT((__int128_t)F(-123456789012345.0), -123456789012345LL);
 
     TEST_INT((__uint128_t)(float)F(4.2), 4);
     TEST_INT((__int128_t)(float)F(4.2), 4);

@@ -16,6 +16,9 @@
 
 set -e
 
+echo Skipping LLDB MI, as it is incompatible with the current version of LLVM
+exit 0
+
 : ${LLDB_MI_VERSION:=2388bd74133bc21eac59b2e2bf97f2a30770a315}
 BUILDDIR=build
 unset HOST
@@ -103,8 +106,17 @@ if [ -n "$HOST" ]; then
 fi
 
 if [ -n "$MACOS_REDIST" ]; then
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9"
+    : ${MACOS_REDIST_ARCHS:=arm64 x86_64}
+    : ${MACOS_REDIST_VERSION:=10.9}
+    ARCH_LIST=""
+    for arch in $MACOS_REDIST_ARCHS; do
+        if [ -n "$ARCH_LIST" ]; then
+            ARCH_LIST="$ARCH_LIST;"
+        fi
+        ARCH_LIST="$ARCH_LIST$arch"
+    done
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=$ARCH_LIST"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_REDIST_VERSION"
 fi
 
 cd lldb-mi
@@ -112,6 +124,7 @@ cd lldb-mi
 [ -z "$CLEAN" ] || rm -rf $BUILDDIR
 mkdir -p $BUILDDIR
 cd $BUILDDIR
+[ -n "$NO_RECONF" ] || rm -rf CMake*
 cmake \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \

@@ -170,15 +170,11 @@ changes:
 - Add `-gcodeview` to the compilation commands (e.g. in
   `wrappers/clang-target-wrapper.sh`), together with using `-g` as usual to
   enable debug info in general.
-- Add `-Wl,-pdb=` to linking commands. This creates a PDB file at the same
+- Add `-Wl,--pdb=` to linking commands. This creates a PDB file at the same
   location as the output EXE/DLL, but with a PDB extension. (By passing
-  `-Wl,-pdb=module.pdb` or `-Wl,-pdb,module.pdb` one can explicitly specify
-  the name of the output PDB file.)
+  `-Wl,--pdb=module.pdb` one can explicitly specify the name of the output
+  PDB file.)
 
-Even though LLVM supports this, there are a few caveats with using it when
-building in MinGW mode:
-
-- Microsoft debuggers might have assumptions about the C++ ABI used, which
-  doesn't hold up with the Itanium ABI used in MinGW.
-- This is unimplemented for the armv7 target, and while implemented for aarch64,
-  it doesn't seem to work properly there yet.
+Even though LLVM supports this, there are some caveats with using it when
+building in MinGW mode; Microsoft debuggers might have assumptions about
+the C++ ABI used, which doesn't hold up with the Itanium ABI used in MinGW.

@@ -67,24 +67,26 @@ RUN ./install-wrappers.sh $TOOLCHAIN_PREFIX
 
 ARG DEFAULT_CRT=ucrt
 
+ARG CFGUARD_ARGS=--disable-cfguard
+
 # Build MinGW-w64
 COPY build-mingw-w64.sh ./
-RUN ./build-mingw-w64.sh $TOOLCHAIN_PREFIX --with-default-msvcrt=$DEFAULT_CRT
+RUN ./build-mingw-w64.sh $TOOLCHAIN_PREFIX --with-default-msvcrt=$DEFAULT_CRT $CFGUARD_ARGS
 
 COPY build-mingw-w64-tools.sh ./
 RUN ./build-mingw-w64-tools.sh $TOOLCHAIN_PREFIX
 
 # Build compiler-rt
 COPY build-compiler-rt.sh ./
-RUN ./build-compiler-rt.sh $TOOLCHAIN_PREFIX
+RUN ./build-compiler-rt.sh $TOOLCHAIN_PREFIX $CFGUARD_ARGS
 
 # Build libunwind/libcxxabi/libcxx
 COPY build-libcxx.sh ./
-RUN ./build-libcxx.sh $TOOLCHAIN_PREFIX
+RUN ./build-libcxx.sh $TOOLCHAIN_PREFIX $CFGUARD_ARGS
 
 # Build mingw-w64's extra libraries
 COPY build-mingw-w64-libraries.sh ./
-RUN ./build-mingw-w64-libraries.sh $TOOLCHAIN_PREFIX
+RUN ./build-mingw-w64-libraries.sh $TOOLCHAIN_PREFIX $CFGUARD_ARGS
 
 # Build C test applications
 ENV PATH=$TOOLCHAIN_PREFIX/bin:$PATH
@@ -130,6 +132,7 @@ RUN cd test && \
 
 # Build sanitizers. Ubsan includes <typeinfo> from the C++ headers, so
 # we need to build this after libcxx.
+# $CFGUARD_ARGS is intentionally omitted here.
 RUN ./build-compiler-rt.sh $TOOLCHAIN_PREFIX --build-sanitizers
 
 # Sanitizers on windows only support x86.
@@ -143,16 +146,16 @@ RUN cd test && \
             ;; \
         esac && \
         for test in stacksmash; do \
-            $arch-w64-mingw32-clang $test.c -o $arch/$test-asan.exe -fsanitize=address -g -gcodeview -Wl,-pdb,$arch/$test-asan.pdb || exit 1; \
+            $arch-w64-mingw32-clang $test.c -o $arch/$test-asan.exe -fsanitize=address -g -gcodeview -Wl,--pdb= || exit 1; \
         done; \
         for test in ubsan; do \
-            $arch-w64-mingw32-clang $test.c -o $arch/$test.exe -fsanitize=undefined || exit 1; \
+            $arch-w64-mingw32-clang $test.c -o $arch/$test.exe -fsanitize=undefined -fno-sanitize-recover=all || exit 1; \
         done; \
     done
 
 # Build libssp
 COPY build-libssp.sh libssp-Makefile ./
-RUN ./build-libssp.sh $TOOLCHAIN_PREFIX
+RUN ./build-libssp.sh $TOOLCHAIN_PREFIX $CFGUARD_ARGS
 
 RUN cd test && \
     for arch in $TOOLCHAIN_ARCHS; do \
@@ -160,11 +163,14 @@ RUN cd test && \
         for test in stacksmash; do \
             $arch-w64-mingw32-clang $test.c -o $arch/$test.exe -fstack-protector-strong || exit 1; \
         done; \
+        for test in bufferoverflow; do \
+            $arch-w64-mingw32-clang $test.c -o $arch/$test.exe -lssp -D_FORTIFY_SOURCE=2 -O2 || exit 1; \
+        done; \
     done
 
 # Build OpenMP
 COPY build-openmp.sh ./
-RUN ./build-openmp.sh $TOOLCHAIN_PREFIX
+RUN ./build-openmp.sh $TOOLCHAIN_PREFIX $CFGUARD_ARGS
 
 # OpenMP on windows only supports x86.
 RUN cd test && \
