@@ -120,6 +120,7 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
             ;;
         esac
     fi
+    git am -3 --keep-non-patch ../patches/llvm-project/*.patch
     cd ..
 fi
 
