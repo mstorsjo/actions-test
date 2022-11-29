@@ -223,7 +223,7 @@ jobs:
       - name: Build
         run: |
           sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} --with-python $LLDB_MI_PARAMS --disable-clang-tools-extra --disable-lldb --disable-mingw-w64-tools --disable-make
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} $LLDB_MI_PARAMS --disable-clang-tools-extra --disable-lldb --disable-mingw-w64-tools --disable-make
           cd install
           zip -9rq ../llvm-mingw-${{matrix.arch}}.zip llvm-mingw-${{matrix.arch}}
       - uses: actions/upload-artifact@v3
@@ -304,7 +304,6 @@ jobs:
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - name: Fetch version
         if: github.event_name == 'schedule'
         run: |
@@ -321,7 +320,6 @@ jobs:
           cmake ../runtimes `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DLIBCXX_ENABLE_WERROR=YES `
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
             -DLIBCXX_CXX_ABI=libcxxabi `
