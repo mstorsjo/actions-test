@@ -205,7 +205,7 @@ jobs:
     steps:
       - name: Unpack cross toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-linux-new.tar.xz
+          curl -LO https://martin.st/temp/llvm-mingw-linux-old.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
