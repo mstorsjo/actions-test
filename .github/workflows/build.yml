@@ -348,7 +348,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: i686, asmflag: }
           - { arch: x86_64, asmflag: -m64 }
     steps:
       - uses: actions/download-artifact@v3
