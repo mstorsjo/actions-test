@@ -285,7 +285,7 @@ jobs:
     #
     # Some tests fail here on the 15.x release branch, but it should pass
     # with versions from git main.
-    if: true
+    if: false
     needs: [linux-cross]
     runs-on: windows-latest
     strategy:
@@ -341,7 +341,7 @@ jobs:
   test-openmp:
     # Some tests fail here on the 15.x release branch, but it should pass
     # with versions from git main.
-    if: false
+    if: true
     needs: [linux-cross]
     runs-on: windows-latest
     strategy:
