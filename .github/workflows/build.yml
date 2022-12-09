@@ -1,0 +1,46 @@
+name: Builds
+on:
+  push:
+
+jobs:
+  llvm-mingw:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: msys
+          install: >-
+            unzip
+            make
+            autotools
+      - name: Download and unpack llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-x86_64.zip
+          unzip -q llvm-mingw-*.zip
+          rm llvm-mingw-*.zip
+          mv llvm-mingw-* /llvm-mingw
+          echo /llvm-mingw/bin >> $GITHUB_PATH
+      - name: Build projects with llvm-mingw
+        run: |
+          export PATH=/llvm-mingw/bin:$PATH
+          curl -LO https://github.com/xiph/ogg/releases/download/v1.3.5/libogg-1.3.5.tar.xz
+          tar -Jxvf libogg-*.tar.xz
+          rm libogg-*.tar.xz
+          cd libogg-*
+          autoreconf
+          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          make -j$(nproc)
+          make -j$(nproc) install
+          cd ..
+          curl -LO https://github.com/xiph/vorbis/releases/download/v1.3.7/libvorbis-1.3.7.tar.xz
+          tar -Jxvf libvorbis-*.tar.xz
+          rm libvorbis-*.tar.xz
+          cd libvorbis-*
+          autoreconf
+          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          make -j$(nproc)
+          make -j$(nproc) install
+          cd ..
