@@ -1,0 +1,25 @@
+From 2c5e4e922a480976912d6a7a8548f7646c414ed1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 9 Dec 2022 18:13:14 +0200
+Subject: [PATCH] Add missing dllexport of __kmpc_omp_taskwait_51
+
+This was missed in 100dfe7a8ad3789a98df623482b88d9a3a02e176.
+---
+ openmp/runtime/src/dllexports | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/openmp/runtime/src/dllexports b/openmp/runtime/src/dllexports
+index 28d8371795ed..17a159b81db4 100644
+--- a/openmp/runtime/src/dllexports
++++ b/openmp/runtime/src/dllexports
+@@ -345,6 +345,7 @@ kmpc_set_defaults                           224
+         __kmpc_fork_teams                   241
+         __kmpc_omp_task_with_deps           242
+         __kmpc_omp_wait_deps                243
++        __kmpc_omp_taskwait_51              293
+         __kmpc_omp_taskwait_deps_51         292
+         __kmpc_cancel                       244
+         __kmpc_cancellationpoint            245
+-- 
+2.25.1
+
