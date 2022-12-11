@@ -1,0 +1,24 @@
+From c5d6cc495107de0a03b8379626623b0859fafc6d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Mon, 12 Dec 2022 00:12:43 +0200
+Subject: [PATCH 2/2] Add __kmpc_fork_call_if to dllexports
+
+---
+ openmp/runtime/src/dllexports | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/openmp/runtime/src/dllexports b/openmp/runtime/src/dllexports
+index 3ad53427a9e3..4e315567ad69 100644
+--- a/openmp/runtime/src/dllexports
++++ b/openmp/runtime/src/dllexports
+@@ -228,6 +228,7 @@
+     __kmpc_for_static_init_4                136
+     __kmpc_for_static_init_8                137
+     __kmpc_fork_call                        138
++    __kmpc_fork_call_if                     294
+     __kmpc_global_num_threads               140
+     __kmpc_global_thread_num                141
+     __kmpc_in_parallel                      142
+-- 
+2.34.1
+
