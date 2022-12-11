@@ -46,7 +46,7 @@ jobs:
           tar -jxvf libtheora-*.tar.bz2
           rm libtheora-*.tar.bz2
           cd libtheora-*
-          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32 --build=x86_64-w64-mingw32
+          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32 --build=x86_64-w64-mingw32 || cat config.log
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
