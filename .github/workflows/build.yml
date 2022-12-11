@@ -44,3 +44,12 @@ jobs:
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
+          curl -LO http://downloads.xiph.org/releases/theora/libtheora-1.1.1.tar.bz2
+          tar -jxvf libtheora-*.tar.bz2
+          rm libtheora-*.tar.bz2
+          cd libtheora-*
+          autoreconf
+          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          make -j$(nproc)
+          make -j$(nproc) install
+          cd ..
