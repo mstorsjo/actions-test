@@ -31,7 +31,8 @@ jobs:
           rm libogg-*.tar.xz
           cd libogg-*
           autoreconf
-          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          ./configure --enable-shared --prefix=/prefix
+          cat config.log
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
@@ -40,7 +41,8 @@ jobs:
           rm libvorbis-*.tar.xz
           cd libvorbis-*
           autoreconf
-          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          ./configure --enable-shared --prefix=/prefix
+          cat config.log
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
