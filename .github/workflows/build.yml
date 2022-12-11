@@ -30,7 +30,6 @@ jobs:
           tar -Jxvf libogg-*.tar.xz
           rm libogg-*.tar.xz
           cd libogg-*
-          autoreconf
           ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
           make -j$(nproc)
           make -j$(nproc) install
@@ -39,7 +38,6 @@ jobs:
           tar -Jxvf libvorbis-*.tar.xz
           rm libvorbis-*.tar.xz
           cd libvorbis-*
-          autoreconf
           ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
           make -j$(nproc)
           make -j$(nproc) install
@@ -48,7 +46,6 @@ jobs:
           tar -jxvf libtheora-*.tar.bz2
           rm libtheora-*.tar.bz2
           cd libtheora-*
-          autoreconf
           ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
           make -j$(nproc)
           make -j$(nproc) install
