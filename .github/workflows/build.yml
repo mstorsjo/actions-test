@@ -11,11 +11,11 @@ jobs:
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: msys
+          msystem: mingw64
           install: >-
             unzip
             make
-            autotools
+            pkg-config
       - name: Download and unpack llvm-mingw
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-x86_64.zip
@@ -30,7 +30,7 @@ jobs:
           tar -Jxvf libogg-*.tar.xz
           rm libogg-*.tar.xz
           cd libogg-*
-          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          ./configure --enable-shared --prefix=/prefix
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
@@ -38,7 +38,7 @@ jobs:
           tar -Jxvf libvorbis-*.tar.xz
           rm libvorbis-*.tar.xz
           cd libvorbis-*
-          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32
+          ./configure --enable-shared --prefix=/prefix
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
@@ -46,7 +46,8 @@ jobs:
           tar -jxvf libtheora-*.tar.bz2
           rm libtheora-*.tar.bz2
           cd libtheora-*
-          ./configure --enable-shared --prefix=/prefix --host=x86_64-w64-mingw32 --build=x86_64-w64-mingw32 || cat config.log
+          export PKG_CONFIG_PATH=/prefix/lib/pkgconfig
+          ./configure --enable-shared --prefix=/prefix
           make -j$(nproc)
           make -j$(nproc) install
           cd ..
