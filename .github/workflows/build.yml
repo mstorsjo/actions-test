@@ -223,8 +223,6 @@ jobs:
       - name: Build
         run: |
           sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
-          git config --global user.name "LLVM MinGW"
-          git config --global user.email root@localhost
           ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} $LLDB_MI_PARAMS --disable-clang-tools-extra --disable-lldb --disable-mingw-w64-tools --disable-make
           cd install
           zip -9rq ../llvm-mingw-${{matrix.arch}}.zip llvm-mingw-${{matrix.arch}}
@@ -370,8 +368,6 @@ jobs:
       - uses: actions/checkout@v3
       - name: Checkout llvm-project
         run: |
-          git config --global user.name "LLVM MinGW"
-          git config --global user.email root@localhost
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
       - name: Build test executables
         run: |
