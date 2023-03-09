@@ -24,7 +24,7 @@ jobs:
             make
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20230130/llvm-mingw-20230130-ucrt-${{matrix.arch}}.zip
           unzip -q llvm-mingw-*.zip
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
@@ -59,7 +59,7 @@ jobs:
       - name: Unpack toolchain
         shell: pwsh
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20230130/llvm-mingw-20230130-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
