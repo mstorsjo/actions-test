@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-15.0.0}
+: ${LLVM_VERSION:=llvmorg-16.0.0-rc1}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -59,9 +59,6 @@ while [ $# -gt 0 ]; do
     --with-python)
         WITH_PYTHON=1
         ;;
-    --symlink-projects)
-        SYMLINK_PROJECTS=1
-        ;;
     --disable-lldb)
         unset LLDB
         ;;
@@ -77,7 +74,7 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--stage2] [--thinlto] [--lto] [--disable-dylib] [--full-llvm] [--with-python] [--symlink-projects] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
+        echo $0 [--enable-asserts] [--stage2] [--thinlto] [--lto] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
         exit 1
     fi
 
@@ -174,24 +171,7 @@ if [ -n "$HOST" ]; then
 
 
     if [ -n "$native" ]; then
-        if [ -x "$native/llvm-tblgen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DLLVM_TABLEGEN=$native/llvm-tblgen$suffix"
-        fi
-        if [ -x "$native/clang-tblgen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_TABLEGEN=$native/clang-tblgen$suffix"
-        fi
-        if [ -x "$native/lldb-tblgen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DLLDB_TABLEGEN=$native/lldb-tblgen$suffix"
-        fi
-        if [ -x "$native/llvm-config$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DLLVM_CONFIG_PATH=$native/llvm-config$suffix"
-        fi
-        if [ -x "$native/clang-pseudo-gen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_PSEUDO_GEN=$native/clang-pseudo-gen$suffix"
-        fi
-        if [ -x "$native/clang-tidy-confusable-chars-gen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_TIDY_CONFUSABLE_CHARS_GEN=$native/clang-tidy-confusable-chars-gen$suffix"
-        fi
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_NATIVE_TOOL_DIR=$native"
     fi
     CROSS_ROOT=$(cd $(dirname $(command -v $HOST-gcc))/../$HOST && pwd)
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH=$CROSS_ROOT"
@@ -241,8 +221,39 @@ if [ -n "$LTO" ]; then
 fi
 
 if [ -n "$MACOS_REDIST" ]; then
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9"
+    : ${MACOS_REDIST_ARCHS:=arm64 x86_64}
+    : ${MACOS_REDIST_VERSION:=10.9}
+    ARCH_LIST=""
+    NATIVE=
+    for arch in $MACOS_REDIST_ARCHS; do
+        if [ -n "$ARCH_LIST" ]; then
+            ARCH_LIST="$ARCH_LIST;"
+        fi
+        ARCH_LIST="$ARCH_LIST$arch"
+        if [ "$(uname -m)" = "$arch" ]; then
+            NATIVE=1
+        fi
+    done
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=$ARCH_LIST"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_REDIST_VERSION"
+    if [ -z "$NATIVE" ]; then
+        # If we're not building for the native arch, flag to CMake that we're
+        # cross compiling, to let it build native versions of tools used
+        # during the build.
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Darwin"
+    fi
+fi
+
+if [ -z "$HOST" ] && [ "$(uname)" = "Darwin" ]; then
+    if [ -n "$LLDB" ]; then
+        # Building LLDB for macOS fails unless building libc++ is enabled at the
+        # same time, or unless the LLDB tests are disabled.
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_INCLUDE_TESTS=OFF"
+        # Don't build our own debugserver - use the system provided one.
+        # The newly built debugserver needs to be properly code signed to work.
+        # This silences a cmake warning.
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_USE_SYSTEM_DEBUGSERVER=ON"
+    fi
 fi
 
 TOOLCHAIN_ONLY=ON
@@ -252,60 +263,29 @@ fi
 
 cd llvm-project/llvm
 
-if [ -n "$SYMLINK_PROJECTS" ]; then
-    # If requested, hook up other tools by symlinking them into tools,
-    # instead of using LLVM_ENABLE_PROJECTS. This way, all source code is
-    # under the directory tree of the toplevel cmake file (llvm-project/llvm),
-    # which makes cmake use relative paths to all source files. Using relative
-    # paths makes for identical compiler output from different source trees in
-    # different locations (for cases where e.g. path names are included, in
-    # assert messages), allowing ccache to share caches across multiple
-    # checkouts.
-    cd tools
-    for p in clang lld lldb; do
-        if [ "$p" = "lldb" ] && [ -z "$LLDB" ]; then
-            continue
-        fi
-        if [ ! -e $p ]; then
-            ln -s ../../$p .
-        fi
-    done
-    cd ..
-    if [ -n "$CLANG_TOOLS_EXTRA" ]; then
-        cd ../clang/tools
-        if [ ! -e extra ]; then
-            ln -s ../../clang-tools-extra extra
-        fi
-        cd ../../llvm
-    fi
-else
-    EXPLICIT_PROJECTS=1
-    PROJECTS="clang;lld"
-    if [ -n "$LLDB" ]; then
-        PROJECTS="$PROJECTS;lldb"
-    fi
-    if [ -n "$CLANG_TOOLS_EXTRA" ]; then
-        PROJECTS="$PROJECTS;clang-tools-extra"
-    fi
+PROJECTS="clang;lld"
+if [ -n "$LLDB" ]; then
+    PROJECTS="$PROJECTS;lldb"
+fi
+if [ -n "$CLANG_TOOLS_EXTRA" ]; then
+    PROJECTS="$PROJECTS;clang-tools-extra"
 fi
 
 [ -z "$CLEAN" ] || rm -rf $BUILDDIR
 mkdir -p $BUILDDIR
 cd $BUILDDIR
-# Building LLDB for macOS fails unless building libc++ is enabled at the
-# same time, or unless the LLDB tests are disabled.
+[ -n "$NO_RECONF" ] || rm -rf CMake*
 cmake \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=$ASSERTS \
-    ${EXPLICIT_PROJECTS+-DLLVM_ENABLE_PROJECTS="$PROJECTS"} \
+    -DLLVM_ENABLE_PROJECTS="$PROJECTS" \
     -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86" \
     -DLLVM_INSTALL_TOOLCHAIN_ONLY=$TOOLCHAIN_ONLY \
     -DLLVM_LINK_LLVM_DYLIB=$LINK_DYLIB \
-    -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf" \
+    -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf;llvm-size" \
     ${HOST+-DLLVM_HOST_TRIPLE=$HOST} \
-    -DLLDB_INCLUDE_TESTS=OFF \
     $CMAKEFLAGS \
     ..
 

@@ -18,7 +18,9 @@ set -e
 
 : ${DEFAULT_WIN32_WINNT:=0x601}
 : ${DEFAULT_MSVCRT:=ucrt}
-: ${MINGW_W64_VERSION:=03e1647a79ac85cac70560734ad6a14e3aa56ea5}
+: ${MINGW_W64_VERSION:=ce5a9f624dfc691082dad2ea2af7b1985e3476b5}
+
+CFGUARD_FLAGS="--enable-cfguard"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -31,6 +33,12 @@ while [ $# -gt 0 ]; do
     --with-default-msvcrt=*)
         DEFAULT_MSVCRT="${1#*=}"
         ;;
+    --enable-cfguard)
+        CFGUARD_FLAGS="--enable-cfguard"
+        ;;
+    --disable-cfguard)
+        CFGUARD_FLAGS=
+        ;;
     *)
         PREFIX="$1"
         ;;
@@ -39,7 +47,7 @@ while [ $# -gt 0 ]; do
 done
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--skip-include-triplet-prefix] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] dest
+        echo "$0 [--skip-include-triplet-prefix] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] dest"
         exit 1
     fi
 
@@ -119,18 +127,21 @@ for arch in $ARCHS; do
         ;;
     esac
     FLAGS="$FLAGS --with-default-msvcrt=$DEFAULT_MSVCRT"
-    ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS
+    ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS
     $MAKE -j$CORES
     $MAKE install
-
-    rm -f $PREFIX/$arch-w64-mingw32/lib/libssp*
-    llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp.a
-    llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp_nonshared.a
     cd ..
 done
 cd ..
 
 for arch in $ARCHS; do
+    if [ ! -f $PREFIX/$arch-w64-mingw32/lib/libssp.a ]; then
+        # Create empty dummy archives, to avoid failing when the compiler
+        # driver adds "-lssp -lssh_nonshared" when linking.
+        llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp.a
+        llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp_nonshared.a
+    fi
+
     mkdir -p "$PREFIX/$arch-w64-mingw32/share/mingw32"
     for file in COPYING COPYING.MinGW-w64/COPYING.MinGW-w64.txt COPYING.MinGW-w64-runtime/COPYING.MinGW-w64-runtime.txt; do
         install -m644 "$file" "$PREFIX/$arch-w64-mingw32/share/mingw32"
