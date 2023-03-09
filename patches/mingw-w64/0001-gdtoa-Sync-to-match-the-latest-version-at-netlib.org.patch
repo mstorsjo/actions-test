@@ -1,0 +1,1171 @@
+From 8a9b0ff24cfad06c6c664e1a687b653e87c67fe9 Mon Sep 17 00:00:00 2001
+From: Jameson Nash <vtjnash@gmail.com>
+Date: Fri, 6 Jan 2023 19:52:55 -0500
+Subject: [PATCH] gdtoa: Sync to match the latest version at netlib.org
+
+As of Jan. 06 2023. Changelog from http://netlib.org/fp/changes (filtered):
+
+20121220
+  dtoa.c and gdtoa.tgz:  to avoid a possible one-time race when
+Infinity or NaN appear in decimal->binary conversions done in parallel
+threads, replace hexdig_init() with static initialization.
+
+20131209
+  dtoa.c, gdtoa.tgz: when strtod computes its starting approximation,
+allow z to involve one more digit for IEEE arithmetic and two more
+digits for IBM-mainframe and VAX arithmetics.  Thanks to Walter Qian
+(water.qian@gmail.com) for suggesting this change, which makes some
+conversions faster.
+
+20151020
+  dtoa.c:  add a test for dtoa() to return "1" under mode 4 when
+converting some very small powers of 10, such as 1e-322 with
+ndigits = 4 and 1e-319 with ndigits = 7 (examples provided by
+jay.foad@gmail.com).
+
+20160219
+  gdtoa.tgz: Adjust gdtoa(...,mode,...) to assume
+"round near" when mode is 0 or 1.  Make various tweaks to banish
+(useless) warnings from "gcc -Wall -Wextra".  Thanks to Jarkko
+Hietaniemi <jhi@iki.fi> for advocating the latter exercise (and
+correcting a typo in README).
+
+20160307
+  dtoa.c:  fix glitches with floating-point values in hexadecimal
+notation:  some values that should overflow to (appropriately signed)
+Infinity, such as 0x1p1025, were mishandled, and values greater than
+0x1p-1075 and less than 0x1.0000000000001p-1075 where treated as zero
+rather than the smallest denormal number.
+  gdtoa.tgz:  fix a bug with hexadecimal input greater than the
+smallest denormal and less than the smallest denormal times the
+smallest number greater than one.  In round-to-nearest values, such
+values should round to the smallest denormal rather than to zero.
+Thanks to Albert Chan <albertmcchan@yahoo.com> for bug reports.
+
+20160325
+  dtoa.c:  fix a bug whereby dtoa(...,mode,...) with, e.g., mode = 2 or
+3 could return a string with trailing zeros, contrary to specification.
+An example provided by Albert Chan:  dtoa(81320560005., 2, 10,...).
+  gdtoa.tgz: fix the analogous bug in gdtoa/dtoa.c and gdtoa/gdtoa.c
+and apply the bug fix of 20151020 to gdtoa/dtoa.c.
+
+20160429
+  dtoa.c, gdtoa.tgz (file dtoa.c):  Fix a bug with dtoa mode 0 when
+Honor_FLT_ROUNDS is defined:  with some inputs and nondefault rounding
+modes (e.g., 1.23 with round toward zero), the returned string was off
+by one.  When the new 64-bit integer logic is used, the test in
+question is very unlikely to be used.  This is another bug reported by
+Albert Chan.
+
+20160505
+  dtoa.c:  fix some glitches in strtod() when Honor_FLT_ROUNDS is
+defined:  zero was returned for some decimal values that should have
+been rounded to +- the smallest denormal, and +-Infinity was returned
+for some hexadecimal strings with huge values that should have been
+rounded to +- the largest finite value.
+
+20160506
+  gdtoa.tgz: analogous bug fixes to those of 20160505.
+
+20180730
+  strtodg.c in gdtoa.c:  fix a glitch, introduced 20160506, with some
+return values of +-Infinity:  the STRTOG_Overflow bit was not set.
+---
+ mingw-w64-crt/gdtoa/README          | 67 ++++++++++++++++++++++-------
+ mingw-w64-crt/gdtoa/README.mingw    |  5 ++-
+ mingw-w64-crt/gdtoa/arithchk.c      | 21 +++++----
+ mingw-w64-crt/gdtoa/dtoa.c          | 37 +++++++++++-----
+ mingw-w64-crt/gdtoa/g__fmt.c        | 56 ++++++++++++++++++++++++
+ mingw-w64-crt/gdtoa/g_dfmt.c        |  2 +-
+ mingw-w64-crt/gdtoa/g_ffmt.c        |  2 +-
+ mingw-w64-crt/gdtoa/g_xfmt.c        |  8 ++--
+ mingw-w64-crt/gdtoa/gd_qnan.h       | 13 +-----
+ mingw-w64-crt/gdtoa/gdtoa.c         | 18 ++++----
+ mingw-w64-crt/gdtoa/gdtoa.h         |  2 +-
+ mingw-w64-crt/gdtoa/gdtoaimp.h      | 22 ++++++++--
+ mingw-w64-crt/gdtoa/gethex.c        | 23 +++++++---
+ mingw-w64-crt/gdtoa/hd_init.c       | 24 ++++++++++-
+ mingw-w64-crt/gdtoa/hexnan.c        | 21 ++++++---
+ mingw-w64-crt/gdtoa/misc.c          |  4 +-
+ mingw-w64-crt/gdtoa/qnan.c          | 53 +++++++++++++----------
+ mingw-w64-crt/gdtoa/strtodg.c       | 38 ++++++++--------
+ mingw-w64-crt/gdtoa/strtodnrp.c     |  2 +-
+ mingw-w64-crt/gdtoa/strtof.c        |  3 +-
+ mingw-w64-crt/gdtoa/strtopx.c       | 14 +++---
+ mingw-w64-crt/stdio/mingw_pformat.c |  2 +-
+ 22 files changed, 302 insertions(+), 135 deletions(-)
+
+diff --git a/mingw-w64-crt/gdtoa/README b/mingw-w64-crt/gdtoa/README
+index ce8be5588..b6732662f 100644
+--- a/mingw-w64-crt/gdtoa/README
++++ b/mingw-w64-crt/gdtoa/README
+@@ -152,12 +152,14 @@ suffer double rounding due to use of extended-precision registers.
+ For some conversions this variant of strtod is less efficient than the
+ one in strtod.c when the latter is run with 53-bit rounding precision.
+ 
+-The values that the strto* routines return for NaNs are determined by
+-gd_qnan.h, which the makefile generates by running the program whose
+-source is qnan.c.  Note that the rules for distinguishing signaling
+-from quiet NaNs are system-dependent.  For cross-compilation, you need
+-to determine arith.h and gd_qnan.h suitably, e.g., using the
+-arithmetic of the target machine.
++When float or double are involved, the values that the strto* routines
++return for NaNs are determined by gd_qnan.h, which the makefile
++generates by running the program whose source is qnan.c.  For other
++types, default NaN values are specified in g__fmt.c and may need
++adjusting.  Note that the rules for distinguishing signaling from
++quiet NaNs are system-dependent.  For cross-compilation, you need to
++determine arith.h and gd_qnan.h suitably, e.g., using the arithmetic
++of the target machine.
+ 
+ C99's hexadecimal floating-point constants are recognized by the
+ strto* routines (but this feature has not yet been heavily tested).
+@@ -172,10 +174,11 @@ hexadecimal digits, it is taken for the fraction bits of the resulting
+ NaN; if there are two or more strings of hexadecimal digits, each
+ string is assigned to the next available sequence of 32-bit words of
+ fractions bits (starting with the most significant), right-aligned in
+-each sequence.
++each sequence.  Strings of hexadecimal digits may be preceded by "0x"
++or "0X".
+ 
+-For binary -> decimal conversions, I've provided just one family
+-of helper routines:
++For binary -> decimal conversions, I've provided a family of helper
++routines:
+ 
+ 	g_ffmt
+ 	g_dfmt
+@@ -183,6 +186,12 @@ of helper routines:
+ 	g_xfmt
+ 	g_xLfmt
+ 	g_Qfmt
++	g_ffmt_p
++	g_dfmt_p
++	g_ddfmt_p
++	g_xfmt_p
++	g_xLfmt_p
++	g_Qfmt_p
+ 
+ which do a "%g" style conversion either to a specified number of decimal
+ places (if their ndig argument is positive), or to the shortest
+@@ -195,7 +204,34 @@ style and conversions with direction of rounding specified (so that, if
+ desired, the decimal value is either >= or <= the binary value).
+ On IEEE-arithmetic systems that provide the C99 fegetround() function,
+ if compiled with -DHonor_FLT_ROUNDS, these routines honor the current
+-rounding mode.
++rounding mode.  For pedants, the ...fmt_p() routines are similar to the
++...fmt() routines, but have an additional final int argument, nik,
++that for conversions of Infinity or NaN, determines whether upper,
++lower, or mixed case is used, whether (...) is added to NaN values,
++and whether the sign of a NaN is reported or suppressed:
++
++	nik = ic + 6*(nb + 3*ns),
++
++where ic with 0 <= ic < 6 controls the rendering of Infinity and NaN:
++
++	0 ==> Infinity or NaN
++	1 ==> infinity or nan
++	2 ==> INFINITY or NAN
++	3 ==> Inf or NaN
++	4 ==> inf or nan
++	5 ==> INF or NAN
++
++nb with 0 <= nb < 3 determines whether NaN values are rendered
++as NaN(...):
++
++	0 ==> no
++	1 ==> yes
++	2 ==> no for default NaN values; yes otherwise
++
++ns = 0 or 1 determines whether the sign of NaN values reported:
++
++	0 ==> distinguish NaN and -NaN
++	1 ==> report both as NaN
+ 
+ For an example of more general conversions based on dtoa(), see
+ netlib's "printf.c from ampl/solvers".
+@@ -228,17 +264,18 @@ to free the value s returned by dtoa or gdtoa.  It's OK to do so whether
+ or not MULTIPLE_THREADS is #defined, and the helper g_*fmt routines
+ listed above all do this indirectly (in gfmt_D2A(), which they all call).
+ 
+-By default, there is a private pool of memory of length 2000 bytes
++By default, there is a private pool of memory of length 2304 bytes
+ for intermediate quantities, and MALLOC (see gdtoaimp.h) is called only
+-if the private pool does not suffice.   2000 is large enough that MALLOC
++if the private pool does not suffice.   2304 is large enough that MALLOC
+ is called only under very unusual circumstances (decimal -> binary
+ conversion of very long strings) for conversions to and from double
+ precision.  For systems with preemptively scheduled multiple threads
+ or for conversions to extended or quad, it may be appropriate to
+-#define PRIVATE_MEM nnnn, where nnnn is a suitable value > 2000.
++#define PRIVATE_MEM nnnn, where nnnn is a suitable value > 2304.
+ For extended and quad precisions, -DPRIVATE_MEM=20000 is probably
+ plenty even for many digits at the ends of the exponent range.
+-Use of the private pool avoids some overhead.
++Use of the private pool avoids some overhead.  When MULTIPLE_THREADS
++is #defined, only thread 0 uses PRIVATE_MEM.
+ 
+ Directory test provides some test routines.  See its README.
+ I've also tested this stuff (except double double conversions)
+@@ -252,7 +289,7 @@ with Vern Paxson's testbase program: see
+ 
+ Some system-dependent additions to CFLAGS in the makefile:
+ 
+-	HU-UX: -Aa -Ae
++	HP-UX: -Aa -Ae
+ 	OSF (DEC Unix): -ieee_with_no_inexact
+ 	SunOS 4.1x: -DKR_headers -DBad_float_h
+ 
+diff --git a/mingw-w64-crt/gdtoa/README.mingw b/mingw-w64-crt/gdtoa/README.mingw
+index b41d1fdae..01ba3717c 100644
+--- a/mingw-w64-crt/gdtoa/README.mingw
++++ b/mingw-w64-crt/gdtoa/README.mingw
+@@ -1,6 +1,6 @@
+ The gdtoa code here is based on David M. Gay's original
+-gdtoa source at http://www.netlib.org/fp/ from Sep. 27,
+-2010. The major changes between the original source and
++gdtoa source at http://www.netlib.org/fp/ from Jan. 6,
++2023. The major changes between the original source and
+ the mingw port here include:
+ 
+ * IBM, CRAY and VAX code removed.
+@@ -14,6 +14,7 @@ the mingw port here include:
+   (grep'ped better..)
+ * A few compiler warning fixes here and there.
+ * A few other insignificant changes (if any..)
++* set_max_gdtoa_threads functionality removed
+ 
+ MinGW specific compile-time definitions are at the top of
+ gdtoaimp.h and gdtoa.h headers.
+diff --git a/mingw-w64-crt/gdtoa/arithchk.c b/mingw-w64-crt/gdtoa/arithchk.c
+index f008fe16a..af6dea977 100644
+--- a/mingw-w64-crt/gdtoa/arithchk.c
++++ b/mingw-w64-crt/gdtoa/arithchk.c
+@@ -42,7 +42,7 @@ VAX		= { "VAX", 4 },
+ CRAY		= { "CRAY", 5};
+ 
+  static Akind *
+-Lcheck()
++Lcheck(void)
+ {
+ 	union {
+ 		double d;
+@@ -69,7 +69,7 @@ Lcheck()
+ 	}
+ 
+  static Akind *
+-icheck()
++icheck(void)
+ {
+ 	union {
+ 		double d;
+@@ -95,10 +95,8 @@ icheck()
+ 	return 0;
+ 	}
+ 
+-char *emptyfmt = "";	/* avoid possible warning message with printf("") */
+-
+  static Akind *
+-ccheck()
++ccheck(int ac, char **av)
+ {
+ 	union {
+ 		double d;
+@@ -107,10 +105,11 @@ ccheck()
+ 	long Cray1;
+ 
+ 	/* Cray1 = 4617762693716115456 -- without overflow on non-Crays */
+-	Cray1 = printf(emptyfmt) < 0 ? 0 : 4617762;
+-	if (printf(emptyfmt, Cray1) >= 0)
++	/* The next three tests should always be true. */
++	Cray1 = ac >= -2 ? 4617762 : 0;
++	if (ac >= -1)
+ 		Cray1 = 1000000*Cray1 + 693716;
+-	if (printf(emptyfmt, Cray1) >= 0)
++	if (av || ac >= 0)
+ 		Cray1 = 1000000*Cray1 + 115456;
+ 	u.d = 1e13;
+ 	if (u.L == Cray1)
+@@ -119,7 +118,7 @@ ccheck()
+ 	}
+ 
+  static int
+-fzcheck()
++fzcheck(void)
+ {
+ 	double a, b;
+ 	int i;
+@@ -138,7 +137,7 @@ fzcheck()
+ 	}
+ 
+  int
+-main()
++main(int argc, char **argv)
+ {
+ 	Akind *a = 0;
+ 	int Ldef = 0;
+@@ -161,7 +160,7 @@ main()
+ 		a = icheck();
+ 		}
+ 	else if (sizeof(double) == sizeof(long))
+-		a = ccheck();
++		a = ccheck(argc, argv);
+ 	if (a) {
+ 		fprintf(f, "#define %s\n#define Arith_Kind_ASL %d\n",
+ 			a->name, a->kind);
+diff --git a/mingw-w64-crt/gdtoa/dtoa.c b/mingw-w64-crt/gdtoa/dtoa.c
+index 46f4caff1..6c8711303 100644
+--- a/mingw-w64-crt/gdtoa/dtoa.c
++++ b/mingw-w64-crt/gdtoa/dtoa.c
+@@ -117,7 +117,7 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ 	ULong x;
+ #endif
+ 	Bigint *b, *b1, *delta, *mlo, *mhi, *S;
+-	union _dbl_union d, d2, eps;
++	union _dbl_union d, d2, eps, eps1;
+ 	double ds;
+ 	char *s, *s0;
+ #ifdef SET_INEXACT
+@@ -363,12 +363,28 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ 			 * generating digits needed.
+ 			 */
+ 			dval(&eps) = 0.5/tens[ilim-1] - dval(&eps);
++			if (k0 < 0 && j2 >= 307) {
++				eps1.d = 1.01e256; /* 1.01 allows roundoff in the next few lines */
++				word0(&eps1) -= Exp_msk1 * (Bias+P-1);
++				dval(&eps1) *= tens[j2 & 0xf];
++				for(i = 0, j = (j2-256) >> 4; j; j >>= 1, i++)
++					if (j & 1)
++						dval(&eps1) *= bigtens[i];
++				if (eps.d < eps1.d)
++					eps.d = eps1.d;
++				if (10. - d.d < 10.*eps.d && eps.d < 1.) {
++					/* eps.d < 1. excludes trouble with the tiniest denormal */
++					*s++ = '1';
++					++k;
++					goto ret1;
++				}
++			}
+ 			for(i = 0;;) {
+ 				L = dval(&d);
+ 				dval(&d) -= L;
+ 				*s++ = '0' + (int)L;
+ 				if (dval(&d) < dval(&eps))
+-					goto ret1;
++					goto retc;
+ 				if (1. - dval(&d) < dval(&eps))
+ 					goto bump_up;
+ 				if (++i >= ilim)
+@@ -389,11 +405,8 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ 				if (i == ilim) {
+ 					if (dval(&d) > 0.5 + dval(&eps))
+ 						goto bump_up;
+-					else if (dval(&d) < 0.5 - dval(&eps)) {
+-						while(*--s == '0');
+-						s++;
+-						goto ret1;
+-					}
++					else if (dval(&d) < 0.5 - dval(&eps))
++						goto retc;
+ 					break;
+ 				}
+ 			}
+@@ -439,7 +452,7 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ #ifdef Honor_FLT_ROUNDS
+ 				if (mode > 1)
+ 				 switch(Rounding) {
+-				  case 0: goto ret1;
++				  case 0: goto retc;
+ 				  case 2: goto bump_up;
+ 				 }
+ #endif
+@@ -462,7 +475,7 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ 				break;
+ 			}
+ 		}
+-		goto ret1;
++		goto retc;
+ 	}
+ 
+ 	m2 = b2;
+@@ -650,7 +663,7 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ 			}
+ 			if (j2 > 0) {
+ #ifdef Honor_FLT_ROUNDS
+-				if (!Rounding)
++				if (!Rounding && mode > 1)
+ 					goto accept_dig;
+ #endif
+ 				if (dig == '9') { /* possible if i == 1 */
+@@ -729,6 +742,10 @@ char *__dtoa (double d0, int mode, int ndigits, int *decpt, int *sign, char **rv
+ 			Bfree(mlo);
+ 		Bfree(mhi);
+ 	}
++retc:
++	while(s > s0 && s[-1] == '0')
++		--s;
++	/* fallthrough */
+  ret1:
+ #ifdef SET_INEXACT
+ 	if (inexact) {
+diff --git a/mingw-w64-crt/gdtoa/g__fmt.c b/mingw-w64-crt/gdtoa/g__fmt.c
+index 49bd95a84..98ef7be14 100644
+--- a/mingw-w64-crt/gdtoa/g__fmt.c
++++ b/mingw-w64-crt/gdtoa/g__fmt.c
+@@ -35,6 +35,30 @@ THIS SOFTWARE.
+ #include "locale.h"
+ #endif
+ 
++#ifndef ldus_QNAN0
++#define ldus_QNAN0 0x7fff
++#endif
++#ifndef ldus_QNAN1
++#define ldus_QNAN1 0xc000
++#endif
++#ifndef ldus_QNAN2
++#define ldus_QNAN2 0
++#endif
++#ifndef ldus_QNAN3
++#define ldus_QNAN3 0
++#endif
++#ifndef ldus_QNAN4
++#define ldus_QNAN4 0
++#endif
++
++ const char *InfName[6] = { "Infinity", "infinity", "INFINITY", "Inf", "inf", "INF" };
++ const char *NanName[3] = { "NaN", "nan", "NAN" };
++ ULong NanDflt_Q_D2A[4] = { 0xffffffff, 0xffffffff, 0xffffffff, 0x7fffffff };
++ ULong NanDflt_d_D2A[2] = { d_QNAN1, d_QNAN0 };
++ ULong NanDflt_f_D2A[1] = { f_QNAN };
++ ULong NanDflt_xL_D2A[3] = { 1, 0x80000000, 0x7fff0000 };
++ UShort NanDflt_ldus_D2A[5] = { ldus_QNAN4, ldus_QNAN3, ldus_QNAN2, ldus_QNAN1, ldus_QNAN0 };
++
+ char *__g__fmt (char *b, char *s, char *se, int decpt, ULong sign, size_t blen)
+ {
+ 	int i, j, k;
+@@ -140,3 +164,35 @@ char *__g__fmt (char *b, char *s, char *se, int decpt, ULong sign, size_t blen)
+ 	__freedtoa(s0);
+ 	return b;
+ }
++
++ char *
++__add_nanbits_D2A(char *b, size_t blen, ULong *bits, int nb)
++{
++	ULong t;
++	char *rv;
++	int i, j;
++	size_t L;
++	static char Hexdig[16] = "0123456789abcdef";
++
++	while(!bits[--nb])
++		if (!nb)
++			return b;
++	L = 8*nb + 3;
++	t = bits[nb];
++	do ++L; while((t >>= 4));
++	if (L > blen)
++		return b;
++	b += L;
++	*--b = 0;
++	rv = b;
++	*--b = /*(*/ ')';
++	for(i = 0; i < nb; ++i) {
++		t = bits[i];
++		for(j = 0; j < 8; ++j, t >>= 4)
++			*--b = Hexdig[t & 0xf];
++		}
++	t = bits[nb];
++	do *--b = Hexdig[t & 0xf]; while(t >>= 4);
++	*--b = '('; /*)*/
++	return rv;
++	}
+diff --git a/mingw-w64-crt/gdtoa/g_dfmt.c b/mingw-w64-crt/gdtoa/g_dfmt.c
+index 50ed708a6..35ba81bdc 100644
+--- a/mingw-w64-crt/gdtoa/g_dfmt.c
++++ b/mingw-w64-crt/gdtoa/g_dfmt.c
+@@ -45,7 +45,7 @@ char *__g_dfmt (char *buf, double *d, int ndig, size_t bufsize)
+ 
+ 	if (ndig < 0)
+ 		ndig = 0;
+-	if ((int) bufsize < ndig + 10)
++	if (bufsize < (size_t)(ndig + 10))
+ 		return 0;
+ 
+ 	L = (ULong*)d;
+diff --git a/mingw-w64-crt/gdtoa/g_ffmt.c b/mingw-w64-crt/gdtoa/g_ffmt.c
+index f3f7c2419..bcf308b0f 100644
+--- a/mingw-w64-crt/gdtoa/g_ffmt.c
++++ b/mingw-w64-crt/gdtoa/g_ffmt.c
+@@ -45,7 +45,7 @@ char *__g_ffmt (char *buf, float *f, int ndig, size_t bufsize)
+ 
+ 	if (ndig < 0)
+ 		ndig = 0;
+-	if ((int) bufsize < ndig + 10)
++	if (bufsize < (size_t)(ndig + 10))
+ 		return 0;
+ 
+ 	L = (ULong*)f;
+diff --git a/mingw-w64-crt/gdtoa/g_xfmt.c b/mingw-w64-crt/gdtoa/g_xfmt.c
+index da11a5881..4d84f62bd 100644
+--- a/mingw-w64-crt/gdtoa/g_xfmt.c
++++ b/mingw-w64-crt/gdtoa/g_xfmt.c
+@@ -69,7 +69,7 @@ char *__g_xfmt (char *buf, void *V, int ndig, size_t bufsize)
+ 
+ 	if (ndig < 0)
+ 		ndig = 0;
+-	if ((int) bufsize < ndig + 10)
++	if (bufsize < (size_t)(ndig + 10))
+ 		return 0;
+ 
+ 	L = (UShort *)V;
+@@ -103,14 +103,14 @@ char *__g_xfmt (char *buf, void *V, int ndig, size_t bufsize)
+ 	if (ex != 0) {
+ 		if (ex == 0x7fff) {
+ 			/* Infinity or NaN */
+-			if (bits[0] | bits[1])
+-				b = strcp(buf, "NaN");
+-			else {
++			if (!bits[0] && bits[1]== 0x80000000) {
+ 				b = buf;
+ 				if (sign)
+ 					*b++ = '-';
+ 				b = strcp(b, "Infinity");
+ 			}
++			else
++				b = strcp(buf, "NaN");
+ 			return b;
+ 		}
+ 		i = STRTOG_Normal;
+diff --git a/mingw-w64-crt/gdtoa/gd_qnan.h b/mingw-w64-crt/gdtoa/gd_qnan.h
+index 0b468c492..885efcdb1 100644
+--- a/mingw-w64-crt/gdtoa/gd_qnan.h
++++ b/mingw-w64-crt/gdtoa/gd_qnan.h
+@@ -1,12 +1,3 @@
+ #define f_QNAN 0x7fc00000
+-#define d_QNAN0 0x0
+-#define d_QNAN1 0x7ff80000
+-#define ld_QNAN0 0x0
+-#define ld_QNAN1 0xc0000000
+-#define ld_QNAN2 0x7fff
+-#define ld_QNAN3 0x0
+-#define ldus_QNAN0 0x0
+-#define ldus_QNAN1 0x0
+-#define ldus_QNAN2 0x0
+-#define ldus_QNAN3 0xc000
+-#define ldus_QNAN4 0x7fff
++#define d_QNAN0 0x7ff80000
++#define d_QNAN1 0x0
+diff --git a/mingw-w64-crt/gdtoa/gdtoa.c b/mingw-w64-crt/gdtoa/gdtoa.c
+index 74c29fe33..1cfe1953e 100644
+--- a/mingw-w64-crt/gdtoa/gdtoa.c
++++ b/mingw-w64-crt/gdtoa/gdtoa.c
+@@ -103,7 +103,7 @@ static Bigint *bitstob (ULong *bits, int nbits, int *bbits)
+  *	   calculation.
+  */
+ 
+-char *__gdtoa (FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
++char *__gdtoa (const FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
+ 							  int *decpt, char **rve)
+ {
+  /*	Arguments ndigits and decpt are similar to the second and third
+@@ -288,7 +288,9 @@ char *__gdtoa (FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
+ 	}
+ 	s = s0 = rv_alloc(i);
+ 
+-	if ( (rdir = fpi->rounding - 1) !=0) {
++	if (mode <= 1)
++		rdir = 0;
++	else if ( (rdir = fpi->rounding - 1) !=0) {
+ 		if (rdir < 0)
+ 			rdir = 2;
+ 		if (kind & STRTOG_Neg)
+@@ -393,7 +395,7 @@ char *__gdtoa (FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
+ 					else if (dval(&d) < ds - dval(&eps)) {
+ 						if (dval(&d))
+ 							inex = STRTOG_Inexlo;
+-						goto clear_trailing0;
++						goto ret1;
+ 					}
+ 					break;
+ 				}
+@@ -456,12 +458,8 @@ char *__gdtoa (FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
+ 						}
+ 					++*s++;
+ 				}
+-				else {
++				else
+ 					inex = STRTOG_Inexlo;
+- clear_trailing0:
+-					while(*--s == '0'){}
+-					++s;
+-				}
+ 				break;
+ 			}
+ 		}
+@@ -712,8 +710,6 @@ char *__gdtoa (FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
+  chopzeros:
+ 		if (b->wds > 1 || b->x[0])
+ 			inex = STRTOG_Inexlo;
+-		while(*--s == '0'){}
+-		++s;
+ 	}
+  ret:
+ 	Bfree(S);
+@@ -723,6 +719,8 @@ char *__gdtoa (FPI *fpi, int be, ULong *bits, int *kindp, int mode, int ndigits,
+ 		Bfree(mhi);
+ 	}
+  ret1:
++	while(s > s0 && s[-1] == '0')
++		--s;
+ 	Bfree(b);
+ 	*s = 0;
+ 	*decpt = k + 1;
+diff --git a/mingw-w64-crt/gdtoa/gdtoa.h b/mingw-w64-crt/gdtoa/gdtoa.h
+index c5c6f8d72..b2b4c5415 100644
+--- a/mingw-w64-crt/gdtoa/gdtoa.h
++++ b/mingw-w64-crt/gdtoa/gdtoa.h
+@@ -99,7 +99,7 @@ extern "C" {
+ 
+ extern char* __dtoa (double d, int mode, int ndigits, int *decpt,
+ 		     int *sign, char **rve);
+-extern char* __gdtoa (FPI *fpi, int be, ULong *bits, int *kindp,
++extern char* __gdtoa (const FPI *fpi, int be, ULong *bits, int *kindp,
+ 		     int mode, int ndigits, int *decpt, char **rve);
+ extern void __freedtoa (char *);
+ 
+diff --git a/mingw-w64-crt/gdtoa/gdtoaimp.h b/mingw-w64-crt/gdtoa/gdtoaimp.h
+index 49b9ce05b..cc2007cd5 100644
+--- a/mingw-w64-crt/gdtoa/gdtoaimp.h
++++ b/mingw-w64-crt/gdtoa/gdtoaimp.h
+@@ -200,6 +200,12 @@ extern void *MALLOC (size_t);
+ #define MALLOC malloc
+ #endif
+ 
++#ifdef REALLOC
++extern void *REALLOC (void*, size_t);
++#else
++#define REALLOC realloc
++#endif
++
+ #undef IEEE_Arith
+ #undef Avoid_Underflow
+ #ifdef IEEE_MC68k
+@@ -457,10 +463,13 @@ extern double rnd_prod(double, double), rnd_quot(double, double);
+ #define ALL_ON 0xffff
+ #endif
+ 
+-#ifndef MULTIPLE_THREADS
++#ifdef MULTIPLE_THREADS /*{{*/
++extern void ACQUIRE_DTOA_LOCK (unsigned int);
++extern void FREE_DTOA_LOCK (unsigned int);
++#else /*}{*/
+ #define ACQUIRE_DTOA_LOCK(n)	/*nothing*/
+ #define FREE_DTOA_LOCK(n)	/*nothing*/
+-#endif
++#endif /*}}*/
+ 
+ #define Kmax 9
+ 
+@@ -501,12 +510,15 @@ __hi0bits_D2A (ULong y)
+ 
+ #define Balloc __Balloc_D2A
+ #define Bfree __Bfree_D2A
++#define InfName __InfName_D2A
++#define NanName __NanName_D2A
+ #define ULtoQ __ULtoQ_D2A
+ #define ULtof __ULtof_D2A
+ #define ULtod __ULtod_D2A
+ #define ULtodd __ULtodd_D2A
+ #define ULtox __ULtox_D2A
+ #define ULtoxL __ULtoxL_D2A
++#define add_nanbits __add_nanbits_D2A
+ #define any_on __any_on_D2A
+ #define b2d __b2d_D2A
+ #define bigtens __bigtens_D2A
+@@ -548,9 +560,11 @@ __hi0bits_D2A (ULong y)
+ 
+ #define hexdig_init_D2A __mingw_hexdig_init_D2A
+ 
++extern char *add_nanbits (char*, size_t, ULong*, int);
+ extern char *dtoa_result;
+ extern const double bigtens[], tens[], tinytens[];
+ extern unsigned char hexdig[];
++extern const char *InfName[6], *NanName[3];
+ 
+ extern Bigint *Balloc (int);
+ extern void Bfree (Bigint*);
+@@ -567,9 +581,9 @@ extern void copybits (ULong*, int, Bigint*);
+ extern Bigint *d2b (double, int*, int*);
+ extern void decrement (Bigint*);
+ extern Bigint *diff (Bigint*, Bigint*);
+-extern int gethex (const char**, FPI*, Long*, Bigint**, int);
++extern int gethex (const char**, const FPI*, Long*, Bigint**, int);
+ extern void hexdig_init_D2A(void);
+-extern int hexnan (const char**, FPI*, ULong*);
++extern int hexnan (const char**, const FPI*, ULong*);
+ extern int hi0bits_D2A (ULong);
+ extern Bigint *i2b (int);
+ extern Bigint *increment (Bigint*);
+diff --git a/mingw-w64-crt/gdtoa/gethex.c b/mingw-w64-crt/gdtoa/gethex.c
+index 23a0db127..b555dd716 100644
+--- a/mingw-w64-crt/gdtoa/gethex.c
++++ b/mingw-w64-crt/gdtoa/gethex.c
+@@ -35,7 +35,7 @@ THIS SOFTWARE.
+ #include "locale.h"
+ #endif
+ 
+-int gethex (const char **sp, FPI *fpi, Long *expo, Bigint **bp, int sign)
++int gethex (const char **sp, const FPI *fpi, Long *expo, Bigint **bp, int sign)
+ {
+ 	Bigint *b;
+ 	const unsigned char *decpt, *s0, *s, *s1;
+@@ -62,8 +62,7 @@ int gethex (const char **sp, FPI *fpi, Long *expo, Bigint **bp, int sign)
+ #endif
+ #endif
+ 
+-	if (!hexdig['0'])
+-		hexdig_init_D2A();
++	/**** if (!hexdig['0']) hexdig_init_D2A(); ****/
+ 	*bp = 0;
+ 	havedig = 0;
+ 	s0 = *(const unsigned char **)sp + 2;
+@@ -177,7 +176,6 @@ int gethex (const char **sp, FPI *fpi, Long *expo, Bigint **bp, int sign)
+ 		  case FPI_Round_down:
+ 			if (sign)
+ 				goto ovfl1;
+-			goto ret_big;
+ 		}
+  ret_big:
+ 		nbits = fpi->nbits;
+@@ -190,8 +188,8 @@ int gethex (const char **sp, FPI *fpi, Long *expo, Bigint **bp, int sign)
+ 		for(j = 0; j < n0; ++j)
+ 			b->x[j] = ALL_ON;
+ 		if (n > n0)
+-			b->x[j] = ULbits >> (ULbits - (nbits & kmask));
+-		*expo = fpi->emin;
++			b->x[j] = ALL_ON >> (ULbits - (nbits & kmask));
++		*expo = fpi->emax;
+ 		return STRTOG_Normal | STRTOG_Inexlo;
+ 	}
+ 	n = s1 - s0 - 1;
+@@ -253,6 +251,17 @@ int gethex (const char **sp, FPI *fpi, Long *expo, Bigint **bp, int sign)
+ 		Bfree(b);
+  ovfl1:
+ 		SET_ERRNO(ERANGE);
++		switch (fpi->rounding) {
++		  case FPI_Round_zero:
++			goto ret_big;
++		  case FPI_Round_down:
++			if (!sign)
++				goto ret_big;
++			break;
++		  case FPI_Round_up:
++			if (sign)
++				goto ret_big;
++		}
+ 		return STRTOG_Infinite | STRTOG_Overflow | STRTOG_Inexhi;
+ 	}
+ 	irv = STRTOG_Normal;
+@@ -262,7 +271,7 @@ int gethex (const char **sp, FPI *fpi, Long *expo, Bigint **bp, int sign)
+ 		if (n >= nbits) {
+ 			switch (fpi->rounding) {
+ 			  case FPI_Round_near:
+-				if (n == nbits && (n < 2 || any_on(b,n-1)))
++				if (n == nbits && (n < 2 || lostbits || any_on(b,n-1)))
+ 					goto one_bit;
+ 				break;
+ 			  case FPI_Round_up:
+diff --git a/mingw-w64-crt/gdtoa/hd_init.c b/mingw-w64-crt/gdtoa/hd_init.c
+index 5ee0caa73..acbb6d84f 100644
+--- a/mingw-w64-crt/gdtoa/hd_init.c
++++ b/mingw-w64-crt/gdtoa/hd_init.c
+@@ -31,6 +31,7 @@ THIS SOFTWARE.
+ 
+ #include "gdtoaimp.h"
+ 
++#if 0
+ unsigned char hexdig[256];
+ 
+ static void htinit (unsigned char *h, unsigned char *s, int inc)
+@@ -40,10 +41,31 @@ static void htinit (unsigned char *h, unsigned char *s, int inc)
+ 		h[j] = i + inc;
+ }
+ 
+-void hexdig_init_D2A (void)
+++hexdig_init_D2A(void)	/* Use of hexdig_init omitted 20121220 to avoid a */
++			/* race condition when multiple threads are used. */
+ {
+ #define USC (unsigned char *)
+ 	htinit(hexdig, USC "0123456789", 0x10);
+ 	htinit(hexdig, USC "abcdef", 0x10 + 10);
+ 	htinit(hexdig, USC "ABCDEF", 0x10 + 10);
+ }
++#else
++ unsigned char hexdig[256] = {
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	16,17,18,19,20,21,22,23,24,25,0,0,0,0,0,0,
++	0,26,27,28,29,30,31,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,26,27,28,29,30,31,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
++	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
++	};
++#endif
+diff --git a/mingw-w64-crt/gdtoa/hexnan.c b/mingw-w64-crt/gdtoa/hexnan.c
+index 4fa4c7745..00b073eb3 100644
+--- a/mingw-w64-crt/gdtoa/hexnan.c
++++ b/mingw-w64-crt/gdtoa/hexnan.c
+@@ -44,14 +44,13 @@ static void L_shift (ULong *x, ULong *x1, int i)
+ 	} while(++x < x1);
+ }
+ 
+-int hexnan (const char **sp, FPI *fpi, ULong *x0)
++int hexnan (const char **sp, const FPI *fpi, ULong *x0)
+ {
+ 	ULong c, h, *x, *x1, *xe;
+ 	const char *s;
+ 	int havedig, hd0, i, nbits;
+ 
+-	if (!hexdig['0'])
+-		hexdig_init_D2A();
++	/**** if (!hexdig['0']) hexdig_init_D2A(); ****/
+ 	nbits = fpi->nbits;
+ 	x = x0 + (nbits >> kshift);
+ 	if (nbits & kmask)
+@@ -61,8 +60,11 @@ int hexnan (const char **sp, FPI *fpi, ULong *x0)
+ 	havedig = hd0 = i = 0;
+ 	s = *sp;
+ 	/* allow optional initial 0x or 0X */
+-	while((c = *(const unsigned char*)(s+1)) && c <= ' ')
++	while((c = *(const unsigned char*)(s+1)) && c <= ' ') {
++		if (!c)
++			goto retnan;
+ 		++s;
++	}
+ 	if (s[1] == '0' && (s[2] == 'x' || s[2] == 'X')
+ 	 && *(const unsigned char*)(s+3) > ' ')
+ 		s += 2;
+@@ -81,8 +83,11 @@ int hexnan (const char **sp, FPI *fpi, ULong *x0)
+ 					x1 = x;
+ 					i = 0;
+ 				}
+-				while(*(const unsigned char*)(s+1) <= ' ')
++				while((c = *(const unsigned char*)(s+1)) <= ' ') {
++					if (!c)
++						goto retnan;
+ 					++s;
++				}
+ 				if (s[1] == '0' && (s[2] == 'x' || s[2] == 'X')
+ 				 && *(const unsigned char*)(s+3) > ' ')
+ 					s += 2;
+@@ -96,10 +101,11 @@ int hexnan (const char **sp, FPI *fpi, ULong *x0)
+ 			do {
+ 				if (/*(*/ c == ')') {
+ 					*sp = s + 1;
+-					break;
++					goto break2;
+ 				}
+ 			} while((c = *++s));
+ #endif
++ retnan:
+ 			return STRTOG_NaN;
+ 		}
+ 		havedig++;
+@@ -111,6 +117,9 @@ int hexnan (const char **sp, FPI *fpi, ULong *x0)
+ 		}
+ 		*x = (*x << 4) | (h & 0xf);
+ 	}
++#ifndef GDTOA_NON_PEDANTIC_NANCHECK
++ break2:
++#endif
+ 	if (!havedig)
+ 		return STRTOG_NaN;
+ 	if (x < x1 && i < 8)
+diff --git a/mingw-w64-crt/gdtoa/misc.c b/mingw-w64-crt/gdtoa/misc.c
+index 43f31cea5..adc955ec0 100644
+--- a/mingw-w64-crt/gdtoa/misc.c
++++ b/mingw-w64-crt/gdtoa/misc.c
+@@ -69,7 +69,7 @@ static void dtoa_lock_cleanup (void)
+ 	}
+ }
+ 
+-static void dtoa_lock (int n)
++static void dtoa_lock (unsigned int n)
+ {
+ 	if (2 == dtoa_CS_init) {
+ 		EnterCriticalSection (&dtoa_CritSec[n]);
+@@ -96,7 +96,7 @@ static void dtoa_lock (int n)
+ 		EnterCriticalSection(&dtoa_CritSec[n]);
+ }
+ 
+-static void dtoa_unlock (int n)
++static void dtoa_unlock (unsigned int n)
+ {
+ 	if (2 == dtoa_CS_init)
+ 		LeaveCriticalSection (&dtoa_CritSec[n]);
+diff --git a/mingw-w64-crt/gdtoa/qnan.c b/mingw-w64-crt/gdtoa/qnan.c
+index c6bc3fe49..944ddc4bd 100644
+--- a/mingw-w64-crt/gdtoa/qnan.c
++++ b/mingw-w64-crt/gdtoa/qnan.c
+@@ -51,15 +51,27 @@ SOFTWARE.
+ 
+ typedef unsigned Long Ulong;
+ 
++#ifdef NO_LONG_LONG
++#undef Gen_ld_QNAN
++#endif
++
+ #undef HAVE_IEEE
+ #ifdef IEEE_8087
+ #define _0 1
+ #define _1 0
++#ifdef Gen_ld_QNAN
++#define _3 3
++static int perm[4] = { 0, 1, 2, 3 };
++#endif
+ #define HAVE_IEEE
+ #endif
+ #ifdef IEEE_MC68k
+ #define _0 0
+ #define _1 1
++#ifdef Gen_ld_QNAN
++#define _3 0
++static int perm[4] = { 3, 2, 1, 0 };
++#endif
+ #define HAVE_IEEE
+ #endif
+ 
+@@ -75,40 +87,35 @@ main(void)
+ 		double d;
+ 		Ulong L[4];
+ #ifndef NO_LONG_LONG
+-/* need u[8] instead of u[5] for 64 bit */
+-		unsigned short u[8];
++		unsigned short u[5];
+ 		long double D;
+ #endif
+ 		} U;
+ 	U a, b, c;
++#ifdef Gen_ld_QNAN
+ 	int i;
+-	a.L[0]=a.L[1]=a.L[2]=a.L[3]=0;
+-	b.L[0]=b.L[1]=b.L[2]=b.L[3]=0;
+-	c.L[0]=c.L[1]=c.L[2]=c.L[3]=0;
++#endif
+ 
+ 	a.L[0] = b.L[0] = 0x7f800000;
+ 	c.f = a.f - b.f;
+-	printf("#define f_QNAN 0x%lx\n", UL c.L[0]);
++	printf("#define f_QNAN 0x%lx\n", UL (c.L[0] & 0x7fffffff));
+ 	a.L[_0] = b.L[_0] = 0x7ff00000;
+ 	a.L[_1] = b.L[_1] = 0;
+ 	c.d = a.d - b.d;	/* quiet NaN */
+-	printf("#define d_QNAN0 0x%lx\n", UL c.L[0]);
+-	printf("#define d_QNAN1 0x%lx\n", UL c.L[1]);
+-#ifdef NO_LONG_LONG
+-	for(i = 0; i < 4; i++)
+-		printf("#define ld_QNAN%d 0xffffffff\n", i);
+-	for(i = 0; i < 5; i++)
+-		printf("#define ldus_QNAN%d 0xffff\n", i);
+-#else
+-	b.D = c.D = a.d;
+-	if (printf("") < 0)
+-		c.D = 37;	/* never executed; just defeat optimization */
+-	a.L[2] = a.L[3] = 0;
+-	a.D = b.D - c.D;
+-	for(i = 0; i < 4; i++)
+-		printf("#define ld_QNAN%d 0x%lx\n", i, UL a.L[i]);
+-	for(i = 0; i < 5; i++)
+-		printf("#define ldus_QNAN%d 0x%x\n", i, a.u[i]);
++	c.L[_0] &= 0x7fffffff;
++	printf("#define d_QNAN0 0x%lx\n", UL c.L[_0]);
++	printf("#define d_QNAN1 0x%lx\n", UL c.L[_1]);
++#ifdef Gen_ld_QNAN
++	if (sizeof(a.D) >= 16) {
++		b.D = c.D = a.d;
++		if (printf("") < 0)
++			c.D = 37;	/* never executed; just defeat optimization */
++		a.L[0] = a.L[1] = a.L[2] = a.L[3] = 0;
++		a.D = b.D - c.D;
++		a.L[_3] &= 0x7fffffff;
++		for(i = 0; i < 4; i++)
++			printf("#define ld_QNAN%d 0x%lx\n", i, UL a.L[perm[i]]);
++		}
+ #endif
+ #endif /* HAVE_IEEE */
+ 	return 0;
+diff --git a/mingw-w64-crt/gdtoa/strtodg.c b/mingw-w64-crt/gdtoa/strtodg.c
+index 6c04abaf0..9259371e3 100644
+--- a/mingw-w64-crt/gdtoa/strtodg.c
++++ b/mingw-w64-crt/gdtoa/strtodg.c
+@@ -270,8 +270,8 @@ int __strtodg (const char *s00, char **se, FPI *fpi, Long *expo, ULong *bits)
+ {
+ 	int abe, abits, asub;
+ 	int bb0, bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, decpt, denorm;
+-	int dsign, e, e1, e2, emin, esign, finished, i, inex, irv;
+-	int j, k, nbits, nd, nd0, nf, nz, nz0, rd, rvbits, rve, rve1, sign;
++	int dsign, e, e1, e2, emin, esign, finished, i, inex, irv, j, k;
++	int nbits, nd, nd0, nf, nz, nz0, rd, rvbits, rve, rve1, sign;
+ 	int sudden_underflow;
+ 	const char *s, *s0, *s1;
+ 	double adj0, tol;
+@@ -496,7 +496,7 @@ int __strtodg (const char *s00, char **se, FPI *fpi, Long *expo, ULong *bits)
+ 
+ 	if (!nd0)
+ 		nd0 = nd;
+-	k = nd < DBL_DIG + 1 ? nd : DBL_DIG + 1;
++	k = nd < DBL_DIG + 2 ? nd : DBL_DIG + 2;
+ 	dval(&rv) = y;
+ 	if (k > 9)
+ 		dval(&rv) = tens[k - 9] * dval(&rv) + z;
+@@ -923,20 +923,31 @@ int __strtodg (const char *s00, char **se, FPI *fpi, Long *expo, ULong *bits)
+ 	Bfree(bd0);
+ 	Bfree(delta);
+ 	if (rve > fpi->emax) {
++huge:
++		Bfree(rvb);
++		rvb = 0;
++		SET_ERRNO(ERANGE);
+ 		switch(fpi->rounding & 3) {
+-		  case FPI_Round_near:
+-			goto huge;
+ 		  case FPI_Round_up:
+ 			if (!sign)
+-				goto huge;
++				goto ret_inf;
+ 			break;
+ 		  case FPI_Round_down:
+-			if (sign)
+-				goto huge;
++			if (!sign)
++				break;
++			/* fallthrough */
++		  case FPI_Round_near:
++ ret_inf:
++			irv = STRTOG_Infinite | STRTOG_Overflow | STRTOG_Inexhi;
++			k = nbits >> kshift;
++			if (nbits & kmask)
++				++k;
++			memset(bits, 0, k*sizeof(ULong));
++ infnanexp:
++			*expo = fpi->emax + 1;
++			goto ret;
+ 		}
+ 		/* Round to largest representable magnitude */
+-		Bfree(rvb);
+-		rvb = 0;
+ 		irv = STRTOG_Normal | STRTOG_Inexlo;
+ 		*expo = fpi->emax;
+ 		b = bits;
+@@ -945,13 +956,6 @@ int __strtodg (const char *s00, char **se, FPI *fpi, Long *expo, ULong *bits)
+ 			*b++ = -1;
+ 		if ((j = fpi->nbits & 0x1f))
+ 			*--be >>= (32 - j);
+-		goto ret;
+- huge:
+-		rvb->wds = 0;
+-		irv = STRTOG_Infinite | STRTOG_Overflow | STRTOG_Inexhi;
+-		SET_ERRNO(ERANGE);
+- infnanexp:
+-		*expo = fpi->emax + 1;
+ 	}
+  ret:
+ 	if (denorm) {
+diff --git a/mingw-w64-crt/gdtoa/strtodnrp.c b/mingw-w64-crt/gdtoa/strtodnrp.c
+index a7b9972ff..bc5e86111 100644
+--- a/mingw-w64-crt/gdtoa/strtodnrp.c
++++ b/mingw-w64-crt/gdtoa/strtodnrp.c
+@@ -39,7 +39,7 @@ THIS SOFTWARE.
+ 
+ double __strtod (const char *s, char **sp)
+ {
+-	static FPI fpi = { 53, 1-1023-53+1, 2046-1023-53+1, 1, SI, Int_max };
++	static FPI fpi = { 53, 1-1023-53+1, 2046-1023-53+1, 1, SI, Int_max /*unused*/ };
+ 	ULong bits[2];
+ 	Long expo;
+ 	int k;
+diff --git a/mingw-w64-crt/gdtoa/strtof.c b/mingw-w64-crt/gdtoa/strtof.c
+index 5f5208af3..e3f6d0c5f 100644
+--- a/mingw-w64-crt/gdtoa/strtof.c
++++ b/mingw-w64-crt/gdtoa/strtof.c
+@@ -33,7 +33,7 @@ THIS SOFTWARE.
+ 
+ float __strtof (const char *s, char **sp)
+ {
+-	static FPI fpi0 = { 24, 1-127-24+1,  254-127-24+1, 1, SI, Int_max };
++	static FPI fpi0 = { 24, 1-127-24+1,  254-127-24+1, 1, SI, Int_max /*unused*/ };
+ 	ULong bits[1];
+ 	Long expo;
+ 	int k;
+@@ -46,6 +46,7 @@ float __strtof (const char *s, char **sp)
+ 
+ 	k = __strtodg(s, sp, fpi, &expo, bits);
+ 	switch(k & STRTOG_Retmask) {
++	  default: /* unused */
+ 	  case STRTOG_NoNumber:
+ 	  case STRTOG_Zero:
+ 		u.L[0] = 0;
+diff --git a/mingw-w64-crt/gdtoa/strtopx.c b/mingw-w64-crt/gdtoa/strtopx.c
+index 51f5ef42d..a5bc3ec60 100644
+--- a/mingw-w64-crt/gdtoa/strtopx.c
++++ b/mingw-w64-crt/gdtoa/strtopx.c
+@@ -31,6 +31,8 @@ THIS SOFTWARE.
+ 
+ #include "gdtoaimp.h"
+ 
++ extern UShort NanDflt_ldus_D2A[5];
++
+ #undef _0
+ #undef _1
+ 
+@@ -63,7 +65,7 @@ typedef union lD {
+ static int __strtopx (const char *s, char **sp, lD *V)
+ {
+ 	static FPI fpi0 = { 64, 1-16383-64+1, 32766 - 16383 - 64 + 1, 1, SI,
+-			   Int_max };
++			   Int_max /*unused*/ };
+ 	ULong bits[2];
+ 	Long expo;
+ 	int k;
+@@ -103,11 +105,11 @@ static int __strtopx (const char *s, char **sp, lD *V)
+ 		break;
+ 
+ 	  case STRTOG_NaN:
+-		L[0] = ldus_QNAN0;
+-		L[1] = ldus_QNAN1;
+-		L[2] = ldus_QNAN2;
+-		L[3] = ldus_QNAN3;
+-		L[4] = ldus_QNAN4;
++		L[_4] = NanDflt_ldus_D2A[0];
++		L[_3] = NanDflt_ldus_D2A[1];
++		L[_2] = NanDflt_ldus_D2A[2];
++		L[_1] = NanDflt_ldus_D2A[3];
++		L[_0] = NanDflt_ldus_D2A[4];
+ 	}
+ 	if (k & STRTOG_Neg)
+ 		L[_0] |= 0x8000;
+diff --git a/mingw-w64-crt/stdio/mingw_pformat.c b/mingw-w64-crt/stdio/mingw_pformat.c
+index 021c1eb4d..87902aea2 100644
+--- a/mingw-w64-crt/stdio/mingw_pformat.c
++++ b/mingw-w64-crt/stdio/mingw_pformat.c
+@@ -1039,7 +1039,7 @@ typedef union
+     signed short         __pformat_fpreg_exponent;
+   };
+   unsigned short         __pformat_fpreg_bitmap[5];
+-  unsigned long          __pformat_fpreg_bits;
++  unsigned int           __pformat_fpreg_bits;
+ } __pformat_fpreg_t;
+ 
+ #ifdef _WIN32
+-- 
+2.34.1
+
