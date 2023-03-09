@@ -29,7 +29,7 @@ jobs:
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Build patched mingw-w64
         run: |
           git config --global user.name "LLVM MinGW"
@@ -40,28 +40,64 @@ jobs:
           ./run-tests.sh /llvm-mingw
           ./run-lldb-tests.sh /llvm-mingw
 
-  # Run llvm-mingw's tests on x86_64 with wine, on Linux.
-  test-toolchain-wine:
-    runs-on: ubuntu-latest
+  test-libcxx:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - i686
     steps:
-      - name: Install wine
-        run: |
-          # dpkg --add-architecture i386 to install 32 bit wine fails currently
-          sudo apt-get update && sudo apt-get install wine64-development
-          wine64 wineboot
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            unzip
+            git
+            make
       - name: Unpack toolchain
+        shell: pwsh
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-ubuntu-18.04-x86_64.tar.xz
-          tar -Jxf llvm-mingw-*.tar.xz
-          rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw-* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v2
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/llvm-mingw-20220906-ucrt-${{matrix.arch}}.zip
+          Expand-Archive llvm-mingw-*.zip -DestinationPath .
+          del llvm-mingw-*.zip
+          mv llvm-mingw-* c:\llvm-mingw
+          echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@v3
       - name: Build patched mingw-w64
+        shell: msys2 {0}
         run: |
           git config --global user.name "LLVM MinGW"
           git config --global user.email root@localhost
-          ./build-mingw-w64.sh /opt/llvm-mingw
-      - name: Run tests
+          ./build-mingw-w64.sh --skip-include-triplet-prefix /c/llvm-mingw
+      - name: Checkout llvm-project
+        shell: msys2 {0}
         run: |
-          RUN_I686=false RUN_X86_64=wine64 ./run-tests.sh /opt/llvm-mingw
+          CHECKOUT_ONLY=1 ./build-llvm.sh
+      - name: Build and test libcxx
+        shell: pwsh
+        run: |
+          cd llvm-project
+          mkdir build
+          cd build
+          cmake ../runtimes `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
+            -DLIBCXX_ENABLE_WERROR=YES `
+            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
+            -DLIBCXX_CXX_ABI=libcxxabi `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++ `
+            -DLIBCXXABI_ENABLE_SHARED=NO `
+            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
+            -DLIBCXX_USE_COMPILER_RT=YES `
+            -DLIBCXXABI_USE_COMPILER_RT=YES `
+            -DLIBUNWIND_USE_COMPILER_RT=YES `
+            -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
+            -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
+          ninja
+          ninja check-cxx
