@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright (c) 2018 Martin Storsjo
 #
@@ -94,9 +94,9 @@ cd mingw-w64-headers
 [ -z "$CLEAN" ] || rm -rf build
 mkdir -p build
 cd build
-../configure --prefix="$HEADER_ROOT" \
+time ../configure --prefix="$HEADER_ROOT" \
     --enable-idl --with-default-win32-winnt=$DEFAULT_WIN32_WINNT --with-default-msvcrt=$DEFAULT_MSVCRT INSTALL="install -C"
-$MAKE install
+time $MAKE install
 cd ../..
 if [ -z "$SKIP_INCLUDE_TRIPLET_PREFIX" ]; then
     for arch in $ARCHS; do
@@ -127,9 +127,9 @@ for arch in $ARCHS; do
         ;;
     esac
     FLAGS="$FLAGS --with-default-msvcrt=$DEFAULT_MSVCRT"
-    ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS
-    $MAKE -j$CORES
-    $MAKE install
+    time ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS
+    time $MAKE -j$CORES
+    time $MAKE install
     cd ..
 done
 cd ..
