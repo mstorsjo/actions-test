@@ -127,7 +127,7 @@ for arch in $ARCHS; do
         ;;
     esac
     FLAGS="$FLAGS --with-default-msvcrt=$DEFAULT_MSVCRT"
-    time ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS
+    time ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS --disable-dependency-tracking
     time $MAKE -j$CORES
     time $MAKE install
     cd ..
