@@ -93,3 +93,56 @@ jobs:
             -DLIBOMP_ASMFLAGS=-m64
           ninja
           ninja check-openmp
+
+  test-compiler-rt:
+    runs-on: windows-latest
+    steps:
+      - name: Unpack toolchain
+        run: |
+          curl -LO https://martin.st/temp/llvm-mingw-20230330-x86_64.zip
+          Expand-Archive llvm-mingw-*.zip -DestinationPath .
+          del llvm-mingw-*.zip
+          mv llvm-mingw-* c:\llvm-mingw
+          echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@v3
+      - name: Checkout llvm-project
+        run: |
+          git config --global user.name "LLVM MinGW"
+          git config --global user.email root@localhost
+          bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
+      - name: Build test executables
+        run: |
+          cd llvm-project
+          mkdir build-tools
+          cd build-tools
+          cmake ../llvm `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DLLVM_TARGETS_TO_BUILD=X86 `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++
+          ninja not FileCheck llvm-config
+          echo "LLVM_CONFIG=$PWD\bin\llvm-config.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CMAKE_DIR=$PWD\lib\cmake\llvm" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build and test compiler-rt
+        run: |
+          cd llvm-project
+          mkdir build-compiler-rt
+          cd build-compiler-rt
+          cmake ../compiler-rt `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++ `
+            -DCMAKE_C_COMPILER_TARGET=x86_64-w64-windows-gnu `
+            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=TRUE `
+            -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE `
+            -DLLVM_CONFIG_PATH="$Env:LLVM_CONFIG" `
+            -DLLVM_CMAKE_DIR="$Env:CMAKE_DIR" `
+            -DSANITIZER_CXX_ABI=libc++ `
+            -DCOMPILER_RT_INCLUDE_TESTS=ON
+          ninja
+          ninja check-compiler-rt
