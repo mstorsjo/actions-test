@@ -8,18 +8,14 @@ jobs:
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-20230330-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Fetch version
-        if: false
-        run: |
-          cat c:\llvm-mingw\versions | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Checkout llvm-project
         run: |
           git config --global user.name "LLVM MinGW"
@@ -39,29 +35,22 @@ jobs:
             -DLIBCXX_CXX_ABI=libcxxabi `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
-            -DLIBCXX_TARGET_INFO="libcxx.test.target_info.MingwLocalTI" `
             -DLIBCXXABI_ENABLE_SHARED=NO `
             -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
             -DLIBCXX_USE_COMPILER_RT=YES `
             -DLIBCXXABI_USE_COMPILER_RT=YES `
             -DLIBUNWIND_USE_COMPILER_RT=YES `
             -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
-            -DLIBCXX_EXTRA_SITE_DEFINES="TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
+            -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
           ninja
-          ninja check-cxx
+          ninja check-cxxabi check-unwind
 
   test-openmp:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: i686, asmflag: }
-          - { arch: x86_64, asmflag: -m64 }
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-${{matrix.arch}}.zip
+          curl -LO https://martin.st/temp/llvm-mingw-20230330-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -71,6 +60,8 @@ jobs:
       - uses: actions/checkout@v3
       - name: Checkout llvm-project
         run: |
+          git config --global user.name "LLVM MinGW"
+          git config --global user.email root@localhost
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
       - name: Build test executables
         run: |
@@ -85,7 +76,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++
           ninja not FileCheck
           echo "TOOLS=$PWD\bin" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build and test openmp
+      - name: Build and test OpenMP
         run: |
           cd llvm-project
           mkdir build-openmp
@@ -93,11 +84,12 @@ jobs:
           cmake ../openmp `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
+            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DPYTHON_EXECUTABLE="$Env:PYTHON_EXE" `
             -DOPENMP_LLVM_TOOLS_DIR="$Env:TOOLS" `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
             -DCMAKE_ASM_MASM_COMPILER=llvm-ml `
-            -DLIBOMP_ASMFLAGS=${{matrix.asmflag}}
+            -DLIBOMP_ASMFLAGS=-m64
           ninja
           ninja check-openmp
