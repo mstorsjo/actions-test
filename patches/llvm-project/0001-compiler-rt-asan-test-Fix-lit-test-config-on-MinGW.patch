@@ -1,0 +1,1361 @@
+From e13ced6c7b5c30b3356f3ebb680a7735d0c2280d Mon Sep 17 00:00:00 2001
+From: Alvin Wong <alvin@alvinhc.com>
+Date: Fri, 31 Mar 2023 12:57:28 +0300
+Subject: [PATCH 01/11] [compiler-rt][asan][test] Fix lit test config on MinGW
+
+MinGW is GCC-like and does not support clang-cl, so clean up the lit cfg
+to reflect that. Also mark all Windows test cases using clang-cl as
+UNSUPPORTED for now. We should probably adapt most of these test cases
+to use the GCC-like clang driver, but that will be for later.
+
+Reviewed By: mstorsjo
+
+Differential Revision: https://reviews.llvm.org/D147057
+---
+ .../asan/TestCases/Windows/aligned_mallocs.cpp   |  2 ++
+ .../asan/TestCases/Windows/allocators_sanity.cpp |  2 ++
+ .../asan/TestCases/Windows/beginthreadex.cpp     |  2 ++
+ .../test/asan/TestCases/Windows/bitfield.cpp     |  2 ++
+ .../test/asan/TestCases/Windows/bitfield_uaf.cpp |  2 ++
+ .../test/asan/TestCases/Windows/breakpoint.cpp   |  2 ++
+ .../asan/TestCases/Windows/calloc_left_oob.cpp   |  2 ++
+ .../asan/TestCases/Windows/calloc_right_oob.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/calloc_uaf.cpp   |  2 ++
+ .../TestCases/Windows/coverage-dll-stdio.cpp     |  2 ++
+ .../asan/TestCases/Windows/crt_initializers.cpp  |  2 ++
+ .../asan/TestCases/Windows/delay_dbghelp.cpp     |  2 ++
+ .../asan/TestCases/Windows/demangled_names.cpp   |  2 ++
+ .../TestCases/Windows/dll_aligned_mallocs.cpp    |  2 ++
+ .../TestCases/Windows/dll_allocators_sanity.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/dll_and_lib.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/dll_cerr.cpp     |  2 ++
+ .../asan/TestCases/Windows/dll_control_c.cpp     |  2 ++
+ .../TestCases/Windows/dll_global_dead_strip.c    |  2 ++
+ .../TestCases/Windows/dll_heap_allocation.cpp    |  1 +
+ .../test/asan/TestCases/Windows/dll_host.cpp     |  2 ++
+ .../TestCases/Windows/dll_intercept_memchr.cpp   |  2 ++
+ .../TestCases/Windows/dll_intercept_memcpy.cpp   |  2 ++
+ .../Windows/dll_intercept_memcpy_indirect.cpp    |  2 ++
+ .../TestCases/Windows/dll_intercept_memset.cpp   |  2 ++
+ .../TestCases/Windows/dll_intercept_strlen.cpp   |  2 ++
+ .../TestCases/Windows/dll_large_function.cpp     |  2 ++
+ .../TestCases/Windows/dll_malloc_left_oob.cpp    |  2 ++
+ .../asan/TestCases/Windows/dll_malloc_uaf.cpp    |  2 ++
+ .../test/asan/TestCases/Windows/dll_noreturn.cpp |  2 ++
+ .../asan/TestCases/Windows/dll_null_deref.cpp    |  2 ++
+ .../Windows/dll_operator_array_new_left_oob.cpp  |  2 ++
+ ...dll_operator_array_new_with_dtor_left_oob.cpp |  2 ++
+ .../TestCases/Windows/dll_poison_unpoison.cpp    |  2 ++
+ ...l_report_globals_symbolization_at_startup.cpp |  2 ++
+ .../test/asan/TestCases/Windows/dll_seh.cpp      |  2 ++
+ .../Windows/dll_stack_use_after_return.cpp       |  2 ++
+ .../Windows/dll_thread_stack_array_left_oob.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/dll_unload.cpp   |  2 ++
+ .../test/asan/TestCases/Windows/double_free.cpp  |  2 ++
+ .../TestCases/Windows/double_operator_delete.cpp |  2 ++
+ .../TestCases/Windows/global_const_string.cpp    |  2 ++
+ .../Windows/global_const_string_oob.cpp          |  2 ++
+ .../asan/TestCases/Windows/global_dead_strip.c   |  2 ++
+ .../test/asan/TestCases/Windows/heapalloc.cpp    |  2 ++
+ .../Windows/heapalloc_dll_double_free.cpp        |  2 ++
+ .../Windows/heapalloc_dll_unload_realloc_uaf.cpp |  2 ++
+ .../TestCases/Windows/heapalloc_doublefree.cpp   |  2 ++
+ .../Windows/heapalloc_flags_fallback.cpp         |  2 ++
+ .../asan/TestCases/Windows/heapalloc_huge.cpp    |  2 ++
+ .../TestCases/Windows/heapalloc_rtl_transfer.cpp |  2 ++
+ .../asan/TestCases/Windows/heapalloc_sanity.cpp  |  2 ++
+ .../TestCases/Windows/heapalloc_transfer.cpp     |  2 ++
+ .../asan/TestCases/Windows/heapalloc_uaf.cpp     |  2 ++
+ .../TestCases/Windows/heapalloc_zero_size.cpp    |  2 ++
+ .../test/asan/TestCases/Windows/heaprealloc.cpp  |  2 ++
+ .../TestCases/Windows/heaprealloc_alloc_zero.cpp |  2 ++
+ .../TestCases/Windows/heaprealloc_zero_size.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/hello_world.cpp  |  2 ++
+ .../TestCases/Windows/illegal_instruction.cpp    |  2 ++
+ .../TestCases/Windows/integer_divide_by_zero.cpp |  2 ++
+ .../asan/TestCases/Windows/intercept_memcpy.cpp  |  2 ++
+ .../asan/TestCases/Windows/intercept_strdup.cpp  |  2 ++
+ .../asan/TestCases/Windows/intercept_strlen.cpp  |  2 ++
+ .../Windows/interface_symbols_windows.cpp        |  2 ++
+ .../test/asan/TestCases/Windows/iostream_sbo.cpp |  2 ++
+ .../asan/TestCases/Windows/malloc_left_oob.cpp   |  2 ++
+ .../asan/TestCases/Windows/malloc_right_oob.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/malloc_uaf.cpp   |  2 ++
+ .../Windows/null_deref_multiple_dlls.cpp         |  2 ++
+ compiler-rt/test/asan/TestCases/Windows/oom.cpp  |  2 ++
+ .../Windows/operator_array_new_left_oob.cpp      |  2 ++
+ .../Windows/operator_array_new_right_oob.cpp     |  2 ++
+ .../TestCases/Windows/operator_array_new_uaf.cpp |  2 ++
+ .../operator_array_new_with_dtor_left_oob.cpp    |  2 ++
+ .../Windows/operator_delete_wrong_argument.cpp   |  2 ++
+ .../TestCases/Windows/operator_new_left_oob.cpp  |  2 ++
+ .../TestCases/Windows/operator_new_right_oob.cpp |  2 ++
+ .../asan/TestCases/Windows/operator_new_uaf.cpp  |  2 ++
+ .../Windows/queue_user_work_item_report.cpp      |  2 ++
+ .../asan/TestCases/Windows/realloc_left_oob.cpp  |  2 ++
+ .../asan/TestCases/Windows/realloc_right_oob.cpp |  2 ++
+ .../test/asan/TestCases/Windows/realloc_uaf.cpp  |  2 ++
+ .../asan/TestCases/Windows/recalloc_sanity.cpp   |  2 ++
+ .../Windows/report_globals_reload_dll.cpp        |  2 ++
+ .../Windows/report_globals_vs_freelibrary.cpp    |  2 ++
+ .../asan/TestCases/Windows/rtlallocateheap.cpp   |  2 ++
+ .../rtlallocateheap_dll_unload_double_free.cpp   |  2 ++
+ .../rtlallocateheap_dll_unload_realloc.cpp       |  2 ++
+ .../Windows/rtlallocateheap_flags_fallback.cpp   |  2 ++
+ .../TestCases/Windows/rtlallocateheap_zero.cpp   |  2 ++
+ .../asan/TestCases/Windows/sanitizer_purge.cpp   |  2 ++
+ compiler-rt/test/asan/TestCases/Windows/seh.cpp  |  2 ++
+ .../TestCases/Windows/shadow_conflict_32.cpp     |  2 ++
+ .../TestCases/Windows/shadow_mapping_failure.cpp |  2 ++
+ .../asan/TestCases/Windows/sse_misalignment.cpp  |  2 ++
+ .../TestCases/Windows/stack_array_left_oob.cpp   |  2 ++
+ .../TestCases/Windows/stack_array_right_oob.cpp  |  2 ++
+ .../TestCases/Windows/stack_array_sanity.cpp     |  2 ++
+ .../TestCases/Windows/stack_use_after_return.cpp |  2 ++
+ .../test/asan/TestCases/Windows/symbols_path.cpp |  2 ++
+ .../asan/TestCases/Windows/thread_simple.cpp     |  2 ++
+ .../Windows/thread_stack_array_left_oob.cpp      |  2 ++
+ .../Windows/thread_stack_array_right_oob.cpp     |  2 ++
+ .../TestCases/Windows/thread_stack_reuse.cpp     |  2 ++
+ .../asan/TestCases/Windows/thread_stress.cpp     |  2 ++
+ .../asan/TestCases/Windows/thread_suspended.cpp  |  2 ++
+ .../test/asan/TestCases/Windows/tls_init.cpp     |  2 ++
+ .../asan/TestCases/Windows/use_after_realloc.cpp |  2 ++
+ .../Windows/use_after_return_linkage.cpp         |  2 ++
+ .../asan/TestCases/Windows/user-exception.cpp    |  2 ++
+ .../test/asan/TestCases/Windows/windows_h.cpp    |  2 ++
+ .../TestCases/Windows/wrong_downcast_on_heap.cpp |  2 ++
+ .../Windows/wrong_downcast_on_stack.cpp          |  2 ++
+ compiler-rt/test/asan/lit.cfg.py                 | 10 ++++++----
+ compiler-rt/test/lit.common.cfg.py               | 16 ++++++++++------
+ 116 files changed, 243 insertions(+), 10 deletions(-)
+
+diff --git a/compiler-rt/test/asan/TestCases/Windows/aligned_mallocs.cpp b/compiler-rt/test/asan/TestCases/Windows/aligned_mallocs.cpp
+index 48bb22101064..cb36fbbe68cb 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/aligned_mallocs.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/aligned_mallocs.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/allocators_sanity.cpp b/compiler-rt/test/asan/TestCases/Windows/allocators_sanity.cpp
+index 2738b4e7bd8c..e39b7fb09621 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/allocators_sanity.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/allocators_sanity.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/beginthreadex.cpp b/compiler-rt/test/asan/TestCases/Windows/beginthreadex.cpp
+index 05d72a539101..eda43d3c70f2 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/beginthreadex.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/beginthreadex.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/bitfield.cpp b/compiler-rt/test/asan/TestCases/Windows/bitfield.cpp
+index 174c92dbe44f..02922f6800e3 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/bitfield.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/bitfield.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/bitfield_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/bitfield_uaf.cpp
+index 9095b805ea38..cc9a8dfa9423 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/bitfield_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/bitfield_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/breakpoint.cpp b/compiler-rt/test/asan/TestCases/Windows/breakpoint.cpp
+index 1c9e8c4a9af9..1ff8d0299735 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/breakpoint.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/breakpoint.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=handle_sigill=1 not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/calloc_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/calloc_left_oob.cpp
+index b83d6354d803..4a8c6b687b60 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/calloc_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/calloc_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/calloc_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/calloc_right_oob.cpp
+index 504b67380793..7baf3e1aa031 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/calloc_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/calloc_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/calloc_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/calloc_uaf.cpp
+index 54577f014c51..facc059861f7 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/calloc_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/calloc_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/coverage-dll-stdio.cpp b/compiler-rt/test/asan/TestCases/Windows/coverage-dll-stdio.cpp
+index f2bfaad28a1d..2a880bae04c7 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/coverage-dll-stdio.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/coverage-dll-stdio.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Test that coverage and MSVC CRT stdio work from a DLL. This ensures that the
+ // __local_stdio_printf_options function isn't instrumented for coverage.
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/crt_initializers.cpp b/compiler-rt/test/asan/TestCases/Windows/crt_initializers.cpp
+index f33c16362a25..a37d47afb167 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/crt_initializers.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/crt_initializers.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/delay_dbghelp.cpp b/compiler-rt/test/asan/TestCases/Windows/delay_dbghelp.cpp
+index 33981bd04858..0cad545d0f31 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/delay_dbghelp.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/delay_dbghelp.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Build an executable with ASan, then extract the DLLs that it depends on.
+ // RUN: %clang_cl_asan %s -Fe%t.exe
+ // RUN: llvm-readobj --coff-imports %t.exe | grep Name: | sed -e 's/ *Name: *//' > %t
+diff --git a/compiler-rt/test/asan/TestCases/Windows/demangled_names.cpp b/compiler-rt/test/asan/TestCases/Windows/demangled_names.cpp
+index f6325f3648be..d457d4d9e4f7 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/demangled_names.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/demangled_names.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ //
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_aligned_mallocs.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_aligned_mallocs.cpp
+index a6a1a3bb91b2..c180950a2b13 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_aligned_mallocs.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_aligned_mallocs.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: %run %t %t.dll | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_allocators_sanity.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_allocators_sanity.cpp
+index 9e0543cb66d6..8e4e71bfce12 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_allocators_sanity.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_allocators_sanity.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: %run %t %t.dll | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_and_lib.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_and_lib.cpp
+index 96fae6b1d603..0346ecfb7735 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_and_lib.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_and_lib.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Just make sure we can link an implib into another DLL
+ // This used to fail between r212699 and r212814.
+ // RUN: %clang_cl_asan -DCONFIG=1 %s -c -Fo%t.1.obj
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_cerr.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_cerr.cpp
+index 1e0967888190..ff84090d046a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_cerr.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_cerr.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_control_c.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_control_c.cpp
+index e30276325dbd..f5127e75d3ff 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_control_c.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_control_c.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -O2 %s -Fe%t.dll
+ // RUNX: %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_global_dead_strip.c b/compiler-rt/test/asan/TestCases/Windows/dll_global_dead_strip.c
+index e5716be4e42a..1871c001dd9a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_global_dead_strip.c
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_global_dead_strip.c
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ //
+ // RUN: %clang_cl_asan /Gw -LD -Od %s -Fe%t.dll
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_heap_allocation.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_heap_allocation.cpp
+index b4df9d4f2221..40e48335e854 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_heap_allocation.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_heap_allocation.cpp
+@@ -1,3 +1,4 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
+ 
+ // RUN: %clang_cl -LD %s -Fe%t.dll -DHEAP_LIBRARY -MD
+ // RUN: %clang_cl %s %t.lib -Fe%t -fsanitize=address -MT
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_host.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_host.cpp
+index 8032201684cd..0757af90d211 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_host.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_host.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // This is a host program for DLL tests.
+ //
+ // Just make sure we can compile this.
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memchr.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memchr.cpp
+index 093134fac59d..3db8943db830 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memchr.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memchr.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy.cpp
+index 7b4fbb63bb3f..6ab61ae0a6c4 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -Wno-fortify-source -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy_indirect.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy_indirect.cpp
+index f2b8cdb5f5db..849c660b5113 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy_indirect.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memcpy_indirect.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memset.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memset.cpp
+index 789a19935213..222c14356c55 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memset.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_memset.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -Wno-fortify-source -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_strlen.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_strlen.cpp
+index e15dec137dc6..1bad2f818fbd 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_intercept_strlen.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_intercept_strlen.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_large_function.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_large_function.cpp
+index 788488dbb8ed..c047a5292f94 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_large_function.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_large_function.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Make sure we can link a DLL with large functions which would mean
+ // functions such as __asan_loadN and __asan_storeN will be called
+ // from the DLL.  We simulate the large function with
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_malloc_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_malloc_left_oob.cpp
+index 194f31fe57d8..f2216cee51d2 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_malloc_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_malloc_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_malloc_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_malloc_uaf.cpp
+index 290541f6d15f..bbf6f3804b0d 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_malloc_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_malloc_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_noreturn.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_noreturn.cpp
+index 8b8e4d14994e..d50257555851 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_noreturn.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_noreturn.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_null_deref.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_null_deref.cpp
+index 0c826a0f3847..a3242c970197 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_null_deref.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_null_deref.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_left_oob.cpp
+index b5e980ae0b0b..34c29b04c159 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_with_dtor_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_with_dtor_left_oob.cpp
+index 5e34071ce48c..bdf3fe330cb5 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_with_dtor_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_operator_array_new_with_dtor_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_poison_unpoison.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_poison_unpoison.cpp
+index 6a23da7640c7..f20c5b16e2f3 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_poison_unpoison.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_poison_unpoison.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_report_globals_symbolization_at_startup.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_report_globals_symbolization_at_startup.cpp
+index 0a8e3d8cdc36..c9fc1669bc70 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_report_globals_symbolization_at_startup.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_report_globals_symbolization_at_startup.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -LD -Od -DDLL %s -Fe%t.dll
+ // RUN: %clang_cl_asan -Od -DEXE %s %t.lib -Fe%te.exe
+ // RUN: %env_asan_opts=report_globals=2 %run %te.exe 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_seh.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_seh.cpp
+index 3651463c5e6f..009351dd7227 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_seh.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_seh.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ //
+ // Check both -GS and -GS- builds:
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_stack_use_after_return.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_stack_use_after_return.cpp
+index e2c295dfa501..6aa9721d5688 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_stack_use_after_return.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_stack_use_after_return.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: %env_asan_opts=detect_stack_use_after_return=1 not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_thread_stack_array_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_thread_stack_array_left_oob.cpp
+index c25da9008b93..da2a9115df76 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_thread_stack_array_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_thread_stack_array_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %p/dll_host.cpp -Fe%t
+ // RUN: %clang_cl_asan -LD -Od %s -Fe%t.dll
+ // RUN: not %run %t %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/dll_unload.cpp b/compiler-rt/test/asan/TestCases/Windows/dll_unload.cpp
+index 055567a0f545..23a65446d760 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/dll_unload.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/dll_unload.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ #include <stdio.h>
+ #include <windows.h>
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/double_free.cpp b/compiler-rt/test/asan/TestCases/Windows/double_free.cpp
+index 68437462a4cf..59a26418303d 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/double_free.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/double_free.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/double_operator_delete.cpp b/compiler-rt/test/asan/TestCases/Windows/double_operator_delete.cpp
+index 168e531a82b1..55304e266a9d 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/double_operator_delete.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/double_operator_delete.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/global_const_string.cpp b/compiler-rt/test/asan/TestCases/Windows/global_const_string.cpp
+index 546419dad180..10437a6e6a60 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/global_const_string.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/global_const_string.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/global_const_string_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/global_const_string_oob.cpp
+index adc9b24c1624..3e5bd1d13630 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/global_const_string_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/global_const_string_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/global_dead_strip.c b/compiler-rt/test/asan/TestCases/Windows/global_dead_strip.c
+index a13447da9911..32d4a181ab38 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/global_dead_strip.c
++++ b/compiler-rt/test/asan/TestCases/Windows/global_dead_strip.c
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan /Gw /Od %s /Fe%t.exe
+ // RUN: %env_asan_opts=report_globals=2 %t.exe 2>&1 | FileCheck %s --check-prefix=NOSTRIP
+ // RUN: %clang_cl_asan /Gw /O2 %s /Fe%t.exe -link -opt:ref
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc.cpp
+index cb07b8fb0f29..3deaa640a903 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // UNSUPPORTED: asan-64-bits
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %t 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_double_free.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_double_free.cpp
+index 496289ae128c..8391719c3c13 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_double_free.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_double_free.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ #include <stdio.h>
+ #include <windows.h>
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_unload_realloc_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_unload_realloc_uaf.cpp
+index 79b30f4a9eb2..a34b7025e251 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_unload_realloc_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_dll_unload_realloc_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ #include <stdio.h>
+ #include <windows.h>
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_doublefree.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_doublefree.cpp
+index 3394a9233b6d..7f7b51a80953 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_doublefree.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_doublefree.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_flags_fallback.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_flags_fallback.cpp
+index e040fd581998..d126c753132c 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_flags_fallback.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_flags_fallback.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t 2>&1 | FileCheck %s
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true %run %t 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_huge.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_huge.cpp
+index 3a6ce7854eb8..8514be34bf29 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_huge.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_huge.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=allocator_may_return_null=true %run %t
+ // RUN: %env_asan_opts=allocator_may_return_null=true:windows_hook_rtl_allocators=true %run %t
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_rtl_transfer.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_rtl_transfer.cpp
+index a36e59470370..c65ece71e23d 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_rtl_transfer.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_rtl_transfer.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ #include "sanitizer\allocator_interface.h"
+ #include <cassert>
+ #include <stdio.h>
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_sanity.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_sanity.cpp
+index a2ee68621a9e..434de5c8666a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_sanity.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_sanity.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t 2>&1 | FileCheck %s
+ #include <stdio.h>
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_transfer.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_transfer.cpp
+index 497d36b41789..fa9f937d5c5a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_transfer.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_transfer.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ #include "sanitizer\allocator_interface.h"
+ #include <cassert>
+ #include <stdio.h>
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_uaf.cpp
+index e0f1f8657413..34f30153c083 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heapalloc_zero_size.cpp b/compiler-rt/test/asan/TestCases/Windows/heapalloc_zero_size.cpp
+index 40396ed5f0dd..f1345f60e9fc 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heapalloc_zero_size.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heapalloc_zero_size.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan /Od -o %t %s
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true %run %t 2>&1 | FileCheck %s
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=false %run %t 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heaprealloc.cpp b/compiler-rt/test/asan/TestCases/Windows/heaprealloc.cpp
+index add644c05e73..0073ce0136cf 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heaprealloc.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heaprealloc.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heaprealloc_alloc_zero.cpp b/compiler-rt/test/asan/TestCases/Windows/heaprealloc_alloc_zero.cpp
+index 7b1272ea5bc4..1595729fc8f7 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heaprealloc_alloc_zero.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heaprealloc_alloc_zero.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan /Od /MT -o %t %s
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/heaprealloc_zero_size.cpp b/compiler-rt/test/asan/TestCases/Windows/heaprealloc_zero_size.cpp
+index 96bc9b90c447..cc1f1f0bc038 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/heaprealloc_zero_size.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/heaprealloc_zero_size.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan /Od -o %t %s
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true %run %t 2>&1 | FileCheck %s
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=false %run %t 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/hello_world.cpp b/compiler-rt/test/asan/TestCases/Windows/hello_world.cpp
+index 0caeb35554cf..546c37e11479 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/hello_world.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/hello_world.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/illegal_instruction.cpp b/compiler-rt/test/asan/TestCases/Windows/illegal_instruction.cpp
+index 2b6b05cfc833..eb6c64a304a7 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/illegal_instruction.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/illegal_instruction.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=handle_sigill=1 not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/integer_divide_by_zero.cpp b/compiler-rt/test/asan/TestCases/Windows/integer_divide_by_zero.cpp
+index 9a0f97a7fc97..d7728e38211d 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/integer_divide_by_zero.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/integer_divide_by_zero.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=handle_sigfpe=1 not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/intercept_memcpy.cpp b/compiler-rt/test/asan/TestCases/Windows/intercept_memcpy.cpp
+index db8de07bf226..401fc1227b3c 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/intercept_memcpy.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/intercept_memcpy.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/intercept_strdup.cpp b/compiler-rt/test/asan/TestCases/Windows/intercept_strdup.cpp
+index 0e4bd13a321d..8e860f21635f 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/intercept_strdup.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/intercept_strdup.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/intercept_strlen.cpp b/compiler-rt/test/asan/TestCases/Windows/intercept_strlen.cpp
+index 0cedf9f2214a..6853d12c396f 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/intercept_strlen.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/intercept_strlen.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/interface_symbols_windows.cpp b/compiler-rt/test/asan/TestCases/Windows/interface_symbols_windows.cpp
+index f3ed331451ad..1803911a43a9 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/interface_symbols_windows.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/interface_symbols_windows.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Check that the interface exported by asan static lib matches the list of
+ // functions mentioned in sanitizer_interface.inc.
+ //
+diff --git a/compiler-rt/test/asan/TestCases/Windows/iostream_sbo.cpp b/compiler-rt/test/asan/TestCases/Windows/iostream_sbo.cpp
+index 8c7570f3c7d8..eea38b82e015 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/iostream_sbo.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/iostream_sbo.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // First, check this works with the default ignorelist:
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: echo "42" | %run %t 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/malloc_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/malloc_left_oob.cpp
+index 4b92e11ff093..0a97e66cdb32 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/malloc_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/malloc_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/malloc_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/malloc_right_oob.cpp
+index 890503ceaff9..cbdf9981a072 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/malloc_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/malloc_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/malloc_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/malloc_uaf.cpp
+index 8cecc680e49c..a64fdb7096be 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/malloc_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/malloc_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/null_deref_multiple_dlls.cpp b/compiler-rt/test/asan/TestCases/Windows/null_deref_multiple_dlls.cpp
+index 09a572e58af2..04f8b925a4a3 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/null_deref_multiple_dlls.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/null_deref_multiple_dlls.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Make sure everything works even if the main module doesn't have any stack
+ // variables, thus doesn't explicitly reference any symbol exported by the
+ // runtime thunk.
+diff --git a/compiler-rt/test/asan/TestCases/Windows/oom.cpp b/compiler-rt/test/asan/TestCases/Windows/oom.cpp
+index bf19aa09cadc..52872c1f8aa4 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/oom.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/oom.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ // REQUIRES: asan-32-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_left_oob.cpp
+index d06bcb22da59..f8ffc69ce552 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_right_oob.cpp
+index c60a35159430..b84e657a88c0 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_uaf.cpp
+index 552ca9d8717a..367162ec5b5a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_with_dtor_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_with_dtor_left_oob.cpp
+index 42904089481c..30fc1c749c94 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_array_new_with_dtor_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_array_new_with_dtor_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_delete_wrong_argument.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_delete_wrong_argument.cpp
+index d8891859fb51..8830faefde99 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_delete_wrong_argument.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_delete_wrong_argument.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_new_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_new_left_oob.cpp
+index f339496b56ff..c9eceffcccba 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_new_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_new_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_new_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_new_right_oob.cpp
+index 8e76790b021f..85e4de83ab90 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_new_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_new_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/operator_new_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/operator_new_uaf.cpp
+index fe8fc9022a64..bf91b6c30112 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/operator_new_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/operator_new_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/queue_user_work_item_report.cpp b/compiler-rt/test/asan/TestCases/Windows/queue_user_work_item_report.cpp
+index aa618cbe8d8c..2c180905b629 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/queue_user_work_item_report.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/queue_user_work_item_report.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/realloc_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/realloc_left_oob.cpp
+index 709f8ea7f347..3adc6e68909b 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/realloc_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/realloc_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/realloc_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/realloc_right_oob.cpp
+index 5ae7eee5d35b..de83936bcd41 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/realloc_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/realloc_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/realloc_uaf.cpp b/compiler-rt/test/asan/TestCases/Windows/realloc_uaf.cpp
+index 7454d5ab2a9c..6593e42c0ddf 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/realloc_uaf.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/realloc_uaf.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/recalloc_sanity.cpp b/compiler-rt/test/asan/TestCases/Windows/recalloc_sanity.cpp
+index a94c8230e280..9ed3ed69fb16 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/recalloc_sanity.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/recalloc_sanity.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Workaround for "LINK : fatal error LNK1318: Unexpected PDB error"
+ // RUN: rm -f %t.pdb
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/report_globals_reload_dll.cpp b/compiler-rt/test/asan/TestCases/Windows/report_globals_reload_dll.cpp
+index eb6d4bc39d59..2965122251f4 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/report_globals_reload_dll.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/report_globals_reload_dll.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Make sure we can handle reloading the same DLL multiple times.
+ // RUN: %clang_cl_asan -LD -Od -DDLL %s -Fe%t.dll
+ // RUN: %clang_cl_asan -Od -DEXE %s -Fe%te.exe
+diff --git a/compiler-rt/test/asan/TestCases/Windows/report_globals_vs_freelibrary.cpp b/compiler-rt/test/asan/TestCases/Windows/report_globals_vs_freelibrary.cpp
+index 9619aff6a74d..2b6aedb2d78d 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/report_globals_vs_freelibrary.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/report_globals_vs_freelibrary.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -LD -Od -DDLL %s -Fe%t.dll
+ // RUN: %clang_cl_asan -Od -DEXE %s -Fe%te.exe
+ // RUN: %env_asan_opts=report_globals=2 %run %te.exe %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap.cpp b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap.cpp
+index 6ef1caa0ec20..8df1b5130aa5 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t /MD
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_double_free.cpp b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_double_free.cpp
+index 078114506303..7ab075c57345 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_double_free.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_double_free.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -LD /Od -DDLL %s -Fe%t.dll
+ // RUN: %clang_cl /Od -DEXE %s -Fe%te.exe
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %te.exe %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_realloc.cpp b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_realloc.cpp
+index a2758cad2369..3bf1784edd15 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_realloc.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_dll_unload_realloc.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -LD /Od -DDLL %s -Fe%t.dll
+ // RUN: %clang_cl /Od -DEXE %s -Fe%te.exe
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %te.exe %t.dll 2>&1 | FileCheck %s
+diff --git a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_flags_fallback.cpp b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_flags_fallback.cpp
+index d7e81ac3a0f4..177de65d4456 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_flags_fallback.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_flags_fallback.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t /MD
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_zero.cpp b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_zero.cpp
+index 92d2940a51ea..b1101437d53b 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_zero.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/rtlallocateheap_zero.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t /MD
+ // RUN: %env_asan_opts=windows_hook_rtl_allocators=true not %run %t 2>&1 | FileCheck %s
+ // UNSUPPORTED: asan-64-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/sanitizer_purge.cpp b/compiler-rt/test/asan/TestCases/Windows/sanitizer_purge.cpp
+index e3c7bfeaa5d4..474f0292f0c2 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/sanitizer_purge.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/sanitizer_purge.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ #include <Windows.h>
+ #include <stdio.h>
+ #include <sanitizer/allocator_interface.h>
+diff --git a/compiler-rt/test/asan/TestCases/Windows/seh.cpp b/compiler-rt/test/asan/TestCases/Windows/seh.cpp
+index 4cb0c55bc773..a6cb048a07a6 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/seh.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/seh.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Make sure that ASan works with SEH in both Clang and MSVC. MSVC uses a
+ // different EH personality depending on the -GS setting, so test both -GS+ and
+ // -GS-.
+diff --git a/compiler-rt/test/asan/TestCases/Windows/shadow_conflict_32.cpp b/compiler-rt/test/asan/TestCases/Windows/shadow_conflict_32.cpp
+index 9e144be91207..c08fcc346ba6 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/shadow_conflict_32.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/shadow_conflict_32.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Load this DLL at the default 32-bit ASan shadow base, and test how we dump
+ // the process memory layout.
+ // REQUIRES: asan-32-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/shadow_mapping_failure.cpp b/compiler-rt/test/asan/TestCases/Windows/shadow_mapping_failure.cpp
+index c774689941b4..b3ee3dfe0a4b 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/shadow_mapping_failure.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/shadow_mapping_failure.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ // REQUIRES: asan-32-bits
+diff --git a/compiler-rt/test/asan/TestCases/Windows/sse_misalignment.cpp b/compiler-rt/test/asan/TestCases/Windows/sse_misalignment.cpp
+index 9f7e23026056..ce9bd638b12e 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/sse_misalignment.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/sse_misalignment.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=handle_sigfpe=1 not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/stack_array_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/stack_array_left_oob.cpp
+index ff36185395ba..abda43538b12 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/stack_array_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/stack_array_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/stack_array_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/stack_array_right_oob.cpp
+index 20270ffce387..78b38007b9ee 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/stack_array_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/stack_array_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/stack_array_sanity.cpp b/compiler-rt/test/asan/TestCases/Windows/stack_array_sanity.cpp
+index 156e9f86fc35..0f0b5450ec75 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/stack_array_sanity.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/stack_array_sanity.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/stack_use_after_return.cpp b/compiler-rt/test/asan/TestCases/Windows/stack_use_after_return.cpp
+index c180bc9d152f..ae16bbd23376 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/stack_use_after_return.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/stack_use_after_return.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %env_asan_opts=detect_stack_use_after_return=1 not %run %t 2>&1 | FileCheck %s
+ // RUN: %clang_cl_asan -Od %s -Fe%t -fsanitize-address-use-after-return=always
+diff --git a/compiler-rt/test/asan/TestCases/Windows/symbols_path.cpp b/compiler-rt/test/asan/TestCases/Windows/symbols_path.cpp
+index 812ccf2e251a..3681ff13923c 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/symbols_path.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/symbols_path.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Make sure symbolization works even if the path to the .exe file changes.
+ // RUN: mkdir %t || true
+ // RUN: %clang_cl_asan -Od %s -Fe%t/symbols_path.exe
+diff --git a/compiler-rt/test/asan/TestCases/Windows/thread_simple.cpp b/compiler-rt/test/asan/TestCases/Windows/thread_simple.cpp
+index fd9ac4c289b4..1cfc2ef3ca39 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/thread_simple.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/thread_simple.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_left_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_left_oob.cpp
+index 2b99bc790683..06bd43be9800 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_left_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_left_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_right_oob.cpp b/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_right_oob.cpp
+index eaae86936fdd..60505a335892 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_right_oob.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/thread_stack_array_right_oob.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/thread_stack_reuse.cpp b/compiler-rt/test/asan/TestCases/Windows/thread_stack_reuse.cpp
+index e7b12ca2a338..07635df8340c 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/thread_stack_reuse.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/thread_stack_reuse.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/thread_stress.cpp b/compiler-rt/test/asan/TestCases/Windows/thread_stress.cpp
+index e25cc6a3c2f6..a4f75fef985f 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/thread_stress.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/thread_stress.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/thread_suspended.cpp b/compiler-rt/test/asan/TestCases/Windows/thread_suspended.cpp
+index b30cf148411f..00fc7f8823da 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/thread_suspended.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/thread_suspended.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/tls_init.cpp b/compiler-rt/test/asan/TestCases/Windows/tls_init.cpp
+index a8569f8025c8..5cf0768a7fa4 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/tls_init.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/tls_init.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan %s -Fe%t.exe /MD
+ // RUN: %run %t.exe | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/use_after_realloc.cpp b/compiler-rt/test/asan/TestCases/Windows/use_after_realloc.cpp
+index ce116f9aaf3b..e26af57cecc3 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/use_after_realloc.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/use_after_realloc.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/use_after_return_linkage.cpp b/compiler-rt/test/asan/TestCases/Windows/use_after_return_linkage.cpp
+index cacf461b4f33..8f92a149fe0a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/use_after_return_linkage.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/use_after_return_linkage.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // Make sure LIBCMT doesn't accidentally get added to the list of DEFAULTLIB
+ // directives.
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/user-exception.cpp b/compiler-rt/test/asan/TestCases/Windows/user-exception.cpp
+index ba14a8b23ab7..5265e05f1f23 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/user-exception.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/user-exception.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: env ASAN_OPTIONS=handle_segv=0 %run %t 2>&1 | FileCheck %s --check-prefix=USER
+ // RUN: env ASAN_OPTIONS=handle_segv=1 not %run %t 2>&1 | FileCheck %s --check-prefix=ASAN
+diff --git a/compiler-rt/test/asan/TestCases/Windows/windows_h.cpp b/compiler-rt/test/asan/TestCases/Windows/windows_h.cpp
+index f20edec0cecd..b3aacb96d449 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/windows_h.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/windows_h.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: %run %t
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_heap.cpp b/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_heap.cpp
+index ec5a92d9c615..6c8a649f930a 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_heap.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_heap.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_stack.cpp b/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_stack.cpp
+index 267775e46893..78c7f49ce447 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_stack.cpp
++++ b/compiler-rt/test/asan/TestCases/Windows/wrong_downcast_on_stack.cpp
+@@ -1,3 +1,5 @@
++// UNSUPPORTED: target={{.*-windows-gnu}}
++
+ // RUN: %clang_cl_asan -Od %s -Fe%t
+ // RUN: not %run %t 2>&1 | FileCheck %s
+ 
+diff --git a/compiler-rt/test/asan/lit.cfg.py b/compiler-rt/test/asan/lit.cfg.py
+index 9f42e20dc626..10fe57670ad4 100644
+--- a/compiler-rt/test/asan/lit.cfg.py
++++ b/compiler-rt/test/asan/lit.cfg.py
+@@ -99,11 +99,13 @@ if config.target_arch == 's390x':
+   clang_asan_static_cflags.append("-mbackchain")
+ clang_asan_static_cxxflags = config.cxx_mode_flags + clang_asan_static_cflags
+ 
++target_is_msvc = bool(re.match(r'.*-windows-msvc$', config.target_triple))
++
+ asan_dynamic_flags = []
+ if config.asan_dynamic:
+   asan_dynamic_flags = ["-shared-libasan"]
+-  if platform.system() == 'Windows':
+-    # On Windows, we need to simulate "clang-cl /MD" on the clang driver side.
++  if platform.system() == 'Windows' and target_is_msvc:
++    # On MSVC target, we need to simulate "clang-cl /MD" on the clang driver side.
+     asan_dynamic_flags += ["-D_MT", "-D_DLL", "-Wl,-nodefaultlib:libcmt,-defaultlib:msvcrt,-defaultlib:oldnames"]
+   elif platform.system() == 'FreeBSD':
+     # On FreeBSD, we need to add -pthread to ensure pthread functions are available.
+@@ -144,8 +146,8 @@ if config.asan_dynamic:
+   config.substitutions.append( ("%clang_asan_static ", build_invocation(clang_asan_static_cflags)) )
+   config.substitutions.append( ("%clangxx_asan_static ", build_invocation(clang_asan_static_cxxflags)) )
+ 
+-# Windows-specific tests might also use the clang-cl.exe driver.
+-if platform.system() == 'Windows':
++# MSVC-specific tests might also use the clang-cl.exe driver.
++if platform.system() == 'Windows' and target_is_msvc:
+   clang_cl_cxxflags = ["-Wno-deprecated-declarations",
+                        "-WX",
+                        "-D_HAS_EXCEPTIONS=0",
+diff --git a/compiler-rt/test/lit.common.cfg.py b/compiler-rt/test/lit.common.cfg.py
+index 5a6f04afffed..5401d25dd228 100644
+--- a/compiler-rt/test/lit.common.cfg.py
++++ b/compiler-rt/test/lit.common.cfg.py
+@@ -102,17 +102,19 @@ config.test_format = lit.formats.ShTest(execute_external)
+ if execute_external:
+   config.available_features.add('shell')
+ 
++target_is_msvc = bool(re.match(r'.*-windows-msvc$', config.target_triple))
++
+ compiler_id = getattr(config, 'compiler_id', None)
+ if compiler_id == "Clang":
+-  if platform.system() != 'Windows':
++  if not (platform.system() == 'Windows' and target_is_msvc):
+     config.cxx_mode_flags = ["--driver-mode=g++"]
+   else:
+     config.cxx_mode_flags = []
+   # We assume that sanitizers should provide good enough error
+   # reports and stack traces even with minimal debug info.
+   config.debug_info_flags = ["-gline-tables-only"]
+-  if platform.system() == 'Windows':
+-    # On Windows, use CodeView with column info instead of DWARF. Both VS and
++  if platform.system() == 'Windows' and target_is_msvc:
++    # On MSVC, use CodeView with column info instead of DWARF. Both VS and
+     # windbg do not behave well when column info is enabled, but users have
+     # requested it because it makes ASan reports more precise.
+     config.debug_info_flags.append("-gcodeview")
+@@ -185,8 +187,8 @@ possibly_dangerous_env_vars = ['ASAN_OPTIONS', 'DFSAN_OPTIONS', 'HWASAN_OPTIONS'
+                                'LIBCLANG_RESOURCE_USAGE',
+                                'LIBCLANG_CODE_COMPLETION_LOGGING',
+                                'XRAY_OPTIONS']
+-# Clang/Win32 may refer to %INCLUDE%. vsvarsall.bat sets it.
+-if platform.system() != 'Windows':
++# Clang/MSVC may refer to %INCLUDE%. vsvarsall.bat sets it.
++if not (platform.system() == 'Windows' and target_is_msvc):
+     possibly_dangerous_env_vars.append('INCLUDE')
+ for name in possibly_dangerous_env_vars:
+   if name in config.environment:
+@@ -200,7 +202,7 @@ config.environment['PATH'] = path
+ 
+ # Help MSVS link.exe find the standard libraries.
+ # Make sure we only try to use it when targetting Windows.
+-if platform.system() == 'Windows' and '-win' in config.target_triple:
++if platform.system() == 'Windows' and target_is_msvc:
+   config.environment['LIB'] = os.environ['LIB']
+ 
+ config.available_features.add(config.host_os.lower())
+@@ -550,6 +552,8 @@ def is_binutils_lto_supported():
+   return True
+ 
+ def is_windows_lto_supported():
++  if not target_is_msvc:
++    return True
+   return os.path.exists(os.path.join(config.llvm_tools_dir, 'lld-link.exe'))
+ 
+ if config.host_os == 'Darwin' and is_darwin_lto_supported():
+-- 
+2.34.1
+

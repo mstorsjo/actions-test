@@ -1,0 +1,30 @@
+From 153a497dacfa9f83e8cd973f812be71fd7e43986 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 30 Mar 2023 00:35:56 +0300
+Subject: [PATCH 05/11] [libcxx] [test] Don't try to build a C++ library test
+ in libunwind's tests
+
+Within libunwind's tests, there is no C++ standard library available.
+---
+ libcxx/utils/libcxx/test/features.py | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libcxx/utils/libcxx/test/features.py b/libcxx/utils/libcxx/test/features.py
+index 9d031ffb41f4..dd5163f84445 100644
+--- a/libcxx/utils/libcxx/test/features.py
++++ b/libcxx/utils/libcxx/test/features.py
+@@ -240,7 +240,10 @@ for locale, alts in locales.items():
+ DEFAULT_FEATURES += [
+   Feature(name='darwin', when=lambda cfg: '__APPLE__' in compilerMacros(cfg)),
+   Feature(name='windows', when=lambda cfg: '_WIN32' in compilerMacros(cfg)),
+-  Feature(name='windows-dll', when=lambda cfg: '_WIN32' in compilerMacros(cfg) and programSucceeds(cfg, """
++  Feature(name='windows-dll', when=lambda cfg: '_WIN32' in compilerMacros(cfg) and sourceBuilds(cfg, """
++            #include <iostream>
++            int main(int, char**) { return 0; }
++          """) and programSucceeds(cfg, """
+             #include <iostream>
+             #include <windows.h>
+             #include <winnt.h>
+-- 
+2.34.1
+

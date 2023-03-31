@@ -1,0 +1,46 @@
+From 98fd33bdd3d3fce90a8472198f2574eb2ee9b8af Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 30 Mar 2023 09:35:08 +0000
+Subject: [PATCH 08/11] [compiler-rt] Create the umbrella check-compiler-rt
+ test target in non-standalone builds too
+
+---
+ compiler-rt/test/CMakeLists.txt | 14 ++++++--------
+ 1 file changed, 6 insertions(+), 8 deletions(-)
+
+diff --git a/compiler-rt/test/CMakeLists.txt b/compiler-rt/test/CMakeLists.txt
+index b4d2999acf9f..69e17af0861c 100644
+--- a/compiler-rt/test/CMakeLists.txt
++++ b/compiler-rt/test/CMakeLists.txt
+@@ -43,9 +43,7 @@ if(NOT ANDROID)
+   endif()
+ endif()
+ 
+-if(COMPILER_RT_STANDALONE_BUILD)
+-  umbrella_lit_testsuite_begin(check-compiler-rt)
+-endif()
++umbrella_lit_testsuite_begin(check-compiler-rt)
+ 
+ function(compiler_rt_test_runtime runtime)
+   string(TOUPPER ${runtime} runtime_uppercase)
+@@ -110,12 +108,12 @@ if(COMPILER_RT_CAN_EXECUTE_TESTS)
+   add_subdirectory(shadowcallstack)
+ endif()
+ 
+-if(COMPILER_RT_STANDALONE_BUILD)
+-  # Now that we've traversed all the directories and know all the lit testsuites,
+-  # introduce a rule to run to run all of them.
+-  add_custom_target(compiler-rt-test-depends DEPENDS ${LLVM_COMPILER_RT_LIT_DEPENDS})
+-  umbrella_lit_testsuite_end(check-compiler-rt)
++# Now that we've traversed all the directories and know all the lit testsuites,
++# introduce a rule to run to run all of them.
++add_custom_target(compiler-rt-test-depends DEPENDS ${LLVM_COMPILER_RT_LIT_DEPENDS})
++umbrella_lit_testsuite_end(check-compiler-rt)
+ 
++if(COMPILER_RT_STANDALONE_BUILD)
+   if(NOT TARGET check-all)
+     add_custom_target(check-all)
+   endif()
+-- 
+2.34.1
+
