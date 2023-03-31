@@ -1,7 +1,7 @@
 From 98fd33bdd3d3fce90a8472198f2574eb2ee9b8af Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 09:35:08 +0000
-Subject: [PATCH 08/11] [compiler-rt] Create the umbrella check-compiler-rt
+Subject: [PATCH 08/13] [compiler-rt] Create the umbrella check-compiler-rt
  test target in non-standalone builds too
 
 ---

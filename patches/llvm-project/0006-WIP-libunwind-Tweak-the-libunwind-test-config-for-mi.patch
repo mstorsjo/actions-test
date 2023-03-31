@@ -1,7 +1,7 @@
 From f8e0323ddb6ecb9988580cb83675d6db3f5a674b Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 00:36:51 +0300
-Subject: [PATCH 06/11] WIP: [libunwind] Tweak the libunwind test config for
+Subject: [PATCH 06/13] WIP: [libunwind] Tweak the libunwind test config for
  mingw
 
 ---
