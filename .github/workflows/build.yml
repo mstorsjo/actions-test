@@ -143,6 +143,7 @@ jobs:
             -DLLVM_CONFIG_PATH="$Env:LLVM_CONFIG" `
             -DLLVM_CMAKE_DIR="$Env:CMAKE_DIR" `
             -DSANITIZER_CXX_ABI=libc++ `
-            -DCOMPILER_RT_INCLUDE_TESTS=ON
+            -DCOMPILER_RT_INCLUDE_TESTS=ON `
+            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF
           ninja
           ninja check-compiler-rt
