@@ -1,0 +1,24 @@
+From d9d70ae17c0e984028380a4106d978c254d828ce Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sat, 1 Apr 2023 00:45:19 +0300
+Subject: [PATCH 17/20] [libcxxabi] Fix the demangle unittest for windows
+
+---
+ libcxxabi/test/unittest_demangle.pass.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libcxxabi/test/unittest_demangle.pass.cpp b/libcxxabi/test/unittest_demangle.pass.cpp
+index fa2853a13093..5d43924f36a5 100644
+--- a/libcxxabi/test/unittest_demangle.pass.cpp
++++ b/libcxxabi/test/unittest_demangle.pass.cpp
+@@ -8,6 +8,7 @@
+ 
+ // UNSUPPORTED: c++03
+ 
++#define _LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS
+ #include "../src/cxa_demangle.cpp"
+ 
+ using namespace __cxxabiv1;
+-- 
+2.34.1
+

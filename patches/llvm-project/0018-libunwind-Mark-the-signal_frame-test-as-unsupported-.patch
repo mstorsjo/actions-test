@@ -1,0 +1,27 @@
+From f2cc0d0de68bd0a2c9c3bf5ce13c50d199840638 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sat, 1 Apr 2023 00:52:05 +0300
+Subject: [PATCH 18/20] [libunwind] Mark the signal_frame test as unsupported
+ on Windows (TODO: Not necessary on i686)
+
+---
+ libunwind/test/signal_frame.pass.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/libunwind/test/signal_frame.pass.cpp b/libunwind/test/signal_frame.pass.cpp
+index 482481d9d96b..c83abb3d626b 100644
+--- a/libunwind/test/signal_frame.pass.cpp
++++ b/libunwind/test/signal_frame.pass.cpp
+@@ -21,6 +21,9 @@
+ // are necessary to run this test.
+ // UNSUPPORTED: target=powerpc{{(64)?}}-ibm-aix
+ 
++// Windows doesn't use CFI directives
++// UNSUPPORTED: target={{.*}}-windows-{{.*}}
++
+ #undef NDEBUG
+ #include <assert.h>
+ #include <stdlib.h>
+-- 
+2.34.1
+

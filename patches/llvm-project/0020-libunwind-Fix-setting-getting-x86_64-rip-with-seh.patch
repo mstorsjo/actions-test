@@ -1,0 +1,41 @@
+From f9cddb3a81d0c394332e408b0a8a7847c2e33dc8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sat, 1 Apr 2023 19:37:59 +0300
+Subject: [PATCH 20/20] [libunwind] Fix setting/getting x86_64 rip with seh
+
+---
+ libunwind/src/UnwindCursor.hpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libunwind/src/UnwindCursor.hpp b/libunwind/src/UnwindCursor.hpp
+index 0c6cda3604a2..a736ce261a9a 100644
+--- a/libunwind/src/UnwindCursor.hpp
++++ b/libunwind/src/UnwindCursor.hpp
+@@ -679,7 +679,7 @@ template <typename A, typename R>
+ bool UnwindCursor<A, R>::validReg(int regNum) {
+   if (regNum == UNW_REG_IP || regNum == UNW_REG_SP) return true;
+ #if defined(_LIBUNWIND_TARGET_X86_64)
+-  if (regNum >= UNW_X86_64_RAX && regNum <= UNW_X86_64_R15) return true;
++  if (regNum >= UNW_X86_64_RAX && regNum <= UNW_X86_64_RIP) return true;
+ #elif defined(_LIBUNWIND_TARGET_ARM)
+   if ((regNum >= UNW_ARM_R0 && regNum <= UNW_ARM_R15) ||
+       regNum == UNW_ARM_RA_AUTH_CODE)
+@@ -694,6 +694,7 @@ template <typename A, typename R>
+ unw_word_t UnwindCursor<A, R>::getReg(int regNum) {
+   switch (regNum) {
+ #if defined(_LIBUNWIND_TARGET_X86_64)
++  case UNW_X86_64_RIP:
+   case UNW_REG_IP: return _msContext.Rip;
+   case UNW_X86_64_RAX: return _msContext.Rax;
+   case UNW_X86_64_RDX: return _msContext.Rdx;
+@@ -744,6 +745,7 @@ template <typename A, typename R>
+ void UnwindCursor<A, R>::setReg(int regNum, unw_word_t value) {
+   switch (regNum) {
+ #if defined(_LIBUNWIND_TARGET_X86_64)
++  case UNW_X86_64_RIP:
+   case UNW_REG_IP: _msContext.Rip = value; break;
+   case UNW_X86_64_RAX: _msContext.Rax = value; break;
+   case UNW_X86_64_RDX: _msContext.Rdx = value; break;
+-- 
+2.34.1
+

@@ -1,0 +1,26 @@
+From ac3f5f32ccd487806902b2e50fc4780ad0a3c844 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sun, 2 Apr 2023 01:02:37 +0300
+Subject: [PATCH 15/20] [libunwind] Fix a case of inconsistent indentation.
+ NFC.
+
+---
+ libunwind/include/__libunwind_config.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libunwind/include/__libunwind_config.h b/libunwind/include/__libunwind_config.h
+index 4ee02bcbf833..a317a36677d3 100644
+--- a/libunwind/include/__libunwind_config.h
++++ b/libunwind/include/__libunwind_config.h
+@@ -196,7 +196,7 @@
+ # define _LIBUNWIND_TARGET_RISCV 1
+ # define _LIBUNWIND_TARGET_VE 1
+ # define _LIBUNWIND_TARGET_S390X 1
+-#define _LIBUNWIND_TARGET_LOONGARCH 1
++ #define _LIBUNWIND_TARGET_LOONGARCH 1
+ # define _LIBUNWIND_CONTEXT_SIZE 167
+ # define _LIBUNWIND_CURSOR_SIZE 204
+ # define _LIBUNWIND_HIGHEST_DWARF_REGISTER 287
+-- 
+2.34.1
+
