@@ -1,7 +1,7 @@
 From 153a497dacfa9f83e8cd973f812be71fd7e43986 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 00:35:56 +0300
-Subject: [PATCH 05/20] [libcxx] [test] Don't try to build a C++ library test
+Subject: [PATCH 05/21] [libcxx] [test] Don't try to build a C++ library test
  in libunwind's tests
 
 Within libunwind's tests, there is no C++ standard library available.

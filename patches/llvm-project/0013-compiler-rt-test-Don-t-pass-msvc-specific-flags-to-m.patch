@@ -1,7 +1,7 @@
 From b7f05b97d35c04aaa24580bdff6e0daaa71cf499 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Fri, 31 Mar 2023 15:23:57 +0000
-Subject: [PATCH 13/20] [compiler-rt] [test] Don't pass msvc specific flags to
+Subject: [PATCH 13/21] [compiler-rt] [test] Don't pass msvc specific flags to
  mingw tools
 
 ---
