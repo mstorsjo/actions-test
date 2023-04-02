@@ -1,7 +1,7 @@
 From f9cddb3a81d0c394332e408b0a8a7847c2e33dc8 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sat, 1 Apr 2023 19:37:59 +0300
-Subject: [PATCH 20/21] [libunwind] Fix setting/getting x86_64 rip with seh
+Subject: [PATCH 20/22] [libunwind] Fix setting/getting x86_64 rip with seh
 
 ---
  libunwind/src/UnwindCursor.hpp | 4 +++-

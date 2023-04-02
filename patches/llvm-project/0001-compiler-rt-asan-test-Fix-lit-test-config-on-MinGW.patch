@@ -1,7 +1,7 @@
 From e13ced6c7b5c30b3356f3ebb680a7735d0c2280d Mon Sep 17 00:00:00 2001
 From: Alvin Wong <alvin@alvinhc.com>
 Date: Fri, 31 Mar 2023 12:57:28 +0300
-Subject: [PATCH 01/21] [compiler-rt][asan][test] Fix lit test config on MinGW
+Subject: [PATCH 01/22] [compiler-rt][asan][test] Fix lit test config on MinGW
 
 MinGW is GCC-like and does not support clang-cl, so clean up the lit cfg
 to reflect that. Also mark all Windows test cases using clang-cl as

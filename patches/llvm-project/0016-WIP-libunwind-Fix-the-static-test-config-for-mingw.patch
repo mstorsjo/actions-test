@@ -1,7 +1,7 @@
 From 6faf8305ac0560c61c4fa531998752af4348e60f Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sat, 1 Apr 2023 00:44:58 +0300
-Subject: [PATCH 16/21] WIP: [libunwind] Fix the static test config for mingw
+Subject: [PATCH 16/22] WIP: [libunwind] Fix the static test config for mingw
 
 ---
  libunwind/test/configs/llvm-libunwind-static.cfg.in | 2 +-

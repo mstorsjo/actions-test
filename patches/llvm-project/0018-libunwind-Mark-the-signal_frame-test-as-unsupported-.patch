@@ -1,7 +1,7 @@
 From f2cc0d0de68bd0a2c9c3bf5ce13c50d199840638 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sat, 1 Apr 2023 00:52:05 +0300
-Subject: [PATCH 18/21] [libunwind] Mark the signal_frame test as unsupported
+Subject: [PATCH 18/22] [libunwind] Mark the signal_frame test as unsupported
  on Windows (TODO: Not necessary on i686)
 
 ---
