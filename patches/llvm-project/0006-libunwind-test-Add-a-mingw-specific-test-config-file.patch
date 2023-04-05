@@ -1,13 +1,16 @@
-From 8a8bf9862900770a13a9184c1c8bdb629a25ef54 Mon Sep 17 00:00:00 2001
+From a04f72d606a2d945b92ff63add3effd8f22ad7dc Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 00:36:51 +0300
-Subject: [PATCH 07/28] [libunwind] [test] Add a mingw specific test config
+Subject: [PATCH 06/28] [libunwind] [test] Add a mingw specific test config
  file
 
+This matches how it is done for libcxx and libcxxabi.
+
+Differential Revision: https://reviews.llvm.org/D147633
 ---
  libunwind/CMakeLists.txt                      |  4 ++-
- .../test/configs/llvm-libunwind-mingw.cfg.in  | 26 +++++++++++++++++++
- 2 files changed, 29 insertions(+), 1 deletion(-)
+ .../test/configs/llvm-libunwind-mingw.cfg.in  | 25 +++++++++++++++++++
+ 2 files changed, 28 insertions(+), 1 deletion(-)
  create mode 100644 libunwind/test/configs/llvm-libunwind-mingw.cfg.in
 
 diff --git a/libunwind/CMakeLists.txt b/libunwind/CMakeLists.txt
@@ -27,13 +30,12 @@ index 647b1c41955b..6f12a160307d 100644
    set(LIBUNWIND_DEFAULT_TEST_CONFIG "llvm-libunwind-static.cfg.in")
 diff --git a/libunwind/test/configs/llvm-libunwind-mingw.cfg.in b/libunwind/test/configs/llvm-libunwind-mingw.cfg.in
 new file mode 100644
-index 000000000000..5061fd4626dc
+index 000000000000..99d0aac9015c
 --- /dev/null
 +++ b/libunwind/test/configs/llvm-libunwind-mingw.cfg.in
-@@ -0,0 +1,26 @@
-+#
-+# Configuration file for running the libunwind tests against the shared library.
-+#
+@@ -0,0 +1,25 @@
++# This testing configuration handles running the test suite against LLVM's libunwind
++# using either a DLL or a static library, with MinGW/Clang on Windows.
 +
 +lit_config.load_config(config, '@CMAKE_CURRENT_BINARY_DIR@/cmake-bridge.cfg')
 +

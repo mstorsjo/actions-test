@@ -1,7 +1,7 @@
-From 7f8067df2691ed0a17a23e7a0114ee4031e0d09d Mon Sep 17 00:00:00 2001
+From 4b62150e0d5382e2319d9e16f9a7f6950d1e90f2 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 14:40:17 +0300
-Subject: [PATCH 15/28] [libcxxabi] [test] Fix the mingw test config
+Subject: [PATCH 13/28] [libcxxabi] [test] Fix the mingw test config
 
 Don't link libc++abi separately in addition to the main -lc++; in
 mingw build configs, libc++abi is always bundled into libc++
@@ -11,6 +11,8 @@ In the case of a shared linked libc++, linking a separate static
 libc++abi leads to linker errors.
 
 Define _LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS while building tests.
+
+Differential Revision: https://reviews.llvm.org/D147638
 ---
  libcxxabi/test/configs/llvm-libc++abi-mingw.cfg.in | 9 +++++++--
  1 file changed, 7 insertions(+), 2 deletions(-)

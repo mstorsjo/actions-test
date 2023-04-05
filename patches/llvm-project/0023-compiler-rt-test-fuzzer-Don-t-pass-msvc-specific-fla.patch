@@ -1,9 +1,13 @@
-From 56ed3c62367df24a3189aacc1e343309793204cc Mon Sep 17 00:00:00 2001
+From b04c8afbcc413d1349d0545f65292c63509b461b Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Fri, 31 Mar 2023 15:23:57 +0000
-Subject: [PATCH 27/28] [compiler-rt] [test] Don't pass msvc specific flags to
- mingw tools
+Subject: [PATCH 23/28] [compiler-rt] [test] [fuzzer] Don't pass msvc specific
+ flags to mingw tools
 
+This fixes building the tests so that the tests can start
+executing (even if there still are lots of failures).
+
+Differential Revision: https://reviews.llvm.org/D147648
 ---
  compiler-rt/lib/fuzzer/tests/CMakeLists.txt | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

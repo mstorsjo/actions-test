@@ -1,9 +1,16 @@
-From 473c501f288234676c4db8802dbab3b60160e5e3 Mon Sep 17 00:00:00 2001
+From 9929baf4da1e60e6af548c0d8f5cf21f84fa6889 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 09:35:08 +0000
-Subject: [PATCH 23/28] [compiler-rt] Create the umbrella check-compiler-rt
+Subject: [PATCH 21/28] [compiler-rt] Create the umbrella check-compiler-rt
  test target in non-standalone builds too
 
+I don't see why we can't have this target when built as a project alongside
+llvm; especially in such build configs, it's useful to have one single target
+for running all tests (in standalone builds, check-all does the same too),
+
+Keep the creation of the check-all target only for standalone builds.
+
+Differential Revision: https://reviews.llvm.org/D147646
 ---
  compiler-rt/test/CMakeLists.txt | 14 ++++++--------
  1 file changed, 6 insertions(+), 8 deletions(-)

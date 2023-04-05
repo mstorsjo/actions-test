@@ -1,4 +1,4 @@
-From 1cbfb323218aad51e97d5ef74caa91e1f794c3f8 Mon Sep 17 00:00:00 2001
+From ddaa6e755fe04e102336ef2e7d4b6c44a432817d Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Fri, 27 Aug 2021 11:35:02 +0000
 Subject: [PATCH 02/28] [libcxxabi, libunwind] [test] Quote the python path
@@ -6,6 +6,10 @@ Subject: [PATCH 02/28] [libcxxabi, libunwind] [test] Quote the python path
 
 This is the same as c218c80c730a14a1cbcebd588b18220a879702c6,
 but for libcxxabi and libunwind.
+
+This fixes running tests on Windows with Python installed in "C:\Program Files\Python".
+
+Differential Revision: https://reviews.llvm.org/D147629
 ---
  libcxxabi/test/CMakeLists.txt | 2 +-
  libunwind/test/CMakeLists.txt | 2 +-

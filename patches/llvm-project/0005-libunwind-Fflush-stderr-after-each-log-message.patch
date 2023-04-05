@@ -1,7 +1,7 @@
-From 8cebe91a65d1dd348e6a83cbb74735253bdc8fd4 Mon Sep 17 00:00:00 2001
+From 16fe76f128edbca89b225e8292121e3d3cafead9 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 10:18:38 +0300
-Subject: [PATCH 06/28] [libunwind] Fflush stderr after each log message
+Subject: [PATCH 05/28] [libunwind] Fflush stderr after each log message
 
 In most configs, stderr is line buffered by default, but in some
 cases on Windows (running in git bash, or running in Wine) stderr
@@ -12,6 +12,8 @@ for the output from lit itself.
 
 This has no effect on libunwind when the log messages aren't enabled
 via the environment variables.
+
+Differential Revision: https://reviews.llvm.org/D147632
 ---
  libunwind/src/config.h | 12 ++++++++----
  1 file changed, 8 insertions(+), 4 deletions(-)

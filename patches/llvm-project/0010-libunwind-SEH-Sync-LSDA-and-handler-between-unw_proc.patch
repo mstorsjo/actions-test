@@ -1,7 +1,7 @@
-From a975a3775ed670eccc2553d7c22fa7ef8278c24c Mon Sep 17 00:00:00 2001
+From 150d4eb55770ec61f47b23d31f35e030b66ba31f Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 4 Apr 2023 20:26:20 +0000
-Subject: [PATCH 11/28] [libunwind] [SEH] Sync LSDA and handler between
+Subject: [PATCH 10/28] [libunwind] [SEH] Sync LSDA and handler between
  unw_proc_info_t and DISPATCHER_CONTEXT
 
 For normal C++ unwinding, we get _dispContext initialized by the
@@ -16,14 +16,16 @@ the handler set in DISPATCHER_CONTEXT.
 Whenever updating these fields in either _info or _dispContext,
 sync them to the other one too.
 
-This fixes one aspect of the force_unwind*.pass.cpp tests on
+This fixes one aspect of the libcxxabi force_unwind*.pass.cpp tests on
 x86_64.
+
+Differential Revision: https://reviews.llvm.org/D147637
 ---
  libunwind/src/UnwindCursor.hpp | 12 +++++++++++-
  1 file changed, 11 insertions(+), 1 deletion(-)
 
 diff --git a/libunwind/src/UnwindCursor.hpp b/libunwind/src/UnwindCursor.hpp
-index a736ce261a9a..9ea0cf1465e8 100644
+index 152606e314d9..8b6451c68b46 100644
 --- a/libunwind/src/UnwindCursor.hpp
 +++ b/libunwind/src/UnwindCursor.hpp
 @@ -506,7 +506,14 @@ public:
@@ -42,7 +44,7 @@ index a736ce261a9a..9ea0cf1465e8 100644
  
    // libunwind does not and should not depend on C++ library which means that we
    // need our own definition of inline placement new.
-@@ -1980,6 +1987,9 @@ bool UnwindCursor<A, R>::getInfoFromSEH(pint_t pc) {
+@@ -1981,6 +1988,9 @@ bool UnwindCursor<A, R>::getInfoFromSEH(pint_t pc) {
        uint32_t lastcode = (xdata->CountOfCodes + 1) & ~1;
        const uint32_t *handler = reinterpret_cast<uint32_t *>(&xdata->UnwindCodes[lastcode]);
        _info.lsda = reinterpret_cast<unw_word_t>(handler+1);

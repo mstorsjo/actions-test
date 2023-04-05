@@ -1,11 +1,11 @@
-From b858005b9dab68cffce258e1d4e555268ddd9885 Mon Sep 17 00:00:00 2001
+From 1b1915620b585cfbe9ea86865ae4896c6f729fd1 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 4 Apr 2023 20:28:49 +0000
-Subject: [PATCH 12/28] [libunwind] [SEH] Initialize _msContext with
+Subject: [PATCH 09/28] [libunwind] [SEH] Initialize _msContext with
  RtlCaptureContext
 
 When we initialize the UnwindCursor (unw_cursor_t) based on
-an existing Registers class (unw_context_t), we only initialize
+an existing Registers object (unw_context_t), we only initialize
 a subset of the class.
 
 Fill the struct properly for the current thread with RtlCaptureContext,
@@ -18,15 +18,17 @@ however in practice, that's not enough.
 
 This fixes crashes when restoring the context via RtlRestoreContext
 (via UnwindCursor::jumpto), via __unw_resume.
+
+Differential Revision: https://reviews.llvm.org/D147636
 ---
  libunwind/src/UnwindCursor.hpp | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/libunwind/src/UnwindCursor.hpp b/libunwind/src/UnwindCursor.hpp
-index 9ea0cf1465e8..8b6451c68b46 100644
+index a736ce261a9a..152606e314d9 100644
 --- a/libunwind/src/UnwindCursor.hpp
 +++ b/libunwind/src/UnwindCursor.hpp
-@@ -579,6 +579,7 @@ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
+@@ -572,6 +572,7 @@ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
    _dispContext.HistoryTable = &_histTable;
    // Initialize MS context from ours.
    R r(context);
