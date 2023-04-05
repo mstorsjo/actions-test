@@ -1,7 +1,7 @@
-From 994077a48e648883cf9a5df70e16bcbac2f6dd77 Mon Sep 17 00:00:00 2001
+From b2b979dde3d5da841aca19be78aea292c88db1da Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Fri, 31 Mar 2023 08:47:59 +0300
-Subject: [PATCH 09/22] [compiler-rt] Fix the triple regex for an XFAIL in a
+Subject: [PATCH 24/28] [compiler-rt] Fix the triple regex for an XFAIL in a
  test
 
 ---

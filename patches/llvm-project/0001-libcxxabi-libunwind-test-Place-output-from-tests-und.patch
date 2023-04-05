@@ -1,0 +1,49 @@
+From a855e8e3f72f122a4d06387cb9e742bd65b97eb8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 5 Apr 2023 13:56:54 +0300
+Subject: [PATCH 01/28] [libcxxabi, libunwind] [test] Place output from tests
+ under a 'test' subdir
+
+Previously, all the output from the tests were placed directly in
+the build directory. The tests produce a couple directories named
+`__config_{exec,cache,src}__` which are easy to distinguish, and
+the output from the individual tests were placed directly in a
+directory named `Output`.
+
+This is the same change as
+736c6e246f5398331d83edd204a846cc967ad5c6, but for the libcxxabi
+and libunwind test suites.
+---
+ libcxxabi/test/configs/cmake-bridge.cfg.in | 2 +-
+ libunwind/test/configs/cmake-bridge.cfg.in | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libcxxabi/test/configs/cmake-bridge.cfg.in b/libcxxabi/test/configs/cmake-bridge.cfg.in
+index d61303aa5173..89b2dca6e530 100644
+--- a/libcxxabi/test/configs/cmake-bridge.cfg.in
++++ b/libcxxabi/test/configs/cmake-bridge.cfg.in
+@@ -21,7 +21,7 @@ config.name = os.path.basename('@LIBCXXABI_TEST_CONFIG@')
+ config.test_source_root = os.path.join('@LIBCXXABI_SOURCE_DIR@', 'test')
+ config.test_format = libcxx.test.format.CxxStandardLibraryTest()
+ config.recursiveExpansionLimit = 10
+-config.test_exec_root = '@CMAKE_BINARY_DIR@'
++config.test_exec_root = os.path.join('@CMAKE_BINARY_DIR@', 'test')
+ 
+ # TODO: This is a non-standard Lit attribute and we should have another way of accessing this.
+ config.host_triple = '@LLVM_HOST_TRIPLE@'
+diff --git a/libunwind/test/configs/cmake-bridge.cfg.in b/libunwind/test/configs/cmake-bridge.cfg.in
+index 109602db8a0f..7860301c367f 100644
+--- a/libunwind/test/configs/cmake-bridge.cfg.in
++++ b/libunwind/test/configs/cmake-bridge.cfg.in
+@@ -20,7 +20,7 @@ config.name = os.path.basename('@LIBUNWIND_TEST_CONFIG@')
+ config.test_source_root = os.path.join('@LIBUNWIND_SOURCE_DIR@', 'test')
+ config.test_format = libcxx.test.format.CxxStandardLibraryTest()
+ config.recursiveExpansionLimit = 10
+-config.test_exec_root = '@CMAKE_BINARY_DIR@'
++config.test_exec_root = os.path.join('@CMAKE_BINARY_DIR@', 'test')
+ 
+ # Add a few features that are common to all the configurations
+ if @LIBUNWIND_USES_ARM_EHABI@:
+-- 
+2.34.1
+

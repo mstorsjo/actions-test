@@ -1,8 +1,10 @@
-From f9cddb3a81d0c394332e408b0a8a7847c2e33dc8 Mon Sep 17 00:00:00 2001
+From 9a2d70376702677090bc6cdedef0d847e4be44d2 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sat, 1 Apr 2023 19:37:59 +0300
-Subject: [PATCH 20/22] [libunwind] Fix setting/getting x86_64 rip with seh
+Subject: [PATCH 10/28] [libunwind] [SEH] Allow setting/getting the register
+ UNW_X86_64_RIP
 
+This fixes libunwind_01.pass.cpp for x86_64 Windows.
 ---
  libunwind/src/UnwindCursor.hpp | 4 +++-
  1 file changed, 3 insertions(+), 1 deletion(-)

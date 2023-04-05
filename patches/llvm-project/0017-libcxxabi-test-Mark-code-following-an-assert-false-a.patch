@@ -1,26 +1,25 @@
-From 80af319c37d58c63f8b84844c95d4449762e713e Mon Sep 17 00:00:00 2001
+From 84d4a5080a11632511a144a8b803217e95a223fa Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sun, 2 Apr 2023 01:45:07 +0300
-Subject: [PATCH 22/22] [libunwind] Another test (TODO: assert/abort noretutn?)
+Subject: [PATCH 17/28] [libcxxabi] [test] Mark code following an assert(false)
+ as unreachable
 
+With current versions of mingw-w64 headers, code following
+assert(false) isn't considered unreachable - thus mark it
+as such with __builtin_unreachable().
+
+The root cause does get fixed further upstream in mingw-w64 in
+https://github.com/mingw-w64/mingw-w64/commit/1690994f515910a31b9fb7c7bd3a52d4ba987abe
+though.
 ---
- libcxxabi/test/cxa_vec_new_overflow_PR41395.pass.cpp | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ libcxxabi/test/cxa_vec_new_overflow_PR41395.pass.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/libcxxabi/test/cxa_vec_new_overflow_PR41395.pass.cpp b/libcxxabi/test/cxa_vec_new_overflow_PR41395.pass.cpp
-index 16239e75f559..bd97471ce03d 100644
+index 16239e75f559..44d369d317dc 100644
 --- a/libcxxabi/test/cxa_vec_new_overflow_PR41395.pass.cpp
 +++ b/libcxxabi/test/cxa_vec_new_overflow_PR41395.pass.cpp
-@@ -11,6 +11,8 @@
- // PR41395 isn't fixed until the dylib shipped with macOS 10.15
- // XFAIL: stdlib=apple-libc++ && target={{.+}}-apple-macosx10.{{9|10|11|12|13|14}}
- 
-+#define _LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS
-+
- #include "cxxabi.h"
- #include <new>
- #include <cassert>
-@@ -18,7 +20,7 @@
+@@ -18,7 +18,7 @@
  void dummy_ctor(void*) { assert(false && "should not be called"); }
  void dummy_dtor(void*) { assert(false && "should not be called"); }
  

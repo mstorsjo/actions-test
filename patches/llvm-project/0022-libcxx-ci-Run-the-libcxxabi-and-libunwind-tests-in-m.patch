@@ -1,0 +1,44 @@
+From f496711e535206e54d509afcad1b3fce5e5e61ec Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 5 Apr 2023 15:25:09 +0300
+Subject: [PATCH 22/28] [libcxx] [ci] Run the libcxxabi and libunwind tests in
+ mingw configurations too
+
+---
+ libcxx/utils/ci/run-buildbot | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/libcxx/utils/ci/run-buildbot b/libcxx/utils/ci/run-buildbot
+index 15b8688bb8a8..7f28df72b692 100755
+--- a/libcxx/utils/ci/run-buildbot
++++ b/libcxx/utils/ci/run-buildbot
+@@ -626,7 +626,7 @@ mingw-dll)
+           -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ \
+           -C "${MONOREPO_ROOT}/libcxx/cmake/caches/MinGW.cmake"
+     echo "+++ Running the libc++ tests"
+-    ${NINJA} -vC "${BUILD_DIR}" check-cxx
++    ${NINJA} -vC "${BUILD_DIR}" check-cxx check-cxxabi check-unwind
+ ;;
+ mingw-static)
+     clean
+@@ -637,7 +637,7 @@ mingw-static)
+           -DLIBCXX_ENABLE_SHARED=OFF \
+           -DLIBUNWIND_ENABLE_SHARED=OFF
+     echo "+++ Running the libc++ tests"
+-    ${NINJA} -vC "${BUILD_DIR}" check-cxx
++    ${NINJA} -vC "${BUILD_DIR}" check-cxx check-cxxabi check-unwind
+ ;;
+ mingw-dll-i686)
+     clean
+@@ -646,7 +646,7 @@ mingw-dll-i686)
+           -DCMAKE_CXX_COMPILER=i686-w64-mingw32-clang++ \
+           -C "${MONOREPO_ROOT}/libcxx/cmake/caches/MinGW.cmake"
+     echo "+++ Running the libc++ tests"
+-    ${NINJA} -vC "${BUILD_DIR}" check-cxx
++    ${NINJA} -vC "${BUILD_DIR}" check-cxx check-cxxabi check-unwind
+ ;;
+ aix)
+     clean
+-- 
+2.34.1
+

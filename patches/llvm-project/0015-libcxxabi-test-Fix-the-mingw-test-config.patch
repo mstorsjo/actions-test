@@ -1,0 +1,44 @@
+From 7f8067df2691ed0a17a23e7a0114ee4031e0d09d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 30 Mar 2023 14:40:17 +0300
+Subject: [PATCH 15/28] [libcxxabi] [test] Fix the mingw test config
+
+Don't link libc++abi separately in addition to the main -lc++; in
+mingw build configs, libc++abi is always bundled into libc++
+(via LIBCXX_ENABLE_STATIC_ABI_LIBRARY).
+
+In the case of a shared linked libc++, linking a separate static
+libc++abi leads to linker errors.
+
+Define _LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS while building tests.
+---
+ libcxxabi/test/configs/llvm-libc++abi-mingw.cfg.in | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/libcxxabi/test/configs/llvm-libc++abi-mingw.cfg.in b/libcxxabi/test/configs/llvm-libc++abi-mingw.cfg.in
+index 5e1a5dc70470..2ff40778a885 100644
+--- a/libcxxabi/test/configs/llvm-libc++abi-mingw.cfg.in
++++ b/libcxxabi/test/configs/llvm-libc++abi-mingw.cfg.in
+@@ -3,12 +3,17 @@
+ 
+ lit_config.load_config(config, '@CMAKE_CURRENT_BINARY_DIR@/cmake-bridge.cfg')
+ 
++# Define _LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS; when tests include
++# libcxxabi sources (some tests do #include "../src/<file>") we can't
++# have the visibility attributes expand to dllimport as they would by
++# default. Also, when linking statically we must refer to functions
++# without dllimport.
+ config.substitutions.append(('%{flags}', ''))
+ config.substitutions.append(('%{compile_flags}',
+-    '-nostdinc++ -I %{include} -I %{cxx-include} -I %{cxx-target-include} %{maybe-include-libunwind} -I %{libcxx}/test/support -I %{libcxx}/src -D_LIBCPP_ENABLE_CXX17_REMOVED_UNEXPECTED_FUNCTIONS'
++    '-nostdinc++ -I %{include} -I %{cxx-include} -I %{cxx-target-include} %{maybe-include-libunwind} -I %{libcxx}/test/support -I %{libcxx}/src -D_LIBCPP_ENABLE_CXX17_REMOVED_UNEXPECTED_FUNCTIONS -D_LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS'
+ ))
+ config.substitutions.append(('%{link_flags}',
+-    '-nostdlib++ -L %{lib} -lc++ -lc++abi'
++    '-nostdlib++ -L %{lib} -lc++'
+ ))
+ config.substitutions.append(('%{exec}',
+     '%{executor} --execdir %T --env PATH=%{lib} -- '
+-- 
+2.34.1
+
