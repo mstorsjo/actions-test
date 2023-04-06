@@ -1,7 +1,7 @@
-From ad10ea9e2c63afb4e2ff716ee37acd2afafc62c0 Mon Sep 17 00:00:00 2001
+From c1d7bc1e7037fe510de62cee6004b2ce88016b5c Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sat, 1 Apr 2023 19:37:59 +0300
-Subject: [PATCH 08/28] [libunwind] [SEH] Allow setting/getting the register
+Subject: [PATCH 04/21] [libunwind] [SEH] Allow setting/getting the register
  UNW_X86_64_RIP
 
 This fixes libunwind_01.pass.cpp for x86_64 Windows.

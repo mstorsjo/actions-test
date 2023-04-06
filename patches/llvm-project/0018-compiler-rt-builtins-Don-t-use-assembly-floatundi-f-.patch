@@ -1,0 +1,65 @@
+From 8b6478e3cecd3bd81bb96275d0fa0a11f9f9bcd6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 6 Apr 2023 07:51:35 +0000
+Subject: [PATCH 18/21] [compiler-rt] [builtins] Don't use assembly floatundi*f
+ on x86_64 mingw
+
+The x86 assembly is entirely skipped for MSVC build configurations,
+since the assembly uses GAS syntax (which MSVC proper can't
+assemble, but clang-cl can). But for mingw configurations, the
+assembly is used.
+
+On x86_64 Windows, the general calling convention is entirely different
+than on other platforms (passing arguments in different registers),
+so we can't use this assembly for mingw targets (unless adapted to
+handle that calling convention). Thus skip these few assembly routines
+for Windows targets. (For i386, we can keep using the assembly
+functions.)
+
+This fixes the builtins tests that test these routines. They aren't
+used in practice though, as LLVM expands code inline for doing such
+conversions anyway.
+
+Differential Revision: https://reviews.llvm.org/D147685
+---
+ compiler-rt/lib/builtins/CMakeLists.txt | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/compiler-rt/lib/builtins/CMakeLists.txt b/compiler-rt/lib/builtins/CMakeLists.txt
+index 0487126a8a54..a302306cc302 100644
+--- a/compiler-rt/lib/builtins/CMakeLists.txt
++++ b/compiler-rt/lib/builtins/CMakeLists.txt
+@@ -310,17 +310,27 @@ if (NOT MSVC)
+     ${x86_ARCH_SOURCES}
+     x86_64/floatdidf.c
+     x86_64/floatdisf.c
+-    x86_64/floatundidf.S
+-    x86_64/floatundisf.S
+   )
++  if (NOT WIN32)
++    set(x86_64_SOURCES
++      ${x86_64_SOURCES}
++      x86_64/floatundidf.S
++      x86_64/floatundisf.S
++    )
++  endif()
+ 
+   if (NOT ANDROID)
+     set(x86_64_SOURCES
+       ${x86_64_SOURCES}
+       ${x86_80_BIT_SOURCES}
+       x86_64/floatdixf.c
+-      x86_64/floatundixf.S
+     )
++    if (NOT WIN32)
++      set(x86_64_SOURCES
++        ${x86_64_SOURCES}
++        x86_64/floatundixf.S
++      )
++    endif()
+   endif()
+ 
+   # Darwin x86_64 Haswell
+-- 
+2.34.1
+

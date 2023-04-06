@@ -1,7 +1,7 @@
-From 2f4962500e8c13f8bb5dc1da740ac53f7a2a454a Mon Sep 17 00:00:00 2001
+From 83927107fd369ce3410a7a915b37f8ac2515db59 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 21:41:51 +0000
-Subject: [PATCH 25/28] [compiler-rt] [test] Use %clangxx for tests that use -x
+Subject: [PATCH 19/21] [compiler-rt] [test] Use %clangxx for tests that use -x
  c++
 
 When instrumenting C++ code, ubsan ends up referencing
@@ -12,7 +12,9 @@ C.
 
 Change all cases of "%clang -x c++" into "%clangxx -x c++".
 
-This fixes a lot of tests in mingw mode.
+This fixes a lot of ubsan tests in mingw mode.
+
+Differential Revision: https://reviews.llvm.org/D147687
 ---
  .../integer-arithmetic-value-change.c            | 16 ++++++++--------
  .../integer-conversion-incdec.c                  |  8 ++++----

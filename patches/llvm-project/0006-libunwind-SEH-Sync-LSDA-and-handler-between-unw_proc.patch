@@ -1,7 +1,7 @@
-From 150d4eb55770ec61f47b23d31f35e030b66ba31f Mon Sep 17 00:00:00 2001
+From 5aeaed62d56d0d66978938940bb283909dd6d801 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 4 Apr 2023 20:26:20 +0000
-Subject: [PATCH 10/28] [libunwind] [SEH] Sync LSDA and handler between
+Subject: [PATCH 06/21] [libunwind] [SEH] Sync LSDA and handler between
  unw_proc_info_t and DISPATCHER_CONTEXT
 
 For normal C++ unwinding, we get _dispContext initialized by the

@@ -1,7 +1,7 @@
-From 7c9f49846665195b3904e8f333a7cf3cbdaea5f2 Mon Sep 17 00:00:00 2001
+From 72d3d9bd04d19e42cd3fd8b078cd48b6cf262ef7 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 15:25:09 +0300
-Subject: [PATCH 20/28] [libcxx] [ci] Run the libcxxabi and libunwind tests in
+Subject: [PATCH 16/21] [libcxx] [ci] Run the libcxxabi and libunwind tests in
  mingw configurations too
 
 ---

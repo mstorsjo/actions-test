@@ -1,11 +1,13 @@
-From 2406c8070c9317020b40ad6de358cdda8173cdd2 Mon Sep 17 00:00:00 2001
+From d5a9ea20441be1f80be12cbd18ff33e0a8f24fbc Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
-Date: Fri, 10 Mar 2023 14:16:42 +0200
-Subject: [PATCH 18/28] [libcxx] [test] Print the failing build command in
- programOutput()
+Date: Thu, 6 Apr 2023 11:19:06 +0300
+Subject: [PATCH 14/21] [libcxx] [test] Print the failing commands in
+ Configuration{Compilation,Runtime}Error
 
 This allows for easier debugging of the test environment when something
 fails.
+
+Differential Revision: https://reviews.llvm.org/D145807
 ---
  libcxx/utils/libcxx/test/dsl.py | 20 ++++++++++----------
  1 file changed, 10 insertions(+), 10 deletions(-)

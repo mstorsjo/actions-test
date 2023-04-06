@@ -1,7 +1,7 @@
-From 5afebb868ec680eee143a040061691dead7ea283 Mon Sep 17 00:00:00 2001
+From d312f290f67ed1d531aba4bbd87bb293ae3ae21c Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 14:12:24 +0300
-Subject: [PATCH 07/28] [libunwind] Increase the external value of
+Subject: [PATCH 03/21] [libunwind] Increase the external value of
  _LIBUNWIND_CURSOR_SIZE for SEH/x86_64
 
 For x86_64 Windows targets (that use SEH), _LIBUNWIND_CURSOR_SIZE

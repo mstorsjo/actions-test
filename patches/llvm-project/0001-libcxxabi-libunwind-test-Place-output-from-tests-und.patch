@@ -1,7 +1,7 @@
-From e5bfa4941a4d56544f88bb315e96d8fd78853dfd Mon Sep 17 00:00:00 2001
+From b35c0debaaa9314299a925ee7ffbf6d45560caaf Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 13:56:54 +0300
-Subject: [PATCH 01/28] [libcxxabi, libunwind] [test] Place output from tests
+Subject: [PATCH 01/21] [libcxxabi, libunwind] [test] Place output from tests
  under a 'test' subdir
 
 Previously, all the output from the tests were placed directly in
