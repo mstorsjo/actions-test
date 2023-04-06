@@ -128,6 +128,11 @@ jobs:
           echo "LLVM_CONFIG=$PWD\bin\llvm-config.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           echo "CMAKE_DIR=$PWD\lib\cmake\llvm" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build and test compiler-rt
+        # Skipping libfuzzer; all tests fail since the clang mingw driver
+        # doesn't support -fsanitize=fuzzer.
+        # Skipping ORC; the tests rely on llvm-jitlink being available,
+        # which requires building a large part of LLVM among the test
+        # tools above, and jitlink requires an MSVC toolchain to be available.
         run: |
           cd llvm-project
           mkdir build-compiler-rt
@@ -145,6 +150,7 @@ jobs:
             -DLLVM_CMAKE_DIR="$Env:CMAKE_DIR" `
             -DSANITIZER_CXX_ABI=libc++ `
             -DCOMPILER_RT_INCLUDE_TESTS=ON `
-            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF
+            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF `
+            -DCOMPILER_RT_BUILD_ORC=OFF
           ninja
           ninja check-compiler-rt
