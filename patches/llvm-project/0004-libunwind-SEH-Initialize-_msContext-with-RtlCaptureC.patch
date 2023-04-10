@@ -1,7 +1,7 @@
-From db1b49db44ada89d552ec5e7e43023d6c96e26fc Mon Sep 17 00:00:00 2001
+From 11aefc0200e8db5c3e5f69736dd0eef007e157c6 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 4 Apr 2023 20:28:49 +0000
-Subject: [PATCH 05/21] [libunwind] [SEH] Initialize _msContext with
+Subject: [PATCH 04/13] [libunwind] [SEH] Initialize _msContext with
  RtlCaptureContext
 
 When we initialize the UnwindCursor (unw_cursor_t) based on
@@ -25,10 +25,10 @@ Differential Revision: https://reviews.llvm.org/D147636
  1 file changed, 1 insertion(+)
 
 diff --git a/libunwind/src/UnwindCursor.hpp b/libunwind/src/UnwindCursor.hpp
-index a736ce261a9a..152606e314d9 100644
+index 9ea0cf1465e8..8b6451c68b46 100644
 --- a/libunwind/src/UnwindCursor.hpp
 +++ b/libunwind/src/UnwindCursor.hpp
-@@ -572,6 +572,7 @@ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
+@@ -579,6 +579,7 @@ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
    _dispContext.HistoryTable = &_histTable;
    // Initialize MS context from ours.
    R r(context);

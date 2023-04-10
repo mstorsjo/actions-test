@@ -1,7 +1,7 @@
-From bbdace0257e2a973c2adf812379f933f1caec136 Mon Sep 17 00:00:00 2001
+From e3a8331d234ca6f3a9411009063ccd519ff9e0eb Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Fri, 31 Mar 2023 11:35:15 +0300
-Subject: [PATCH 21/21] [compiler-rt] Fix the scalbn tests on mingw on
+Subject: [PATCH 12/13] [compiler-rt] Fix the scalbn tests on mingw on
  arm/aarch64
 
 ---

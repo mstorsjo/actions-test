@@ -1,7 +1,7 @@
-From 2ac8a81d23f390dfce99f8c16cba0c3dc4d5e305 Mon Sep 17 00:00:00 2001
+From 51b675a1cca5c8f46c8a1e45dcbc0d36d6040ba3 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 14:51:36 +0300
-Subject: [PATCH 12/21] [libcxxabi] [test] Don't cast a pointer to long, fixing
+Subject: [PATCH 07/13] [libcxxabi] [test] Don't cast a pointer to long, fixing
  the test on Windows
 
 Use uintptr_t instead. On Windows, long is 32 bit even on 64 bit
