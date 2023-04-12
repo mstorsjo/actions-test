@@ -1,0 +1,41 @@
+From 03bf8581660ce8cb4934bb48aafd928b9ef404f8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 12 Apr 2023 11:17:48 +0000
+Subject: [PATCH 17/23] [compiler-rt] [test] [profile] Add an executable suffix
+ to a temp executable
+
+Mingw toolchains implicitly add an .exe suffix; this makes sure that
+the later rm comand actually removes the expected executable.
+
+(Alternatively the rm command can use "merge4*".)
+---
+ compiler-rt/test/profile/instrprof-basic.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/compiler-rt/test/profile/instrprof-basic.c b/compiler-rt/test/profile/instrprof-basic.c
+index 17631d1b9a98..7b785a50fce4 100644
+--- a/compiler-rt/test/profile/instrprof-basic.c
++++ b/compiler-rt/test/profile/instrprof-basic.c
+@@ -32,13 +32,13 @@
+ // Test that merging is enabled by default with -fprofile-generate
+ // RUN: rm -fr %t.dir4
+ // RUN: mkdir -p %t.dir4
+-// RUN: %clang_pgogen -o %t.dir4/merge4 -O0 %s
++// RUN: %clang_pgogen -o %t.dir4/merge4.exe -O0 %s
+ // RUN: cd %t.dir4
+-// RUN: %run %t.dir4/merge4
+-// RUN: %run %t.dir4/merge4
+-// RUN: %run %t.dir4/merge4
+-// RUN: %run %t.dir4/merge4
+-// RUN: rm -f %t.dir4/merge4
++// RUN: %run %t.dir4/merge4.exe
++// RUN: %run %t.dir4/merge4.exe
++// RUN: %run %t.dir4/merge4.exe
++// RUN: %run %t.dir4/merge4.exe
++// RUN: rm -f %t.dir4/merge4.exe
+ // RUN: llvm-profdata merge -o %t.m4.profdata ./
+ // RUN: %clang_profuse=%t.m4.profdata -O0 -o - -S -emit-llvm %s | FileCheck %s --check-prefix=COMMON  --check-prefix=PGOMERGE
+ 
+-- 
+2.34.1
+

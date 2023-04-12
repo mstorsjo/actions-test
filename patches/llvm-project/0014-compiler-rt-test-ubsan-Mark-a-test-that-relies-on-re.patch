@@ -1,0 +1,28 @@
+From 7afc056ec0596df257ab112106351eaa90cc172d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 12 Apr 2023 10:55:36 +0000
+Subject: [PATCH 14/23] [compiler-rt] [test] [ubsan] Mark a test that relies on
+ redefining weak symbols as unsupported on mingw
+
+While mingw toolchains do support weak symbols, the relevant
+sanitizer symbols aren't made weak on Windows.
+---
+ compiler-rt/test/ubsan/TestCases/Misc/monitor.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler-rt/test/ubsan/TestCases/Misc/monitor.cpp b/compiler-rt/test/ubsan/TestCases/Misc/monitor.cpp
+index 0a705cc4c1c6..f1e335d2a543 100644
+--- a/compiler-rt/test/ubsan/TestCases/Misc/monitor.cpp
++++ b/compiler-rt/test/ubsan/TestCases/Misc/monitor.cpp
+@@ -4,7 +4,7 @@
+ // __ubsan_on_report is not defined as weak. Redefining it here isn't supported
+ // on Windows.
+ //
+-// UNSUPPORTED: target={{.*windows-msvc.*}}
++// UNSUPPORTED: target={{.*windows-msvc.*|.*windows-gnu.*}}
+ // Linkage issue
+ // XFAIL: target={{.*openbsd.*}}
+ 
+-- 
+2.34.1
+

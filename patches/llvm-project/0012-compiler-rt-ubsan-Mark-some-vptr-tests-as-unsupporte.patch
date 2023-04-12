@@ -1,0 +1,42 @@
+From 8f7e955802bcec23ba8d9728d49470786feb5ef3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 12 Apr 2023 10:32:19 +0000
+Subject: [PATCH 12/23] [compiler-rt] [ubsan] Mark some vptr tests as
+ unsupported on mingw targets
+
+The C++ typenames aren't demangled in those configurations.
+---
+ .../test/ubsan/TestCases/TypeCheck/vptr-virtual-base.cpp       | 2 ++
+ compiler-rt/test/ubsan/TestCases/TypeCheck/vptr.cpp            | 3 +++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-virtual-base.cpp b/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-virtual-base.cpp
+index 80a96cb042ae..b80446488814 100644
+--- a/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-virtual-base.cpp
++++ b/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-virtual-base.cpp
+@@ -6,6 +6,8 @@
+ // UNSUPPORTED: target={{.*windows-msvc.*}}
+ // Nested crash reported
+ // UNSUPPORTED: target={{.*freebsd.*}}
++// Itanium demangling isn't done for the type names.
++// UNSUPPORTED: target={{.*windows-gnu.*}}
+ 
+ struct S { virtual int f() { return 0; } };
+ struct T : virtual S {};
+diff --git a/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr.cpp b/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr.cpp
+index 70c93440a0e0..52ef622061af 100644
+--- a/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr.cpp
++++ b/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr.cpp
+@@ -44,6 +44,9 @@
+ // UNSUPPORTED: target={{.*openbsd.*}}
+ // Compilation error
+ // UNSUPPORTED: target={{.*freebsd.*}}
++// Vptr tests generally work, but Itanium demangling isn't done for the
++// type names. The "(echo ..." line fails to be handled by the shell.
++// UNSUPPORTED: target={{.*windows-gnu.*}}
+ #include <new>
+ #include <typeinfo>
+ #include <assert.h>
+-- 
+2.34.1
+

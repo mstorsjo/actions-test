@@ -1,0 +1,28 @@
+From b867cc8ba2d181a8cd9acfaa618c3d242e0ce0d0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 11 Apr 2023 00:32:47 +0300
+Subject: [PATCH 21/23] [compiler-rt] [test] Fix trampoline_setup_test.c on
+ Windows
+
+Set __COMPAT_LAYER=RunAsInvoker to avoid the error
+"[WinError 740] The requested operation requires elevation";
+heuristics can flag "trampoline_setup_test" as an executable that
+may need to be run with elevated privileges.
+---
+ compiler-rt/test/builtins/Unit/lit.cfg.py | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/compiler-rt/test/builtins/Unit/lit.cfg.py b/compiler-rt/test/builtins/Unit/lit.cfg.py
+index e3602a99087d..81dcebc5ad31 100644
+--- a/compiler-rt/test/builtins/Unit/lit.cfg.py
++++ b/compiler-rt/test/builtins/Unit/lit.cfg.py
+@@ -128,3 +128,6 @@ if len(builtins_source_feature_duplicates) > 0:
+       builtins_source_feature_duplicates)
+   )
+ config.available_features.update(builtins_source_features)
++
++if config.host_os  == 'Windows':
++  config.environment['__COMPAT_LAYER'] = 'RunAsInvoker'
+-- 
+2.34.1
+

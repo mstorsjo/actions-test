@@ -1,0 +1,40 @@
+From cef72ae896e8d699ee683d583e883638a02a426d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 12 Apr 2023 11:45:41 +0000
+Subject: [PATCH 20/23] [compiler-rt] [test] [profile] Generalize existing
+ windows XFAILs to cover mingw too
+
+---
+ compiler-rt/test/profile/instrprof-merge-entry-cover.c | 2 +-
+ compiler-rt/test/profile/instrprof-merge.c             | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/compiler-rt/test/profile/instrprof-merge-entry-cover.c b/compiler-rt/test/profile/instrprof-merge-entry-cover.c
+index da479e80d57e..a99458898392 100644
+--- a/compiler-rt/test/profile/instrprof-merge-entry-cover.c
++++ b/compiler-rt/test/profile/instrprof-merge-entry-cover.c
+@@ -3,7 +3,7 @@
+ // RUN: llvm-profdata show --all-functions --counts %t.profraw  | FileCheck %s
+ 
+ // FIXME: llvm-profdata exits with "Malformed instrumentation profile data"
+-// XFAIL: target={{.*msvc.*}}
++// XFAIL: target={{.*windows.*}}
+ 
+ #include "profile_test.h"
+ #include <stdint.h>
+diff --git a/compiler-rt/test/profile/instrprof-merge.c b/compiler-rt/test/profile/instrprof-merge.c
+index d121b696bb65..8be1016da873 100644
+--- a/compiler-rt/test/profile/instrprof-merge.c
++++ b/compiler-rt/test/profile/instrprof-merge.c
+@@ -3,7 +3,7 @@
+ // RUN: llvm-profdata show --all-functions --counts %t.profraw  | FileCheck %s
+ 
+ // FIXME: llvm-profdata exits with "Malformed instrumentation profile data"
+-// XFAIL: target={{.*msvc.*}}
++// XFAIL: target={{.*windows.*}}
+ 
+ #include <stdint.h>
+ #include <stdio.h>
+-- 
+2.34.1
+

@@ -1,7 +1,7 @@
-From 533932857f6d3d2108e3b987a823fbed6b22ad67 Mon Sep 17 00:00:00 2001
+From a80f0544f3c54bfd86ac10d707bed065b5a67f6e Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 15:46:56 +0300
-Subject: [PATCH 11/13] [compiler-rt] [test] [builtins] Pass the right
+Subject: [PATCH 08/23] [compiler-rt] [test] [builtins] Pass the right
  parameters for linking with -nodefaultlibs on mingw targets
 
 The clang-cl/MSVC case is handled above, thus consider win32 && !is_msvc

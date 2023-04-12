@@ -1,7 +1,7 @@
-From 11aefc0200e8db5c3e5f69736dd0eef007e157c6 Mon Sep 17 00:00:00 2001
+From fc4aafc9ae9f43ef6067d0a4f54ebea1cfd13e25 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 4 Apr 2023 20:28:49 +0000
-Subject: [PATCH 04/13] [libunwind] [SEH] Initialize _msContext with
+Subject: [PATCH 02/23] [libunwind] [SEH] Initialize _msContext with
  RtlCaptureContext
 
 When we initialize the UnwindCursor (unw_cursor_t) based on

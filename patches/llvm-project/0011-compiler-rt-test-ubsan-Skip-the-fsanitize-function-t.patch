@@ -1,0 +1,27 @@
+From 542b2c8ad5ecd2c31a37dc7a84f2d9eb66c06dde Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 12 Apr 2023 09:12:28 +0000
+Subject: [PATCH 11/23] [compiler-rt] [test] [ubsan] Skip the
+ -fsanitize=function test on mingw too
+
+-fsanitize=function is unsupported both in mingw and msvc modes.
+---
+ .../test/ubsan/TestCases/TypeCheck/Function/function.cpp        | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler-rt/test/ubsan/TestCases/TypeCheck/Function/function.cpp b/compiler-rt/test/ubsan/TestCases/TypeCheck/Function/function.cpp
+index 06eb796a46bb..567db7a872cc 100644
+--- a/compiler-rt/test/ubsan/TestCases/TypeCheck/Function/function.cpp
++++ b/compiler-rt/test/ubsan/TestCases/TypeCheck/Function/function.cpp
+@@ -4,7 +4,7 @@
+ // RUN: %run %t 2>&1 | FileCheck %s --check-prefix=CHECK $(%run %t-unique UNIQUE)
+ // Verify that we can disable symbolization if needed:
+ // RUN: %env_ubsan_opts=symbolize=0 %run %t 2>&1 | FileCheck %s --check-prefix=NOSYM $(%run %t-unique NOSYM-UNIQUE)
+-// XFAIL: target={{.*windows-msvc.*}}
++// XFAIL: target={{.*windows.*}}
+ // Unsupported function flag
+ // UNSUPPORTED: target={{.*openbsd.*}}
+ 
+-- 
+2.34.1
+

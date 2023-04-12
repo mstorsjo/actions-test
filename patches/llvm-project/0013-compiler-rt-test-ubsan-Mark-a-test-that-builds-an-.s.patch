@@ -1,0 +1,27 @@
+From 2a6315043afe80b01c7139b2358efe2232391be3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 12 Apr 2023 10:50:18 +0000
+Subject: [PATCH 13/23] [compiler-rt] [test] [ubsan] Mark a test that builds an
+ .so as unsupported on mingw targets
+
+The linking of DLLs on Windows requires a couple more options.
+---
+ .../test/ubsan/TestCases/TypeCheck/vptr-non-unique-typeinfo.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-non-unique-typeinfo.cpp b/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-non-unique-typeinfo.cpp
+index 6686415a222c..d63f993f1a0c 100644
+--- a/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-non-unique-typeinfo.cpp
++++ b/compiler-rt/test/ubsan/TestCases/TypeCheck/vptr-non-unique-typeinfo.cpp
+@@ -3,7 +3,7 @@
+ // RUN: %run %t
+ //
+ // REQUIRES: cxxabi
+-// UNSUPPORTED: target={{.*windows-msvc.*}}
++// UNSUPPORTED: target={{.*windows-msvc.*|.*windows-gnu.*}}
+ 
+ struct X {
+   virtual ~X() {}
+-- 
+2.34.1
+
