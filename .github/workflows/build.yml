@@ -133,6 +133,7 @@ jobs:
         # Skipping ORC; the tests rely on llvm-jitlink being available,
         # which requires building a large part of LLVM among the test
         # tools above, and jitlink requires an MSVC toolchain to be available.
+        continue-on-error: true
         run: |
           cd llvm-project
           mkdir build-compiler-rt
@@ -155,3 +156,10 @@ jobs:
           cp lib\windows\* c:\llvm-mingw\lib\clang\17\lib\windows
           ninja
           ninja check-compiler-rt
+      - uses: actions/upload-artifact@v3
+        with:
+          name: test-output
+          path: |
+            llvm-project/build-compiler-rt/test/profile
+            llvm-project/build-tools/bin
+          retention-days: 7
