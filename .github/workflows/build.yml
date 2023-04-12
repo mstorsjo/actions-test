@@ -152,5 +152,6 @@ jobs:
             -DCOMPILER_RT_INCLUDE_TESTS=ON `
             -DCOMPILER_RT_BUILD_LIBFUZZER=OFF `
             -DCOMPILER_RT_BUILD_ORC=OFF
+          cp lib\windows\* c:\llvm-mingw\lib\clang\17\lib\windows
           ninja
           ninja check-compiler-rt
