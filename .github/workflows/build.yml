@@ -112,6 +112,7 @@ jobs:
         run: |
           git config --global user.name "LLVM MinGW"
           git config --global user.email root@localhost
+          git config --global core.autocrlf false
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
       - name: Build test executables
         run: |
