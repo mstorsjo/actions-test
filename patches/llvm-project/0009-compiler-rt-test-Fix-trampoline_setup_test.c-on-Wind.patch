@@ -1,7 +1,7 @@
-From b867cc8ba2d181a8cd9acfaa618c3d242e0ce0d0 Mon Sep 17 00:00:00 2001
+From 215b9c48385188e73e9a0bd8b284ed9b247366da Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 11 Apr 2023 00:32:47 +0300
-Subject: [PATCH 21/23] [compiler-rt] [test] Fix trampoline_setup_test.c on
+Subject: [PATCH 09/12] [compiler-rt] [test] Fix trampoline_setup_test.c on
  Windows
 
 Set __COMPAT_LAYER=RunAsInvoker to avoid the error

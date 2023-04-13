@@ -1,7 +1,7 @@
-From cf82a87febc162b8cd46197e8367d6724560a1a1 Mon Sep 17 00:00:00 2001
+From f96cdaed09345778c2f41c6b78130a266c810c9a Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 30 Mar 2023 14:40:17 +0300
-Subject: [PATCH 03/23] [libcxxabi] [test] Fix the mingw test config
+Subject: [PATCH 01/12] [libcxxabi] [test] Fix the mingw test config
 
 Don't link libc++abi separately in addition to the main -lc++; in
 mingw build configs, libc++abi is always bundled into libc++

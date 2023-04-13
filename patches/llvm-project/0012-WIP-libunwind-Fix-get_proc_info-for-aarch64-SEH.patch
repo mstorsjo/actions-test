@@ -1,7 +1,7 @@
-From 561e2a8f1f652250ff4113be902e50fb5b99f0f8 Mon Sep 17 00:00:00 2001
+From d56353f6df91e796d4d477597c998b61eb7c224a Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Sat, 1 Apr 2023 01:43:39 +0300
-Subject: [PATCH 23/23] WIP [libunwind] Fix get_proc_info for aarch64 SEH
+Subject: [PATCH 12/12] WIP [libunwind] Fix get_proc_info for aarch64 SEH
 
 ---
  libunwind/src/libunwind.cpp | 2 +-

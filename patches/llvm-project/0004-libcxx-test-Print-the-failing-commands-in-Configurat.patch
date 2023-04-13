@@ -1,7 +1,7 @@
-From 2454635a4d4c775beecbcd62fa001987a2db1d88 Mon Sep 17 00:00:00 2001
+From 0ff6ba8861a936ab9c5a56fe7b7044bcfc2f1b35 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Thu, 6 Apr 2023 11:19:06 +0300
-Subject: [PATCH 06/23] [libcxx] [test] Print the failing commands in
+Subject: [PATCH 04/12] [libcxx] [test] Print the failing commands in
  Configuration{Compilation,Runtime}Error
 
 This allows for easier debugging of the test environment when something

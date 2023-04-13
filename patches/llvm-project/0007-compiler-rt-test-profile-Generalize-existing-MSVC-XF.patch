@@ -1,9 +1,10 @@
-From cef72ae896e8d699ee683d583e883638a02a426d Mon Sep 17 00:00:00 2001
+From 32d9023eac4fc999d6d5a558341db8b6e4ae99e6 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 12 Apr 2023 11:45:41 +0000
-Subject: [PATCH 20/23] [compiler-rt] [test] [profile] Generalize existing
- windows XFAILs to cover mingw too
+Subject: [PATCH 07/12] [compiler-rt] [test] [profile] Generalize existing MSVC
+ XFAILs to cover mingw too
 
+Differential Revision: https://reviews.llvm.org/D148167
 ---
  compiler-rt/test/profile/instrprof-merge-entry-cover.c | 2 +-
  compiler-rt/test/profile/instrprof-merge.c             | 2 +-
