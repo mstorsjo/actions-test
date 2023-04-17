@@ -27,7 +27,7 @@ jobs:
               mkdir test/build-$arch
               cd test/build-$arch
               (export PATH=$(pwd)/../../msvc/bin/$arch:$PATH
-                  CC=cl CXX=cl cmake .. -G Ninja -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows
+                  CC=cl CXX=cl cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows
                   ninja -v
               )
               cd ../..
