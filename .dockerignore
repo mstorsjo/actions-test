@@ -1,0 +1,15 @@
+.git
+llvm-project
+mingw-w64
+lldb-mi
+make-*
+libffi
+cpython*
+python-native
+**/*.exe
+**/*.dll
+**/*.lib
+**/*.pdb
+**/*.a
+*.tar.xz
+*.zip
