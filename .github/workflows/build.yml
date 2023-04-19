@@ -3,8 +3,6 @@ on:
   push:
     branches:
       - '**'
-  schedule:
-    - cron: '0 0 * * *'
 
 jobs:
   # For scheduled builds, get the commit ids of the latest versions to build.
