@@ -35,6 +35,14 @@ jobs:
           echo "/*) BASE=\"\$(dirname \"\$EXE\")\" ;;" >> wine-arm64
           echo "*) BASE=\"\$(pwd)\"; EXE=\"\$BASE/\$EXE\" ;;" >> wine-arm64
           echo "esac" >> wine-arm64
+          echo "while true; do" >> wine-arm64
+          echo "    parent=\"\$(dirname \"\$BASE\")\"" >> wine-arm64
+          echo "    if [ \"\$parent\" = \"/\" ]; then" >> wine-arm64
+          echo "        break" >> wine-arm64
+          echo "    else" >> wine-arm64
+          echo "        BASE=\"\$parent\"" >> wine-arm64
+          echo "    fi" >> wine-arm64
+          echo "done" >> wine-arm64
           echo "docker run --rm -v \"\$BASE:\$BASE\" linaro/wine-arm64 wine-arm64 \"\$EXE\" \"\$@\"" >> wine-arm64
           chmod a+x wine-arm64
           sudo mkdir -p /opt/wine-arm64/bin
