@@ -1,8 +1,8 @@
-From 9b1dce45984237d8819fea49ac60c0f56ac15fd6 Mon Sep 17 00:00:00 2001
+From f1a32c804f0d3311b1fe693c91c09214de61731e Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 12 Apr 2023 11:17:48 +0000
-Subject: [PATCH 10/11] [compiler-rt] [test] [profile] Add an .exe suffix to
- some temp executables
+Subject: [PATCH 2/2] [compiler-rt] [test] [profile] Avoid issues with an
+ implicit .exe suffix
 
 Mingw toolchains implicitly add an .exe suffix if the output linked
 file doesn't have a suffix. In many cases the extra suffix doesn't
@@ -10,67 +10,56 @@ cause any issues, but in some tests, this discrepancy between expected
 output file name and actual output file does cause issues.
 
 In one test, a later rm command fails to remove the executable since it
-doesn't have the expected name. (Alternatively the rm command could use
-a wildcard.)
+doesn't have the expected name. By failing to remove the executable, the
+later llvm-profdata command tries to read the executable as if it was
+a profile data file.
 
-In another test, the executables that are run with a ./ prefix doesn't
-manage to resolve the executable when it has an extra implicit .exe
-suffix.
+In another test, when the Python executor executes commands, it can
+resolve executable names without the extra .exe suffix for absolute
+paths (when most binaries are executed as e.g. "%t/foo"), but it fails
+to resolve the executables for relative paths such as "./foo". Making
+the paths absolute by using %t here shouldn't affect the actual tested
+behaviours.
 
 Differential Revision: https://reviews.llvm.org/D148169
 ---
- compiler-rt/test/profile/instrprof-basic.c  | 12 ++++++------
- compiler-rt/test/profile/instrprof-tmpdir.c |  8 ++++----
- 2 files changed, 10 insertions(+), 10 deletions(-)
+ compiler-rt/test/profile/instrprof-basic.c  | 2 +-
+ compiler-rt/test/profile/instrprof-tmpdir.c | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/compiler-rt/test/profile/instrprof-basic.c b/compiler-rt/test/profile/instrprof-basic.c
-index 17631d1b9a98..7b785a50fce4 100644
+index 17631d1b9a98..de66e1b27468 100644
 --- a/compiler-rt/test/profile/instrprof-basic.c
 +++ b/compiler-rt/test/profile/instrprof-basic.c
-@@ -32,13 +32,13 @@
- // Test that merging is enabled by default with -fprofile-generate
- // RUN: rm -fr %t.dir4
- // RUN: mkdir -p %t.dir4
--// RUN: %clang_pgogen -o %t.dir4/merge4 -O0 %s
-+// RUN: %clang_pgogen -o %t.dir4/merge4.exe -O0 %s
- // RUN: cd %t.dir4
--// RUN: %run %t.dir4/merge4
--// RUN: %run %t.dir4/merge4
--// RUN: %run %t.dir4/merge4
--// RUN: %run %t.dir4/merge4
+@@ -38,7 +38,7 @@
+ // RUN: %run %t.dir4/merge4
+ // RUN: %run %t.dir4/merge4
+ // RUN: %run %t.dir4/merge4
 -// RUN: rm -f %t.dir4/merge4
-+// RUN: %run %t.dir4/merge4.exe
-+// RUN: %run %t.dir4/merge4.exe
-+// RUN: %run %t.dir4/merge4.exe
-+// RUN: %run %t.dir4/merge4.exe
-+// RUN: rm -f %t.dir4/merge4.exe
++// RUN: rm -f %t.dir4/merge4*
  // RUN: llvm-profdata merge -o %t.m4.profdata ./
  // RUN: %clang_profuse=%t.m4.profdata -O0 -o - -S -emit-llvm %s | FileCheck %s --check-prefix=COMMON  --check-prefix=PGOMERGE
  
 diff --git a/compiler-rt/test/profile/instrprof-tmpdir.c b/compiler-rt/test/profile/instrprof-tmpdir.c
-index 036313850ed6..488a4b519e49 100644
+index 036313850ed6..6f323e7e6a01 100644
 --- a/compiler-rt/test/profile/instrprof-tmpdir.c
 +++ b/compiler-rt/test/profile/instrprof-tmpdir.c
-@@ -1,18 +1,18 @@
- // RUN: rm -rf %t
- // RUN: mkdir -p %t
- // RUN: cd %t
--// RUN: %clang_profgen -o %t/binary %s
-+// RUN: %clang_profgen -o %t/binary.exe %s
+@@ -4,15 +4,15 @@
+ // RUN: %clang_profgen -o %t/binary %s
  //
  // Check that a dir separator is appended after %t is subsituted.
 -// RUN: env TMPDIR="%t" LLVM_PROFILE_FILE="%%traw1.profraw" %run ./binary
-+// RUN: env TMPDIR="%t" LLVM_PROFILE_FILE="%%traw1.profraw" %run ./binary.exe
++// RUN: env TMPDIR="%t" LLVM_PROFILE_FILE="%%traw1.profraw" %run %t/binary
  // RUN: llvm-profdata show ./raw1.profraw | FileCheck %s -check-prefix TMPDIR
  //
  // Check that substitution works even if a redundant dir separator is added.
 -// RUN: env TMPDIR="%t" LLVM_PROFILE_FILE="%%t/raw2.profraw" %run ./binary
-+// RUN: env TMPDIR="%t" LLVM_PROFILE_FILE="%%t/raw2.profraw" %run ./binary.exe
++// RUN: env TMPDIR="%t" LLVM_PROFILE_FILE="%%t/raw2.profraw" %run %t/binary
  // RUN: llvm-profdata show ./raw2.profraw | FileCheck %s -check-prefix TMPDIR
  //
  // Check that we fall back to the default path if TMPDIR is missing.
 -// RUN: env -u TMPDIR LLVM_PROFILE_FILE="%%t/raw3.profraw" %run ./binary 2>&1 | FileCheck %s -check-prefix MISSING
-+// RUN: env -u TMPDIR LLVM_PROFILE_FILE="%%t/raw3.profraw" %run ./binary.exe 2>&1 | FileCheck %s -check-prefix MISSING
++// RUN: env -u TMPDIR LLVM_PROFILE_FILE="%%t/raw3.profraw" %run %t/binary 2>&1 | FileCheck %s -check-prefix MISSING
  // RUN: llvm-profdata show ./default.profraw | FileCheck %s -check-prefix TMPDIR
  
  // TMPDIR: Maximum function count: 1
