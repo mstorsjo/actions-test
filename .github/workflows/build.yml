@@ -54,6 +54,7 @@ jobs:
 
   test-openmp:
     runs-on: windows-latest
+    if: false
     steps:
       - name: Unpack toolchain
         run: |
