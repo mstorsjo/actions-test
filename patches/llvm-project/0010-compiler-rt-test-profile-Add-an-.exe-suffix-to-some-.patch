@@ -1,7 +1,7 @@
-From b0795248706ddec7fffd6c2295a0bbc44f026e00 Mon Sep 17 00:00:00 2001
+From 9b1dce45984237d8819fea49ac60c0f56ac15fd6 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 12 Apr 2023 11:17:48 +0000
-Subject: [PATCH 08/12] [compiler-rt] [test] [profile] Add an .exe suffix to
+Subject: [PATCH 10/11] [compiler-rt] [test] [profile] Add an .exe suffix to
  some temp executables
 
 Mingw toolchains implicitly add an .exe suffix if the output linked

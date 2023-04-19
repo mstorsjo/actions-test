@@ -1,0 +1,37 @@
+From 274fad0b7e965a7b6e93d284cb2ba0f208221b00 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 14 Apr 2023 20:58:34 +0000
+Subject: [PATCH 07/11] [compiler-rt] [test] Don't override config.unsupported
+ in TestCases/Windows
+
+This is a leftover from when these tests were added in
+2bdca2006941a3a7de8e16ea9af9a758b367ee32 in 2014 (when the toplevel
+asan/lit.cfg set "config.unsupported = True" on Windows). When the
+common tests were included on Windows in
+89d994367a597134fa7e1724314044e217718165 in 2015, that commit should
+have removed the now unnecessary "config.unsupported = False" line here.
+
+Differential Revision: https://reviews.llvm.org/D148442
+---
+ compiler-rt/test/asan/TestCases/Windows/lit.local.cfg.py | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/compiler-rt/test/asan/TestCases/Windows/lit.local.cfg.py b/compiler-rt/test/asan/TestCases/Windows/lit.local.cfg.py
+index 13ef6d428251..e924d91c4493 100644
+--- a/compiler-rt/test/asan/TestCases/Windows/lit.local.cfg.py
++++ b/compiler-rt/test/asan/TestCases/Windows/lit.local.cfg.py
+@@ -5,10 +5,5 @@ def getRoot(config):
+ 
+ root = getRoot(config)
+ 
+-# We only run a small set of tests on Windows for now.
+-# Override the parent directory's "unsupported" decision until we can handle
+-# all of its tests.
+-if root.host_os in ['Windows']:
+-  config.unsupported = False
+-else:
++if root.host_os not in ['Windows']:
+   config.unsupported = True
+-- 
+2.34.1
+

@@ -1,9 +1,12 @@
-From a6e6028090dca664143297bd19e33e233eee559d Mon Sep 17 00:00:00 2001
+From a1d67dd04bf90e02c28d173fe1ad418fc04f72f1 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 5 Apr 2023 15:25:09 +0300
-Subject: [PATCH 05/12] [libcxx] [ci] Run the libcxxabi and libunwind tests in
- mingw configurations too
+Subject: [PATCH 01/11] [libcxx] [ci] Run the libcxxabi and libunwind tests in
+ mingw configurations
 
+The check-runtimes function runs check-cxx, check-cxxabi and check-unwind.
+
+Differential Revision: https://reviews.llvm.org/D148267
 ---
  libcxx/utils/ci/run-buildbot | 9 +++------
  1 file changed, 3 insertions(+), 6 deletions(-)

@@ -1,0 +1,42 @@
+From d8fe7180632a3a9a65caa69901e9e79bcebb0456 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Tue, 18 Apr 2023 15:42:35 +0300
+Subject: [PATCH 04/11] [libunwind] [SEH] Clear DISPATCHER_CONTEXT when
+ initializing a cursor
+
+We only initialize a few fields in DISPATCHER_CONTEXT - don't leave
+the rest in an uninitialized state; make sure the whole struct is
+in a deterministic state.
+
+This makes nondeterministic failures deterministic, for some cases
+relating to forced unwinding on aarch64/arm (which requires filling
+in parsing of the xdata for finding the exception handler and LSDA).
+
+Differential Revision: https://reviews.llvm.org/D148660
+---
+ libunwind/src/UnwindCursor.hpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/libunwind/src/UnwindCursor.hpp b/libunwind/src/UnwindCursor.hpp
+index 8b6451c68b46..db6d0ec853f3 100644
+--- a/libunwind/src/UnwindCursor.hpp
++++ b/libunwind/src/UnwindCursor.hpp
+@@ -575,6 +575,7 @@ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
+                 "UnwindCursor<> requires more alignment than unw_cursor_t");
+   memset(&_info, 0, sizeof(_info));
+   memset(&_histTable, 0, sizeof(_histTable));
++  memset(&_dispContext, 0, sizeof(_dispContext));
+   _dispContext.ContextRecord = &_msContext;
+   _dispContext.HistoryTable = &_histTable;
+   // Initialize MS context from ours.
+@@ -677,6 +678,7 @@ UnwindCursor<A, R>::UnwindCursor(CONTEXT *context, A &as)
+                 "UnwindCursor<> does not fit in unw_cursor_t");
+   memset(&_info, 0, sizeof(_info));
+   memset(&_histTable, 0, sizeof(_histTable));
++  memset(&_dispContext, 0, sizeof(_dispContext));
+   _dispContext.ContextRecord = &_msContext;
+   _dispContext.HistoryTable = &_histTable;
+   _msContext = *context;
+-- 
+2.34.1
+

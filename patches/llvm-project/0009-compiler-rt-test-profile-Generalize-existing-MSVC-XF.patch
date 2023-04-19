@@ -1,7 +1,7 @@
-From 32d9023eac4fc999d6d5a558341db8b6e4ae99e6 Mon Sep 17 00:00:00 2001
+From 8c7ae03ab3df5cc1757d0cb90cd744cf7f4bde60 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Wed, 12 Apr 2023 11:45:41 +0000
-Subject: [PATCH 07/12] [compiler-rt] [test] [profile] Generalize existing MSVC
+Subject: [PATCH 09/11] [compiler-rt] [test] [profile] Generalize existing MSVC
  XFAILs to cover mingw too
 
 Differential Revision: https://reviews.llvm.org/D148167

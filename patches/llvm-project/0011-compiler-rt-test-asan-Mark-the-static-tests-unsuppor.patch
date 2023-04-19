@@ -1,0 +1,103 @@
+From 301f7f4c1342788855b476feee2ba311998fd550 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 14 Apr 2023 21:47:37 +0000
+Subject: [PATCH 11/11] [compiler-rt] [test] [asan] Mark the static tests
+ unsupported on mingw
+
+It turns out that googletest unit tests don't react to the
+config.unsupported flag so far, so we need to change the framework
+for that. (Such a change should be split out to a separate commit,
+but I'm including it here for now, for complete overview of this
+change.)
+
+The symbol referenced in the non-dynamic case for i386,
+`_except_handler4`, isn't available in mingw configurations (where
+we only ever link the dynamic CRT); for ASAN_DYNAMIC, the symbol is
+redirected to `_except_handler4_common` which does exist.
+
+When the static asan testsuites are marked as unsupported (but
+available), building `check-compiler-rt` or `check-asan` ends up
+trying to link the unit tests for the static ccase even if they're
+not going to be executed; therefore, this practically irrelevant
+case still needs to be compileable and linkable.
+
+This is an alternative to D148319, and depends on D148442.
+
+Differential Revision: https://reviews.llvm.org/D148443
+---
+ compiler-rt/lib/asan/asan_win.cpp             | 2 ++
+ compiler-rt/test/asan/Unit/lit.site.cfg.py.in | 4 ++++
+ compiler-rt/test/asan/lit.cfg.py              | 3 +++
+ llvm/utils/lit/lit/formats/googletest.py      | 6 ++++++
+ 4 files changed, 15 insertions(+)
+
+diff --git a/compiler-rt/lib/asan/asan_win.cpp b/compiler-rt/lib/asan/asan_win.cpp
+index 7dbd7ab98a17..c48ef77e48c1 100644
+--- a/compiler-rt/lib/asan/asan_win.cpp
++++ b/compiler-rt/lib/asan/asan_win.cpp
+@@ -173,7 +173,9 @@ void InitializePlatformInterceptors() {
+   ASAN_INTERCEPT_FUNC(__C_specific_handler);
+ #else
+   ASAN_INTERCEPT_FUNC(_except_handler3);
++#if ASAN_DYNAMIC || !defined(__MINGW32__)
+   ASAN_INTERCEPT_FUNC(_except_handler4);
++#endif
+ #endif
+ 
+   // Try to intercept kernel32!RaiseException, and if that fails, intercept
+diff --git a/compiler-rt/test/asan/Unit/lit.site.cfg.py.in b/compiler-rt/test/asan/Unit/lit.site.cfg.py.in
+index 638e1dedfc1d..4aa963790b48 100644
+--- a/compiler-rt/test/asan/Unit/lit.site.cfg.py.in
++++ b/compiler-rt/test/asan/Unit/lit.site.cfg.py.in
+@@ -48,6 +48,10 @@ config.test_exec_root = os.path.join("@COMPILER_RT_BINARY_DIR@",
+ 
+ config.test_source_root = config.test_exec_root
+ 
++target_is_msvc = bool(re.match(r'.*-windows-msvc$', config.target_triple))
++if config.host_os == 'Windows' and not @ASAN_TEST_DYNAMIC@ and not target_is_msvc:
++  config.unsupported = True
++
+ # When LLVM_ENABLE_PER_TARGET_RUNTIME_DIR=on, the initial value of
+ # config.compiler_rt_libdir (COMPILER_RT_RESOLVED_LIBRARY_OUTPUT_DIR) has the
+ # host triple as the trailing path component. The value is incorrect for i386
+diff --git a/compiler-rt/test/asan/lit.cfg.py b/compiler-rt/test/asan/lit.cfg.py
+index 10fe57670ad4..a3ffdda90bcc 100644
+--- a/compiler-rt/test/asan/lit.cfg.py
++++ b/compiler-rt/test/asan/lit.cfg.py
+@@ -244,6 +244,9 @@ else:
+ if config.host_os not in ['Linux', 'Darwin', 'FreeBSD', 'SunOS', 'Windows', 'NetBSD']:
+   config.unsupported = True
+ 
++if config.host_os == 'Windows' and not config.asan_dynamic and not target_is_msvc:
++  config.unsupported = True
++
+ if not config.parallelism_group:
+   config.parallelism_group = 'shadow-memory'
+ 
+diff --git a/llvm/utils/lit/lit/formats/googletest.py b/llvm/utils/lit/lit/formats/googletest.py
+index 8209f503a1b3..fff7c7c6580d 100644
+--- a/llvm/utils/lit/lit/formats/googletest.py
++++ b/llvm/utils/lit/lit/formats/googletest.py
+@@ -28,6 +28,9 @@ class GoogleTest(TestFormat):
+         self.run_under = run_under
+ 
+     def get_num_tests(self, path, litConfig, localConfig):
++        if localConfig.unsupported:
++            return 0
++
+         list_test_cmd = self.prepareCmd(
+             [path, '--gtest_list_tests', '--gtest_filter=-*DISABLED_*'])
+         try:
+@@ -132,6 +135,9 @@ class GoogleTest(TestFormat):
+         if litConfig.noExecute:
+             return lit.Test.PASS, ''
+ 
++        if test.config.unsupported:
++            return lit.Test.UNSUPPORTED, ''
++
+         def get_shard_header(shard_env):
+             shard_envs = ' '.join([k + '=' + v for k, v in shard_env.items()])
+             return f"Script(shard):\n--\n%s %s\n--\n" % (shard_envs, ' '.join(cmd))
+-- 
+2.34.1
+
