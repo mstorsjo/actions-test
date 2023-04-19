@@ -5,10 +5,16 @@ on:
 jobs:
   test-libcxx:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - i686
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-20230419-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-20230419-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -97,10 +103,16 @@ jobs:
 
   test-compiler-rt:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - i686
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-20230419-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-20230419-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -144,7 +156,7 @@ jobs:
             -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
-            -DCMAKE_C_COMPILER_TARGET=x86_64-w64-windows-gnu `
+            -DCMAKE_C_COMPILER_TARGET=${{matrix.arch}}-w64-windows-gnu `
             -DCOMPILER_RT_DEFAULT_TARGET_ONLY=TRUE `
             -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE `
             -DLLVM_CONFIG_PATH="$Env:LLVM_CONFIG" `
