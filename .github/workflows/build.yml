@@ -24,6 +24,22 @@ jobs:
           # dpkg --add-architecture i386 to install 32 bit wine fails currently
           sudo apt-get update && sudo apt-get install wine64-development
           wine64 wineboot
+      - name: Set up wine-arm64
+        if: matrix.arch == 'aarch64'
+        run: |
+          docker pull linaro/wine-arm64
+          echo "#!/bin/sh" > wine-arm64
+          echo "EXE=\"\$1\"" >> wine-arm64
+          echo "shift" >> wine-arm64
+          echo "case \"\$EXE\" in" >> wine-arm64
+          echo "/*) BASE=\"\$(dirname \"\$EXE\")\" ;;" >> wine-arm64
+          echo "*) BASE=\"\$(pwd)\"; EXE=\"\$BASE/\$EXE\" ;;" >> wine-arm64
+          echo "esac" >> wine-arm64
+          echo "docker run --rm -v \"\$BASE:\$BASE\" linaro/wine-arm64 wine-arm64 \"\$EXE\" \"\$@\"" >> wine-arm64
+          chmod a+x wine-arm64
+          sudo mkdir -p /opt/wine-arm64/bin
+          sudo mv wine-arm64 /opt/wine-arm64/bin
+          echo /opt/wine-arm64/bin >> $GITHUB_PATH
       - name: Unpack cross toolchain
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-ucrt-ubuntu-18.04-x86_64.tar.xz
@@ -47,15 +63,22 @@ jobs:
           # Make sure we exit in a reasonable time instead of waiting for
           # the whole github actions timeout of 6h before exiting.
           ulimit -t 180
-          if [ "${{matrix.arch}}" = "x86_64" ]; then
-              ARGS="--target-exec=wine64 --samples=../fate-samples"
-          fi
-          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl $ARGS
+          case "${{matrix.arch}}" in
+          x86_64)
+              ARGS="--target-exec=wine64"
+              ;;
+          aarch64)
+              ARGS="--target-exec=wine-arm64"
+              ;;
+          esac
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32- --enable-gpl --samples=../fate-samples $ARGS
           make -j$(nproc)
-          if [ "${{matrix.arch}}" = "x86_64" ]; then
+          case "${{matrix.arch}}" in
+          x86_64|aarch64)
               make fate-rsync
               make -j$(nproc) fate
-          fi
+              ;;
+          esac
 
   # Test building ffmpeg for natively on x86_64 Windows and run its tests,
   # to find cases of compiler bugs don't show up as failed asserts in the
