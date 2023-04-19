@@ -16,7 +16,7 @@
 
 set -e
 
-CFGUARD_CFLAGS=
+CFGUARD_CFLAGS="-mguard=cf"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -72,14 +72,8 @@ fi
 for arch in $ARCHS; do
     CMAKEFLAGS=""
     case $arch in
-    i686)
-        ;;
     x86_64)
         CMAKEFLAGS="$CMAKEFLAGS -DLIBOMP_ASMFLAGS=-m64"
-        ;;
-    *)
-        # Not supported
-        continue
         ;;
     esac
 

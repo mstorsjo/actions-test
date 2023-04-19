@@ -18,7 +18,7 @@ set -e
 
 LLVM_ARGS=""
 MINGW_ARGS=""
-CFGUARD_ARGS="--disable-cfguard"
+CFGUARD_ARGS="--enable-cfguard"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -68,11 +68,11 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo "$0 [--enable-asserts] [--disable-dylib] [--full-llvm] [--with-python] [--symlink-projects] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] dest"
+    echo "$0 [--enable-asserts] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] dest"
     exit 1
 fi
 
-for dep in git curl cmake; do
+for dep in git cmake; do
     if ! command -v $dep >/dev/null; then
         echo "$dep not installed. Please install it and retry" 1>&2
         exit 1
@@ -96,5 +96,4 @@ fi
 ./build-libcxx.sh $PREFIX $CFGUARD_ARGS
 ./build-mingw-w64-libraries.sh $PREFIX $CFGUARD_ARGS
 ./build-compiler-rt.sh $PREFIX --build-sanitizers # CFGUARD_ARGS intentionally omitted
-./build-libssp.sh $PREFIX $CFGUARD_ARGS
 ./build-openmp.sh $PREFIX $CFGUARD_ARGS

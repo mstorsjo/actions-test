@@ -17,8 +17,8 @@
 set -e
 
 : ${LIBFFI_VERSION:=v3.4.2}
-: ${PYTHON_VERSION:=v3.10.5}
-: ${PYTHON_VERSION_MINGW:=2ff76a3ae3d1416c3564d5a9344009843ce3ddc9}
+: ${PYTHON_VERSION:=v3.10.9}
+: ${PYTHON_VERSION_MINGW:=101c2b0778f1a02169d7d649511e7b75fb93fbfa}
 
 unset HOST
 
@@ -141,8 +141,8 @@ mkdir -p $BUILDDIR
 cd $BUILDDIR
 BUILD=$(../config.guess) # Python configure requires build triplet for cross compilation
 
-export CC=$HOST-clang
-export CXX=$HOST-clang++
+export CC=$HOST-gcc
+export CXX=$HOST-g++
 
 ../configure --prefix="$PREFIX" --build=$BUILD --host=$HOST \
     CFLAGS="-I$PREFIX/include" CXXFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib -Wl,-s" \
