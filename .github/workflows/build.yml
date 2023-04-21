@@ -57,12 +57,16 @@ jobs:
           sudo apt-get update && sudo apt-get install ninja-build
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
-          tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
+          TAG=nightly
+          DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-$(uname -m)
+          NAME=llvm-mingw-$TAG-ucrt-$DISTRO
+          mv llvm-mingw $NAME
+          tar -Jcf ../$NAME.tar.xz $NAME
       - uses: actions/upload-artifact@v3
         with:
           name: linux-toolchain
           path: |
-            llvm-mingw-linux.tar.xz
+            llvm-mingw-*.tar.xz
           retention-days: 7
 
   # Build a cross compiler for Linux, targeting Windows, with assertions enabled.
@@ -130,12 +134,15 @@ jobs:
           # form.
           MACOS_REDIST=1 LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           cd install
-          tar -Jcf ../llvm-mingw-macos.tar.xz llvm-mingw
+          TAG=nightly
+          NAME=llvm-mingw-$TAG-ucrt-macos-universal
+          mv llvm-mingw $NAME
+          tar -Jcf ../$NAME.tar.xz $NAME
       - uses: actions/upload-artifact@v3
         with:
           name: macos-toolchain
           path: |
-            llvm-mingw-macos.tar.xz
+            llvm-mingw-*.tar.xz
           retention-days: 7
 
   # Test building the toolchain on msys2 (in the mingw64 and clang64
@@ -204,9 +211,9 @@ jobs:
           name: linux-toolchain
       - name: Unpack cross toolchain
         run: |
-          tar -Jxf llvm-mingw-linux.tar.xz
-          rm llvm-mingw-linux.tar.xz
-          sudo mv llvm-mingw /opt/llvm-mingw
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v3
       - name: Fetch version
@@ -222,12 +229,15 @@ jobs:
           sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
           ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw-${{matrix.arch}} ${{matrix.arch}} --with-python
           cd install
-          zip -9rq ../llvm-mingw-${{matrix.arch}}.zip llvm-mingw-${{matrix.arch}}
+          TAG=nightly
+          NAME=llvm-mingw-$TAG-ucrt-${{matrix.arch}}
+          mv llvm-mingw-${{matrix.arch}} $NAME
+          zip -9rq ../$NAME.zip $NAME
       - uses: actions/upload-artifact@v3
         with:
           name: windows-${{matrix.arch}}-toolchain
           path: |
-            llvm-mingw-${{matrix.arch}}.zip
+            llvm-mingw-*.zip
           retention-days: 7
 
   # Run llvm-mingw's tests on x86_64 (and i686) with the cross-built x86_64
