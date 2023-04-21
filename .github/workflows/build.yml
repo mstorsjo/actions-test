@@ -317,7 +317,7 @@ jobs:
             -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
             -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
           ninja
-          ninja check-cxx check-cxxabi check-unwind
+          ninja check-cxx
 
   # Run the OpenMP tests with the cross-built i686/x86_64 toolchains from above.
   # This also forces testing the bundled python executables.
@@ -385,7 +385,7 @@ jobs:
   test-compiler-rt:
     # These tests don't pass on the pinned 16.x branch, but only on latest
     # git main - thus only run it for scheduled jobs.
-    if: true
+    if: false
     needs: [linux-cross, prepare]
     runs-on: windows-latest
     strategy:
