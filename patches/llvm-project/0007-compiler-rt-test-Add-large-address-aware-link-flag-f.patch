@@ -1,0 +1,38 @@
+From e853c9d4141de39269fec5e252dbbb3ab2bf323b Mon Sep 17 00:00:00 2001
+From: Alvin Wong <alvin@alvinhc.com>
+Date: Sat, 22 Apr 2023 22:18:21 +0300
+Subject: [PATCH 7/7] [compiler-rt][test] Add `--large-address-aware` link flag
+ for MinGW
+
+The interception tests rely on the test binary being large address
+aware. This has already been set for MSVC builds. Now we do the same for
+MinGW.
+
+This fixes the interception unit tests for i686-w64-windows-gnu target.
+
+Reviewed By: mstorsjo
+
+Differential Revision: https://reviews.llvm.org/D148996
+---
+ compiler-rt/lib/interception/tests/CMakeLists.txt | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/compiler-rt/lib/interception/tests/CMakeLists.txt b/compiler-rt/lib/interception/tests/CMakeLists.txt
+index 37bf99edaf06..688edc3750f5 100644
+--- a/compiler-rt/lib/interception/tests/CMakeLists.txt
++++ b/compiler-rt/lib/interception/tests/CMakeLists.txt
+@@ -39,6 +39,11 @@ if(MSVC)
+     -Wl,-nodefaultlib:libcmt,-defaultlib:msvcrt,-defaultlib:oldnames
+     )
+ endif()
++if(MINGW)
++  list(APPEND INTERCEPTION_TEST_LINK_FLAGS_COMMON
++    -Wl,--large-address-aware
++    )
++endif()
+ list(APPEND INTERCEPTION_TEST_LINK_FLAGS_COMMON -g)
+ 
+ if(NOT MSVC)
+-- 
+2.34.1
+
