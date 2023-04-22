@@ -169,4 +169,4 @@ jobs:
             -DCOMPILER_RT_BUILD_ORC=OFF
           cp lib\windows\* c:\llvm-mingw\lib\clang\17\lib\windows
           ninja
-          ninja ${{ (matrix.arch == 'x86_64') && 'check-asan-dynamic check-interception' || '' }} check-builtins check-profile check-sanitizer check-ubsan
+          ninja check-compiler-rt
