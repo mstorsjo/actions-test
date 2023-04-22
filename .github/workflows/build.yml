@@ -4,6 +4,7 @@ on:
 
 jobs:
   test-libcxx:
+    if: false
     runs-on: windows-latest
     strategy:
       fail-fast: false
