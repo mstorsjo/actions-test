@@ -1,7 +1,7 @@
-From f3063294fa470bf5bf6e48cfbcd4dd77fa46f5ec Mon Sep 17 00:00:00 2001
+From 6ac5fa24a77804482ae627f1d0c8fc8d655f40da Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
 Date: Tue, 11 Apr 2023 00:32:47 +0300
-Subject: [PATCH 2/7] [compiler-rt] [test] [builtins] Set
+Subject: [PATCH 1/8] [compiler-rt] [test] [builtins] Set
  __COMPAT_LAYER=RunAsInvoker when running tests
 
 Set __COMPAT_LAYER=RunAsInvoker to avoid the error

@@ -1,7 +1,7 @@
-From c0beea6f008a0ddb4d1eedd2eb39942c07c6927a Mon Sep 17 00:00:00 2001
+From ee30e0c660d1835eb8b4567d0243fd047748ed13 Mon Sep 17 00:00:00 2001
 From: Alvin Wong <alvin@alvinhc.com>
 Date: Sat, 22 Apr 2023 22:17:25 +0300
-Subject: [PATCH 5/7] [compiler-rt][interception][win] Add more assembly
+Subject: [PATCH 4/8] [compiler-rt][interception][win] Add more assembly
  patterns
 
 These assembly patterns are needed to intercept some libc++ and

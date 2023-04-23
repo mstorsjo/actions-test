@@ -1,0 +1,29 @@
+From cfd3ea46159f7a34f51983353dcbeef53ea70283 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sun, 23 Apr 2023 22:51:59 +0300
+Subject: [PATCH 7/8] [compiler-rt] [test] Add an .exe suffix for unit test
+ executables on MinGW too
+
+In practice, an .exe suffix is added implicitly, but the build
+system thinks it is generating a file without a suffix, causing
+various subtle cases of confusion.
+---
+ compiler-rt/cmake/Modules/AddCompilerRT.cmake | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler-rt/cmake/Modules/AddCompilerRT.cmake b/compiler-rt/cmake/Modules/AddCompilerRT.cmake
+index 045221312a82..752ce2ff1c8f 100644
+--- a/compiler-rt/cmake/Modules/AddCompilerRT.cmake
++++ b/compiler-rt/cmake/Modules/AddCompilerRT.cmake
+@@ -508,7 +508,7 @@ function(add_compiler_rt_test test_suite test_name arch)
+   set(output_dir "${output_dir}/${CMAKE_CFG_INTDIR}")
+   file(MAKE_DIRECTORY "${output_dir}")
+   set(output_bin "${output_dir}/${test_name}")
+-  if(MSVC)
++  if(WIN32)
+     set(output_bin "${output_bin}.exe")
+   endif()
+ 
+-- 
+2.34.1
+

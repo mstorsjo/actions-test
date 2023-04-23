@@ -1,7 +1,7 @@
-From b3e366aba0dcedf50633003d22a6db873dd3834b Mon Sep 17 00:00:00 2001
+From d8cbe06cf680a59e91a901cc7f4ba872085d0e5f Mon Sep 17 00:00:00 2001
 From: Alvin Wong <alvin@alvinhc.com>
 Date: Sat, 22 Apr 2023 22:17:48 +0300
-Subject: [PATCH 6/7] [compiler-rt][asan][win] Intercept exceptions for i686
+Subject: [PATCH 5/8] [compiler-rt][asan][win] Intercept exceptions for i686
  MinGW
 
 The i686-w64-windows-gnu target does not use SEH (which MSVC uses),
