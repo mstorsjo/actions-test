@@ -1,0 +1,46 @@
+name: Builds
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  # For scheduled builds, get the commit ids of the latest versions to build.
+  #
+  # Doing this as one single job, which then propagates the information further
+  # to the other jobs, so that all build jobs in one workflow builds the exact
+  # same version. This allows trusting builds without assertions enabled
+  # slightly more, when we know a separate build of the same version but with
+  # assertions enabled, has passed some amount of tests.
+  prepare:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    runs-on: ubuntu-latest
+    outputs:
+      LLVM_VERSION: ${{steps.get-versions.outputs.LLVM_VERSION}}
+      MINGW_W64_VERSION: ${{steps.get-versions.outputs.MINGW_W64_VERSION}}
+      PYTHON_VERSION_MINGW: ${{steps.get-versions.outputs.PYTHON_VERSION_MINGW}}
+      TAG: ${{steps.get-tag.outputs.TAG}}
+    steps:
+      - name: Select build tag
+        id: get-tag
+        run: |
+          if ${{github.event_name == 'schedule'}}; then
+              TAG=nightly
+          else
+              TAG=$(date +%Y%m%d)
+          fi
+          echo TAG=$TAG >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
+          date
+          TZ=UTC date
+      - name: Check latest version
+        if: true
+        id: get-versions
+        run: |
+          echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> $GITHUB_OUTPUT
+          echo MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> $GITHUB_OUTPUT
+          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.10.9$' | awk '{print $1}') >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
