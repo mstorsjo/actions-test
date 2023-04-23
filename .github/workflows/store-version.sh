@@ -10,4 +10,6 @@ if [ -n "$LLVM_VERSION" ]; then
             echo "$i=$val" >> $OUT
         fi
     done
+else
+    echo "Regular, pinned build at $(TZ=UTC date +%Y-%m-%d)" >> $OUT
 fi
