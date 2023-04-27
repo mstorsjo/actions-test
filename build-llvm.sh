@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-16.0.0}
+: ${LLVM_VERSION:=llvmorg-16.0.2}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -122,16 +122,19 @@ fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0
 
-case $(uname) in
-MINGW*)
-    TARGET_WINDOWS=1
-    ;;
-*)
-    if [ -n "$HOST" ]; then
+if [ -n "$HOST" ]; then
+    case $HOST in
+    *-mingw32)
         TARGET_WINDOWS=1
-    fi
-    ;;
-esac
+        ;;
+    esac
+else
+    case $(uname) in
+    MINGW*)
+        TARGET_WINDOWS=1
+        ;;
+    esac
+fi
 
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
@@ -146,8 +149,6 @@ else
     MINGW*)
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
-    *)
-        ;;
     esac
     BUILDCMD=make
 fi
@@ -155,10 +156,21 @@ fi
 CMAKEFLAGS="$LLVM_CMAKEFLAGS"
 
 if [ -n "$HOST" ]; then
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
+    case $HOST in
+    *-mingw32)
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
+        ;;
+    *-linux*)
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Linux"
+        ;;
+    *)
+        echo "Unrecognized host $HOST"
+        exit 1
+        ;;
+    esac
 
     native=""
     for dir in llvm-project/llvm/build/bin llvm-project/llvm/build-asserts/bin; do
@@ -187,7 +199,7 @@ if [ -n "$HOST" ]; then
 
     BUILDDIR=$BUILDDIR-$HOST
 
-    if [ -n "$WITH_PYTHON" ]; then
+    if [ -n "$WITH_PYTHON" ] && [ -n "$TARGET_WINDOWS" ]; then
         # The python3-config script requires executing with bash. It outputs
         # an extra trailing space, which the extra 'echo' layer gets rid of.
         EXT_SUFFIX="$(echo $(bash $PREFIX/python/bin/python3-config --extension-suffix))"

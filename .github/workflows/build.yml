@@ -40,7 +40,7 @@ jobs:
         run: |
           echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> $GITHUB_OUTPUT
           echo MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> $GITHUB_OUTPUT
-          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.10.9$' | awk '{print $1}') >> $GITHUB_OUTPUT
+          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.10.11$' | awk '{print $1}') >> $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT
 
   # Build a cross compiler for Linux, targeting Windows.
@@ -57,7 +57,10 @@ jobs:
           TAG: ${{needs.prepare.outputs.TAG}}
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          # Skip dynamic library dependencies that might make it harder to
+          # run the binaries on other distros (and that have little use within
+          # llvm-mingw).
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-$(uname -m)
@@ -67,6 +70,47 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: linux-toolchain
+          path: |
+            llvm-mingw-*.tar.xz
+          retention-days: 7
+
+  # Crosscompile the toolchain for running on Linux on a different architecture, bundle the runtime
+  # libraries that were built in the 'linux' step above.
+  linux-cross-aarch64:
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    needs: [linux, prepare]
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        env:
+          LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
+          MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
+        run: |
+          sudo apt-get update && sudo apt-get install ninja-build g++-aarch64-linux-gnu
+          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb --no-runtimes --host=aarch64-linux-gnu
+          .github/workflows/store-version.sh install/llvm-mingw/versions.txt
+      - uses: actions/download-artifact@v3
+        with:
+          name: linux-toolchain
+      - name: Unpack native toolchain
+        run: |
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw* llvm-mingw-native
+      - name: Assemble the cross-built toolchain
+        env:
+          TAG: ${{needs.prepare.outputs.TAG}}
+        run: |
+          ./prepare-cross-toolchain-unix.sh $(pwd)/llvm-mingw-native $(pwd)/install/llvm-mingw
+          cd install
+          DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-aarch64
+          NAME=llvm-mingw-$TAG-ucrt-$DISTRO
+          mv llvm-mingw $NAME
+          tar -Jcf ../$NAME.tar.xz $NAME
+      - uses: actions/upload-artifact@v3
+        with:
+          name: linux-aarch64-toolchain
           path: |
             llvm-mingw-*.tar.xz
           retention-days: 7
@@ -90,7 +134,10 @@ jobs:
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb --enable-asserts
+          # Skip dynamic library dependencies that might make it harder to
+          # run the binaries on other distros (and that have little use within
+          # llvm-mingw).
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb --enable-asserts
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
@@ -175,7 +222,7 @@ jobs:
   # Use the Linux cross compilers built in the first step to cross compile
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
-  linux-cross:
+  linux-cross-windows:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     needs: [linux, prepare]
     runs-on: ubuntu-latest
@@ -223,7 +270,7 @@ jobs:
   # toolchain from above.
   test-toolchain:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux-cross]
+    needs: [linux-cross-windows]
     runs-on: windows-latest
     defaults:
       run:
@@ -271,7 +318,7 @@ jobs:
     # The libcxxabi and libunwind tests don't pass on the pinned 16.x branch,
     # only on git main.
     if: false
-    needs: [linux-cross, prepare]
+    needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -326,7 +373,7 @@ jobs:
   test-openmp:
     # Only running these tests in scheduled builds.
     if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux-cross, prepare]
+    needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -388,7 +435,7 @@ jobs:
     # These tests don't pass on the pinned 16.x branch, but only on latest
     # git main - thus only run it for scheduled jobs.
     if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux-cross, prepare]
+    needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -515,7 +562,7 @@ jobs:
   # for scheduled builds.
   test-ffmpeg:
     if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux-cross]
+    needs: [linux-cross-windows]
     runs-on: windows-latest
     defaults:
       run:
@@ -564,14 +611,15 @@ jobs:
     if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
     permissions:
       contents: write
-    needs: [linux, macos, linux-cross, test-toolchain, linux-test-cross-build-ffmpeg, test-ffmpeg]
+    needs: [linux, linux-cross-aarch64, macos, linux-cross-windows, test-toolchain, linux-test-cross-build-ffmpeg, test-ffmpeg]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v3
       - name: Rearrange files
         run: |
-          mv windows-*-toolchain/*.zip linux-toolchain/*.tar.xz macos-toolchain/*.tar.xz .
+          rm -rf linux-asserts*
+          mv *-toolchain/*.zip *-toolchain/*.tar.xz .
       - name: Upload binaries
         env:
           GITHUB_TOKEN: ${{github.token}}
