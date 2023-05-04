@@ -3,118 +3,12 @@ on:
   push:
 
 jobs:
-  test-libcxx:
-    if: false
+  test-llvm:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - x86_64
-          - i686
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-20230419-${{matrix.arch}}.zip
-          Expand-Archive llvm-mingw-*.zip -DestinationPath .
-          del llvm-mingw-*.zip
-          mv llvm-mingw-* c:\llvm-mingw
-          echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v3
-      - name: Checkout llvm-project
-        run: |
-          git config --global user.name "LLVM MinGW"
-          git config --global user.email root@localhost
-          bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      - name: Build and test libcxx
-        run: |
-          cd llvm-project
-          mkdir build
-          cd build
-          cmake ../runtimes `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DLIBCXX_ENABLE_WERROR=YES `
-            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
-            -DLIBCXX_CXX_ABI=libcxxabi `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++ `
-            -DLIBCXXABI_ENABLE_SHARED=NO `
-            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
-            -DLIBCXX_USE_COMPILER_RT=YES `
-            -DLIBCXXABI_USE_COMPILER_RT=YES `
-            -DLIBUNWIND_USE_COMPILER_RT=YES `
-            -DLIBCXXABI_USE_LLVM_UNWINDER=YES `
-            -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT"
-          ninja
-          ninja check-unwind
-          ninja check-cxxabi
-
-  test-openmp:
-    runs-on: windows-latest
-    if: false
-    steps:
-      - name: Unpack toolchain
-        run: |
-          curl -LO https://martin.st/temp/llvm-mingw-20230419-x86_64.zip
-          Expand-Archive llvm-mingw-*.zip -DestinationPath .
-          del llvm-mingw-*.zip
-          mv llvm-mingw-* c:\llvm-mingw
-          echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v3
-      - name: Checkout llvm-project
-        run: |
-          git config --global user.name "LLVM MinGW"
-          git config --global user.email root@localhost
-          bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      - name: Build test executables
-        run: |
-          cd llvm-project
-          mkdir build-tools
-          cd build-tools
-          cmake ../llvm `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DLLVM_TARGETS_TO_BUILD=X86 `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++
-          ninja not FileCheck
-          echo "TOOLS=$PWD\bin" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build and test OpenMP
-        run: |
-          cd llvm-project
-          mkdir build-openmp
-          cd build-openmp
-          cmake ../openmp `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DPYTHON_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DOPENMP_LLVM_TOOLS_DIR="$Env:TOOLS" `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++ `
-            -DCMAKE_ASM_MASM_COMPILER=llvm-ml `
-            -DLIBOMP_ASMFLAGS=-m64
-          ninja
-          ninja check-openmp
-
-  test-compiler-rt:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - x86_64
-          - i686
-    steps:
-      - name: Unpack toolchain
-        run: |
-          curl -LO https://martin.st/temp/llvm-mingw-20230419-${{matrix.arch}}.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -128,45 +22,51 @@ jobs:
           git config --global user.email root@localhost
           git config --global core.autocrlf false
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      - name: Build test executables
+      - name: Build and run tests
         run: |
           cd llvm-project
-          mkdir build-tools
-          cd build-tools
+          mkdir build
+          cd build
+          cmake ../llvm `
+            -G Ninja `
+            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DLLVM_TARGETS_TO_BUILD=X86 `
+            -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" `
+            -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=OFF `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++
+          ninja
+          ninja check
+
+  test-llvm-msvc:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        forward:
+          - NO
+          - YES
+    steps:
+      - uses: actions/checkout@v3
+      - name: Checkout llvm-project
+        run: |
+          git config --global user.name "LLVM MinGW"
+          git config --global user.email root@localhost
+          git config --global core.autocrlf false
+          bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build and run tests
+        run: |
+          cd llvm-project
+          mkdir build
+          cd build
           cmake ../llvm `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DLLVM_TARGETS_TO_BUILD=X86 `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++
-          ninja not FileCheck llvm-config KillTheDoctor count
-          echo "LLVM_CONFIG=$PWD\bin\llvm-config.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CMAKE_DIR=$PWD\lib\cmake\llvm" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build and test compiler-rt
-        # Skipping libfuzzer; all tests fail since the clang mingw driver
-        # doesn't support -fsanitize=fuzzer.
-        # Skipping ORC; the tests rely on llvm-jitlink being available,
-        # which requires building a large part of LLVM among the test
-        # tools above, and jitlink requires an MSVC toolchain to be available.
-        run: |
-          cd llvm-project
-          mkdir build-compiler-rt
-          cd build-compiler-rt
-          cmake ../compiler-rt `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++ `
-            -DCMAKE_C_COMPILER_TARGET=${{matrix.arch}}-w64-windows-gnu `
-            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=TRUE `
-            -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE `
-            -DLLVM_CONFIG_PATH="$Env:LLVM_CONFIG" `
-            -DLLVM_CMAKE_DIR="$Env:CMAKE_DIR" `
-            -DSANITIZER_CXX_ABI=libc++ `
-            -DCOMPILER_RT_INCLUDE_TESTS=ON `
-            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF `
-            -DCOMPILER_RT_BUILD_ORC=OFF
-          cp lib\windows\* c:\llvm-mingw\lib\clang\17\lib\windows
+            -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" `
+            -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=${{matrix.forward}}
           ninja
-          ninja check-compiler-rt
+          ninja check
