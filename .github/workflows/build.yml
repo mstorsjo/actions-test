@@ -42,6 +42,7 @@ jobs:
             -DCLANG_DEFAULT_CXX_STDLIB=libc++ `
             -DCLANG_DEFAULT_LINKER=lld `
             -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE `
-            -DSANITIZER_CXX_ABI=libc++
+            -DSANITIZER_CXX_ABI=libc++ `
+            -DLLDB_ENABLE_PYTHON=OFF
           ninja
           ninja check-lldb
