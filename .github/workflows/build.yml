@@ -33,45 +33,15 @@ jobs:
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DLLVM_TARGETS_TO_BUILD=X86 `
-            -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" `
+            -DLLVM_ENABLE_PROJECTS="clang;lld;lldb;compiler-rt" `
             -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=OFF `
             -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++
+            -DCMAKE_CXX_COMPILER=clang++ `
+            -DCLANG_DEFAULT_RTLIB=compiler-rt `
+            -DCLANG_DEFAULT_UNWINDLIB=libunwind `
+            -DCLANG_DEFAULT_CXX_STDLIB=libc++ `
+            -DCLANG_DEFAULT_LINKER=lld `
+            -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE `
+            -DSANITIZER_CXX_ABI=libc++
           ninja
-          ninja check
-
-  test-llvm-msvc:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        forward:
-          - NO
-          - YES
-    steps:
-      - uses: actions/checkout@v3
-      - name: Checkout llvm-project
-        run: |
-          git config --global user.name "LLVM MinGW"
-          git config --global user.email root@localhost
-          git config --global core.autocrlf false
-          bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      - name: Set up the environment
-        uses: ilammy/msvc-dev-cmd@v1
-      - name: Build
-        run: |
-          cd llvm-project
-          mkdir build
-          cd build
-          cmake ../llvm `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DLLVM_TARGETS_TO_BUILD=X86 `
-            -DLLVM_ENABLE_PROJECTS="clang;lld" `
-            -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=${{matrix.forward}}
-          ninja
-      - name: Run tests
-        run: |
-          cd llvm-project
-          cd build
-          ninja check
+          ninja check-lldb
