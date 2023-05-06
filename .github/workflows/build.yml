@@ -30,6 +30,7 @@ jobs:
           cmake ../llvm `
             -G Ninja `
             -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
+            -DLLDB_PYTHON_HOME=c:/llvm-mingw/python `
             -DCMAKE_BUILD_TYPE=Release `
             -DLLVM_TARGETS_TO_BUILD=X86 `
             -DLLVM_ENABLE_PROJECTS="clang;lld;lldb;compiler-rt" `
