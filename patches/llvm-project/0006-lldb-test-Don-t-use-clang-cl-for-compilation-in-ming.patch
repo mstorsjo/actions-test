@@ -1,0 +1,60 @@
+From ed16d64d9427984f2c3c0f5662cb457709f5e53c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 9 Jun 2022 08:19:26 +0000
+Subject: [PATCH 6/8] [lldb] [test] Don't use clang-cl for compilation in mingw
+ mode
+
+---
+ lldb/test/Shell/helper/build.py     | 9 ++++++++-
+ lldb/test/Shell/helper/toolchain.py | 1 +
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/lldb/test/Shell/helper/build.py b/lldb/test/Shell/helper/build.py
+index 55d871f2a040..e514e8a973f0 100755
+--- a/lldb/test/Shell/helper/build.py
++++ b/lldb/test/Shell/helper/build.py
+@@ -3,6 +3,7 @@
+ import argparse
+ import os
+ import platform
++import re
+ import shutil
+ import signal
+ import subprocess
+@@ -29,6 +30,12 @@ parser.add_argument('--arch',
+                     choices=['32', '64', 'host'],
+                     help='Specify the architecture to target.')
+ 
++parser.add_argument('--target',
++                    metavar='target',
++                    dest='target',
++                    required=True,
++                    help='Specify the target triple.')
++
+ parser.add_argument('--compiler',
+                     metavar='compiler',
+                     dest='compiler',
+@@ -196,7 +203,7 @@ def find_toolchain(compiler, tools_dir):
+         return ('clang', find_executable('clang++', tools_dir))
+     if compiler == 'any':
+         priorities = []
+-        if sys.platform == 'win32':
++        if sys.platform == 'win32' and not re.match(r'.*-windows-gnu$', args.target):
+             priorities = ['clang-cl', 'msvc', 'clang', 'gcc']
+         else:
+             priorities = ['clang', 'gcc', 'clang-cl']
+diff --git a/lldb/test/Shell/helper/toolchain.py b/lldb/test/Shell/helper/toolchain.py
+index 69b55b90751a..4f4ef75ec8cd 100644
+--- a/lldb/test/Shell/helper/toolchain.py
++++ b/lldb/test/Shell/helper/toolchain.py
+@@ -35,6 +35,7 @@ def use_lldb_substitutions(config):
+     build_script = os.path.join(build_script, 'build.py')
+     build_script_args = [build_script,
+                         '--compiler=any', # Default to best compiler
++                        '--target=' + config.target_triple,
+                         '--arch=' + str(config.lldb_bitness)]
+     if config.lldb_lit_tools_dir:
+         build_script_args.append('--tools-dir={0}'.format(config.lldb_lit_tools_dir))
+-- 
+2.34.1
+

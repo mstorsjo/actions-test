@@ -1,0 +1,45 @@
+From dacc9532cbf3e258175be686a9d47b92322e597a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 5 May 2023 10:51:28 +0000
+Subject: [PATCH 2/8] [test] [ExecutionEngine] Skip the ExecutionEngine tests
+ on mingw targets
+
+These tests used to be supported (somewhat) for mingw targets,
+but since c42c67ad60449fe19949f2664c2a5878b3f72b7e, which made
+Orc the default JIT engine, these tests are failing. (That commit
+made most tests under the ExecutionEngine/MCJIT directory run with
+both "lli -jit-kind=mcjit" for explicitly running with MCJIT, and
+with just plain "lli" which defaults to Orc.)
+
+Orc doesn't seem to work for mingw targets; most tests fail with
+an undefined reference to the "__main" symbol.
+
+While fixing it would be better than just marking the tests as
+unsupported, this works as a stopgap measure, unblocking running
+the rest of the LLVM tests.
+
+Differential Revision: https://reviews.llvm.org/D149996
+---
+ llvm/test/ExecutionEngine/lit.local.cfg | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/llvm/test/ExecutionEngine/lit.local.cfg b/llvm/test/ExecutionEngine/lit.local.cfg
+index b00ef0dcbdf0..12618e534587 100644
+--- a/llvm/test/ExecutionEngine/lit.local.cfg
++++ b/llvm/test/ExecutionEngine/lit.local.cfg
+@@ -1,6 +1,12 @@
+ if config.root.native_target in ['Sparc', 'PowerPC', 'SystemZ', 'Hexagon', 'RISCV']:
+     config.unsupported = True
+ 
++# FIXME: Most tests fail for MinGW targets with Orc, where they do succeed
++# with the MCJIT backend; they fail with undefined references to the "__main"
++# symbol.
++if 'windows-gnu' in config.host_triple:
++    config.unsupported = True
++
+ # ExecutionEngine tests are not expected to pass in a cross-compilation setup.
+ if 'native' not in config.available_features:
+     config.unsupported = True
+-- 
+2.34.1
+

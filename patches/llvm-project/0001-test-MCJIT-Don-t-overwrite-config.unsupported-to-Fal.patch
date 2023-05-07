@@ -1,0 +1,50 @@
+From ecac1ba1dfc7df3661a8101659b390db598d170b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 5 May 2023 10:50:09 +0000
+Subject: [PATCH 1/8] [test] [MCJIT] Don't overwrite config.unsupported to
+ False
+
+An outer directory may have set config.unsupported to True for
+a different reason, separate from architecture concerns - we
+shouldn't force it back to False just because one criterion is
+fulfilled.
+
+This is a preparatory step before a second patch.
+
+Differential Revision: https://reviews.llvm.org/D149995
+---
+ llvm/test/ExecutionEngine/MCJIT/lit.local.cfg | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/llvm/test/ExecutionEngine/MCJIT/lit.local.cfg b/llvm/test/ExecutionEngine/MCJIT/lit.local.cfg
+index e2535ef1dbfd..185aeda325db 100644
+--- a/llvm/test/ExecutionEngine/MCJIT/lit.local.cfg
++++ b/llvm/test/ExecutionEngine/MCJIT/lit.local.cfg
+@@ -1,21 +1,16 @@
+ root = config.root
+ targets = root.targets
+-if ('X86' in targets) | ('AArch64' in targets) | ('ARM' in targets) | \
+-   ('Mips' in targets) | ('PowerPC' in targets) | ('SystemZ' in targets):
+-    config.unsupported = False
+-else:
++if not (('X86' in targets) | ('AArch64' in targets) | ('ARM' in targets) | \
++   ('Mips' in targets) | ('PowerPC' in targets) | ('SystemZ' in targets)):
+     config.unsupported = True
+ 
+ # FIXME: autoconf and cmake produce different arch names. We should normalize
+ # them before getting here.
+ if root.host_arch not in ['i386', 'x86', 'x86_64', 'AMD64',
+-                          'AArch64', 'ARM', 'Mips',
++                          'AArch64', 'ARM', 'armv7', 'Mips',
+                           'PowerPC', 'ppc64', 'ppc64le', 'SystemZ']:
+     config.unsupported = True
+ 
+-if 'armv7' in root.host_arch:
+-    config.unsupported = False
+-
+ if 'i386-apple-darwin' in root.target_triple:
+     config.unsupported = True
+ 
+-- 
+2.34.1
+

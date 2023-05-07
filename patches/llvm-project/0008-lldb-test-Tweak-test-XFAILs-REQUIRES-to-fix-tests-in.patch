@@ -1,0 +1,82 @@
+From 4fac757e0262ff40f9688ce05f13f89b25cd9853 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sun, 7 May 2023 21:57:46 +0000
+Subject: [PATCH 8/8] [lldb] [test] Tweak test XFAILs/REQUIRES to fix tests in
+ mingw mode
+
+---
+ lldb/test/Shell/Breakpoint/case-insensitive.test             | 5 +++++
+ lldb/test/Shell/Expr/TestIRMemoryMapWindows.test             | 2 +-
+ lldb/test/Shell/Expr/nodefaultlib.cpp                        | 5 +++++
+ .../Shell/Process/Windows/exception_access_violation.cpp     | 2 +-
+ lldb/test/Shell/Process/Windows/process_load.cpp             | 2 +-
+ 5 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/lldb/test/Shell/Breakpoint/case-insensitive.test b/lldb/test/Shell/Breakpoint/case-insensitive.test
+index f6330b5f4320..5d588158bcf7 100644
+--- a/lldb/test/Shell/Breakpoint/case-insensitive.test
++++ b/lldb/test/Shell/Breakpoint/case-insensitive.test
+@@ -1,5 +1,10 @@
+ # REQUIRES: system-windows
+ 
++# TODO: For mingw targets, the main() function produces an implicit reference
++# to the __main function, which isn't provided in a --nodefaultlib (--nostdlib)
++# setup.
++# XFAIL: windows-gnu
++
+ # RUN: %build %p/Inputs/case-sensitive.c --nodefaultlib -o %t
+ # RUN: lldb-test breakpoints %t %s | FileCheck %s
+ 
+diff --git a/lldb/test/Shell/Expr/TestIRMemoryMapWindows.test b/lldb/test/Shell/Expr/TestIRMemoryMapWindows.test
+index ae29492c9ccc..65d802d23ce5 100644
+--- a/lldb/test/Shell/Expr/TestIRMemoryMapWindows.test
++++ b/lldb/test/Shell/Expr/TestIRMemoryMapWindows.test
+@@ -1,4 +1,4 @@
+-# REQUIRES: system-windows
++# REQUIRES: system-windows && windows-msvc
+ 
+ # RUN: %clang_cl_host /Zi /GS- %p/Inputs/call-function.cpp /c /o %t.obj
+ # RUN: %msvc_link /debug:full %t.obj /out:%t
+diff --git a/lldb/test/Shell/Expr/nodefaultlib.cpp b/lldb/test/Shell/Expr/nodefaultlib.cpp
+index 23279ff43078..66f31203f2cb 100644
+--- a/lldb/test/Shell/Expr/nodefaultlib.cpp
++++ b/lldb/test/Shell/Expr/nodefaultlib.cpp
+@@ -7,6 +7,11 @@
+ // XFAIL: system-netbsd || system-freebsd || system-darwin
+ // XFAIL: windows-msvc && !dia-sdk
+ 
++// TODO: For mingw targets, the main() function produces an implicit reference
++// to the __main function, which isn't provided in a --nodefaultlib (--nostdlib)
++// setup.
++// XFAIL: windows-gnu
++
+ // RUN: %build %s --nodefaultlib -o %t
+ // RUN: %lldb %t -o "b main" -o run -o "expression call_me(5, 6)" -o exit \
+ // RUN:   | FileCheck %s
+diff --git a/lldb/test/Shell/Process/Windows/exception_access_violation.cpp b/lldb/test/Shell/Process/Windows/exception_access_violation.cpp
+index 4835b498ee4d..57aa58353976 100644
+--- a/lldb/test/Shell/Process/Windows/exception_access_violation.cpp
++++ b/lldb/test/Shell/Process/Windows/exception_access_violation.cpp
+@@ -1,6 +1,6 @@
+ // clang-format off
+ 
+-// REQUIRES: system-windows
++// REQUIRES: system-windows && windows-msvc
+ // RUN: %build --compiler=clang-cl -o %t.exe -- %s
+ // RUN: env LLDB_USE_NATIVE_PDB_READER=1 %lldb -f %t.exe -o "run" -- write | FileCheck --check-prefix=WRITE %s
+ // RUN: env LLDB_USE_NATIVE_PDB_READER=1 %lldb -f %t.exe -o "run" -- read | FileCheck --check-prefix=READ %s
+diff --git a/lldb/test/Shell/Process/Windows/process_load.cpp b/lldb/test/Shell/Process/Windows/process_load.cpp
+index 43bf45865f9b..7bf668cc0a39 100644
+--- a/lldb/test/Shell/Process/Windows/process_load.cpp
++++ b/lldb/test/Shell/Process/Windows/process_load.cpp
+@@ -1,6 +1,6 @@
+ // clang-format off
+ 
+-// REQUIRES: system-windows
++// REQUIRES: system-windows && windows-msvc
+ // RUN: %build --compiler=clang-cl -o %t.exe -- %s
+ // RUN: env LLDB_USE_NATIVE_PDB_READER=1 %lldb -f %t.exe -o "b main" -o "process launch" -o "process load kernel32.dll" | FileCheck %s
+ 
+-- 
+2.34.1
+

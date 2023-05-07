@@ -1,0 +1,30 @@
+From ba5e11b15777acaf69ebc32a853d3e0c5951c92b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 5 May 2023 11:08:32 +0000
+Subject: [PATCH 5/8] [clang-tidy] [test] Narrow down a special case to MSVC
+ mode
+
+For MinGW targets, size_t isn't a compiler defined type, just like
+for unix targets.
+
+Differential Revision: https://reviews.llvm.org/D149999
+---
+ .../checkers/readability/identifier-naming-standard-types.h     | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/clang-tools-extra/test/clang-tidy/checkers/readability/identifier-naming-standard-types.h b/clang-tools-extra/test/clang-tidy/checkers/readability/identifier-naming-standard-types.h
+index edec8d738020..e1036483ee8f 100644
+--- a/clang-tools-extra/test/clang-tidy/checkers/readability/identifier-naming-standard-types.h
++++ b/clang-tools-extra/test/clang-tidy/checkers/readability/identifier-naming-standard-types.h
+@@ -9,7 +9,7 @@ typedef unsigned char       uint8_t;    // NOLINT
+ typedef unsigned short      uint16_t;   // NOLINT
+ typedef unsigned long       uint32_t;   // NOLINT
+ typedef unsigned long long  uint64_t;   // NOLINT
+-#ifndef _WIN32
++#ifndef _MSC_VER
+ typedef unsigned long long  size_t;     // NOLINT
+ #endif
+ typedef long                intptr_t;   // NOLINT
+-- 
+2.34.1
+

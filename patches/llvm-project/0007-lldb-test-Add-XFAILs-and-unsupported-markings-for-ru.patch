@@ -1,0 +1,97 @@
+From 4221197f79c5bce99f2a696e890736891e2809d0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Sun, 7 May 2023 21:33:42 +0000
+Subject: [PATCH 7/8] [lldb] [test] Add XFAILs and unsupported markings for
+ running tests with MSVC without the DIA SDK
+
+---
+ lldb/test/Shell/Driver/TestSingleQuote.test          | 1 +
+ lldb/test/Shell/Expr/nodefaultlib.cpp                | 1 +
+ lldb/test/Shell/SymbolFile/PDB/lit.local.cfg         | 2 ++
+ lldb/test/Shell/Unwind/windows-unaligned-x86_64.test | 1 +
+ lldb/test/Shell/lit.cfg.py                           | 3 +++
+ lldb/test/Shell/lit.site.cfg.py.in                   | 3 +++
+ 6 files changed, 11 insertions(+)
+
+diff --git a/lldb/test/Shell/Driver/TestSingleQuote.test b/lldb/test/Shell/Driver/TestSingleQuote.test
+index af321ba04db3..3032cb400bcb 100644
+--- a/lldb/test/Shell/Driver/TestSingleQuote.test
++++ b/lldb/test/Shell/Driver/TestSingleQuote.test
+@@ -1,6 +1,7 @@
+ # Make sure lldb can handle filenames with single quotes in them.
+ # RUN: %clang_host %p/Inputs/hello.c -g -o "%t-'pat"
+ # RUN: %lldb -s %s "%t-'pat" | FileCheck %s
++# XFAIL: windows-msvc && !dia-sdk
+ 
+ br set -p return
+ # CHECK: Breakpoint 1: where = TestSingleQuote.test.tmp-'pat`main
+diff --git a/lldb/test/Shell/Expr/nodefaultlib.cpp b/lldb/test/Shell/Expr/nodefaultlib.cpp
+index f97d8aad9a8d..23279ff43078 100644
+--- a/lldb/test/Shell/Expr/nodefaultlib.cpp
++++ b/lldb/test/Shell/Expr/nodefaultlib.cpp
+@@ -5,6 +5,7 @@
+ // UNSUPPORTED: ld_preload-present
+ // XFAIL: system-linux && !(target-x86 || target-x86_64)
+ // XFAIL: system-netbsd || system-freebsd || system-darwin
++// XFAIL: windows-msvc && !dia-sdk
+ 
+ // RUN: %build %s --nodefaultlib -o %t
+ // RUN: %lldb %t -o "b main" -o run -o "expression call_me(5, 6)" -o exit \
+diff --git a/lldb/test/Shell/SymbolFile/PDB/lit.local.cfg b/lldb/test/Shell/SymbolFile/PDB/lit.local.cfg
+index c9b378b7a8a5..5ddd34c3d34f 100644
+--- a/lldb/test/Shell/SymbolFile/PDB/lit.local.cfg
++++ b/lldb/test/Shell/SymbolFile/PDB/lit.local.cfg
+@@ -1,2 +1,4 @@
+ if 'lldb-repro' in config.available_features:
+   config.unsupported = True
++if 'dia-sdk' not in config.available_features:
++  config.unsupported = True
+diff --git a/lldb/test/Shell/Unwind/windows-unaligned-x86_64.test b/lldb/test/Shell/Unwind/windows-unaligned-x86_64.test
+index 94f1c011ebd2..b4e861dcab25 100644
+--- a/lldb/test/Shell/Unwind/windows-unaligned-x86_64.test
++++ b/lldb/test/Shell/Unwind/windows-unaligned-x86_64.test
+@@ -3,6 +3,7 @@
+ # KiUserExceptionDispatcher and KiUserCallbackDispatcher in ntdll.dll.)
+ 
+ # REQUIRES: target-x86_64, native, system-windows
++# XFAIL: windows-msvc && !dia-sdk
+ 
+ # RUN: %build %p/Inputs/windows-unaligned-x86_64.cpp %p/Inputs/windows-unaligned-x86_64-asm.s -o %t
+ # RUN: %lldb %t -s %s -o exit | FileCheck %s
+diff --git a/lldb/test/Shell/lit.cfg.py b/lldb/test/Shell/lit.cfg.py
+index 7717400f0de1..d15fea3e6ac9 100644
+--- a/lldb/test/Shell/lit.cfg.py
++++ b/lldb/test/Shell/lit.cfg.py
+@@ -135,6 +135,9 @@ if config.lldb_system_debugserver:
+ if config.have_lldb_server:
+     config.available_features.add('lldb-server')
+ 
++if config.have_dia_sdk:
++    config.available_features.add('dia-sdk')
++
+ # NetBSD permits setting dbregs either if one is root
+ # or if user_set_dbregs is enabled
+ can_set_dbregs = True
+diff --git a/lldb/test/Shell/lit.site.cfg.py.in b/lldb/test/Shell/lit.site.cfg.py.in
+index d58918c87315..f8b9f9c5561b 100644
+--- a/lldb/test/Shell/lit.site.cfg.py.in
++++ b/lldb/test/Shell/lit.site.cfg.py.in
+@@ -1,5 +1,7 @@
+ @LIT_SITE_CFG_IN_HEADER@
+ 
++import lit.util
++
+ config.llvm_src_root = "@LLVM_SOURCE_DIR@"
+ config.llvm_obj_root = "@LLVM_BINARY_DIR@"
+ config.llvm_tools_dir = lit_config.substitute("@LLVM_TOOLS_DIR@")
+@@ -27,6 +29,7 @@ config.lldb_system_debugserver = @LLDB_USE_SYSTEM_DEBUGSERVER@
+ # The shell tests use their own module caches.
+ config.lldb_module_cache = os.path.join("@LLDB_TEST_MODULE_CACHE_LLDB@", "lldb-shell")
+ config.clang_module_cache = os.path.join("@LLDB_TEST_MODULE_CACHE_CLANG@", "lldb-shell")
++config.have_dia_sdk = lit.util.pythonize_bool("@LLVM_ENABLE_DIA_SDK@")
+ 
+ import lit.llvm
+ lit.llvm.initialize(lit_config, config)
+-- 
+2.34.1
+
