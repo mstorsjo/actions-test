@@ -29,8 +29,6 @@ jobs:
           cd build
           cmake ../llvm `
             -G Ninja `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
-            -DLLDB_PYTHON_HOME=c:/llvm-mingw/python `
             -DCMAKE_BUILD_TYPE=Release `
             -DLLVM_TARGETS_TO_BUILD=X86 `
             -DLLVM_ENABLE_PROJECTS="clang;lld;lldb;compiler-rt" `
@@ -42,6 +40,7 @@ jobs:
             -DCLANG_DEFAULT_CXX_STDLIB=libc++ `
             -DCLANG_DEFAULT_LINKER=lld `
             -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE `
-            -DSANITIZER_CXX_ABI=libc++
+            -DSANITIZER_CXX_ABI=libc++ `
+            -DLLDB_ENABLE_PYTHON=OFF
           ninja
           ninja check-lldb
