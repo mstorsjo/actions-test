@@ -52,16 +52,6 @@ We're going to install it into `~/my_msvc` to avoid needing root privileges on a
 # Add wrapper scripts, do minor cleanup of the unpacked MSVC installation
 ./install.sh ~/my_msvc/opt/msvc
 
-# Custom CMake
-git clone https://gitlab.kitware.com/mstorsjo/cmake.git
-cd cmake
-git checkout 844ccd2280d11ada286d0e2547c0fa5ff22bd4db
-mkdir build 
-cd build
-../configure --prefix=~/my_msvc/opt/cmake --parallel=$(nproc) -- -DCMAKE_USE_OPENSSL=OFF
-make -j$(nproc)
-make install
-
 # Run wine at least once
 wineserver -k # kills server (optional)
 wineserver -p
@@ -70,13 +60,12 @@ wine64 wineboot
 
 ### Setting up your project with CMake
 
-You need to set the path to prioritize our custom CMake, and also to see our MSVC installation.
+You need to add the our MSVC installation to the path.
 After that we just run CMake command with a few extra settings:
 
 ```bash
-export PATH=~/my_msvc/opt/cmake/bin:$PATH
 export PATH=~/my_msvc/opt/msvc/bin/x64:$PATH
-CC=cl CXX=cl cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows
+CC=cl CXX=cl cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
 make
 ```
 
@@ -135,9 +124,10 @@ Yes, but the install scripts won't work because `msitools` is too old. You'll ne
 
 ## Does it work with CMake?
 
-Yes, but a custom version is needed or else CMake will complain that `/opt/msvc/bin/x64/cl` can't build a simple program.
-
-It also fixes the `Ninja` Generator which otherwise has trouble finding RC.
+Yes, but you need CMake 3.25 or later, the CMake projects need to either
+set `cmake_minimum_required(VERSION 3.25.0)` or set
+`cmake_policy(SET CMP0141 NEW)`, and you need to configure with
+`-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded`.
 
 ## Can it build Debug versions?
 
