@@ -1,0 +1,81 @@
+From 40fc8e3183b488ecd854d41d65e1c01e3a0dab2b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Fri, 5 May 2023 10:58:47 +0000
+Subject: [PATCH 3/3] Reapply [clang] [test] Narrow down MSVC specific
+ behaviours from "any windows" to only MSVC/clang-cl
+
+This fixes running tests with a toolchain that defaults to a MinGW
+target.
+
+Differential Revision: https://reviews.llvm.org/D149997
+---
+ clang/test/C/drs/dr1xx.c                        |  2 +-
+ clang/test/Driver/experimental-library-flag.cpp |  2 +-
+ clang/test/SemaCXX/attr-trivial-abi.cpp         | 10 +++++-----
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/clang/test/C/drs/dr1xx.c b/clang/test/C/drs/dr1xx.c
+index 400807ed5da8..47538e44428c 100644
+--- a/clang/test/C/drs/dr1xx.c
++++ b/clang/test/C/drs/dr1xx.c
+@@ -235,7 +235,7 @@ void dr118(void) {
+ 	 * type at this point.
+ 	 */
+     Val = sizeof(enum E)
+-    #ifndef _WIN32
++    #if !defined(_WIN32) || defined(__MINGW32__)
+     /* expected-error@-2 {{invalid application of 'sizeof' to an incomplete type 'enum E'}} */
+     /* expected-note@-12 {{definition of 'enum E' is not complete until the closing '}'}} */
+     #endif
+diff --git a/clang/test/Driver/experimental-library-flag.cpp b/clang/test/Driver/experimental-library-flag.cpp
+index 148cb7ed2adb..db6a90b50f25 100644
+--- a/clang/test/Driver/experimental-library-flag.cpp
++++ b/clang/test/Driver/experimental-library-flag.cpp
+@@ -1,6 +1,6 @@
+ // On some platforms, -stdlib=libc++ is currently ignored, so -lc++experimental is not added.
+ // Once -stdlib=libc++ works on those, this XFAIL can be removed.
+-// XFAIL: target={{.*-windows.*}}, target={{.*-(ps4|ps5)}}
++// XFAIL: target={{.*-windows-msvc.*}}, target={{.*-(ps4|ps5)}}
+ 
+ // For some reason, this fails with a core dump on AIX. This needs to be investigated.
+ // UNSUPPORTED: target={{.*}}-aix{{.*}}
+diff --git a/clang/test/SemaCXX/attr-trivial-abi.cpp b/clang/test/SemaCXX/attr-trivial-abi.cpp
+index deae99f7d089..c215f90eb124 100644
+--- a/clang/test/SemaCXX/attr-trivial-abi.cpp
++++ b/clang/test/SemaCXX/attr-trivial-abi.cpp
+@@ -5,11 +5,11 @@ void __attribute__((trivial_abi)) foo(); // expected-warning {{'trivial_abi' att
+ // Should not crash.
+ template <class>
+ class __attribute__((trivial_abi)) a { a(a &&); };
+-#ifdef _WIN64
+-// On Windows, to be trivial-for-calls, an object must be trivially copyable.
++#if defined(_WIN64) && !defined(__MINGW32__)
++// On Windows/MSVC, to be trivial-for-calls, an object must be trivially copyable.
+ // (And it is only trivially relocatable, currently, if it is trivial for calls.)
+ // In this case, it is suppressed by an explicitly defined move constructor.
+-// Similar concerns apply to later tests that have #ifdef _WIN64.
++// Similar concerns apply to later tests that have #if defined(_WIN64) && !defined(__MINGW32__)
+ static_assert(!__is_trivially_relocatable(a<int>), "");
+ #else
+ static_assert(__is_trivially_relocatable(a<int>), "");
+@@ -137,7 +137,7 @@ struct __attribute__((trivial_abi)) CopyDeleted {
+   CopyDeleted(const CopyDeleted &) = delete;
+   CopyDeleted(CopyDeleted &&) = default;
+ };
+-#ifdef _WIN64
++#if defined(_WIN64) && !defined(__MINGW32__)
+ static_assert(!__is_trivially_relocatable(CopyDeleted), "");
+ #else
+ static_assert(__is_trivially_relocatable(CopyDeleted), "");
+@@ -163,7 +163,7 @@ static_assert(!__is_trivially_relocatable(S19), "");
+ struct __attribute__((trivial_abi)) S20 {
+   int &&a; // a member of rvalue reference type deletes the copy constructor.
+ };
+-#ifdef _WIN64
++#if defined(_WIN64) && !defined(__MINGW32__)
+ static_assert(!__is_trivially_relocatable(S20), "");
+ #else
+ static_assert(__is_trivially_relocatable(S20), "");
+-- 
+2.34.1
+
