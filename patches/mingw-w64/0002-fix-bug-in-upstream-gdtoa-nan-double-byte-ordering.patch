@@ -1,0 +1,38 @@
+From c2d888a8ed50207a8a6824a0ad8120e8b75ead6e Mon Sep 17 00:00:00 2001
+From: Jameson Nash <vtjnash@gmail.com>
+Date: Thu, 11 May 2023 11:19:20 -0400
+Subject: [PATCH 2/2] fix bug in upstream gdtoa nan double byte ordering
+
+---
+ mingw-w64-crt/gdtoa/gd_qnan.h | 4 ++--
+ mingw-w64-crt/gdtoa/qnan.c    | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/mingw-w64-crt/gdtoa/gd_qnan.h b/mingw-w64-crt/gdtoa/gd_qnan.h
+index 885efcdb1..bd324f0f6 100644
+--- a/mingw-w64-crt/gdtoa/gd_qnan.h
++++ b/mingw-w64-crt/gdtoa/gd_qnan.h
+@@ -1,3 +1,3 @@
+ #define f_QNAN 0x7fc00000
+-#define d_QNAN0 0x7ff80000
+-#define d_QNAN1 0x0
++#define d_QNAN0 0x0
++#define d_QNAN1 0x7ff80000
+diff --git a/mingw-w64-crt/gdtoa/qnan.c b/mingw-w64-crt/gdtoa/qnan.c
+index 944ddc4bd..e6e0564ca 100644
+--- a/mingw-w64-crt/gdtoa/qnan.c
++++ b/mingw-w64-crt/gdtoa/qnan.c
+@@ -103,8 +103,8 @@ main(void)
+ 	a.L[_1] = b.L[_1] = 0;
+ 	c.d = a.d - b.d;	/* quiet NaN */
+ 	c.L[_0] &= 0x7fffffff;
+-	printf("#define d_QNAN0 0x%lx\n", UL c.L[_0]);
+-	printf("#define d_QNAN1 0x%lx\n", UL c.L[_1]);
++	printf("#define d_QNAN0 0x%lx\n", UL c.L[0]);
++	printf("#define d_QNAN1 0x%lx\n", UL c.L[1]);
+ #ifdef Gen_ld_QNAN
+ 	if (sizeof(a.D) >= 16) {
+ 		b.D = c.D = a.d;
+-- 
+2.34.1
+

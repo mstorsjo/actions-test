@@ -1,7 +1,7 @@
-From 8a9b0ff24cfad06c6c664e1a687b653e87c67fe9 Mon Sep 17 00:00:00 2001
+From 25ddabc7f92dea801614ae138d11d52dbccb91cd Mon Sep 17 00:00:00 2001
 From: Jameson Nash <vtjnash@gmail.com>
 Date: Fri, 6 Jan 2023 19:52:55 -0500
-Subject: [PATCH] gdtoa: Sync to match the latest version at netlib.org
+Subject: [PATCH 1/2] gdtoa: Sync to match the latest version at netlib.org
 
 As of Jan. 06 2023. Changelog from http://netlib.org/fp/changes (filtered):
 
