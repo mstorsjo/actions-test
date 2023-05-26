@@ -28,8 +28,6 @@ jobs:
           git config --global user.email root@localhost
           git config --global core.autocrlf false
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      # Not passing -DPython3_EXECUTABLE="$Env:PYTHON_EXE" here. The bundled Python doesn't have
-      # zlib enabled, which some tests require.
       - name: Build and run tests
         run: |
           cd llvm-project
@@ -37,6 +35,7 @@ jobs:
           cd build
           cmake ../llvm `
             -G Ninja `
+            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DCMAKE_BUILD_TYPE=Release `
             -DLLVM_TARGETS_TO_BUILD=X86 `
             -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" `
