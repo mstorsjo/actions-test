@@ -9,7 +9,6 @@ jobs:
       fail-fast: false
       matrix:
         arch:
-          - i686
           - x86_64
     steps:
       - name: Unpack toolchain
