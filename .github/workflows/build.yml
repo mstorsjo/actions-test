@@ -41,5 +41,4 @@ jobs:
             -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=OFF `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++
-          ninja
           ninja check
