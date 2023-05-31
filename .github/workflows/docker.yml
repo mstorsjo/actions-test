@@ -1,0 +1,39 @@
+name: Build docker images
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit'
+        required: true
+        type: string
+      tag:
+        description: 'Tag'
+        required: true
+        type: string
+      push:
+        description: 'Push the built images'
+        required: true
+        type: boolean
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { file: Dockerfile,     maintag: latest,  prefix: }
+          - { file: Dockerfile.dev, maintag: dev,     prefix: dev- }
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{inputs.commit}}
+      - name: Build Docker images
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: ${{inputs.push}}
+          file: ./${{matrix.file}}
+          tags: |
+            mstorsjo/llvm-mingw:${{matrix.maintag}}
+            mstorsjo/llvm-mingw:${{matrix.prefix}}${{inputs.tag}}
