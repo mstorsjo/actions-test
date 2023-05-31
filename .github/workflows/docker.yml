@@ -37,3 +37,6 @@ jobs:
           tags: |
             mstorsjo/llvm-mingw:${{matrix.maintag}}
             mstorsjo/llvm-mingw:${{matrix.prefix}}${{inputs.tag}}
+      - name: Inspect Docker images
+        run: |
+          docker images
