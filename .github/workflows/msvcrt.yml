@@ -10,6 +10,10 @@ on:
         description: 'Tag'
         required: true
         type: string
+      upload:
+        description: 'Upload the artifacts'
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -89,8 +93,42 @@ jobs:
             llvm-mingw-*.zip
           retention-days: 7
 
+  test-toolchain:
+    needs: [linux-cross-windows]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: i686, crt: msvcrt }
+          - { arch: x86_64, crt: msvcrt }
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            unzip
+            make
+      - uses: actions/download-artifact@v3
+        with:
+          name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
+      - name: Unpack toolchain
+        run: |
+          unzip -q llvm-mingw-*.zip
+          rm llvm-mingw-*.zip
+          mv llvm-mingw-* /llvm-mingw
+          echo /llvm-mingw/bin >> $GITHUB_PATH
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: |
+          ./run-tests.sh /llvm-mingw
+          ./run-lldb-tests.sh /llvm-mingw
+
   upload:
-    if: false
+    if: ${{inputs.upload}}
     permissions:
       contents: write
     needs: [linux-msvcrt, linux-cross-windows, test-toolchain]
