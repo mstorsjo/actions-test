@@ -1,0 +1,109 @@
+name: Build msvcrt toolchains
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit'
+        required: true
+        type: string
+      tag:
+        description: 'Tag'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Build a new toolchain with a different CRT choice.
+  linux-msvcrt:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3 # TODO: Input ref
+      - name: Download artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          workflow_conclusion: success
+          repo: mstorsjo/llvm-mingw
+          commit: # TODO: Inputs
+          branch: master
+          event: push
+          name: linux-toolchain # TODO: Rename to linux-ucrt-x86_64-toolchain
+      - name: Unpack original toolchain
+        run: |
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mkdir install
+          mv llvm-mingw* install/llvm-mingw
+      - name: Build
+        run: |
+          export TAG=${{inputs.tag}} # TODO: Use parameters.txt
+          sudo apt-get update && sudo apt-get install ninja-build
+          ./build-all.sh $(pwd)/install/llvm-mingw --no-tools --wipe-runtimes --with-default-msvcrt=msvcrt
+          cd install
+          DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-$(uname -m)
+          NAME=llvm-mingw-$TAG-msvcrt-$DISTRO
+          mv llvm-mingw $NAME
+          tar -Jcf ../$NAME.tar.xz $NAME
+      - uses: actions/upload-artifact@v3
+        with:
+          name: linux-msvcrt-x86_64-toolchain
+          path: |
+            llvm-mingw-*.tar.xz
+          retention-days: 7
+
+  linux-cross-windows:
+    needs: [linux-msvcrt]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: i686, crt: msvcrt }
+          - { arch: x86_64, crt: msvcrt }
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: linux-${{matrix.crt}}-x86_64-toolchain
+      - name: Unpack cross toolchain
+        run: |
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - uses: actions/checkout@v3 # TODO: Input ref
+      - name: Build
+        run: |
+          export TAG=${{inputs.tag}} # TODO: Use parameters.txt
+          sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python
+          cd install
+          NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
+          mv llvm-mingw $NAME
+          zip -9rq ../$NAME.zip $NAME
+      - uses: actions/upload-artifact@v3
+        with:
+          name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
+          path: |
+            llvm-mingw-*.zip
+          retention-days: 7
+
+  upload:
+    permissions:
+      contents: write
+    needs: [linux-msvcrt, linux-cross-windows, test-toolchain]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+      - name: Rearrange files
+        run: |
+          rm -rf linux-asserts*
+          mv *-toolchain/*.zip *-toolchain/*.tar.xz .
+      - name: Upload binaries
+        env:
+          GITHUB_TOKEN: ${{github.token}}
+        run: |
+          # TODO: TAG
+          gh release upload ${{input.tag}} *.tar.xz *.zip --clobber -R ${{github.repository}}
