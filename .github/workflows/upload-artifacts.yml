@@ -59,10 +59,6 @@ jobs:
       - name: Make a tag
         if: ${{inputs.make_tag}}
         run: |
-          if [ "$TAG" != "${{inputs.tag}}" ]; then
-              echo Tag mismatch, \"$TAG\" in workflow vs \"${{inputs.tag}}\" as input
-              exit 1
-          fi
           cd repo
           git config --global user.name "GitHub Actions"
           git config --global user.email martin@martin.st
