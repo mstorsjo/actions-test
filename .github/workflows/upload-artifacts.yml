@@ -48,7 +48,7 @@ jobs:
       - name: Rearrange files
         run: |
           rm -rf linux-asserts*
-          mv *-toolchain/*.zip *-toolchain/*.tar.xz .
+          mv *-toolchain/*.tar.xz .
       - name: Set environment
         run: |
           cat parameters/parameters.txt >> $GITHUB_ENV
@@ -83,7 +83,7 @@ jobs:
               prerelease="--prerelease"
           fi
           if ${{inputs.create_release}}; then
-              gh release create ${{inputs.tag}} --verify-tag $prerelease --title "${{inputs.title}}" --notes "" *.tar.xz *.zip -R ${{github.repository}}
+              gh release create ${{inputs.tag}} --verify-tag $prerelease --title "${{inputs.title}}" --notes "" *.tar.xz -R ${{github.repository}}
           else
-              gh release upload ${{inputs.tag}} *.tar.xz *.zip --clobber -R ${{github.repository}}
+              gh release upload ${{inputs.tag}} *.tar.xz --clobber -R ${{github.repository}}
           fi
