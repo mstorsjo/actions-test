@@ -106,4 +106,4 @@ jobs:
           GITHUB_TOKEN: ${{github.token}}
         run: |
           # TODO: TAG
-          gh release upload ${{input.tag}} *.tar.xz *.zip --clobber -R ${{github.repository}}
+          gh release upload ${{inputs.tag}} *.tar.xz *.zip --clobber -R ${{github.repository}}
