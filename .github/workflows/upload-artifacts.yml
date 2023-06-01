@@ -42,8 +42,8 @@ jobs:
         with:
           workflow: build.yml
           workflow_conclusion: success
-          commit: ${{inputs.commit}}
-          branch: ${{inputs.branch}}
+          commit: 8b4fe8d216b3b4e5aba57f6cd9fc1590852c6d42
+          branch:
           event: push
       - name: Rearrange files
         run: |
