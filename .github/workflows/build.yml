@@ -35,6 +35,7 @@ jobs:
           fi
           echo TAG=$TAG >> $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT >> parameters.txt
       - name: Check latest version
         if: github.event_name == 'schedule'
         id: get-versions
@@ -43,6 +44,13 @@ jobs:
           echo MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> $GITHUB_OUTPUT
           echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.10.11$' | awk '{print $1}') >> $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT >> parameters.txt
+      - uses: actions/upload-artifact@v3
+        with:
+          name: parameters
+          path: |
+            parameters.txt
+          retention-days: 7
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
@@ -70,7 +78,7 @@ jobs:
           tar -Jcf ../$NAME.tar.xz $NAME
       - uses: actions/upload-artifact@v3
         with:
-          name: linux-toolchain
+          name: linux-ucrt-x86_64-toolchain
           path: |
             llvm-mingw-*.tar.xz
           retention-days: 7
@@ -93,7 +101,7 @@ jobs:
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
       - uses: actions/download-artifact@v3
         with:
-          name: linux-toolchain
+          name: linux-ucrt-x86_64-toolchain
       - name: Unpack native toolchain
         run: |
           tar -Jxf llvm-mingw-*.tar.xz
@@ -117,7 +125,7 @@ jobs:
           tar -Jcf ../$NAME.tar.xz $NAME
       - uses: actions/upload-artifact@v3
         with:
-          name: linux-aarch64-toolchain
+          name: linux-ucrt-aarch64-toolchain
           path: |
             llvm-mingw-*.tar.xz
           retention-days: 7
@@ -182,7 +190,7 @@ jobs:
           tar -Jcf ../$NAME.tar.xz $NAME
       - uses: actions/upload-artifact@v3
         with:
-          name: macos-toolchain
+          name: macos-ucrt-toolchain
           path: |
             llvm-mingw-*.tar.xz
           retention-days: 7
@@ -236,15 +244,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - i686
-          - x86_64
-          - armv7
-          - aarch64
+        include:
+          - { arch: i686, crt: ucrt }
+          - { arch: x86_64, crt: ucrt }
+          - { arch: armv7, crt: ucrt }
+          - { arch: aarch64, crt: ucrt }
     steps:
       - uses: actions/download-artifact@v3
         with:
-          name: linux-toolchain
+          name: linux-${{matrix.crt}}-x86_64-toolchain
       - name: Unpack cross toolchain
         run: |
           tar -Jxf llvm-mingw-*.tar.xz
@@ -263,18 +271,18 @@ jobs:
           ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
-          NAME=llvm-mingw-$TAG-ucrt-${{matrix.arch}}
+          NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
           mv llvm-mingw $NAME
           zip -9rq ../$NAME.zip $NAME
       - uses: actions/upload-artifact@v3
         with:
-          name: windows-${{matrix.arch}}-toolchain
+          name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
           path: |
             llvm-mingw-*.zip
           retention-days: 7
 
-  # Run llvm-mingw's tests on x86_64 (and i686) with the cross-built x86_64
-  # toolchain from above.
+  # Run llvm-mingw's tests on x86_64 and i686 with the cross-built corresponding
+  # toolchains from above.
   test-toolchain:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     needs: [linux-cross-windows]
@@ -297,7 +305,7 @@ jobs:
             make
       - uses: actions/download-artifact@v3
         with:
-          name: windows-${{matrix.arch}}-toolchain
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
           unzip -q llvm-mingw-*.zip
@@ -336,7 +344,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v3
         with:
-          name: windows-${{matrix.arch}}-toolchain
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
@@ -391,7 +399,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v3
         with:
-          name: windows-${{matrix.arch}}-toolchain
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
@@ -453,7 +461,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v3
         with:
-          name: windows-${{matrix.arch}}-toolchain
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
@@ -584,7 +592,7 @@ jobs:
             nasm:p
       - uses: actions/download-artifact@v3
         with:
-          name: windows-x86_64-toolchain
+          name: windows-ucrt-x86_64-toolchain
       - name: Unpack toolchain
         run: |
           unzip -q llvm-mingw-*.zip
