@@ -68,7 +68,12 @@ jobs:
           # Skip dynamic library dependencies that might make it harder to
           # run the binaries on other distros (and that have little use within
           # llvm-mingw).
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mkdir install
+          mv llvm-mingw* install/llvm-mingw
+          ARCHS=i686 LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb --no-tools --wipe-runtimes
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-$(uname -m)
