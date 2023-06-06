@@ -14,7 +14,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-set -e
+set -ex
 
 BUILD_STATIC=ON
 BUILD_SHARED=ON
@@ -82,7 +82,7 @@ for arch in $ARCHS; do
     mkdir -p build-$arch
     cd build-$arch
     [ -n "$NO_RECONF" ] || rm -rf CMake*
-    cmake \
+    if ! cmake \
         ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$PREFIX/$arch-w64-mingw32" \
@@ -113,7 +113,18 @@ for arch in $ARCHS; do
         -DLIBCXXABI_LIBDIR_SUFFIX="" \
         -DCMAKE_C_FLAGS_INIT="$CFGUARD_CFLAGS" \
         -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \
-        ..
+        ..; then
+        if [ -f CMakeFiles/CMakeConfigureLog.yaml ]; then
+            cat CMakeFiles/CMakeConfigureLog.yaml
+        fi
+        if [ -f CMakeFiles/CMakeOutput.log ]; then
+            cat CMakeFiles/CMakeOutput.log
+        fi
+        if [ -f CMakeFiles/CMakeError.log ]; then
+            cat CMakeFiles/CMakeError.log
+        fi
+        exit 1
+    fi
 
     $BUILDCMD ${CORES+-j$CORES}
     $BUILDCMD install
