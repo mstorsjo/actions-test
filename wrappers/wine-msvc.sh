@@ -14,8 +14,15 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-EXE=$1
-shift
+EXE=$(dirname $0)/../msvctricks.exe
+if [ -f "$EXE" ]; then
+	HAS_MSVCTRICKS=true
+else
+	HAS_MSVCTRICKS=false
+	EXE=$1
+	shift
+fi
+
 ARGS=()
 while [ $# -gt 0 ]; do
 	a=$1
@@ -39,24 +46,11 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-if [ ${#ARGS[@]} -gt 0 ]; then
-	# 1. Escape all double-quotes.
-	# 2. Enclose each argument with double quotes.
-	# 3. Join all arguments with spaces.
-	export WINE_MSVC_ARGS=$(printf ' "%s"' "${ARGS[@]//\"/\\\"}")
-else
-	export WINE_MSVC_ARGS=
-fi
-
 unixify_path='s/\r// ; s/z:\([\\/]\)/\1/i ; /^Note:/s,\\,/,g'
 
-if [ -d /proc/$$/fd ]; then
-	exec {fd1}> >(sed -e "$unixify_path")
-	exec {fd2}> >(sed -e "$unixify_path" >&2)
-
-	export WINE_MSVC_STDOUT=/proc/$$/fd/$fd1
-	export WINE_MSVC_STDERR=/proc/$$/fd/$fd2
-	WINEDEBUG=-all wine64 'C:\Windows\System32\cmd.exe' /C $(dirname $0)/wine-msvc.bat "$EXE" &>/dev/null {fd1}>&- {fd2}>&-
+if ! $HAS_MSVCTRICKS; then
+	WINEDEBUG=-all wine64 "$EXE" "${ARGS[@]}" 2> >(sed -e "$unixify_path" >&2) | sed -e "$unixify_path"
+	exit $PIPESTATUS
 else
 	export WINE_MSVC_STDOUT=${TMPDIR:-/tmp}/wine-msvc.stdout.$$
 	export WINE_MSVC_STDERR=${TMPDIR:-/tmp}/wine-msvc.stderr.$$
@@ -72,5 +66,5 @@ else
 
 	sed -e "$unixify_path" <$WINE_MSVC_STDOUT &
 	sed -e "$unixify_path" <$WINE_MSVC_STDERR >&2 &
-	WINEDEBUG=-all wine64 'C:\Windows\System32\cmd.exe' /C $(dirname $0)/wine-msvc.bat "$EXE" &>/dev/null
+	WINEDEBUG=-all wine64 "$EXE" "${ARGS[@]}" &>/dev/null
 fi

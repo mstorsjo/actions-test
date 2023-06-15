@@ -64,7 +64,16 @@ for arch in x86 x64 arm arm64; do
     done
     cd ..
 done
-cd ../bin
+cd ..
+# Fix casing issues in the MSVC headers. These headers mostly have consistent
+# lowercase naming among themselves, but they do reference some WinSDK headers
+# with mixed case names (in a spelling that isn't present in the WinSDK).
+# Thus process them to reference the other headers with lowercase names.
+# Also lowercase these files, as a few of them do have non-lowercase names,
+# and the call to fixinclude lowercases those references.
+$ORIG/lowercase -symlink include
+$ORIG/fixinclude include
+cd bin
 # vctip.exe is known to cause problems at some times; just remove it.
 # See https://bugs.chromium.org/p/chromium/issues/detail?id=735226 and
 # https://github.com/mstorsjo/msvc-wine/issues/23 for references.
@@ -125,15 +134,33 @@ for arch in x86 x64 arm arm64; do
     $ORIG/lowercase -symlink kits/10/lib/$SDKVER/um/$arch
 done
 
+host=x64
+if [ "$(uname -m)" = "aarch64" ]; then
+    host=arm64
+fi
+
 SDKVER=$(basename $(echo kits/10/include/* | awk '{print $NF}'))
 MSVCVER=$(basename $(echo vc/tools/msvc/* | awk '{print $1}'))
-cat $ORIG/wrappers/msvcenv.sh | sed 's/MSVCVER=.*/MSVCVER='$MSVCVER/ | sed 's/SDKVER=.*/SDKVER='$SDKVER/ > msvcenv.sh
+cat $ORIG/wrappers/msvcenv.sh | sed 's/MSVCVER=.*/MSVCVER='$MSVCVER/ | sed 's/SDKVER=.*/SDKVER='$SDKVER/ | sed s/x64/$host/ > msvcenv.sh
 for arch in x86 x64 arm arm64; do
     if [ ! -d "vc/tools/msvc/$MSVCVER/bin/Hostx64/$arch" ]; then
         continue
     fi
     mkdir -p bin/$arch
-    cp $ORIG/wrappers/* bin/$arch
+    cp -a $ORIG/wrappers/* bin/$arch
     cat msvcenv.sh | sed 's/ARCH=.*/ARCH='$arch/ > bin/$arch/msvcenv.sh
 done
 rm msvcenv.sh
+
+if [ -d "$DEST/bin/$host" ] && [ -x "$(which wine64 2>/dev/null)" ]; then
+    WINEDEBUG=-all wine64 wineboot &>/dev/null
+    echo "Build msvctricks ..."
+    "$DEST/bin/$host/cl" /EHsc /O2 "$ORIG/msvctricks.cpp"
+    if [ $? -eq 0 ]; then
+        mv msvctricks.exe bin/
+        rm msvctricks.obj
+        echo "Build msvctricks done."
+    else
+        echo "Build msvctricks failed."
+    fi
+fi
