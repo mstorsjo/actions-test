@@ -26,6 +26,29 @@ cat >test.c <<EOF
 const char* file = __FILE__;
 EOF
 
+cat >test-arm.asm <<EOF
+        AREA |.text|, CODE, READONLY, ALIGN=4, CODEALIGN
+        ALIGN 4
+        EXPORT func
+func PROC
+        nop
+        ENDP
+        END
+EOF
+
+cat >test-x86.asm <<EOF
+_TEXT SEGMENT ALIGN(16) 'CODE'
+PUBLIC func
+func PROC
+        ret
+func ENDP
+_TEXT ENDS
+END
+EOF
+
+
+ARCH=$(. "${BIN}msvcenv.sh" && echo $ARCH)
+
 
 EXEC "" ${BIN}cl ${TESTS}hello.c
 
@@ -60,5 +83,19 @@ DIFF cl-P-Fi.i - <<EOF
 const char* file = "./test.c";
 EOF
 
+case $ARCH in
+x86)
+    EXEC "" ${BIN}ml /c /Fo test-$ARCH.obj test-x86.asm
+    ;;
+x64)
+    EXEC "" ${BIN}ml64 /c /Fo test-$ARCH.obj test-x86.asm
+    ;;
+arm)
+    EXEC "" ${BIN}armasm test-arm.asm test-$ARCH.obj
+    ;;
+arm64)
+    EXEC "" ${BIN}armasm64 test-arm.asm test-$ARCH.obj
+    ;;
+esac
 
 EXIT
