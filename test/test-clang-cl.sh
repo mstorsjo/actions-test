@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2018 Martin Storsjo
+# Copyright (c) 2023 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,11 +14,18 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-. $(dirname $0)/msvcenv.sh
+. "${0%/*}/test.sh"
 
-# /PDBPATH
-unixify_path='/^(Dump of file |  PDB file found at )/{ s/z:([\\/])/\1/i; s,\\,/,g; }'
+cd "$TESTS"
 
-export WINE_MSVC_STDOUT_SED="$unixify_path"
+for arch in x86 x64 arm arm64; do
+    BIN="${1:-/opt/msvc}/bin/$arch/"
+    if [ ! -d "$BIN" ]; then
+        continue
+    fi
 
-$(dirname $0)/wine-msvc.sh $BINDIR/dumpbin.exe "$@"
+    EXEC "" BIN=$BIN ./test-clang-cl-cmds.sh
+    EXEC "" BIN=$BIN ./test-cmake-clang-cl.sh
+done
+
+EXIT

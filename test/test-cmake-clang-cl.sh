@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2018 Martin Storsjo
+# Copyright (c) 2023 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,11 +14,32 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-. $(dirname $0)/msvcenv.sh
+. "${0%/*}/test.sh"
 
-# /PDBPATH
-unixify_path='/^(Dump of file |  PDB file found at )/{ s/z:([\\/])/\1/i; s,\\,/,g; }'
+# ${BIN} set up by the caller
+if [ -z "$BIN" ]; then
+    echo Must set the BIN env variable pointing to the MSVC bin directory
+    exit 1
+fi
 
-export WINE_MSVC_STDOUT_SED="$unixify_path"
+. ${TESTS}/../msvcenv-native.sh
 
-$(dirname $0)/wine-msvc.sh $BINDIR/dumpbin.exe "$@"
+CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    -DCMAKE_SYSTEM_NAME=Windows
+    -DCMAKE_MT=$(which llvm-mt)
+)
+
+EXEC "" CC="clang-cl --target=$TARGET_TRIPLE" CXX="clang-cl --target=$TARGET_TRIPLE" RC="llvm-rc" cmake -S"$TESTS" -GNinja "${CMAKE_ARGS[@]}"
+EXEC "" ninja -v
+
+# Rerun ninja to make sure that dependencies aren't broken.
+EXEC ninja-rerun ninja -d explain -v
+DIFF ninja-rerun.err - <<EOF
+EOF
+DIFF ninja-rerun.out - <<EOF
+ninja: no work to do.
+EOF
+
+
+EXIT
