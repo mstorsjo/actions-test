@@ -92,12 +92,12 @@ jobs:
       # Intentionally not pushing the built docker images;
       # the installed files aren't redistributable!
 
-  test-build-dav1d:
+  test-build-ffmpeg:
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
         run: |
-          sudo apt-get update && sudo apt-get install wine64-development python3 msitools python3-simplejson python3-six ca-certificates ninja-build winbind meson nasm
+          sudo apt-get update && sudo apt-get install wine64-development python3 msitools python3-simplejson python3-six ca-certificates winbind nasm
           wine64 wineboot
       - uses: actions/checkout@v3
       - name: Download MSVC
@@ -113,44 +113,25 @@ jobs:
       - name: Add gas-preprocessor to path
         run: |
           echo $(pwd)/gas-preprocessor >> $GITHUB_PATH
-      - name: Checkout dav1d
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v3
+        with:
+          repository: ffmpeg/ffmpeg
+          ref: n6.0
+          path: ffmpeg
+      - name: Build ffmpeg
         run: |
-          git clone https://code.videolan.org/videolan/dav1d.git
-          cd dav1d
-          git checkout 1.2.1
-      - name: Build dav1d
-        run: |
-          cd dav1d
-          mkdir build
-          cd build
-          export PATH=$(pwd)/../../msvc/bin/arm64:$PATH
-          cat >cross.txt <<EOF
-          [binaries]
-          c = 'cl'
-          cpp = 'cl'
-          ar = 'lib'
-          windres = 'rc'
-          ;exe_wrapper = ['wine']
-
-          [properties]
-          needs_exe_wrapper = true
-
-          [host_machine]
-          system = 'windows'
-          cpu_family = 'aarch64'
-          cpu = 'aarch64'
-          endian = 'little'
-          EOF
-
-          meson setup --cross-file cross.txt --buildtype release --prefix $(pwd)/../../install ..
-          ninja -v
-          ninja install
-          cp ../../msvc/vc/Redist/MSVC/1*/arm64/*.CRT/vcruntime*.dll ../../install/bin
+          mkdir ffmpeg-build
+          cd ffmpeg-build
+          export PATH=$(pwd)/../msvc/bin/arm64:$PATH
+          ../ffmpeg/configure --arch=arm64 --target-os=win32 --toolchain=msvc --enable-cross-compile --prefix=$(pwd)/../install
+          make -j$(nproc)
+          make install
       # The build output from MSVC actually is redistributable, even if the
       # toolchain itself isn't.
       - uses: actions/upload-artifact@v3
         with:
-          name: dav1d
+          name: ffmpeg
           path: |
             install/*
           retention-days: 7
