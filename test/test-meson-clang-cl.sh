@@ -44,7 +44,7 @@ cat >cross.txt <<EOF
 c = ['clang-cl', '--target=$TARGET_TRIPLE']
 cpp = ['clang-cl', '--target=$TARGET_TRIPLE']
 ar = 'llvm-lib'
-windres = 'llvm-rc'
+windres = 'rc'
 ;exe_wrapper = ['wine']
 
 [properties]
@@ -56,6 +56,10 @@ cpu_family = '$CPU_FAMILY'
 cpu = '$TARGET_ARCH'
 endian = 'little'
 EOF
+
+# TODO: Meson can't detect/use llvm-rc currently, so we need to use the wine
+# wrapped 'rc', and add the msvc tools to the path.
+export PATH="$BIN:$PATH"
 
 MESON_ARGS=(
     --cross-file cross.txt
