@@ -26,6 +26,7 @@ for arch in x86 x64 arm arm64; do
 
     EXEC "" BIN=$BIN ./test-clang-cl-cmds.sh
     EXEC "" BIN=$BIN ./test-cmake-clang-cl.sh
+    EXEC "" BIN=$BIN ./test-meson-clang-cl.sh
 done
 
 EXIT

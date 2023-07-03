@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Install prerequisites
         run: |
-          sudo apt-get update && sudo apt-get install python3 msitools python3-simplejson python3-six ca-certificates clang lld llvm cmake ninja-build
+          sudo apt-get update && sudo apt-get install python3 msitools python3-simplejson python3-six ca-certificates clang lld llvm cmake ninja-build meson
       - name: Set up clang-cl/lld-link symlinks
         run: |
           if [ ! -e /usr/bin/clang-cl ]; then
