@@ -241,7 +241,6 @@ jobs:
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux, prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -249,11 +248,9 @@ jobs:
         include:
           - { arch: x86_64, crt: ucrt }
     steps:
-      - uses: actions/download-artifact@v3
-        with:
-          name: linux-${{matrix.crt}}-x86_64-toolchain
       - name: Unpack cross toolchain
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-ubuntu-20.04-x86_64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
@@ -332,7 +329,7 @@ jobs:
     # The libcxxabi and libunwind tests don't pass on the pinned 16.x branch,
     # only on git main.
     if: true
-    needs: [linux-cross-windows, prepare]
+    needs: [linux-cross-windows]
     runs-on: windows-latest
     strategy:
       fail-fast: false
