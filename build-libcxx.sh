@@ -18,7 +18,7 @@ set -e
 
 BUILD_STATIC=ON
 BUILD_SHARED=ON
-CFGUARD_CFLAGS=
+CFGUARD_CFLAGS="-mguard=cf"
 
 while [ $# -gt 0 ]; do
     if [ "$1" = "--disable-shared" ]; then
@@ -72,8 +72,6 @@ else
     case $(uname) in
     MINGW*)
         CMAKE_GENERATOR="MSYS Makefiles"
-        ;;
-    *)
         ;;
     esac
     BUILDCMD=make

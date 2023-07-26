@@ -62,13 +62,15 @@ fi
 if [ -n "$HOST" ]; then
     CONFIGFLAGS="$CONFIGFLAGS --host=$HOST"
     CROSS_NAME=-$HOST
-    EXEEXT=.exe
+    case $HOST in
+    *-mingw32)
+        EXEEXT=.exe
+        ;;
+    esac
 else
     case $(uname) in
     MINGW*)
         EXEEXT=.exe
-        ;;
-    *)
         ;;
     esac
 fi

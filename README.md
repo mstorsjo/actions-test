@@ -13,6 +13,8 @@ Benefits of a LLVM based MinGW toolchain are:
   architecture
 - Support for generating debug info in PDB format
 - Support for Address Sanitizer and Undefined Behaviour Sanitizer
+- Since LLVM 16: Support for [Control Flow Guard](https://github.com/mstorsjo/llvm-mingw/issues/301)
+  (`-mguard=cf` compile and link flags)
 
 Clang on its own can also be used as compiler in the normal GNU binutils
 based environments though, so the main difference lies in replacing
@@ -50,6 +52,9 @@ less featureful. Address Sanitizer only works properly with UCRT.
 In addition to the downloadable toolchain packges, there are also
 prebuilt docker linux images containing the llvm-mingw toolchain,
 available from [Docker Hub](https://hub.docker.com/r/mstorsjo/llvm-mingw/).
+
+There are also [nightly builds](https://github.com/mstorsjo/llvm-mingw/releases/tag/nightly)
+with the very latest versions of LLVM and mingw-w64 from git.
 
 Building from source
 --------------------

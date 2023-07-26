@@ -18,9 +18,9 @@ set -e
 
 : ${DEFAULT_WIN32_WINNT:=0x601}
 : ${DEFAULT_MSVCRT:=ucrt}
-: ${MINGW_W64_VERSION:=d4a0c84d908243a45255a06dc293d3d7c06db98c}
+: ${MINGW_W64_VERSION:=b1900827318b31fda2a4c040917fe978ef6e75c4}
 
-CFGUARD_FLAGS=
+CFGUARD_FLAGS="--enable-cfguard"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -74,6 +74,12 @@ if command -v gmake >/dev/null; then
     MAKE=gmake
 fi
 
+case $(uname) in
+MINGW*|MSYS*)
+    CRT_CONFIG_FLAGS="--disable-dependency-tracking"
+    ;;
+esac
+
 export PATH="$PREFIX/bin:$PATH"
 
 unset CC
@@ -126,7 +132,7 @@ for arch in $ARCHS; do
         ;;
     esac
     FLAGS="$FLAGS --with-default-msvcrt=$DEFAULT_MSVCRT"
-    ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS
+    ../configure --host=$arch-w64-mingw32 --prefix="$PREFIX/$arch-w64-mingw32" $FLAGS $CFGUARD_FLAGS $CRT_CONFIG_FLAGS
     $MAKE -j$CORES
     $MAKE install
     cd ..
@@ -134,6 +140,13 @@ done
 cd ..
 
 for arch in $ARCHS; do
+    if [ ! -f $PREFIX/$arch-w64-mingw32/lib/libssp.a ]; then
+        # Create empty dummy archives, to avoid failing when the compiler
+        # driver adds "-lssp -lssh_nonshared" when linking.
+        llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp.a
+        llvm-ar rcs $PREFIX/$arch-w64-mingw32/lib/libssp_nonshared.a
+    fi
+
     mkdir -p "$PREFIX/$arch-w64-mingw32/share/mingw32"
     for file in COPYING COPYING.MinGW-w64/COPYING.MinGW-w64.txt COPYING.MinGW-w64-runtime/COPYING.MinGW-w64-runtime.txt; do
         install -m644 "$file" "$PREFIX/$arch-w64-mingw32/share/mingw32"

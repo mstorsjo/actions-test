@@ -37,8 +37,8 @@ ifneq ($(ARCH),)
     CROSS = $(ARCH)-w64-mingw32-
     CROSS_UWP = $(ARCH)-w64-mingw32uwp-
 endif
-CC = $(CROSS)clang$(TOOLEXT)
-CXX = $(CROSS)clang++$(TOOLEXT)
+CC = $(CROSS)gcc$(TOOLEXT)
+CXX = $(CROSS)g++$(TOOLEXT)
 WIDL = $(CROSS)widl$(TOOLEXT)
 CC_UWP = $(CROSS_UWP)clang$(TOOLEXT)
 
@@ -57,6 +57,9 @@ endif
 
 EXEEXT = .exe
 DLLEXT = .dll
+
+# Available everywhere by default, but can be skipped by passing HAVE_OPENMP=
+HAVE_OPENMP = 1
 
 TESTS_C = hello hello-tls crt-test setjmp
 TESTS_C_DLL = autoimport-lib
@@ -174,7 +177,7 @@ $(TARGETS_CFGUARD): %$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -mguard=cf
 
 $(TARGETS_FORTIFY): %-fortify$(EXEEXT): %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -O2 -D_FORTIFY_SOURCE=2 -lssp
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -O2 -D_FORTIFY_SOURCE=2
 
 $(TARGETS_ASAN): %-asan$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=address -g -gcodeview -Wl,--pdb=
@@ -217,7 +220,7 @@ ifeq ($(ARCH), i686)
     COMPILER_RT_ARCH = i386
 endif
 
-RUNTIMES = libc++ libunwind libssp-0 libclang_rt.asan_dynamic-$(COMPILER_RT_ARCH) libomp
+RUNTIMES = libc++ libunwind libclang_rt.asan_dynamic-$(COMPILER_RT_ARCH) libomp
 ifneq ($(RUNTIMES_SRC),)
 LOCAL_RUNTIMES = $(patsubst $(RUNTIMES_SRC)/%, %, $(wildcard $(addprefix $(RUNTIMES_SRC)/, $(addsuffix $(DLLEXT), $(RUNTIMES)))))
 
@@ -252,7 +255,11 @@ ifeq ($(CMD),)
     FAILURE_TEST_TARGETS = $(addprefix .failtested., $(FAILURE_TESTS))
     CUSTOM1_FAILURE_TEST_TARGETS = .customtest1.bufferoverflow-fortify$(EXEEXT)
     ifneq ($(HAVE_CFGUARD),)
+    ifeq ($(WSL),)
+        # These tests do special calling of cmd.exe, which don't quite
+        # work when running with Linux make in WSL.
         CUSTOM2_FAILURE_TEST_TARGETS = .customtest2.cfguard-test$(EXEEXT)
+    endif
     endif
 endif
 endif
@@ -271,10 +278,6 @@ $(TEST_TARGETS): .tested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTI
 	$(DO_RUN)$<
 	$(TOUCH_TARGET)
 
-# GNU libssp writes the error messages directly to the console, and it can't be
-# redirected, so we can't check for the presence of those messages.
-# grep -q "stack smashing detected" $$OUT || exit 1
-# grep -q "buffer overflow detected" $$OUT || exit 1
 $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTIMES)
 	@echo $(DO_RUN)$< trigger; \
 	OUT=log1-$*; \
@@ -296,8 +299,10 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 			grep -q "signed integer overflow" $$OUT || exit 1; \
 			;; \
 		stacksmash) \
+			grep -q "stack smashing detected" $$OUT || exit 1; \
 			;; \
 		bufferoverflow-*) \
+			grep -q "buffer overflow detected" $$OUT || exit 1; \
 			;; \
 		*) \
 			echo Unhandled failure test $*; \
@@ -308,7 +313,6 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 	fi
 	@touch $@
 
-# grep -q "buffer overflow detected" $$OUT || exit 1
 .customtest1.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $(LOCAL_RUNTIMES)
 	@i=0; while [ $$i -le 10 ]; do \
 		OUT=log2-$*; \
@@ -323,6 +327,7 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 			ret=$$?; \
 			cat $$OUT; \
 			echo OK: $* $$i failed expectedly, returned $$ret; \
+			grep -q "buffer overflow detected" $$OUT || exit 1; \
 			rm -f $$OUT; \
 		fi; \
 		i=$$(($$i+1)); \

@@ -16,10 +16,7 @@
 
 set -e
 
-echo Skipping LLDB MI, as it is incompatible with the current version of LLVM
-exit 0
-
-: ${LLDB_MI_VERSION:=2388bd74133bc21eac59b2e2bf97f2a30770a315}
+: ${LLDB_MI_VERSION:=07178904778f87df13389480b85b9ce353ba4f31}
 BUILDDIR=build
 unset HOST
 
@@ -67,8 +64,6 @@ else
     MINGW*)
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
-    *)
-        ;;
     esac
     BUILDCMD=make
 fi
@@ -94,29 +89,50 @@ fi
 if [ -n "$HOST" ]; then
     BUILDDIR=$BUILDDIR-$HOST
 
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
+    case $HOST in
+    *-mingw32)
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
+        ;;
+    *-linux*)
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Linux"
+        ;;
+    *)
+        echo "Unrecognized host $HOST"
+        exit 1
+        ;;
+    esac
 
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH=$LLVM_DIR"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
 fi
 
 if [ -n "$MACOS_REDIST" ]; then
     : ${MACOS_REDIST_ARCHS:=arm64 x86_64}
     : ${MACOS_REDIST_VERSION:=10.9}
     ARCH_LIST=""
+    NATIVE=
     for arch in $MACOS_REDIST_ARCHS; do
         if [ -n "$ARCH_LIST" ]; then
             ARCH_LIST="$ARCH_LIST;"
         fi
         ARCH_LIST="$ARCH_LIST$arch"
+        if [ "$(uname -m)" = "$arch" ]; then
+            NATIVE=1
+        fi
     done
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=$ARCH_LIST"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_REDIST_VERSION"
+    if [ -z "$NATIVE" ]; then
+        # If we're not building for the native arch, flag to CMake that we're
+        # cross compiling.
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Darwin"
+    fi
 fi
 
 cd lldb-mi
