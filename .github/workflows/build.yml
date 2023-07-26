@@ -264,7 +264,7 @@ jobs:
           TAG: ${{needs.prepare.outputs.TAG}}
         run: |
           sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --disable-clang-tools-extra --disable-lldb --disable-mingw-w64-tools --disable-make
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --disable-clang-tools-extra --disable-lldb --disable-mingw-w64-tools --disable-make
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
@@ -347,7 +347,6 @@ jobs:
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/checkout@v3
       - name: Checkout llvm-project
         env:
@@ -362,7 +361,6 @@ jobs:
           cmake ../runtimes `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DLIBCXX_ENABLE_WERROR=YES `
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
             -DLIBCXX_CXX_ABI=libcxxabi `
