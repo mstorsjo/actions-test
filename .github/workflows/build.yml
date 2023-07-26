@@ -240,7 +240,7 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -329,7 +329,6 @@ jobs:
     # The libcxxabi and libunwind tests don't pass on the pinned 16.x branch,
     # only on git main.
     if: true
-    needs: [linux-cross-windows]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -337,11 +336,9 @@ jobs:
         arch:
           - x86_64
     steps:
-      - uses: actions/download-artifact@v3
-        with:
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
