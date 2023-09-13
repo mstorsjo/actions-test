@@ -26,21 +26,10 @@ jobs:
     outputs:
       LLVM_VERSION: ${{steps.get-parameters.outputs.LLVM_VERSION}}
     steps:
-      - name: Download build parameters
-        uses: dawidd6/action-download-artifact@v2
-        with:
-          repo: mstorsjo/llvm-mingw
-          workflow: build.yml
-          workflow_conclusion: success
-          commit: ${{inputs.commit}}
-          branch: ${{inputs.branch}}
-          event: ${{inputs.pipeline_type}}
-          name: parameters
       - name: Get build parameters
         id: get-parameters
         run: |
-          cat parameters.txt >> $GITHUB_OUTPUT
-          cat $GITHUB_OUTPUT
+          echo Noop
 
   test-llvm:
     needs: [prepare]
