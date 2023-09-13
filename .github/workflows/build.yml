@@ -338,7 +338,7 @@ jobs:
     steps:
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-nightly-20230912-ucrt-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-nightly-20230913-ucrt-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
