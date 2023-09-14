@@ -76,7 +76,7 @@ jobs:
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
       # Not passing -DPython3_EXECUTABLE="$Env:PYTHON_EXE" here. The bundled Python doesn't normally have
       # zlib enabled, which some tests require.
-      - name: Build and run tests
+      - name: Build the project and unittests
         run: |
           cd llvm-project
           mkdir build
@@ -90,4 +90,9 @@ jobs:
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
             -DLLVM_LIT_ARGS="-v --time-tests"
+          ninja test-depends
+      - name: Run tests
+        run: |
+          cd llvm-project
+          cd build
           ninja check
