@@ -4,42 +4,17 @@ on:
 
 jobs:
   test-llvm:
-    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - x86_64
+        image:
+          - windows-latest
+          - windows-2019
+          - windows-2022
+    runs-on: ${{matrix.image}}
     steps:
-      - name: Unpack toolchain
-        run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-${{matrix.arch}}.zip
-          Expand-Archive llvm-mingw-*.zip -DestinationPath .
-          del llvm-mingw-*.zip
-          mv llvm-mingw-* c:\llvm-mingw
-          echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v3
-      - name: Checkout llvm-project
-        run: |
-          git config --global user.name "LLVM MinGW"
-          git config --global user.email root@localhost
-          git config --global core.autocrlf false
-          bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
-      # Not passing -DPython3_EXECUTABLE="$Env:PYTHON_EXE" here. The bundled Python doesn't normally have
-      # zlib enabled, which some tests require.
       - name: Build and run tests
+        shell: cmd
         run: |
-          cd llvm-project
-          mkdir build
-          cd build
-          cmake ../llvm `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DLLVM_TARGETS_TO_BUILD=X86 `
-            -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" `
-            -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=OFF `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++
-          ninja check
+          where cmake
+          where ninja
