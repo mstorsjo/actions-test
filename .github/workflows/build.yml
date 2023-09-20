@@ -9,4 +9,5 @@ jobs:
       - name: Locate ninja
         shell: cmd
         run: |
+          choco install ninja
           where ninja
