@@ -4,17 +4,9 @@ on:
 
 jobs:
   test-llvm:
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - windows-latest
-          - windows-2019
-          - windows-2022
-    runs-on: ${{matrix.image}}
+    runs-on: windows-2022
     steps:
-      - name: Build and run tests
+      - name: Locate ninja
         shell: cmd
         run: |
-          where cmake
           where ninja
