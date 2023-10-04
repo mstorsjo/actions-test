@@ -1,0 +1,59 @@
+From 1656661ade020e937d4d0a95996a0a2fc3a767d4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 4 Oct 2023 13:07:31 +0300
+Subject: [PATCH] [libcxx] [test] Add a test parameter for disabling memory
+ intensive tests
+
+Specifically, the test
+std/input.output/string.streams/stringstream/stringstream.members/gcount.pass.cpp
+allocates a std::string with INT_MAX-1 elements, and then writes
+this to a std::stringstream. On Linux, running this test consumes
+around 5.0 GB of memory; on Windows, it ends up using up to
+6.8 GB of memory.
+
+This limits whether such tests can run on e.g. GitHub Actions
+runners, where the free runners are limited to 8 GB of memory.
+
+This is somewhat similar to, but still notably different, from
+the existing test parameter long_tests.
+
+Better suggestions on parameter name are welcome.
+---
+ .../stringstream/stringstream.members/gcount.pass.cpp     | 1 +
+ libcxx/utils/libcxx/test/params.py                        | 8 ++++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/libcxx/test/std/input.output/string.streams/stringstream/stringstream.members/gcount.pass.cpp b/libcxx/test/std/input.output/string.streams/stringstream/stringstream.members/gcount.pass.cpp
+index 3a5edac6c58b..8dc74421e789 100644
+--- a/libcxx/test/std/input.output/string.streams/stringstream/stringstream.members/gcount.pass.cpp
++++ b/libcxx/test/std/input.output/string.streams/stringstream/stringstream.members/gcount.pass.cpp
+@@ -7,6 +7,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ // UNSUPPORTED: 32-bit-pointer
++// REQUIRES: large_tests
+ 
+ // Test that tellp() does not break the stringstream after INT_MAX, due to use
+ // of pbump() that accept int.
+diff --git a/libcxx/utils/libcxx/test/params.py b/libcxx/utils/libcxx/test/params.py
+index d4e4b722347d..5911af85c1c8 100644
+--- a/libcxx/utils/libcxx/test/params.py
++++ b/libcxx/utils/libcxx/test/params.py
+@@ -278,6 +278,14 @@ DEFAULT_PARAMETERS = [
+         help="Whether to enable tests that take longer to run. This can be useful when running on a very slow device.",
+         actions=lambda enabled: [] if not enabled else [AddFeature("long_tests")],
+     ),
++    Parameter(
++        name="large_tests",
++        choices=[True, False],
++        type=bool,
++        default=True,
++        help="Whether to enable tests that use a lot of memory. This can be useful when running on a device with limited amounts of memory.",
++        actions=lambda enabled: [] if not enabled else [AddFeature("large_tests")],
++    ),
+     Parameter(
+         name="hardening_mode",
+         choices=["unchecked", "hardened", "safe", "debug"],
+-- 
+2.25.1
+
