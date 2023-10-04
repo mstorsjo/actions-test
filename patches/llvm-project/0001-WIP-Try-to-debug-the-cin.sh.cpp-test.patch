@@ -1,0 +1,33 @@
+From 393b2126fceb88d7951d0240e8b46b242c7b3b8b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 4 Oct 2023 16:09:49 +0300
+Subject: [PATCH] WIP: Try to debug the cin.sh.cpp test
+
+---
+ .../iostream.objects/narrow.stream.objects/cin.sh.cpp | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/libcxx/test/std/input.output/iostream.objects/narrow.stream.objects/cin.sh.cpp b/libcxx/test/std/input.output/iostream.objects/narrow.stream.objects/cin.sh.cpp
+index b39cd57ab212..5bf14add4af2 100644
+--- a/libcxx/test/std/input.output/iostream.objects/narrow.stream.objects/cin.sh.cpp
++++ b/libcxx/test/std/input.output/iostream.objects/narrow.stream.objects/cin.sh.cpp
+@@ -20,8 +20,13 @@
+ #include <cassert>
+ 
+ int main(int, char**) {
+-    int i;
+-    std::cin >> i;
+-    assert(i == 1234);
++    std::string str;
++    std::cin >> str;
++    fprintf(stderr,"%d chars:", (int)str.size());
++    for (int i = 0; i < (int)str.size(); i++)
++        fprintf(stderr, " %02x", str[i]);
++    fprintf(stderr, "\n");
++    fflush(stderr);
++    assert(false);
+     return 0;
+ }
+-- 
+2.25.1
+
