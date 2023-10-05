@@ -355,6 +355,10 @@ jobs:
           git config --global user.name "LLVM MinGW"
           git config --global user.email root@localhost
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
+      - name: Find echo
+        shell: cmd
+        run: |
+          where echo
       - name: Build and test libcxx
         run: |
           cd llvm-project
