@@ -340,6 +340,7 @@ jobs:
         shell: cmd
         run: |
           where echo
+          where ninja
 
   # Run the OpenMP tests with the cross-built i686/x86_64 toolchains from above.
   # This also forces testing the bundled python executables.
