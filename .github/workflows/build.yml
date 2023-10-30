@@ -334,14 +334,14 @@ jobs:
       fail-fast: false
       matrix:
         arch:
-          - x86_64
+          - i686
     steps:
       - name: Install dependencies
         run: |
           choco install ninja
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-x86_64.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-i686.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
