@@ -333,15 +333,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - i686
+        include:
+          - { arch: i686, prefix: }
+          - { arch: x86_64, prefix: i686-w64-mingw32- }
+          - { arch: x86_64, prefix: }
     steps:
       - name: Install dependencies
         run: |
           choco install ninja
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-i686.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -364,8 +366,8 @@ jobs:
             -DLIBCXX_ENABLE_WERROR=YES `
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
             -DLIBCXX_CXX_ABI=libcxxabi `
-            -DCMAKE_C_COMPILER=clang `
-            -DCMAKE_CXX_COMPILER=clang++ `
+            -DCMAKE_C_COMPILER=${{matrix.prefix}}clang `
+            -DCMAKE_CXX_COMPILER=${{matrix.prefix}}clang++ `
             -DLIBCXXABI_ENABLE_SHARED=NO `
             -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
             -DLIBCXX_USE_COMPILER_RT=YES `
