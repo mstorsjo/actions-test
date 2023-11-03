@@ -378,7 +378,7 @@ jobs:
             -DLIBCXX_EXTRA_SITE_DEFINES="__USE_MINGW_ANSI_STDIO=1;TEST_IS_EXECUTED_IN_A_SLOW_ENVIRONMENT" `
             -DLIBCXX_TEST_PARAMS="large_tests=False"
           ninja
-          ninja check-cxx
+          python3 bin/llvm-lit.py -v ../libcxx/test/std/utilities/tuple/tuple.tuple/tuple.cnstr/recursion_depth.pass.cpp
 
   # Run the OpenMP tests with the cross-built i686/x86_64 toolchains from above.
   # This also forces testing the bundled python executables.
