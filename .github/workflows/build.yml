@@ -345,8 +345,6 @@ jobs:
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/checkout@v3
       - name: Checkout llvm-project
         env:
@@ -363,7 +361,6 @@ jobs:
           cmake ../runtimes `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DLIBCXX_ENABLE_WERROR=YES `
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
             -DLIBCXX_CXX_ABI=libcxxabi `
