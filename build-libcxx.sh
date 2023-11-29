@@ -62,8 +62,6 @@ cd runtimes
 
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
-    NINJA=1
-    BUILDCMD=ninja
 else
     : ${CORES:=$(nproc 2>/dev/null)}
     : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
@@ -74,7 +72,6 @@ else
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
     esac
-    BUILDCMD=make
 fi
 
 for arch in $ARCHS; do
@@ -115,7 +112,7 @@ for arch in $ARCHS; do
         -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \
         ..
 
-    $BUILDCMD ${CORES+-j$CORES}
-    $BUILDCMD install
+    cmake --build . ${CORES:+-j${CORES}}
+    cmake --install .
     cd ..
 done

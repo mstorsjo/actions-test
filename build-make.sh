@@ -18,7 +18,7 @@ set -e
 
 unset HOST
 
-: ${MAKE_VERSION:=4.2.1}
+: ${MAKE_VERSION:=4.4.1}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -53,8 +53,8 @@ download() {
 }
 
 if [ ! -d make-$MAKE_VERSION ]; then
-    download https://ftp.gnu.org/gnu/make/make-$MAKE_VERSION.tar.bz2
-    tar -jxf make-$MAKE_VERSION.tar.bz2
+    download https://ftp.gnu.org/gnu/make/make-$MAKE_VERSION.tar.gz
+    tar -zxf make-$MAKE_VERSION.tar.gz
 fi
 
 cd make-$MAKE_VERSION
@@ -64,6 +64,7 @@ if [ -n "$HOST" ]; then
     CROSS_NAME=-$HOST
 fi
 
+[ -z "$CLEAN" ] || rm -rf build$CROSS_NAME
 mkdir -p build$CROSS_NAME
 cd build$CROSS_NAME
 ../configure --prefix="$PREFIX" $CONFIGFLAGS --program-prefix=mingw32- --enable-job-server LDFLAGS="-Wl,-s"
