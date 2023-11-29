@@ -81,6 +81,7 @@ if [ -n "$PYTHON" ]; then
     cp $PREFIX/python/bin/*.dll $PREFIX/bin
     LLVM_ARGS="$LLVM_ARGS --with-python"
 fi
+exit 0
 
 ./build-llvm.sh $PREFIX --host=$HOST $LLVM_ARGS
 if [ -z "$NO_LLDB" ] && [ -z "$NO_LLDB_MI" ]; then
