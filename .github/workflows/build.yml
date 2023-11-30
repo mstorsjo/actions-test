@@ -280,7 +280,7 @@ jobs:
           sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
           git config --global user.name "LLVM MinGW"
           git config --global user.email root@localhost
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --disable-clang-tools-extra
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
@@ -296,7 +296,7 @@ jobs:
   # Run llvm-mingw's tests on x86_64 and i686 with the cross-built corresponding
   # toolchains from above.
   test-toolchain:
-    if: false
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     needs: [linux-cross-windows]
     runs-on: windows-latest
     defaults:
@@ -374,7 +374,7 @@ jobs:
   # This also forces testing the bundled python executables.
   test-openmp:
     # Only running these tests in scheduled builds.
-    if: false
+    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
     needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
@@ -440,7 +440,7 @@ jobs:
   # above. This also forces testing the bundled python executables.
   test-compiler-rt:
     # Only running these tests in scheduled builds.
-    if: false
+    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
     needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
@@ -612,7 +612,7 @@ jobs:
           make -j$(nproc) fate
 
   upload-nightly:
-    if: false
+    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
     permissions:
       contents: write
     needs: [linux, linux-cross-aarch64, macos, linux-cross-windows, test-toolchain, linux-test-cross-build-ffmpeg, test-ffmpeg]
