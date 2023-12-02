@@ -155,6 +155,9 @@ export CXX=$HOST-g++
     --without-ensurepip         \
     --without-c-locale-coercion
 
+$MAKE -j$CORES libpython3.11.a
+$MAKE -j$CORES sharedmods
+$MAKE -j$CORES libpython3.11.dll.a
 $MAKE -j$CORES
 $MAKE install
 rm -rf $PREFIX/lib/python*/test
