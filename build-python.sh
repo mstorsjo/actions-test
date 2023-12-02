@@ -120,7 +120,6 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT_PYTHON" ]; then
     [ -z "$SYNC" ] || git fetch
     git reset --hard
     git checkout $PYTHON_VERSION_MINGW
-    git am -3 ../0001*.patch
     autoreconf -vfi
     cd ..
 fi
