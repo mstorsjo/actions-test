@@ -258,7 +258,6 @@ jobs:
       matrix:
         include:
           - { arch: x86_64, crt: ucrt }
-          - { arch: aarch64, crt: ucrt }
     steps:
       - name: Unpack cross toolchain
         run: |
