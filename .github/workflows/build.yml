@@ -61,6 +61,13 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
+      - name: Unpack toolchain
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -89,10 +96,17 @@ jobs:
   # libraries that were built in the 'linux' step above.
   linux-cross-aarch64:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux, prepare]
+    needs: [prepare]
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
+      - name: Unpack toolchain
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          sudo mv llvm-mingw* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -101,17 +115,9 @@ jobs:
           sudo apt-get update && sudo apt-get install ninja-build g++-aarch64-linux-gnu
           ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --no-runtimes --host=aarch64-linux-gnu
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
-      - uses: actions/download-artifact@v3
-        with:
-          name: linux-ucrt-x86_64-toolchain
-      - name: Unpack native toolchain
-        run: |
-          tar -Jxf llvm-mingw-*.tar.xz
-          rm llvm-mingw-*.tar.xz
-          mv llvm-mingw* llvm-mingw-native
       - name: Assemble the cross-built toolchain
         run: |
-          ./prepare-cross-toolchain-unix.sh $(pwd)/llvm-mingw-native $(pwd)/install/llvm-mingw
+          ./prepare-cross-toolchain-unix.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw
       - name: Test using the cross-built assembled toolchain
         run: |
           sudo apt-get update && sudo apt-get install qemu-user-static libc6-arm64-cross libstdc++6-arm64-cross
@@ -172,6 +178,13 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Unpack toolchain
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-macos-universal.tar.xz
+          tar -Jxf llvm-mingw-*.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw* llvm-mingw-preexisting
+          echo $(pwd)/llvm-mingw-preexisting/bin >> $GITHUB_PATH
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
