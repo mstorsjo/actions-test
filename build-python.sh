@@ -18,7 +18,7 @@ set -e
 
 : ${LIBFFI_VERSION:=v3.4.4}
 : ${PYTHON_VERSION:=v3.11.6}
-: ${PYTHON_VERSION_MINGW:=9599c1cbffc8b1889f661b4da6463252e0722bed}
+: ${PYTHON_VERSION_MINGW:=03d9f3ca4807a327815ce80aceadc8154245e267}
 
 unset HOST
 
@@ -159,4 +159,10 @@ $MAKE -j$CORES
 $MAKE install
 rm -rf $PREFIX/lib/python*/test
 find $PREFIX/lib/python* -name __pycache__ | xargs rm -rf
+
+# Provide a versionless executable as well; msys2 does something similar
+# (for python3, python3w, python3-config, idle3 and pydoc3) after installing
+# a Python version that is supposed to be the primary Python.
+cp -a $PREFIX/bin/python3.exe $PREFIX/bin/python.exe
+
 cd ../..
