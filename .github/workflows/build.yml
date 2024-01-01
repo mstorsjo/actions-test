@@ -177,6 +177,9 @@ jobs:
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           mv llvm-mingw* llvm-mingw-preexisting
+          cd llvm-mingw-preexisting/bin
+          ln -s lld ld64.lld
+          cd ../..
           echo $(pwd)/llvm-mingw-preexisting/bin >> $GITHUB_PATH
       - name: Build
         env:
