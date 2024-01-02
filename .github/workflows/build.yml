@@ -177,6 +177,7 @@ jobs:
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           mv llvm-mingw* llvm-mingw-preexisting
+          cp -a $(clang -print-resource-dir)/lib/darwin llvm-mingw-preexisting/lib/clang/*/lib
           cd llvm-mingw-preexisting/bin
           ln -s lld ld64.lld
           cd ../..
