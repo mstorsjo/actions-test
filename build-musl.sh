@@ -48,7 +48,8 @@ fi
 
 if [ ! -d musl ]; then
     # Unofficial github mirror at https://github.com/bminor/musl
-    git clone https://git.musl-libc.org/git/musl
+    #git clone https://git.musl-libc.org/git/musl
+    git clone https://github.com/bminor/musl
     CHECKOUT=1
 fi
 
