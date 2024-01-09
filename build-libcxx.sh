@@ -18,7 +18,6 @@ set -e
 
 BUILD_STATIC=ON
 BUILD_SHARED=ON
-CFGUARD_CFLAGS="-mguard=cf"
 
 while [ $# -gt 0 ]; do
     if [ "$1" = "--disable-shared" ]; then
@@ -29,17 +28,13 @@ while [ $# -gt 0 ]; do
         BUILD_STATIC=OFF
     elif [ "$1" = "--enable-static" ]; then
         BUILD_STATIC=ON
-    elif [ "$1" = "--enable-cfguard" ]; then
-        CFGUARD_CFLAGS="-mguard=cf"
-    elif [ "$1" = "--disable-cfguard" ]; then
-        CFGUARD_CFLAGS=
     else
         PREFIX="$1"
     fi
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo "$0 [--disable-shared] [--disable-static] [--enable-cfguard|--disable-cfguard] dest"
+    echo "$0 [--disable-shared] [--disable-static] dest"
     exit 1
 fi
 
@@ -48,7 +43,7 @@ PREFIX="$(cd "$PREFIX" && pwd)"
 
 export PATH="$PREFIX/bin:$PATH"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i386 x86_64 arm aarch64 powerpc64le riscv64}}
 
 if [ ! -d llvm-project/libunwind ] || [ -n "$SYNC" ]; then
     CHECKOUT_ONLY=1 ./build-llvm.sh
@@ -75,6 +70,20 @@ else
 fi
 
 for arch in $ARCHS; do
+    triple=$arch-linux-musl
+    fulltriple=$arch-unknown-linux-musl
+    multiarch_triple=$arch-linux-gnu
+    case $arch in
+    arm*)
+        triple=$arch-linux-musleabihf
+        fulltriple=armv7-unknown-linux-musleabihf
+        multiarch_triple=$arch-linux-gnueabihf
+        ;;
+    i*86)
+        multiarch_triple=i386-linux-gnu
+        ;;
+    esac
+
     [ -z "$CLEAN" ] || rm -rf build-$arch
     mkdir -p build-$arch
     cd build-$arch
@@ -82,11 +91,14 @@ for arch in $ARCHS; do
     cmake \
         ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$PREFIX/$arch-w64-mingw32" \
-        -DCMAKE_C_COMPILER=$arch-w64-mingw32-clang \
-        -DCMAKE_CXX_COMPILER=$arch-w64-mingw32-clang++ \
-        -DCMAKE_CXX_COMPILER_TARGET=$arch-w64-windows-gnu \
-        -DCMAKE_SYSTEM_NAME=Windows \
+        -DCMAKE_INSTALL_PREFIX="$PREFIX/generic-linux-musl/usr" \
+        -DLIBCXX_INSTALL_LIBRARY_DIR=lib/$multiarch_triple \
+        -DLIBCXXABI_INSTALL_LIBRARY_DIR=lib/$multiarch_triple \
+        -DLIBUNWIND_INSTALL_LIBRARY_DIR=lib/$multiarch_triple \
+        -DCMAKE_C_COMPILER=$triple-clang \
+        -DCMAKE_CXX_COMPILER=$triple-clang++ \
+        -DCMAKE_CXX_COMPILER_TARGET=$fulltriple \
+        -DCMAKE_SYSTEM_NAME=Linux \
         -DCMAKE_C_COMPILER_WORKS=TRUE \
         -DCMAKE_CXX_COMPILER_WORKS=TRUE \
         -DLLVM_PATH="$LLVM_PATH" \
@@ -100,19 +112,23 @@ for arch in $ARCHS; do
         -DLIBCXX_ENABLE_SHARED=$BUILD_SHARED \
         -DLIBCXX_ENABLE_STATIC=$BUILD_STATIC \
         -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=TRUE \
+        -DLIBCXX_HAS_MUSL_LIBC=TRUE \
         -DLIBCXX_CXX_ABI=libcxxabi \
         -DLIBCXX_LIBDIR_SUFFIX="" \
         -DLIBCXX_INCLUDE_TESTS=FALSE \
-        -DLIBCXX_ENABLE_ABI_LINKER_SCRIPT=FALSE \
+        -DLIBCXX_INSTALL_MODULES=ON \
+        -DLIBCXX_INSTALL_MODULES_DIR="$PREFIX/share/libc++/v1" \
         -DLIBCXXABI_USE_COMPILER_RT=ON \
         -DLIBCXXABI_USE_LLVM_UNWINDER=ON \
-        -DLIBCXXABI_ENABLE_SHARED=OFF \
+        -DLIBCXXABI_ENABLE_SHARED=$BUILD_SHARED \
+        -DLIBCXXABI_ENABLE_STATIC=$BUILD_STATIC \
         -DLIBCXXABI_LIBDIR_SUFFIX="" \
-        -DCMAKE_C_FLAGS_INIT="$CFGUARD_CFLAGS" \
-        -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \
         ..
+
+#        -DLIBCXX_ENABLE_ABI_LINKER_SCRIPT=FALSE \
 
     cmake --build . ${CORES:+-j${CORES}}
     cmake --install .
+
     cd ..
 done

@@ -16,9 +16,9 @@
 
 set -e
 
-: ${LIBFFI_VERSION:=v3.4.4}
-: ${PYTHON_VERSION:=v3.11.6}
-: ${PYTHON_VERSION_MINGW:=03d9f3ca4807a327815ce80aceadc8154245e267}
+: ${LIBFFI_VERSION:=v3.4.6}
+: ${PYTHON_VERSION:=v3.11.9}
+: ${PYTHON_VERSION_MINGW:=d6d38acc0d637e6dc2fe6b984664bdd460bd3d04}
 
 unset HOST
 
@@ -103,7 +103,8 @@ if [ -z "$HOST" ]; then
     cd $BUILDDIR
     ../configure --prefix="$PREFIX" \
         CFLAGS="-I$PREFIX/include" CXXFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib -Wl,-s" \
-        --without-ensurepip
+        --without-ensurepip \
+        --disable-test-modules
     $MAKE -j$CORES
     $MAKE install
     exit 0
@@ -153,11 +154,11 @@ export CXX=$HOST-g++
     --enable-shared             \
     --with-system-ffi           \
     --without-ensurepip         \
-    --without-c-locale-coercion
+    --without-c-locale-coercion \
+    --disable-test-modules
 
 $MAKE -j$CORES
 $MAKE install
-rm -rf $PREFIX/lib/python*/test
 find $PREFIX/lib/python* -name __pycache__ | xargs rm -rf
 
 # Provide a versionless executable as well; msys2 does something similar

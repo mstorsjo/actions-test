@@ -1,7 +1,5 @@
 /llvm-project
-/mingw-w64
+/musl
+/linux
 /lldb-mi
 /make-*
-/libffi
-/cpython*
-/python-native

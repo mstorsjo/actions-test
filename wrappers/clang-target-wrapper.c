@@ -22,7 +22,7 @@
 #define CLANG "clang"
 #endif
 #ifndef DEFAULT_TARGET
-#define DEFAULT_TARGET "x86_64-w64-mingw32"
+#define DEFAULT_TARGET "x86_64-linux-musl"
 #endif
 
 int _tmain(int argc, TCHAR* argv[]) {
@@ -34,11 +34,29 @@ int _tmain(int argc, TCHAR* argv[]) {
         target = _T(DEFAULT_TARGET);
     TCHAR *arch = _tcsdup(target);
     TCHAR *dash = _tcschr(arch, '-');
-    if (dash)
+    TCHAR *target_without_arch = NULL;
+    if (dash) {
         *dash = '\0';
+        target_without_arch = dash + 1;
+    }
     TCHAR *target_os = _tcsrchr(target, '-');
     if (target_os)
         target_os++;
+
+    TCHAR *basedir = _tcsdup(dir);
+    size_t basedirlen = _tcslen(basedir);
+    if (basedirlen > 0 && (basedir[basedirlen - 1] == '/' ||
+                           basedir[basedirlen - 1] == '\\'))
+        basedir[basedirlen - 1] = '\0';
+    TCHAR *sep = _tcsrchrs(basedir, '/', '\\');
+    if (sep)
+        *(sep + 1) = '\0';
+    TCHAR *sysroot = concat(basedir, _T("generic-linux-musl"));
+    if (!_tcscmp(arch, _T("arm"))) {
+        arch = _T("armv7");
+        if (target_without_arch)
+            target = concat(_T("armv7-"), target_without_arch);
+    }
 
     // Check if trying to compile Ada; if we try to do this, invoking clang
     // would end up invoking <triplet>-gcc with the same arguments, which ends
@@ -66,30 +84,9 @@ int _tmain(int argc, TCHAR* argv[]) {
     else if (!_tcscmp(exe, _T("c11")))
         exec_argv[arg++] = _T("-std=c11");
 
-    if (!_tcscmp(arch, _T("i686"))) {
-        // Dwarf is the default for i686.
-    } else if (!_tcscmp(arch, _T("x86_64"))) {
-        // SEH is the default for x86_64.
-    } else if (!_tcscmp(arch, _T("armv7"))) {
-        // SEH is the default for armv7.
-    } else if (!_tcscmp(arch, _T("aarch64"))) {
-        // SEH is the default for aarch64.
-    }
-
-    if (target_os && !_tcscmp(target_os, _T("mingw32uwp"))) {
-        // the UWP target is for Windows 10
-        exec_argv[arg++] = _T("-D_WIN32_WINNT=0x0A00");
-        exec_argv[arg++] = _T("-DWINVER=0x0A00");
-        // the UWP target can only use Windows Store APIs
-        exec_argv[arg++] = _T("-DWINAPI_FAMILY=WINAPI_FAMILY_APP");
-        // the Windows Store API only supports Windows Unicode (some rare ANSI ones are available)
-        exec_argv[arg++] = _T("-DUNICODE");
-        // force the user of Universal C Runtime
-        exec_argv[arg++] = _T("-D_UCRT");
-    }
-
     exec_argv[arg++] = _T("-target");
     exec_argv[arg++] = target;
+    exec_argv[arg++] = concat(_T("--sysroot="), sysroot);
     exec_argv[arg++] = _T("-rtlib=compiler-rt");
     exec_argv[arg++] = _T("-unwindlib=libunwind");
     exec_argv[arg++] = _T("-stdlib=libc++");
@@ -113,7 +110,7 @@ int _tmain(int argc, TCHAR* argv[]) {
     }
 
     exec_argv[arg] = NULL;
-    if (arg >= max_arg) {
+    if (arg > max_arg) {
         fprintf(stderr, "Too many options added\n");
         abort();
     }
