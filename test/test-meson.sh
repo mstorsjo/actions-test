@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2023 Huang Qinjin
+# Copyright (c) 2023 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -17,32 +17,61 @@
 . "${0%/*}/test.sh"
 
 
-MSVCDIR=$(. "${BIN}msvcenv.sh" && echo $MSVCDIR)
-MSVCDIR=${MSVCDIR//\\//}
-MSVCDIR=${MSVCDIR#z:}
+ARCH=$(. "${BIN}msvcenv.sh" && echo $ARCH)
 
-CMAKE_ARGS=(
-    -DMSVCDIR="$MSVCDIR"
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo
-    -DCMAKE_SYSTEM_NAME=Windows
-)
-
-case $OSTYPE in
-    darwin*)
-        CMAKE_ARGS+=(
-            # No winbind package available on macOS.
-            # https://github.com/mstorsjo/msvc-wine/issues/6
-            -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
-        ) ;;
+case $ARCH in
+x86)
+    CPU_FAMILY=x86
+    CPU=i686
+    ;;
+x64)
+    CPU_FAMILY=x86_64
+    CPU=x86_64
+    ;;
+arm)
+    CPU_FAMILY=arm
+    CPU=armv7
+    ;;
+arm64)
+    CPU_FAMILY=aarch64
+    CPU=aarch64
+    ;;
 esac
 
-EXEC "" CC=${BIN}cl CXX=${BIN}cl RC=${BIN}rc cmake -S"$TESTS" -GNinja "${CMAKE_ARGS[@]}"
+cat >cross.txt <<EOF
+[binaries]
+c = 'cl'
+cpp = 'cl'
+ar = 'lib'
+windres = 'rc'
+;exe_wrapper = ['wine']
+
+[properties]
+needs_exe_wrapper = true
+
+[host_machine]
+system = 'windows'
+cpu_family = '$CPU_FAMILY'
+cpu = '$CPU'
+endian = 'little'
+EOF
+
+MESON_ARGS=(
+    --buildtype debugoptimized
+    --cross-file cross.txt
+)
+
+export PATH="$BIN:$PATH"
+
+EXEC "" meson setup "$TESTS" "${MESON_ARGS[@]}"
 EXEC "" ninja -v
 
 # Rerun ninja to make sure that dependencies aren't broken.
 EXEC ninja-rerun ninja -d explain -v
-DIFF ninja-rerun.err - <<EOF
-EOF
+# Since meson 0.63.0, it generates some extra meta rules, causing the stderr
+# output not to be empty here.
+# DIFF ninja-rerun.err - <<EOF
+# EOF
 DIFF ninja-rerun.out - <<EOF
 ninja: no work to do.
 EOF

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2023 Huang Qinjin
+# Copyright (c) 2023 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -17,20 +17,41 @@
 . "${0%/*}/test.sh"
 
 
-# https://gitlab.kitware.com/cmake/cmake/-/blob/v3.26.0/Source/cmcmd.cxx#L2405
-# https://github.com/mstorsjo/msvc-wine/pull/63
-mtRetIsUpdate() {
-    eval $(printf '%q ' "$@")
-    local mtRet=$?
-    if [ $mtRet -eq 1090650113 ] || [ $mtRet -eq 187 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
+cat >test-arm.asm <<EOF
+        AREA |.text|, CODE, READONLY, ALIGN=4, CODEALIGN
+        ALIGN 4
+        EXPORT func
+func PROC
+        nop
+        ENDP
+        END
+EOF
 
-EXEC "" mtRetIsUpdate ${BIN}mt /nologo /manifest ${TESTS}utf8.manifest /out:output.manifest /notify_update
-EXEC ""               ${BIN}mt /nologo /manifest ${TESTS}utf8.manifest /out:output.manifest /notify_update
+cat >test-x86.asm <<EOF
+_TEXT SEGMENT ALIGN(16) 'CODE'
+PUBLIC func
+func PROC
+        ret
+func ENDP
+_TEXT ENDS
+END
+EOF
 
+ARCH=$(. "${BIN}msvcenv.sh" && echo $ARCH)
+
+case $ARCH in
+x86)
+    EXEC "" ${BIN}ml /c /Fo test-$ARCH.obj test-x86.asm
+    ;;
+x64)
+    EXEC "" ${BIN}ml64 /c /Fo test-$ARCH.obj test-x86.asm
+    ;;
+arm)
+    EXEC "" ${BIN}armasm test-arm.asm test-$ARCH.obj
+    ;;
+arm64)
+    EXEC "" ${BIN}armasm64 test-arm.asm test-$ARCH.obj
+    ;;
+esac
 
 EXIT
