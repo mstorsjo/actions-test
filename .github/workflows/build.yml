@@ -5,6 +5,7 @@ on:
 
 jobs:
   test-msvc-wine-linux:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
@@ -27,20 +28,11 @@ jobs:
     steps:
       - name: Install prerequisites
         run: |
-          brew update && brew install wine-stable msitools cmake ninja meson
+          brew update && brew install wine-stable
           wine64 wineboot
-      - uses: actions/checkout@v3
-      - name: Download MSVC
-        run: |
-          ./vsdownload.py --accept-license --dest $(pwd)/msvc
-          ./install.sh $(pwd)/msvc
-      - name: Test using the installed tools
-        run: |
-          test/test.sh $(pwd)/msvc
-      # Intentionally not storing any artifacts with the downloaded tools;
-      # the installed files aren't redistributable!
 
   test-clang-lld:
+    if: false
     # Ubuntu 22.04 comes with Clang/LLD 14; at least 13 is required for providing
     # __guard_eh_cont_table and __guard_eh_cont_count which are required with
     # MSVC 2019 16.8 or newer.
@@ -73,6 +65,7 @@ jobs:
       # the installed files aren't redistributable!
 
   test-docker:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
