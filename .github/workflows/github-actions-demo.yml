@@ -48,7 +48,6 @@ jobs:
           ninja check-cxx
 
   clang-cl:
-    if: false
     runs-on: windows-latest
     steps:
       - name: Set up the environment
