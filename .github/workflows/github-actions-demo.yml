@@ -6,6 +6,9 @@ jobs:
   llvm-mingw:
     runs-on: windows-latest
     steps:
+      - name: Install dependencies
+        run: |
+          choco install -y ninja
       - name: Download and unpack llvm-mingw
         run: |
           curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20220802/llvm-mingw-20220802-ucrt-x86_64.zip
