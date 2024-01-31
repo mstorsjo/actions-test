@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-17.0.6}
+: ${LLVM_VERSION:=llvmorg-18.1.0-rc1}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -153,8 +153,10 @@ fi
 CMAKEFLAGS="$LLVM_CMAKEFLAGS"
 
 if [ -n "$HOST" ]; then
+    ARCH="${HOST%%-*}"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
     case $HOST in
     *-mingw32)
         CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
@@ -202,7 +204,7 @@ if [ -n "$HOST" ]; then
         EXT_SUFFIX="$(echo $(bash $PREFIX/python/bin/python3-config --extension-suffix))"
         PYTHON_RELATIVE_PATH="$(cd "$PREFIX" && echo python/lib/python*/site-packages)"
         PYTHON_INCLUDE_DIR="$(echo $PREFIX/python/include/python*)"
-        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython*.dll.a)"
+        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython3.*.dll.a)"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_ENABLE_PYTHON=ON"
         CMAKEFLAGS="$CMAKEFLAGS -DPYTHON_HOME=$PREFIX/python"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_HOME=../python"
@@ -267,7 +269,9 @@ if [ -n "$MACOS_REDIST" ]; then
         # If we're not building for the native arch, flag to CMake that we're
         # cross compiling, to let it build native versions of tools used
         # during the build.
+        ARCH="$(echo $MACOS_REDIST_ARCHS | awk '{print $1}')"
         CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Darwin"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
     fi
 fi
 
