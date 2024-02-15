@@ -9,4 +9,11 @@ jobs:
     steps:
       - name: Install prerequisites
         run: |
-          brew update && brew install wine-stable msitools cmake ninja meson
+          set -x
+          time brew update --auto-update
+          time brew update
+          time brew install ninja
+          time brew install cmake
+          time brew install wine-stable
+          time brew install msitools
+          time brew install meson
