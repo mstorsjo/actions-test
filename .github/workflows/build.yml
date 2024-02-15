@@ -10,7 +10,6 @@ jobs:
       - name: Install prerequisites
         run: |
           set -x
-          time brew update --auto-update
           time brew update
           time brew install ninja
           time brew install cmake
