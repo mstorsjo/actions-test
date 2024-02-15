@@ -5,7 +5,14 @@ on:
 
 jobs:
   test-msvc-wine-macos:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-12
+          - macos-13
+          - macos-14
+    runs-on: ${{matrix.runner}}
     steps:
       - name: Install prerequisites
         run: |
