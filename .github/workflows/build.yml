@@ -9,4 +9,4 @@ jobs:
     steps:
       - name: Install prerequisites
         run: |
-          brew update && brew install wine-stable msitools cmake ninja meson
+          brew install wine-stable msitools cmake ninja meson
