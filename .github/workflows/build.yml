@@ -17,5 +17,6 @@ jobs:
       - name: Install prerequisites
         run: |
           set -x
+          time brew install msitools cmake ninja meson
           time brew update --auto-update
-          time brew install meson
+          time brew install wine-stable
