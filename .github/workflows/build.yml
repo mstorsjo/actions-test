@@ -16,9 +16,4 @@ jobs:
     steps:
       - name: Install prerequisites
         run: |
-          set -x
-          ls -l /usr/local/bin/2to3*
-          time brew list --versions
-          time brew install msitools cmake ninja meson
-          time brew update --auto-update
           time brew install wine-stable
