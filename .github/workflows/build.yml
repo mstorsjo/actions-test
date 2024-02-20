@@ -1,0 +1,462 @@
+name: Run extra tests
+
+on:
+  push:
+
+jobs:
+  msvc-x86:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86
+          - x64
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install meson ninja
+          choco install nasm
+          echo "C:\Program Files\NASM" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{matrix.arch}}
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and test
+        run: |
+          mkdir build
+          cd build
+          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  msvc-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install meson ninja
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v6
+        with:
+          repository: ffmpeg/gas-preprocessor
+          ref: 7380ac24e1cd23a5e6d76c6af083d8fc5ab9e943
+          path: gas-preprocessor
+      - name: Add gas-preprocessor to path
+        run: |
+          echo "$PWD\gas-preprocessor" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  clangcl-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install meson ninja
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Create cross file
+        shell: bash
+        run: |
+          cat >cross.txt <<EOF
+          [binaries]
+          c = ['clang-cl', '--target=aarch64-win32-msvc']
+          cpp = ['clang-cl', '--target=aarch64-win32-msvc']
+          ar = 'llvm-lib'
+          windres = 'rc'
+
+          [properties]
+          needs_exe_wrapper = false
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = 'aarch64'
+          cpu = 'aarch64'
+          endian = 'little'
+          EOF
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          meson setup --cross-file ../cross.txt -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  linux-pacbti:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update && sudo apt-get install clang meson qemu-user-static
+      - name: Set up Fedora cross sysroot
+        run: |
+          docker run --rm -v $PWD:/host arm64v8/fedora:35 bash -c "yum -y install glibc-devel gcc && tar -cf /host/fedora.tar /usr /etc/ld.so.cache"
+          mkdir -p /opt/fedora-sysroot
+          tar -C /opt/fedora-sysroot -xf fedora*.tar
+          rm fedora*.tar
+          ln -s usr/lib64 /opt/fedora-sysroot/lib64
+          ln -s usr/lib /opt/fedora-sysroot/lib
+      - uses: actions/checkout@v6
+      - name: Build and test checkasm
+        run: |
+          mkdir build
+          cd build
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'clang'
+          cpp = 'clang++'
+          ar = 'ar'
+          strip = 'strip'
+          exe_wrapper = ['qemu-aarch64-static', '-L', '/opt/fedora-sysroot']
+
+          [properties]
+          needs_exe_wrapper = false
+          c_args = ['--target=aarch64-linux-gnu', '--sysroot=/opt/fedora-sysroot', '-mbranch-protection=standard']
+          c_link_args = ['--target=aarch64-linux-gnu', '--sysroot=/opt/fedora-sysroot', '-Wl,-z,force-bti', '-L/opt/fedora-sysroot/usr/lib64', '-L/opt/fedora-sysroot/usr/lib/gcc/aarch64-redhat-linux/11']
+
+          [host_machine]
+          system = 'linux'
+          cpu_family = 'aarch64'
+          cpu = 'aarch64'
+          endian = 'little'
+          EOF
+
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
+          ninja
+          meson test checkasm -v
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-15-intel
+          - macos-14
+    runs-on: ${{matrix.runner}}
+    steps:
+      - name: Install prerequisites
+        run: |
+          brew install meson nasm
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and run all tests
+        run: |
+          mkdir build
+          cd build
+          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  msvc-wine:
+    runs-on: ubuntu-24.04-arm
+    container: ghcr.io/mstorsjo/wine
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm, sdk: 10.0.22621 } # The newer SDK doesn't inclue ARM
+          - { arch: arm64, sdk: 10.0.26100 } # The older SDK doesn't have flags for detecting modern aarch64 extensions
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v6
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 32b504c63b869681cda6824a20e30b74cb718432
+          path: msvc-wine
+      - name: Install msvc-wine
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends python3 msitools ca-certificates ninja-build winbind meson
+          wine wineboot
+          cd msvc-wine
+          ./vsdownload.py --accept-license --dest /opt/msvc --sdk-version ${{matrix.sdk}}
+          ./install.sh /opt/msvc
+      - uses: actions/checkout@v6
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v6
+        with:
+          repository: ffmpeg/gas-preprocessor
+          ref: 7380ac24e1cd23a5e6d76c6af083d8fc5ab9e943
+          path: gas-preprocessor
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and test
+        run: |
+          mkdir build
+          cd build
+          export PATH=$(pwd)/../gas-preprocessor:/opt/msvc/bin/${{matrix.arch}}:$PATH
+
+          arch=${{matrix.arch}}
+          case $arch in
+          arm)
+              cpu=armv7
+              cpu_family=arm
+              ;;
+          arm64)
+              cpu=aarch64
+              cpu_family=aarch64
+              ;;
+          esac
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'cl'
+          cpp = 'cl'
+          ar = 'lib'
+          windres = 'rc'
+          exe_wrapper = ['wine']
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$cpu'
+          endian = 'little'
+          EOF
+
+          # Stop a potential lingering wineserver, start a new persistent one
+          wineserver -k || true
+          wineserver -p
+          wine wineboot
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false -Dtestdata_tests=true --werror ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  clangcl-cross:
+    runs-on: ubuntu-24.04-arm
+    container: ghcr.io/mstorsjo/wine
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm, sdk: 10.0.22621 } # The newer SDK doesn't inclue ARM
+          - { arch: arm64, sdk: 10.0.26100 } # The older SDK doesn't have flags for detecting modern aarch64 extensions
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v6
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 32b504c63b869681cda6824a20e30b74cb718432
+          path: msvc-wine
+      - name: Install msvc-wine
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends python3 msitools ca-certificates ninja-build winbind meson
+          wine wineboot
+          cd msvc-wine
+          ./vsdownload.py --accept-license --dest /opt/msvc --sdk-version ${{matrix.sdk}}
+          ./install.sh /opt/msvc
+          cp msvcenv-native.sh /opt/msvc
+      - name: Install Clang/LLVM
+        run: |
+          apt-get update && apt-get install -y clang lld llvm
+      - name: Set up clang-cl/lld-link symlinks
+        run: |
+          if [ ! -e /usr/bin/clang-cl ]; then
+              sudo ln -s /usr/bin/clang /usr/bin/clang-cl
+          fi
+          if [ ! -e /usr/bin/lld-link ]; then
+              sudo ln -s /usr/bin/lld /usr/bin/lld-link
+          fi
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and test
+        run: |
+          BIN=/opt/msvc/bin/${{matrix.arch}} . /opt/msvc/msvcenv-native.sh
+          mkdir build
+          cd build
+          export PATH=$PATH
+
+          arch=${{matrix.arch}}
+          case $arch in
+          arm)
+              cpu=armv7
+              cpu_family=arm
+              c_args="-mfpu=neon"
+              ;;
+          arm64)
+              cpu=aarch64
+              cpu_family=aarch64
+              ;;
+          esac
+          cat >cross.txt <<EOF
+          [binaries]
+          c = ['clang-cl', '--target=$cpu-win32-msvc', '-fuse-ld=lld']
+          cpp = ['clang-cl', '--target=$cpu-win32-msvc', '-fuse-ld=lld']
+          ar = 'llvm-lib'
+          windres = 'llvm-rc'
+          exe_wrapper = ['wine']
+
+          [properties]
+          c_args = ['$c_args']
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$cpu'
+          endian = 'little'
+          EOF
+
+          # Stop a potential lingering wineserver, start a new persistent one
+          wineserver -k || true
+          wineserver -p
+          wine wineboot
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false -Dtestdata_tests=true --werror ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  llvm-mingw:
+    runs-on: ubuntu-24.04-arm
+    container: ghcr.io/mstorsjo/wine
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - armv7
+          - aarch64
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends meson ninja-build
+      - uses: actions/checkout@v6
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz
+          tar -Jxf llvm-mingw-*-ucrt-ubuntu-*-aarch64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and test checkasm
+        run: |
+          mkdir build
+          cd build
+
+          arch=${{matrix.arch}}
+          cpu_family=$arch
+          if [ "$cpu_family" = "armv7" ]; then cpu_family="arm"; fi
+          cat >cross.txt <<EOF
+          [binaries]
+          c = '$arch-w64-mingw32-clang'
+          cpp = '$arch-w64-mingw32-clang++'
+          ar = '$arch-w64-mingw32-ar'
+          strip = '$arch-w64-mingw32-strip'
+          windres = '$arch-w64-mingw32-windres'
+          exe_wrapper = ['wine']
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$arch'
+          endian = 'little'
+          EOF
+
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false -Dtestdata_tests=true --werror ..
+          ninja
+          wineserver -p
+          wine wineboot
+          meson test
+          meson test checkasm -v
+
+  linux-aarch64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update && sudo apt-get install meson
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and run all tests
+        run: |
+          mkdir build
+          cd build
+          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          ninja
+          meson test
+          meson test checkasm -v
+
+  linux-armhf:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update && sudo apt-get install meson g++-arm-linux-gnueabihf libc6:armhf libstdc++6:armhf
+      - uses: actions/checkout@v6
+      - name: Checkout test data
+        run: |
+          cd tests
+          git clone https://code.videolan.org/videolan/dav1d-test-data.git
+      - name: Build and run all tests
+        run: |
+          mkdir build
+          cd build
+
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'arm-linux-gnueabihf-gcc'
+          cpp = 'arm-linux-gnueabihf-g++'
+          ar = 'arm-linux-gnueabihf-ar'
+          strip = 'arm-linux-gnueabihf-strip'
+
+          [host_machine]
+          system = 'linux'
+          cpu_family = 'arm'
+          cpu = 'armv7a'
+          endian = 'little'
+          EOF
+
+          meson setup --cross-file cross.txt -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          ninja
+          meson test
+          meson test checkasm -v
