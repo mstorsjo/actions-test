@@ -14,6 +14,6 @@ jobs:
           - macos-14
     runs-on: ${{matrix.runner}}
     steps:
-      - name: Install prerequisites
+      - name: Inspect the SDK
         run: |
-          time brew install wine-stable
+          echo MAC_OS_X_VERSION_MAX_ALLOWED | clang -E -P -include AvailabilityMacros.h -
