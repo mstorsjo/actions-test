@@ -18,6 +18,4 @@ jobs:
         run: |
           set -x
           time brew list --versions
-          time brew install msitools cmake ninja meson
-          time brew update --auto-update
-          time brew install wine-stable
+          time brew install msitools cmake ninja meson wine-stable
