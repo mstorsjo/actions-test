@@ -99,6 +99,13 @@ static inline int _tspawnvp_escape(int mode, const TCHAR *filename, const TCHAR 
     }
     escaped_argv[num_args] = NULL;
     printf("_tspawnvp cmdline %d chars, unescaped %d chars\n", total, unescaped);
+if (total >= 32767) {
+    LPWSTR cmdline = GetCommandLineW();
+    _ftprintf(stdout, _T("input cmdline "TS"\n"), cmdline);
+    for (int i = 0; escaped_argv[i]; i++)
+        _ftprintf(stdout, _T(TS" "), escaped_argv[i]);
+    _ftprintf(stdout, _T("\n"));
+}
     return _tspawnvp(mode, filename, escaped_argv);
 }
 #else
