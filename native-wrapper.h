@@ -91,12 +91,14 @@ static inline int _tspawnvp_escape(int mode, const TCHAR *filename, const TCHAR 
         num_args++;
     const TCHAR **escaped_argv = malloc((num_args + 1) * sizeof(*escaped_argv));
     int total = 0;
+    int unescaped = 0;
     for (int i = 0; argv[i]; i++) {
+        unescaped += 1 + _tcslen(argv[i]);
         escaped_argv[i] = escape(argv[i]);
         total += 1 + _tcslen(escaped_argv[i]);
     }
     escaped_argv[num_args] = NULL;
-    printf("_tspawnvp cmdline %d chars\n", total);
+    printf("_tspawnvp cmdline %d chars, unescaped %d chars\n", total, unescaped);
     return _tspawnvp(mode, filename, escaped_argv);
 }
 #else
