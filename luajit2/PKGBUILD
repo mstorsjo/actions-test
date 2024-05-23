@@ -1,0 +1,29 @@
+pkgname=(luajit2-shared-dev luajit2-shared)
+pkgver=2.1_20240314
+pkgrel=1
+pkgdesc='Just-in-time compiler and drop-in replacement for Lua 5.1'
+arch=('x86_64')
+url="https://luajit.org/"
+license=('MIT')
+source=("git+https://github.com/openresty/luajit2")
+md5sums=('SKIP')
+
+build() {
+  cd $srcdir/luajit2
+  make amalg BUILDMODE=dynamic
+}
+
+package_luajit2-shared-dev() {
+  cd $srcdir/luajit2
+  make DESTDIR=$pkgdir PREFIX=/opt install
+  rm -rf $pkgdir/opt/bin $pkgdir/opt/share $pkgdir/opt/lib/lua
+  mv src/liblua*.a $pkgdir/opt/lib
+}
+
+package_luajit2-shared() {
+  export PKGEXT='.pkg.tar.xz'
+  cd $srcdir/luajit2
+  mkdir -p $pkgdir/opt/bin
+  mv src/lua*.exe $pkgdir/opt/bin
+  mv src/lua*.dll $pkgdir/opt/bin
+}

@@ -1,0 +1,57 @@
+# Maintainer: nyfair <nyfair2012@gmail.com>
+pkgname=mpv-shared
+pkgver=0.38.0
+pkgrel=1
+pkgdesc='a free, open source, and cross-platform media player'
+arch=('x86_64')
+url='https://mpv.io/'
+makedepends=("libjpeg-dev"
+             "libpng-dev"
+             "libsdl2-dev"
+             "libsixel-dev"
+             "angle-headers-dev"
+             "ffmpeg-shared-dev"
+             "mujs-dev"
+             "rubberband-dev"
+             "freetype2-dev"
+             "fribidi-dev"
+             "harfbuzz-dev"
+             "libass-dev"
+             "lcms2-dev"
+             "libbluray-dev"
+             "libdvdnav-dev"
+             "libplacebo-shared-dev"
+             "luajit2-shared-dev"
+             "shaderc-dev"
+             "spirv-cross-dev"
+             "vapoursynth-dev"
+             "vulkan-shared-dev"
+             "zlib-dev")
+license=('GPL3')
+source=("git+https://github.com/mpv-player/mpv.git")
+md5sums=('SKIP')
+
+build() {
+  cd $srcdir/mpv
+  eval "${mpv_ldflags}"
+  meson setup build --buildtype=release -Dprefix=/opt \
+    -Dlua=enabled \
+    -Dopenal=enabled \
+    -Drubberband=enabled \
+    -Dsdl2=enabled \
+    -Dlibbluray=enabled \
+    -Ddvdnav=enabled \
+    -Degl-angle=enabled
+  meson compile -C build
+}
+
+package() {
+  export PKGEXT='.pkg.tar.xz'
+  mkdir -p $pkgdir/opt/bin  
+  cd $srcdir/mpv/build
+  mv mpv.exe $pkgdir/opt/bin
+  mv mpv.com $pkgdir/opt/bin
+  strip -s $pkgdir/opt/bin/mpv.*
+  mv /d/msys64/opt/bin/vulkan*.dll $pkgdir/opt/bin
+  mv /d/msys64/opt/bin/libplacebo*.dll $pkgdir/opt/bin
+}
