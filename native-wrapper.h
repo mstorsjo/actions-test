@@ -90,9 +90,13 @@ static inline int _tspawnvp_escape(int mode, const TCHAR *filename, const TCHAR 
     while (argv[num_args])
         num_args++;
     const TCHAR **escaped_argv = malloc((num_args + 1) * sizeof(*escaped_argv));
-    for (int i = 0; argv[i]; i++)
+    int total = 0;
+    for (int i = 0; argv[i]; i++) {
         escaped_argv[i] = escape(argv[i]);
+        total += 1 + _tcslen(escaped_argv[i]);
+    }
     escaped_argv[num_args] = NULL;
+    printf("_tspawnvp cmdline %d chars\n", total);
     return _tspawnvp(mode, filename, escaped_argv);
 }
 #else
