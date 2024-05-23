@@ -58,11 +58,7 @@ typedef char TCHAR;
 #endif
 
 #ifdef _WIN32
-static inline const TCHAR *escape(const TCHAR *str) {
-    // If we don't need to escape anything, just return the input string
-    // as is.
-    if (!_tcschr(str, ' ') && !_tcschr(str, '"'))
-        return str;
+static inline TCHAR *escape(const TCHAR *str) {
     TCHAR *out = malloc((_tcslen(str) * 2 + 3) * sizeof(*out));
     TCHAR *ptr = out;
     int i;
