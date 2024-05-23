@@ -70,6 +70,9 @@ package_ffmpeg-shared-dev() {
     --extra-cflags="${ffmpeg_extra_cflags}" \
     --extra-libs="${ffmpeg_extra_libs}" \
     --extra-ldflags=-v \
+    --enable-amf \
+    --enable-avisynth \
+    --enable-cuvid${ffmpeg_cuda_llvm} \
     --enable-lcms2 \
     --enable-libaom \
     --enable-libaribcaption \
@@ -99,6 +102,9 @@ package_ffmpeg-shared-dev() {
     --enable-libxvid \
     --enable-libzimg \
     --enable-libzvbi \
+    --enable-openssl \
+    --enable-vaapi \
+    --enable-vapoursynth \
     --enable-zlib \
     --disable-decoder=libaom_av1 \
     --disable-decoder=libvorbis \
