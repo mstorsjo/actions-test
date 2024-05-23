@@ -91,22 +91,18 @@ static inline int _tspawnvp_escape(int mode, const TCHAR *filename, const TCHAR 
         num_args++;
     const TCHAR **escaped_argv = malloc((num_args + 1) * sizeof(*escaped_argv));
     int total = 0;
-    int unescaped = 0;
     for (int i = 0; argv[i]; i++) {
-        unescaped += 1 + _tcslen(argv[i]);
         escaped_argv[i] = escape(argv[i]);
         total += 1 + _tcslen(escaped_argv[i]);
     }
     escaped_argv[num_args] = NULL;
-    printf("_tspawnvp cmdline %d chars, unescaped %d chars\n", total, unescaped);
-if (total >= 32767) {
-    LPWSTR cmdline = GetCommandLineW();
-    _ftprintf(stdout, _T("input cmdline "TS"\n"), cmdline);
-    for (int i = 0; escaped_argv[i]; i++)
-        _ftprintf(stdout, _T(TS" "), escaped_argv[i]);
-    _ftprintf(stdout, _T("\n"));
-}
-    return _tspawnvp(mode, filename, escaped_argv);
+    int ret = _tspawnvp(mode, filename, escaped_argv);
+    if (ret == -1 && total > 32767) {
+        int err = errno;
+        fprintf(stderr, "command line too long; %d characters\n", total);
+        errno = err;
+    }
+    return ret;
 }
 #else
 static inline int _tcsicmp(const TCHAR *a, const TCHAR *b) {
