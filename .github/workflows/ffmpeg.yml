@@ -26,6 +26,10 @@ jobs:
       with:
         path: D:\ucrt64
         key: clang-ucrt-x86_64
+    - name: Rebuild clang-target-wrapper
+      run: |
+        /d/ucrt64/bin/gcc clang-target-wrapper.c -o clang-target-wrapper.exe -O2 -Wl,-s -municode -DCLANG=\"clang-18\"
+        cp clang-target-wrapper.exe /d/ucrt64/bin/gcc.exe
     - name: Build
       run: |
         pacman -Sy nasm git --noconfirm
