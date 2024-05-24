@@ -30,9 +30,6 @@ int _tmain(int argc, TCHAR* argv[]) {
     const TCHAR *target;
     const TCHAR *exe;
 
-    LPWSTR cmdline = GetCommandLineW();
-    printf("input cmdline %d chars\n", (int)wcslen(cmdline));
-
     split_argv(argv[0], &dir, NULL, &target, &exe);
     if (!target)
         target = _T(DEFAULT_TARGET);
