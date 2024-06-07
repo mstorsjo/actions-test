@@ -68,8 +68,6 @@ fi
 
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
-    NINJA=1
-    BUILDCMD=ninja
 else
     : ${CORES:=$(nproc 2>/dev/null)}
     : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
@@ -80,10 +78,11 @@ else
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
     esac
-    BUILDCMD=make
 fi
 
 cd llvm-project/compiler-rt
+# Use a staging directory in case parts of the resource dir are immutable
+WORKDIR=$(mktemp -d); trap "rm -rf $WORKDIR" 0
 
 for arch in $ARCHS; do
     if [ -n "$SANITIZERS" ]; then
@@ -116,6 +115,7 @@ for arch in $ARCHS; do
         -DCOMPILER_RT_DEFAULT_TARGET_ONLY=TRUE \
         -DCOMPILER_RT_USE_BUILTINS_LIBRARY=TRUE \
         -DCOMPILER_RT_BUILD_BUILTINS=$BUILD_BUILTINS \
+        -DCOMPILER_RT_EXCLUDE_ATOMIC_BUILTIN=FALSE \
         -DLLVM_CONFIG_PATH="" \
         -DCMAKE_FIND_ROOT_PATH=$PREFIX/$arch-w64-mingw32 \
         -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
@@ -124,11 +124,17 @@ for arch in $ARCHS; do
         -DCMAKE_C_FLAGS_INIT="$CFGUARD_CFLAGS" \
         -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \
         $SRC_DIR
-    $BUILDCMD ${CORES+-j$CORES}
-    $BUILDCMD install
+    cmake --build . ${CORES:+-j${CORES}}
+    cmake --install . --prefix "${WORKDIR}/install"
     mkdir -p "$PREFIX/$arch-w64-mingw32/bin"
     if [ -n "$SANITIZERS" ]; then
-        mv "$CLANG_RESOURCE_DIR/lib/windows/"*.dll "$PREFIX/$arch-w64-mingw32/bin"
+        mv "${WORKDIR}/install/lib/windows/"*.dll "$PREFIX/$arch-w64-mingw32/bin"
     fi
     cd ..
 done
+
+if [ -h "$CLANG_RESOURCE_DIR/include" ]; then
+    # symlink to system headers - skip copy
+    rm -rf ${WORKDIR}/install/include
+fi
+cp -r ${WORKDIR}/install/. $CLANG_RESOURCE_DIR

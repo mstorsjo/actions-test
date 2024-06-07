@@ -19,14 +19,20 @@ jobs:
   # slightly more, when we know a separate build of the same version but with
   # assertions enabled, has passed some amount of tests.
   prepare:
-    if: false
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     runs-on: ubuntu-latest
     outputs:
       LLVM_VERSION: ${{steps.get-versions.outputs.LLVM_VERSION}}
       MINGW_W64_VERSION: ${{steps.get-versions.outputs.MINGW_W64_VERSION}}
       PYTHON_VERSION_MINGW: ${{steps.get-versions.outputs.PYTHON_VERSION_MINGW}}
       TAG: ${{steps.get-tag.outputs.TAG}}
+      COMMIT_DATE_UNIX: ${{steps.get-tag.outputs.COMMIT_DATE_UNIX}}
+      BUILD_DATE: ${{steps.get-tag.outputs.BUILD_DATE}}
+      BUILD_DATE_UNIX: ${{steps.get-tag.outputs.BUILD_DATE_UNIX}}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .
       - name: Select build tag
         id: get-tag
         run: |
@@ -36,6 +42,10 @@ jobs:
               TAG=$(TZ=UTC date +%Y%m%d)
           fi
           echo TAG=$TAG >> $GITHUB_OUTPUT
+          echo COMMIT_DATE_UNIX=$(git log -1 --pretty=%ct $GITHUB_SHA) >> $GITHUB_OUTPUT
+          BUILD_DATE=$(date -u '+%FT%TZ')
+          echo BUILD_DATE=${BUILD_DATE} >> $GITHUB_OUTPUT
+          echo BUILD_DATE_UNIX=$(date -d "${BUILD_DATE}" +%s) >> $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT >> parameters.txt
       - name: Check latest version
@@ -44,10 +54,10 @@ jobs:
         run: |
           echo LLVM_VERSION=$(git ls-remote https://github.com/llvm/llvm-project.git | grep 'refs/heads/main$' | awk '{print $1}') >> $GITHUB_OUTPUT
           echo MINGW_W64_VERSION=$(git ls-remote https://github.com/mingw-w64/mingw-w64.git | grep 'refs/heads/master$' | awk '{print $1}') >> $GITHUB_OUTPUT
-          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.10.11$' | awk '{print $1}') >> $GITHUB_OUTPUT
+          echo PYTHON_VERSION_MINGW=$(git ls-remote https://github.com/msys2-contrib/cpython-mingw.git | grep 'refs/heads/mingw-v3.11.6$' | awk '{print $1}') >> $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT >> parameters.txt
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: parameters
           path: |
@@ -56,29 +66,39 @@ jobs:
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
-    if: false
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     needs: [prepare]
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 300M
+          key: linux-native
+          verbose: 1
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
           TAG: ${{needs.prepare.outputs.TAG}}
+          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
+          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
           # Skip dynamic library dependencies that might make it harder to
           # run the binaries on other distros (and that have little use within
           # llvm-mingw).
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLDB_ENABLE_PYTHON=OFF" COMPILER_LAUNCHER="ccache" ./build-all.sh $(pwd)/install/llvm-mingw --disable-lldb --disable-clang-tools-extra
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
+          ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
+          RUN_I686=false RUN_X86_64=false ./run-tests.sh $(pwd)/install/llvm-mingw
           cd install
           DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-$(uname -m)
           NAME=llvm-mingw-$TAG-ucrt-$DISTRO
           mv llvm-mingw $NAME
-          tar -Jcf ../$NAME.tar.xz $NAME
-      - uses: actions/upload-artifact@v3
+          tar -Jcf ../$NAME.tar.xz --format=ustar --numeric-owner --owner=0 --group=0 --sort=name --mtime="$BUILD_DATE" $NAME
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-ucrt-x86_64-toolchain
           path: |
@@ -92,16 +112,23 @@ jobs:
     needs: [linux, prepare]
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 300M
+          key: linux-cross-aarch64
+          verbose: 1
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
+          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
         run: |
           sudo apt-get update && sudo apt-get install ninja-build g++-aarch64-linux-gnu
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb --no-runtimes --host=aarch64-linux-gnu
+          COMPILER_LAUNCHER="ccache" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --no-runtimes --host=aarch64-linux-gnu
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: linux-ucrt-x86_64-toolchain
       - name: Unpack native toolchain
@@ -115,17 +142,19 @@ jobs:
       - name: Test using the cross-built assembled toolchain
         run: |
           sudo apt-get update && sudo apt-get install qemu-user-static libc6-arm64-cross libstdc++6-arm64-cross
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
           QEMU_LD_PREFIX=/usr/aarch64-linux-gnu RUN_I686=false RUN_X86_64=false ./run-tests.sh $(pwd)/install/llvm-mingw
       - name: Package the toolchain
         env:
           TAG: ${{needs.prepare.outputs.TAG}}
+          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           cd install
           DISTRO=ubuntu-$(grep DISTRIB_RELEASE /etc/lsb-release | cut -f 2 -d =)-aarch64
           NAME=llvm-mingw-$TAG-ucrt-$DISTRO
           mv llvm-mingw $NAME
-          tar -Jcf ../$NAME.tar.xz $NAME
-      - uses: actions/upload-artifact@v3
+          tar -Jcf ../$NAME.tar.xz --format=ustar --numeric-owner --owner=0 --group=0 --sort=name --mtime="$BUILD_DATE" $NAME
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-ucrt-aarch64-toolchain
           path: |
@@ -144,11 +173,13 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
+          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
+          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
           # Skip dynamic library dependencies that might make it harder to
@@ -156,9 +187,10 @@ jobs:
           # llvm-mingw).
           LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb --enable-asserts
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
+          RUN_I686=false RUN_X86_64=false ./run-tests.sh $(pwd)/install/llvm-mingw
           cd install
-          tar -Jcf ../llvm-mingw-linux.tar.xz llvm-mingw
-      - uses: actions/upload-artifact@v3
+          tar -Jcf ../llvm-mingw-linux.tar.xz --format=ustar --numeric-owner --owner=0 --group=0 --sort=name --mtime="$BUILD_DATE" llvm-mingw
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-asserts-toolchain
           path: |
@@ -169,28 +201,38 @@ jobs:
   macos:
     if: false
     needs: [prepare]
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 550M
+          key: macos
+          verbose: 1
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
           TAG: ${{needs.prepare.outputs.TAG}}
+          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
+          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
-          brew install ninja
-          # Building with MACOS_REDIST=1 (building universal binaries) without
-          # --disable-lldb fails in Github Actions, because python is available
-          # (and gets picked up), but only exists in native form.
-          # Disable use of zstd too - it's also available, but only in native
-          # form.
-          MACOS_REDIST=1 LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          brew install ninja gnu-tar
+          # Disable zstd and python. Both are available on the runners, but
+          # installed with homebrew, and only available in the native (x86_64)
+          # form. Therefore, autodetection will pick them up, but linking
+          # universal binaries fails as those libraries are unavailable in the
+          # other (arm64) architecture form.
+          MACOS_REDIST=1 LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF -DLLDB_ENABLE_PYTHON=OFF" COMPILER_LAUNCHER="ccache" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
+          ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
+          RUN_I686=false RUN_X86_64=false ./run-tests.sh $(pwd)/install/llvm-mingw
           cd install
           NAME=llvm-mingw-$TAG-ucrt-macos-universal
           mv llvm-mingw $NAME
-          tar -Jcf ../$NAME.tar.xz $NAME
-      - uses: actions/upload-artifact@v3
+          gtar -Jcf ../$NAME.tar.xz --format=ustar --numeric-owner --owner=0 --group=0 --sort=name --mtime="$BUILD_DATE" $NAME
+      - uses: actions/upload-artifact@v4
         with:
           name: macos-ucrt-toolchain
           path: |
@@ -222,25 +264,52 @@ jobs:
             git
             make
             diffutils
+            tar
           pacboy: >-
             toolchain:p
             cmake:p
             ninja:p
-      - uses: actions/checkout@v3
+            ccache:p
+      - uses: actions/checkout@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 400M
+          key: msys2-${{matrix.sys}}
+          verbose: 1
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
+          TAG: ${{needs.prepare.outputs.TAG}}
+          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
+          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
-          ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
+          if [ "${{matrix.sys}}" = "mingw64" ]; then
+              ARGS="--disable-dylib"
+          fi
+          COMPILER_LAUNCHER="ccache" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb $ARGS
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
+          ./copy-msys-dependencies.sh $(pwd)/install/llvm-mingw ${{matrix.sys}}
+          NATIVE=1 ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
           ./run-tests.sh $(pwd)/install/llvm-mingw
+          cd install
+          NAME=llvm-mingw-$TAG-ucrt-msys2-${{matrix.sys}}
+          mv llvm-mingw $NAME
+          tar -Jcf ../$NAME.tar.xz --format=ustar --numeric-owner --owner=0 --group=0 --sort=name --mtime="$BUILD_DATE" $NAME
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msys2-${{matrix.sys}}-toolchain
+          path: |
+            llvm-mingw-*.tar.xz
+          retention-days: 7
 
   # Use the Linux cross compilers built in the first step to cross compile
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
-    if: false
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    needs: [linux, prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -248,29 +317,39 @@ jobs:
         include:
           - { arch: x86_64, crt: ucrt }
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-${{matrix.crt}}-x86_64-toolchain
       - name: Unpack cross toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/nightly/llvm-mingw-nightly-ucrt-ubuntu-20.04-x86_64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 450M
+          key: linux-cross-windows-${{matrix.arch}}
+          verbose: 1
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
           PYTHON_VERSION_MINGW: ${{needs.prepare.outputs.PYTHON_VERSION_MINGW}}
           TAG: ${{needs.prepare.outputs.TAG}}
+          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
+          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install autoconf-archive ninja-build
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --disable-clang-tools-extra --disable-lldb --disable-mingw-w64-tools --disable-make
+          COMPILER_LAUNCHER="ccache" CCACHE_COMPILERCHECK="%compiler% -v" ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --disable-lldb --disable-clang-tools-extra
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
           mv llvm-mingw $NAME
           zip -9rq ../$NAME.zip $NAME
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
           path: |
@@ -299,7 +378,7 @@ jobs:
           install: >-
             unzip
             make
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
@@ -308,9 +387,10 @@ jobs:
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Run tests
         run: |
+          NATIVE=1 ./test-libcxx-module.sh /llvm-mingw
           ./run-tests.sh /llvm-mingw
           ./run-lldb-tests.sh /llvm-mingw
 
@@ -327,41 +407,28 @@ jobs:
     # Therefore, keep the test disabled by default; it's easy to enable
     # temporarily on a branch for testing.
     if: true
+    needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-        #  - { arch: x86_64, prefix: i686-w64-mingw32- }
           - { arch: x86_64, prefix: }
     steps:
       - name: Install dependencies
         run: |
           choco install ninja
-      - uses: msys2/setup-msys2@v2
+      - uses: actions/download-artifact@v4
         with:
-          msystem: mingw64
-          install: >-
-            git
-            make
-            diffutils
-          pacboy: >-
-            cmake:p
-            ninja:p
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20240518/llvm-mingw-20240518-ucrt-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/checkout@v4
-      - name: Rebuild wrappers
-        shell: msys2 {0}
-        run: |
-          PATH=/c/llvm-mingw/bin:$PATH ARCHS=x86_64 ./install-wrappers.sh /c/llvm-mingw
       - name: Checkout llvm-project
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -375,7 +442,6 @@ jobs:
           cmake ../runtimes `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DLIBCXX_ENABLE_WERROR=YES `
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" `
             -DLIBCXX_CXX_ABI=libcxxabi `
@@ -406,7 +472,10 @@ jobs:
           - { arch: i686, asmflag: }
           - { arch: x86_64, asmflag: -m64 }
     steps:
-      - uses: actions/download-artifact@v3
+      - name: Install dependencies
+        run: |
+          choco install ninja
+      - uses: actions/download-artifact@v4
         with:
           name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
@@ -417,7 +486,7 @@ jobs:
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Checkout llvm-project
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -456,8 +525,7 @@ jobs:
   # Run the compiler-rt tests with the cross-built i686/x86_64 toolchains from
   # above. This also forces testing the bundled python executables.
   test-compiler-rt:
-    # These tests don't pass on the pinned 16.x branch, but only on latest
-    # git main - thus only run it for scheduled jobs.
+    # Only running these tests in scheduled builds.
     if: false
     needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
@@ -468,7 +536,10 @@ jobs:
           - x86_64
           - i686
     steps:
-      - uses: actions/download-artifact@v3
+      - name: Install dependencies
+        run: |
+          choco install ninja
+      - uses: actions/download-artifact@v4
         with:
           name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
@@ -479,7 +550,7 @@ jobs:
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Checkout llvm-project
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -497,7 +568,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD=X86 `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++
-          ninja not FileCheck llvm-config KillTheDoctor count
+          ninja not FileCheck llvm-config KillTheDoctor count split-file
           echo "LLVM_CONFIG=$PWD\bin\llvm-config.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           echo "CMAKE_DIR=$PWD\lib\cmake\llvm" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build and test compiler-rt
@@ -545,7 +616,7 @@ jobs:
           - armv7
           - aarch64
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: linux-asserts-toolchain
       - name: Unpack cross toolchain
@@ -555,7 +626,7 @@ jobs:
           sudo mv llvm-mingw* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - name: Checkout ffmpeg
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ffmpeg/ffmpeg
           ref: n6.0
@@ -599,7 +670,7 @@ jobs:
             diffutils
           pacboy: >-
             nasm:p
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: windows-ucrt-x86_64-toolchain
       - name: Unpack toolchain
@@ -609,7 +680,7 @@ jobs:
           mv llvm-mingw-* /llvm-mingw
           echo /llvm-mingw/bin >> $GITHUB_PATH
       - name: Checkout ffmpeg
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ffmpeg/ffmpeg
           ref: n6.0
@@ -632,10 +703,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       - name: Rearrange files
         run: |
           rm -rf linux-asserts*
+          rm -rf msys2*
           mv *-toolchain/*.zip *-toolchain/*.tar.xz .
       - name: Upload binaries
         env:

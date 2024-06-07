@@ -40,7 +40,11 @@ if [ -n "$FULL_LLVM" ]; then
 fi
 
 if [ -n "$HOST" ]; then
-    EXEEXT=.exe
+    case $HOST in
+    *-mingw32)
+        EXEEXT=.exe
+        ;;
+    esac
 fi
 
 case $(uname) in
@@ -70,6 +74,8 @@ for i in amdgpu-arch bugpoint c-index-test clang-* clangd clangd-* darwin-debug 
         ;;
     clangd)
         ;;
+    clang-scan-deps)
+        ;;
     clang-tidy)
         ;;
     clang-target-wrapper*)
@@ -83,14 +89,14 @@ for i in amdgpu-arch bugpoint c-index-test clang-* clangd clangd-* darwin-debug 
             rm -f $i
         fi
         ;;
-    llvm-ar|llvm-cvtres|llvm-dlltool|llvm-nm|llvm-objdump|llvm-ranlib|llvm-rc|llvm-readobj|llvm-strings|llvm-pdbutil|llvm-objcopy|llvm-strip|llvm-cov|llvm-profdata|llvm-addr2line|llvm-symbolizer|llvm-wrapper|llvm-windres|llvm-ml|llvm-readelf|llvm-size)
+    llvm-ar|llvm-cvtres|llvm-dlltool|llvm-nm|llvm-objdump|llvm-ranlib|llvm-rc|llvm-readobj|llvm-strings|llvm-pdbutil|llvm-objcopy|llvm-strip|llvm-cov|llvm-profdata|llvm-addr2line|llvm-symbolizer|llvm-wrapper|llvm-windres|llvm-ml|llvm-readelf|llvm-size|llvm-cxxfilt)
         ;;
     ld64.lld|wasm-ld)
         if [ -e $i ]; then
             rm $i
         fi
         ;;
-    lldb|lldb-server|lldb-argdumper|lldb-instr|lldb-mi|lldb-vscode)
+    lldb|lldb-server|lldb-argdumper|lldb-instr|lldb-mi|lldb-vscode|lldb-dap)
         ;;
     *)
         if [ -f $i ]; then

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2022 Martin Storsjo
+# Copyright (c) 2023 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,31 +14,33 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-set -ex
+set -e
 
-if [ $# -lt 1 ]; then
-    echo $0 tag
+while [ $# -gt 0 ]; do
+    if [ -z "$PREFIX" ]; then
+        PREFIX="$1"
+    elif [ -z "$MSYS_ENV" ]; then
+        MSYS_ENV="$1"
+    else
+        echo Unrecognized parameter $1
+        exit 1
+    fi
+    shift
+done
+if [ -z "$MSYS_ENV" ]; then
+    echo $0 prefix msys_env
     exit 1
 fi
 
-TAG=$1
-
-# macOS itself doesn't ship with libzstd; avoid picking up a zstd
-# dependency from libraries installed e.g. with homebrew.
-export LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF"
-
-RELNAME=llvm-mingw-$TAG-ucrt-macos-universal
-DEST=$HOME/$RELNAME
-rm -rf $DEST
-time CLEAN=1 SYNC=1 MACOS_REDIST=1 ./build-all.sh $DEST
-dir=$(pwd)
-cd $HOME
-TAR=tar
-if command -v gtar >/dev/null; then
-    TAR_FLAGS="--numeric-owner --owner=0 --group=0"
-    TAR=gtar
-fi
-$TAR -Jcvf $dir/$RELNAME.tar.xz --format=ustar $TAR_FLAGS $RELNAME
-rm -rf $RELNAME
-cd $dir
-ls -lh $RELNAME.tar.xz
+cd $PREFIX/bin
+for i in ld.lld.exe clang-*.exe lldb.exe; do
+    if [ ! -f "$i" ]; then
+        continue
+    fi
+    for f in $(ldd "$i" | grep /$MSYS_ENV | awk '{print $3}'); do
+        if [ ! -f "$(basename $f)" ]; then
+            echo Copying $f
+            cp $f .
+        fi
+    done
+done

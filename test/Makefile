@@ -17,6 +17,7 @@ SRC_PATH=$(word 1, $(dir $(MAKEFILE_LIST)))
 vpath %.c $(SRC_PATH)
 vpath %.cpp $(SRC_PATH)
 vpath %.idl $(SRC_PATH)
+vpath %.rc $(SRC_PATH)
 
 ifneq ($(filter %-mingw32, $(MAKE_HOST)),)
     # If we're running as mingw32-make, we're executing everything in
@@ -40,6 +41,7 @@ endif
 CC = $(CROSS)gcc$(TOOLEXT)
 CXX = $(CROSS)g++$(TOOLEXT)
 WIDL = $(CROSS)widl$(TOOLEXT)
+WINDRES = $(CROSS)windres$(TOOLEXT)
 CC_UWP = $(CROSS_UWP)clang$(TOOLEXT)
 
 ifneq ($(COPY),)
@@ -82,13 +84,15 @@ ifneq ($(HAVE_OPENMP),)
 endif
 TESTS_UWP = uwp-error
 TESTS_IDL = idltest
+TESTS_RES = hello-res
 ifneq ($(HAVE_UWP),)
-    TESTS_OTHER_TARGETS = hello
+    TESTS_OTHER_TARGETS = hello hello-tls
 endif
 ifneq ($(HAVE_CFGUARD),)
     TESTS_CFGUARD = cfguard-test
     TESTS_ASAN_CFGUARD = $(TESTS_ASAN)
 endif
+TESTS_ATOMIC = atomic-helpers
 
 TARGETS_C = $(addsuffix $(EXEEXT), $(TESTS_C))
 TARGETS_C_DLL = $(addsuffix $(DLLEXT), $(TESTS_C_DLL))
@@ -105,6 +109,7 @@ TARGETS_SSP = $(addsuffix $(EXEEXT), $(TESTS_SSP))
 TARGETS_CFGUARD = $(addsuffix $(EXEEXT), $(TESTS_CFGUARD))
 TARGETS_FORTIFY = $(addsuffix -fortify$(EXEEXT), $(TESTS_FORTIFY))
 TARGETS_IDL = $(addsuffix $(EXEEXT), $(TESTS_IDL))
+TARGETS_RES = $(addsuffix $(EXEEXT), $(TESTS_RES))
 TARGETS_OTHER_TARGETS = $(addsuffix -mingw32uwp$(EXEEXT), $(TESTS_OTHER_TARGETS))
 TARGETS_UWP = $(addsuffix -mingw32$(EXEEXT), $(TESTS_UWP))
 ifneq ($(HAVE_UWP),)
@@ -116,15 +121,16 @@ TARGETS_ASAN = $(addsuffix -asan$(EXEEXT), $(TESTS_ASAN))
 TARGETS_UBSAN = $(addsuffix $(EXEEXT), $(TESTS_UBSAN))
 TARGETS_ASAN_CFGUARD = $(addsuffix -asan-cfguard$(EXEEXT), $(TESTS_ASAN_CFGUARD))
 TARGETS_OMP = $(addsuffix $(EXEEXT), $(TESTS_OMP))
+TARGETS_ATOMIC = $(addsuffix $(EXEEXT), $(TESTS_ATOMIC))
 
 TARGETS = \
     $(TARGETS_C) $(TARGETS_C_DLL) $(TARGETS_C_LINK_DLL) $(TARGETS_C_NO_BUILTIN) $(TARGETS_C_ANSI_STDIO) \
     $(TARGETS_CPP) $(TARGETS_CPP_EXCEPTIONS) $(TARGETS_CPP_EXCEPTIONS_OPT) $(TARGETS_CPP_STATIC) $(TARGETS_CPP_DLL) $(TARGETS_CPP_LINK_DLL) \
     $(TARGETS_SSP) $(TARGETS_CFGUARD) $(TARGETS_FORTIFY) \
-    $(TARGETS_IDL) \
+    $(TARGETS_IDL) $(TARGETS_RES) \
     $(TARGETS_OTHER_TARGETS) $(TARGETS_UWP) $(TARGETS_UWP_FAIL) \
     $(TARGETS_ASAN) $(TARGETS_UBSAN) $(TARGETS_ASAN_CFGUARD) \
-    $(TARGETS_OMP)
+    $(TARGETS_OMP) $(TARGETS_ATOMIC)
 
 # crt-test-fortify doesn't trigger failures
 FAILURE_TESTS = \
@@ -136,8 +142,7 @@ EXTRAFILES = \
      $(addprefix lib, $(addsuffix .dll.a, $(TESTS_C_DLL))) \
      $(addprefix lib, $(addsuffix .dll.a, $(TESTS_CPP_DLL))) \
      $(addsuffix .h, $(TESTS_IDL)) \
-     $(addsuffix -asan.pdb, $(TESTS_ASAN)) \
-     $(addsuffix -asan-cfguard.pdb, $(TESTS_ASAN_CFGUARD))
+     $(addsuffix -rc.o, $(TESTS_RES)) \
 
 all: $(TARGETS)
 
@@ -180,23 +185,32 @@ $(TARGETS_FORTIFY): %-fortify$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -O2 -D_FORTIFY_SOURCE=2
 
 $(TARGETS_ASAN): %-asan$(EXEEXT): %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=address -g -gcodeview -Wl,--pdb=
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=address -g
 
 $(TARGETS_UBSAN): %$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=undefined -fno-sanitize-recover=all
 
 # Smoke test ASAN with CFGuard to make sure it doesn't trip.
 $(TARGETS_ASAN_CFGUARD): %-asan-cfguard$(EXEEXT): %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=address -g -gcodeview -mguard=cf -Wl,--pdb=
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fsanitize=address -g -mguard=cf
 
 $(TARGETS_OMP): %$(EXEEXT): %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fopenmp=libomp
+
+$(TARGETS_ATOMIC): %$(EXEEXT): %.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -Wno-atomic-alignment
 
 %.h: %.idl
 	$(WIDL) $< -h -o $@
 
 $(TARGETS_IDL): %$(EXEEXT): %.c %.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -I. -lole32
+
+%.o: %.rc
+	$(WINDRES) $< $@
+
+$(TARGETS_RES): %$(EXEEXT): %.c %-rc.o
+	$(CC) $(CPPFLAGS) $(CFLAGS) $+ -o $@
 
 $(TARGETS_OTHER_TARGETS): %-mingw32uwp$(EXEEXT): %.c
 	$(CC_UWP) $< -o $@
@@ -292,17 +306,17 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 		echo OK: $< trigger failed expectedly, returned $$ret; \
 		case $* in \
 		stacksmash-asan|stacksmash-asan-cfguard) \
-			grep -q stack-buffer-overflow $$OUT || exit 1; \
-			grep -q "func.*stacksmash.c" $$OUT || exit 1; \
+			grep -q stack-buffer-overflow $$OUT || { echo ERROR: $< missing mention of stack-buffer-overflow; exit 1; }; \
+			grep -q "func.*stacksmash.c" $$OUT || { echo ERROR: $< missing source location; exit 1; }; \
 			;; \
 		ubsan) \
-			grep -q "signed integer overflow" $$OUT || exit 1; \
+			grep -q "signed integer overflow" $$OUT || { echo ERROR: $< missing mention of signed integer overflow; exit 1; }; \
 			;; \
 		stacksmash) \
-			grep -q "stack smashing detected" $$OUT || exit 1; \
+			grep -q "stack smashing detected" $$OUT || { echo ERROR: $< missing mention of stack smashing detected; exit 1; }; \
 			;; \
 		bufferoverflow-*) \
-			grep -q "buffer overflow detected" $$OUT || exit 1; \
+			grep -q "buffer overflow detected" $$OUT || { echo ERROR: $< missing mention of buffer overflow detected; exit 1; }; \
 			;; \
 		*) \
 			echo Unhandled failure test $*; \
@@ -327,7 +341,7 @@ $(FAILURE_TEST_TARGETS): .failtested.%$(EXEEXT): %$(EXEEXT) .copied.%$(EXEEXT) $
 			ret=$$?; \
 			cat $$OUT; \
 			echo OK: $* $$i failed expectedly, returned $$ret; \
-			grep -q "buffer overflow detected" $$OUT || exit 1; \
+			grep -q "buffer overflow detected" $$OUT || { echo ERROR: $< missing mention of buffer overflow detected; exit 1; }; \
 			rm -f $$OUT; \
 		fi; \
 		i=$$(($$i+1)); \

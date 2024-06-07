@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=a1fa43d030168d1ecd04031b4790b101e651770a}
+: ${LLVM_VERSION:=llvmorg-18.1.6}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -138,8 +138,6 @@ fi
 
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
-    NINJA=1
-    BUILDCMD=ninja
 else
     : ${CORES:=$(nproc 2>/dev/null)}
     : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
@@ -150,14 +148,15 @@ else
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
     esac
-    BUILDCMD=make
 fi
 
 CMAKEFLAGS="$LLVM_CMAKEFLAGS"
 
 if [ -n "$HOST" ]; then
+    ARCH="${HOST%%-*}"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
     case $HOST in
     *-mingw32)
         CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
@@ -205,7 +204,7 @@ if [ -n "$HOST" ]; then
         EXT_SUFFIX="$(echo $(bash $PREFIX/python/bin/python3-config --extension-suffix))"
         PYTHON_RELATIVE_PATH="$(cd "$PREFIX" && echo python/lib/python*/site-packages)"
         PYTHON_INCLUDE_DIR="$(echo $PREFIX/python/include/python*)"
-        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython*.dll.a)"
+        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython3.*.dll.a)"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_ENABLE_PYTHON=ON"
         CMAKEFLAGS="$CMAKEFLAGS -DPYTHON_HOME=$PREFIX/python"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_HOME=../python"
@@ -224,6 +223,20 @@ elif [ -n "$STAGE2" ]; then
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=clang"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=clang++"
     CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=lld"
+else
+    # Native compilation with the system default compiler.
+
+    # Use a faster linker, if available.
+    if command -v ld.lld >/dev/null; then
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=lld"
+    elif command -v ld.gold >/dev/null; then
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=gold"
+    fi
+fi
+
+if [ -n "$COMPILER_LAUNCHER" ]; then
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
 fi
 
 if [ -n "$TARGET_WINDOWS" ]; then
@@ -261,7 +274,9 @@ if [ -n "$MACOS_REDIST" ]; then
         # If we're not building for the native arch, flag to CMake that we're
         # cross compiling, to let it build native versions of tools used
         # during the build.
+        ARCH="$(echo $MACOS_REDIST_ARCHS | awk '{print $1}')"
         CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Darwin"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
     fi
 fi
 
@@ -302,14 +317,15 @@ cmake \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=$ASSERTS \
     -DLLVM_ENABLE_PROJECTS="$PROJECTS" \
-    -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86" \
+    -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86;NVPTX" \
     -DLLVM_INSTALL_TOOLCHAIN_ONLY=$TOOLCHAIN_ONLY \
     -DLLVM_LINK_LLVM_DYLIB=$LINK_DYLIB \
-    -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf;llvm-size" \
+    -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf;llvm-size;llvm-cxxfilt" \
     ${HOST+-DLLVM_HOST_TRIPLE=$HOST} \
     $CMAKEFLAGS \
     ..
 
-$BUILDCMD ${CORES+-j$CORES} install/strip
+cmake --build . ${CORES:+-j${CORES}}
+cmake --install . --strip
 
 cp ../LICENSE.TXT $PREFIX

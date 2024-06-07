@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 RUN apt-get update -qq && \
     DEBIAN_FRONTEND="noninteractive" apt-get install -qqy --no-install-recommends \
@@ -7,6 +7,7 @@ RUN apt-get update -qq && \
     ninja-build ca-certificates curl less zip && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
+
 
 RUN git config --global user.name "LLVM MinGW" && \
     git config --global user.email root@localhost
