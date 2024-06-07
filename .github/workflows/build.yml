@@ -340,7 +340,7 @@ jobs:
           choco install ninja
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-nightly-20240602-ucrt-x86_64.zip
+          curl -LO https://martin.st/temp/llvm-mingw-nightly-20240603-ucrt-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
