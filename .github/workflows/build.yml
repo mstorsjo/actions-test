@@ -74,7 +74,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          max-size: 300M
+          max-size: 1000M
           key: linux-native
           verbose: 1
       - name: Build
@@ -330,7 +330,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          max-size: 450M
+          max-size: 1000M
           key: linux-cross-windows-${{matrix.arch}}
           verbose: 1
       - name: Build
