@@ -462,6 +462,9 @@ jobs:
       - name: Checkout llvm-project
         run: |
           git clone https://github.com/llvm/llvm-project
+          cd llvm-project
+          git fetch origin refs/pull/96916/head
+          git checkout FETCH_HEAD
       - name: Build test executables
         run: |
           cd llvm-project
