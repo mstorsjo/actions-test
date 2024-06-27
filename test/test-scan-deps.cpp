@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Martin Storsjo
+ * Copyright (c) 2024 Martin Storsjo
  *
  * This file is part of llvm-mingw.
  *
@@ -16,16 +16,24 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "native-wrapper.h"
+// Test that clang-scan-deps can locate c++ standard library headers
+#include <version>
 
-int _tmain(int argc, TCHAR* argv[]) {
-    const TCHAR *dir;
-    const TCHAR *exe;
-    const TCHAR *basename, *target;
-    split_argv(argv[0], &dir, &basename, &target, &exe);
-    if (_tcsncmp(exe, _T("llvm-"), 5))
-        exe = concat(_T("llvm-"), exe);
-    TCHAR *exe_path = concat(dir, exe);
-
-    return run_final(exe_path, (const TCHAR *const *) argv);
-}
+// Test that we have set the expected architecture defines.
+#if defined(__x86_64__)
+#ifndef EXPECT_x86_64
+#include <intentionally-missing-header>
+#endif
+#elif defined(__i386__)
+#ifndef EXPECT_i686
+#include <intentionally-missing-header>
+#endif
+#elif defined(__aarch64__)
+#ifndef EXPECT_aarch64
+#include <intentionally-missing-header>
+#endif
+#elif defined(__arm__)
+#ifndef EXPECT_armv7
+#include <intentionally-missing-header>
+#endif
+#endif

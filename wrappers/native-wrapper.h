@@ -58,7 +58,11 @@ typedef char TCHAR;
 #endif
 
 #ifdef _WIN32
-static inline TCHAR *escape(const TCHAR *str) {
+static inline const TCHAR *escape(const TCHAR *str) {
+    // If we don't need to escape anything, just return the input string
+    // as is.
+    if (!_tcschr(str, ' ') && !_tcschr(str, '"'))
+        return str;
     TCHAR *out = malloc((_tcslen(str) * 2 + 3) * sizeof(*out));
     TCHAR *ptr = out;
     int i;
@@ -85,15 +89,50 @@ static inline TCHAR *escape(const TCHAR *str) {
     return out;
 }
 
+static inline TCHAR *concat(const TCHAR *prefix, const TCHAR *suffix);
+
+static TCHAR *make_response_file(const TCHAR **argv) {
+    if (!argv[1])
+        return NULL;
+    TCHAR *temp_path = malloc(MAX_PATH * sizeof(*temp_path));
+    if (GetTempPath(MAX_PATH, temp_path) == 0)
+        return NULL;
+    TCHAR *rsp_file = malloc(MAX_PATH * sizeof(*rsp_file));
+    if (GetTempFileName(temp_path, _T("ctw"), 0, rsp_file) == 0)
+        return NULL;
+
+    FILE *f = _tfopen(rsp_file, _T("w, ccs=UNICODE"));
+    for (int i = 1; argv[i]; i++)
+        _ftprintf(f, _T(TS"\n"), argv[i]);
+    fclose(f);
+    argv[1] = escape(concat(_T("@"), rsp_file));
+    argv[2] = NULL;
+    return rsp_file;
+}
+
 static inline int _tspawnvp_escape(int mode, const TCHAR *filename, const TCHAR * const *argv) {
     int num_args = 0;
     while (argv[num_args])
         num_args++;
     const TCHAR **escaped_argv = malloc((num_args + 1) * sizeof(*escaped_argv));
-    for (int i = 0; argv[i]; i++)
+    int total = 0;
+    for (int i = 0; argv[i]; i++) {
         escaped_argv[i] = escape(argv[i]);
+        total += 1 + _tcslen(escaped_argv[i]);
+    }
     escaped_argv[num_args] = NULL;
-    return _tspawnvp(mode, filename, escaped_argv);
+    const TCHAR *temp_file = NULL;
+    if (total > 32000) {
+        // If we are getting close to the limit, write the arguments to
+        // a temporary response file.
+        temp_file = make_response_file(escaped_argv);
+        if (temp_file)
+            total = _tcslen(escaped_argv[0]) + _tcslen(escaped_argv[1]) + 2;
+    }
+    int ret = _tspawnvp(mode, filename, escaped_argv);
+    if (temp_file)
+        DeleteFile(temp_file);
+    return ret;
 }
 #else
 static inline int _tcsicmp(const TCHAR *a, const TCHAR *b) {
@@ -138,6 +177,20 @@ static inline void split_argv(const TCHAR *argv0, const TCHAR **dir_ptr, const T
 #ifdef _WIN32
     TCHAR module_path[8192];
     GetModuleFileName(NULL, module_path, sizeof(module_path)/sizeof(module_path[0]));
+    // Try to resolve the given tool name into its long form. If the caller
+    // called us with a short form executable name, e.g. C__~1.EXE instead of
+    // c++.exe, we need to resolve the original name, so that the wrapper
+    // can invoke the right tool with the right arguments.
+    //
+    // CMake/Ninja generates such tool names when the tools are located in
+    // a path with spaces.
+    TCHAR long_path[8192];
+    int long_path_ret = GetLongPathName(module_path, long_path, sizeof(long_path)/sizeof(long_path[0]));
+    if (long_path_ret > 0 && long_path_ret < sizeof(long_path)/sizeof(long_path[0])) {
+        sep = _tcsrchrs(long_path, '/', '\\');
+        if (sep)
+            basename = _tcsdup(sep + 1);
+    }
     TCHAR *sep2 = _tcsrchr(module_path, '\\');
     if (sep2) {
         sep2[1] = '\0';
@@ -154,6 +207,21 @@ static inline void split_argv(const TCHAR *argv0, const TCHAR **dir_ptr, const T
     if (dash) {
         *dash = '\0';
         exe = dash + 1;
+        // Handle [<target>-]llvm-<tool> as exe=llvm-<tool>
+        TCHAR *dash2 = _tcsrchr(target, '-');
+        if (dash2 && !_tcscmp(dash2, _T("-llvm"))) {
+            // Found <target>-llvm-<tool>; move the llvm- prefix to
+            // exe. Convert the original dash which we overwrote with '\0'
+            // back into a dash and split the string at the preceding dash.
+            *dash = '-';
+            *dash2 = '\0';
+            exe = dash2 + 1;
+        } else if (!_tcscmp(target, _T("llvm"))) {
+            // Found llvm-<tool>; don't treat "llvm" as target but move
+            // it to the exe part.
+            exe = basename;
+            target = NULL;
+        }
     } else {
         target = NULL;
     }

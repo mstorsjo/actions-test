@@ -1,0 +1,8 @@
+/llvm-project
+/mingw-w64
+/lldb-mi
+/make-*
+/libffi
+/cpython*
+/python-native
+/toolchain

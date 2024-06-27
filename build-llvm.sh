@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=624e9e131827162fe186cb40239f753dcff0eb20}
+: ${LLVM_VERSION:=llvmorg-18.1.8}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -59,9 +59,6 @@ while [ $# -gt 0 ]; do
     --with-python)
         WITH_PYTHON=1
         ;;
-    --symlink-projects)
-        SYMLINK_PROJECTS=1
-        ;;
     --disable-lldb)
         unset LLDB
         ;;
@@ -77,7 +74,7 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--stage2] [--thinlto] [--lto] [--disable-dylib] [--full-llvm] [--with-python] [--symlink-projects] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
+        echo $0 [--enable-asserts] [--stage2] [--thinlto] [--lto] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
         exit 1
     fi
 
@@ -125,10 +122,22 @@ fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0
 
+if [ -n "$HOST" ]; then
+    case $HOST in
+    *-mingw32)
+        TARGET_WINDOWS=1
+        ;;
+    esac
+else
+    case $(uname) in
+    MINGW*)
+        TARGET_WINDOWS=1
+        ;;
+    esac
+fi
+
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
-    NINJA=1
-    BUILDCMD=ninja
 else
     : ${CORES:=$(nproc 2>/dev/null)}
     : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
@@ -138,60 +147,47 @@ else
     MINGW*)
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
-    *)
-        ;;
     esac
-    BUILDCMD=make
 fi
 
 CMAKEFLAGS="$LLVM_CMAKEFLAGS"
 
 if [ -n "$HOST" ]; then
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
+    ARCH="${HOST%%-*}"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
+    case $HOST in
+    *-mingw32)
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_RC_COMPILER=$HOST-windres"
+        ;;
+    *-linux*)
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Linux"
+        ;;
+    *)
+        echo "Unrecognized host $HOST"
+        exit 1
+        ;;
+    esac
 
     native=""
     for dir in llvm-project/llvm/build/bin llvm-project/llvm/build-asserts/bin; do
         if [ -x "$dir/llvm-tblgen.exe" ]; then
             native="$(pwd)/$dir"
-            suffix=".exe"
             break
         elif [ -x "$dir/llvm-tblgen" ]; then
             native="$(pwd)/$dir"
-            suffix=""
             break
         fi
     done
     if [ -z "$native" ] && command -v llvm-tblgen >/dev/null; then
         native="$(dirname $(command -v llvm-tblgen))"
-        suffix=""
-        if [ -x "$native/llvm-tblgen.exe" ]; then
-            suffix=".exe"
-        fi
     fi
 
 
     if [ -n "$native" ]; then
-        if [ -x "$native/llvm-tblgen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DLLVM_TABLEGEN=$native/llvm-tblgen$suffix"
-        fi
-        if [ -x "$native/clang-tblgen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_TABLEGEN=$native/clang-tblgen$suffix"
-        fi
-        if [ -x "$native/lldb-tblgen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DLLDB_TABLEGEN=$native/lldb-tblgen$suffix"
-        fi
-        if [ -x "$native/llvm-config$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DLLVM_CONFIG_PATH=$native/llvm-config$suffix"
-        fi
-        if [ -x "$native/clang-pseudo-gen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_PSEUDO_GEN=$native/clang-pseudo-gen$suffix"
-        fi
-        if [ -x "$native/clang-tidy-confusable-chars-gen$suffix" ]; then
-            CMAKEFLAGS="$CMAKEFLAGS -DCLANG_TIDY_CONFUSABLE_CHARS_GEN=$native/clang-tidy-confusable-chars-gen$suffix"
-        fi
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_NATIVE_TOOL_DIR=$native"
     fi
     CROSS_ROOT=$(cd $(dirname $(command -v $HOST-gcc))/../$HOST && pwd)
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH=$CROSS_ROOT"
@@ -200,22 +196,15 @@ if [ -n "$HOST" ]; then
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY"
 
-    # Custom, llvm-mingw specific defaults. We normally set these in
-    # the frontend wrappers, but this makes sure they are enabled by
-    # default if that wrapper is bypassed as well.
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_RTLIB=compiler-rt"
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_UNWINDLIB=libunwind"
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_CXX_STDLIB=libc++"
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_LINKER=lld"
     BUILDDIR=$BUILDDIR-$HOST
 
-    if [ -n "$WITH_PYTHON" ]; then
+    if [ -n "$WITH_PYTHON" ] && [ -n "$TARGET_WINDOWS" ]; then
         # The python3-config script requires executing with bash. It outputs
         # an extra trailing space, which the extra 'echo' layer gets rid of.
         EXT_SUFFIX="$(echo $(bash $PREFIX/python/bin/python3-config --extension-suffix))"
         PYTHON_RELATIVE_PATH="$(cd "$PREFIX" && echo python/lib/python*/site-packages)"
         PYTHON_INCLUDE_DIR="$(echo $PREFIX/python/include/python*)"
-        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython*.dll.a)"
+        PYTHON_LIB="$(echo $PREFIX/python/lib/libpython3.*.dll.a)"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_ENABLE_PYTHON=ON"
         CMAKEFLAGS="$CMAKEFLAGS -DPYTHON_HOME=$PREFIX/python"
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_PYTHON_HOME=../python"
@@ -234,6 +223,31 @@ elif [ -n "$STAGE2" ]; then
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=clang"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=clang++"
     CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=lld"
+else
+    # Native compilation with the system default compiler.
+
+    # Use a faster linker, if available.
+    if command -v ld.lld >/dev/null; then
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=lld"
+    elif command -v ld.gold >/dev/null; then
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=gold"
+    fi
+fi
+
+if [ -n "$COMPILER_LAUNCHER" ]; then
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
+fi
+
+if [ -n "$TARGET_WINDOWS" ]; then
+    # Custom, llvm-mingw specific defaults. We normally set these in
+    # the frontend wrappers, but this makes sure they are enabled by
+    # default if that wrapper is bypassed as well.
+    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_RTLIB=compiler-rt"
+    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_UNWINDLIB=libunwind"
+    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_CXX_STDLIB=libc++"
+    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_LINKER=lld"
+    CMAKEFLAGS="$CMAKEFLAGS -DLLD_DEFAULT_LD_LLD_IS_MINGW=ON"
 fi
 
 if [ -n "$LTO" ]; then
@@ -241,8 +255,41 @@ if [ -n "$LTO" ]; then
 fi
 
 if [ -n "$MACOS_REDIST" ]; then
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9"
+    : ${MACOS_REDIST_ARCHS:=arm64 x86_64}
+    : ${MACOS_REDIST_VERSION:=10.9}
+    ARCH_LIST=""
+    NATIVE=
+    for arch in $MACOS_REDIST_ARCHS; do
+        if [ -n "$ARCH_LIST" ]; then
+            ARCH_LIST="$ARCH_LIST;"
+        fi
+        ARCH_LIST="$ARCH_LIST$arch"
+        if [ "$(uname -m)" = "$arch" ]; then
+            NATIVE=1
+        fi
+    done
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_ARCHITECTURES=$ARCH_LIST"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_REDIST_VERSION"
+    if [ -z "$NATIVE" ]; then
+        # If we're not building for the native arch, flag to CMake that we're
+        # cross compiling, to let it build native versions of tools used
+        # during the build.
+        ARCH="$(echo $MACOS_REDIST_ARCHS | awk '{print $1}')"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Darwin"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
+    fi
+fi
+
+if [ -z "$HOST" ] && [ "$(uname)" = "Darwin" ]; then
+    if [ -n "$LLDB" ]; then
+        # Building LLDB for macOS fails unless building libc++ is enabled at the
+        # same time, or unless the LLDB tests are disabled.
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_INCLUDE_TESTS=OFF"
+        # Don't build our own debugserver - use the system provided one.
+        # The newly built debugserver needs to be properly code signed to work.
+        # This silences a cmake warning.
+        CMAKEFLAGS="$CMAKEFLAGS -DLLDB_USE_SYSTEM_DEBUGSERVER=ON"
+    fi
 fi
 
 TOOLCHAIN_ONLY=ON
@@ -252,63 +299,33 @@ fi
 
 cd llvm-project/llvm
 
-if [ -n "$SYMLINK_PROJECTS" ]; then
-    # If requested, hook up other tools by symlinking them into tools,
-    # instead of using LLVM_ENABLE_PROJECTS. This way, all source code is
-    # under the directory tree of the toplevel cmake file (llvm-project/llvm),
-    # which makes cmake use relative paths to all source files. Using relative
-    # paths makes for identical compiler output from different source trees in
-    # different locations (for cases where e.g. path names are included, in
-    # assert messages), allowing ccache to share caches across multiple
-    # checkouts.
-    cd tools
-    for p in clang lld lldb; do
-        if [ "$p" = "lldb" ] && [ -z "$LLDB" ]; then
-            continue
-        fi
-        if [ ! -e $p ]; then
-            ln -s ../../$p .
-        fi
-    done
-    cd ..
-    if [ -n "$CLANG_TOOLS_EXTRA" ]; then
-        cd ../clang/tools
-        if [ ! -e extra ]; then
-            ln -s ../../clang-tools-extra extra
-        fi
-        cd ../../llvm
-    fi
-else
-    EXPLICIT_PROJECTS=1
-    PROJECTS="clang;lld"
-    if [ -n "$LLDB" ]; then
-        PROJECTS="$PROJECTS;lldb"
-    fi
-    if [ -n "$CLANG_TOOLS_EXTRA" ]; then
-        PROJECTS="$PROJECTS;clang-tools-extra"
-    fi
+PROJECTS="clang;lld"
+if [ -n "$LLDB" ]; then
+    PROJECTS="$PROJECTS;lldb"
+fi
+if [ -n "$CLANG_TOOLS_EXTRA" ]; then
+    PROJECTS="$PROJECTS;clang-tools-extra"
 fi
 
 [ -z "$CLEAN" ] || rm -rf $BUILDDIR
 mkdir -p $BUILDDIR
 cd $BUILDDIR
-# Building LLDB for macOS fails unless building libc++ is enabled at the
-# same time, or unless the LLDB tests are disabled.
+[ -n "$NO_RECONF" ] || rm -rf CMake*
 cmake \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=$ASSERTS \
-    ${EXPLICIT_PROJECTS+-DLLVM_ENABLE_PROJECTS="$PROJECTS"} \
-    -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86" \
+    -DLLVM_ENABLE_PROJECTS="$PROJECTS" \
+    -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86;NVPTX" \
     -DLLVM_INSTALL_TOOLCHAIN_ONLY=$TOOLCHAIN_ONLY \
     -DLLVM_LINK_LLVM_DYLIB=$LINK_DYLIB \
-    -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf" \
+    -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf;llvm-size;llvm-cxxfilt" \
     ${HOST+-DLLVM_HOST_TRIPLE=$HOST} \
-    -DLLDB_INCLUDE_TESTS=OFF \
     $CMAKEFLAGS \
     ..
 
-$BUILDCMD ${CORES+-j$CORES} install/strip
+cmake --build . ${CORES:+-j${CORES}}
+cmake --install . --strip
 
 cp ../LICENSE.TXT $PREFIX

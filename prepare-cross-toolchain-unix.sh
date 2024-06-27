@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2018 Martin Storsjo
+# Copyright (c) 2022 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -16,25 +16,17 @@
 
 set -e
 
-if [ $# -lt 3 ]; then
-    echo $0 src dest arch
+if [ $# -lt 2 ]; then
+    echo $0 src dest
     exit 1
 fi
 SRC="$1"
 DEST="$2"
-CROSS_ARCH="$3"
 
 : ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
 
 CLANG_RESOURCE_DIR="$("$SRC/bin/clang" --print-resource-dir)"
 CLANG_VERSION=$(basename "$CLANG_RESOURCE_DIR")
-
-# If linked to a shared libc++/libunwind, we need to bundle those DLLs
-# in the bin directory. For simplicity, copy all runtime DLLs to the
-# bin directory - that way, users who have this directory in $PATH
-# can run the executables they've built directly without fiddling
-# with copying them.
-cp $SRC/$CROSS_ARCH-w64-mingw32/bin/*.dll $DEST/bin
 
 # Copy the clang resource files (include, lib, share). The clang cross
 # build installs the main headers, but since we didn't build the runtimes
@@ -52,19 +44,9 @@ cp $SRC/$CROSS_ARCH-w64-mingw32/bin/*.dll $DEST/bin
 rm -rf $DEST/lib/clang/$CLANG_VERSION
 cp -a $CLANG_RESOURCE_DIR $DEST/lib/clang/$CLANG_VERSION
 
-mkdir -p $DEST/include
-# Copy over headers and arch specific files, converting a unix style
-# install (everything in arch specific subdirectories) into
-# what we'd have when built on Windows, as if build-mingw-w64.sh
-# was called with --skip-include-triplet-prefit, with all headers
-# in $DEST/include, and only keeping the bin and lib directories for the
-# individual architectures.
-cp -a $SRC/generic-w64-mingw32/include/. $DEST/include
-for arch in $ARCHS; do
-    mkdir -p $DEST/$arch-w64-mingw32
-    for subdir in bin lib share; do
-        cp -a $SRC/$arch-w64-mingw32/$subdir $DEST/$arch-w64-mingw32
-    done
+# Copy all arch-specific subdirectories plus the "generic" one, as is.
+for arch in generic $ARCHS; do
+    cp -a $SRC/$arch-w64-mingw32 $DEST/$arch-w64-mingw32
 done
 
 # Copy the libc++ module sources

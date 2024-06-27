@@ -18,6 +18,7 @@ set -e
 
 BUILD_STATIC=ON
 BUILD_SHARED=ON
+CFGUARD_CFLAGS="-mguard=cf"
 
 while [ $# -gt 0 ]; do
     if [ "$1" = "--disable-shared" ]; then
@@ -28,13 +29,17 @@ while [ $# -gt 0 ]; do
         BUILD_STATIC=OFF
     elif [ "$1" = "--enable-static" ]; then
         BUILD_STATIC=ON
+    elif [ "$1" = "--enable-cfguard" ]; then
+        CFGUARD_CFLAGS="-mguard=cf"
+    elif [ "$1" = "--disable-cfguard" ]; then
+        CFGUARD_CFLAGS=
     else
         PREFIX="$1"
     fi
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo $0 [--disable-shared] [--disable-static] dest
+    echo "$0 [--disable-shared] [--disable-static] [--enable-cfguard|--disable-cfguard] dest"
     exit 1
 fi
 
@@ -57,8 +62,6 @@ cd runtimes
 
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
-    NINJA=1
-    BUILDCMD=ninja
 else
     : ${CORES:=$(nproc 2>/dev/null)}
     : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
@@ -68,16 +71,14 @@ else
     MINGW*)
         CMAKE_GENERATOR="MSYS Makefiles"
         ;;
-    *)
-        ;;
     esac
-    BUILDCMD=make
 fi
 
 for arch in $ARCHS; do
     [ -z "$CLEAN" ] || rm -rf build-$arch
     mkdir -p build-$arch
     cd build-$arch
+    [ -n "$NO_RECONF" ] || rm -rf CMake*
     cmake \
         ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
         -DCMAKE_BUILD_TYPE=Release \
@@ -102,14 +103,18 @@ for arch in $ARCHS; do
         -DLIBCXX_CXX_ABI=libcxxabi \
         -DLIBCXX_LIBDIR_SUFFIX="" \
         -DLIBCXX_INCLUDE_TESTS=FALSE \
+        -DLIBCXX_INSTALL_MODULES=ON \
+        -DLIBCXX_INSTALL_MODULES_DIR="$PREFIX/share/libc++/v1" \
         -DLIBCXX_ENABLE_ABI_LINKER_SCRIPT=FALSE \
         -DLIBCXXABI_USE_COMPILER_RT=ON \
         -DLIBCXXABI_USE_LLVM_UNWINDER=ON \
         -DLIBCXXABI_ENABLE_SHARED=OFF \
         -DLIBCXXABI_LIBDIR_SUFFIX="" \
+        -DCMAKE_C_FLAGS_INIT="$CFGUARD_CFLAGS" \
+        -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \
         ..
 
-    $BUILDCMD ${CORES+-j$CORES}
-    $BUILDCMD install
+    cmake --build . ${CORES:+-j${CORES}}
+    cmake --install .
     cd ..
 done

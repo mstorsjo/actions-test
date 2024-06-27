@@ -16,9 +16,9 @@
 
 set -e
 
-: ${LIBFFI_VERSION:=v3.4.2}
-: ${PYTHON_VERSION:=v3.10.5}
-: ${PYTHON_VERSION_MINGW:=2ff76a3ae3d1416c3564d5a9344009843ce3ddc9}
+: ${LIBFFI_VERSION:=v3.4.6}
+: ${PYTHON_VERSION:=v3.11.9}
+: ${PYTHON_VERSION_MINGW:=d6d38acc0d637e6dc2fe6b984664bdd460bd3d04}
 
 unset HOST
 
@@ -103,7 +103,8 @@ if [ -z "$HOST" ]; then
     cd $BUILDDIR
     ../configure --prefix="$PREFIX" \
         CFLAGS="-I$PREFIX/include" CXXFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib -Wl,-s" \
-        --without-ensurepip
+        --without-ensurepip \
+        --disable-test-modules
     $MAKE -j$CORES
     $MAKE install
     exit 0
@@ -140,19 +141,29 @@ cd cpython-mingw
 mkdir -p $BUILDDIR
 cd $BUILDDIR
 BUILD=$(../config.guess) # Python configure requires build triplet for cross compilation
+# Locate the native python3 that we've built before, from the path
+NATIVE_PYTHON="$(command -v python3)"
 
-export CC=$HOST-clang
-export CXX=$HOST-clang++
+export CC=$HOST-gcc
+export CXX=$HOST-g++
 
 ../configure --prefix="$PREFIX" --build=$BUILD --host=$HOST \
     CFLAGS="-I$PREFIX/include" CXXFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib -Wl,-s" \
+    PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
+    --with-build-python="$NATIVE_PYTHON" \
     --enable-shared             \
     --with-system-ffi           \
     --without-ensurepip         \
-    --without-c-locale-coercion
+    --without-c-locale-coercion \
+    --disable-test-modules
 
 $MAKE -j$CORES
 $MAKE install
-rm -rf $PREFIX/lib/python*/test
 find $PREFIX/lib/python* -name __pycache__ | xargs rm -rf
+
+# Provide a versionless executable as well; msys2 does something similar
+# (for python3, python3w, python3-config, idle3 and pydoc3) after installing
+# a Python version that is supposed to be the primary Python.
+cp -a $PREFIX/bin/python3.exe $PREFIX/bin/python.exe
+
 cd ../..

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Martin Storsjo
+ * Copyright (c) 2023 Martin Storsjo
  *
  * This file is part of llvm-mingw.
  *
@@ -16,16 +16,26 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "native-wrapper.h"
+#include <stdatomic.h>
 
-int _tmain(int argc, TCHAR* argv[]) {
-    const TCHAR *dir;
-    const TCHAR *exe;
-    const TCHAR *basename, *target;
-    split_argv(argv[0], &dir, &basename, &target, &exe);
-    if (_tcsncmp(exe, _T("llvm-"), 5))
-        exe = concat(_T("llvm-"), exe);
-    TCHAR *exe_path = concat(dir, exe);
+struct large {
+    int data[20];
+};
 
-    return run_final(exe_path, (const TCHAR *const *) argv);
+typedef struct large type;
+
+_Atomic type value;
+
+type get(void) {
+    return atomic_load(&value);
+}
+
+type myValue;
+
+int lockfree;
+
+int main(int argc, char* argv[]) {
+    myValue = get();
+    lockfree = atomic_is_lock_free(&value);
+    return 0;
 }

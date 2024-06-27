@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Martin Storsjo
+ * Copyright (c) 2023 Martin Storsjo
  *
  * This file is part of llvm-mingw.
  *
@@ -16,16 +16,16 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "native-wrapper.h"
+#include <stdio.h>
+#include <windows.h>
+#include "hello-res.h"
 
-int _tmain(int argc, TCHAR* argv[]) {
-    const TCHAR *dir;
-    const TCHAR *exe;
-    const TCHAR *basename, *target;
-    split_argv(argv[0], &dir, &basename, &target, &exe);
-    if (_tcsncmp(exe, _T("llvm-"), 5))
-        exe = concat(_T("llvm-"), exe);
-    TCHAR *exe_path = concat(dir, exe);
-
-    return run_final(exe_path, (const TCHAR *const *) argv);
+int main(int argc, char *argv[]) {
+    char buf[100];
+    if (LoadStringA(GetModuleHandle(NULL), HELLO_STRING, buf, sizeof(buf)) <= 0) {
+        printf("Unable to load resource string\n");
+        return 1;
+    }
+    printf("Resource string: %s\n", buf);
+    return 0;
 }
