@@ -19,18 +19,13 @@ jobs:
             make
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/nightly-good.zip
+          curl -LO https://martin.st/temp/nightly-bad.zip
           unzip -q *.zip
           rm *.zip
-          mv llvm-mingw-* /llvm-mingw-good
-          curl -LO https://martin.st/temp/lldb-bisect7.zip
-          unzip *.zip
-          rm *.zip
-          mv bin /lldb-bisect
+          mv llvm-mingw-* /llvm-mingw
+          echo /llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v4
       - name: Run tests
         run: |
-          cp /llvm-mingw-good/bin/libc++.dll .
-          cp /llvm-mingw-good/bin/libunwind.dll .
-          /llvm-mingw-good/bin/g++ test/hello-exception.cpp -o hello-exception-dwarf.exe -g
-          /lldb-bisect/lldb -b -s lldb-test-script -- hello-exception-dwarf.exe -noop < /dev/null
+          curl -LO https://martin.st/temp/hello-exception-dwarf.exe
+          /llvm-mingw/bin/lldb -b -s lldb-test-script -- hello-exception-dwarf.exe -noop < /dev/null
