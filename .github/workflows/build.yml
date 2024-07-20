@@ -19,15 +19,18 @@ jobs:
             make
       - name: Unpack toolchain
         run: |
+          curl -LO https://martin.st/temp/nightly-good.zip
+          unzip -q *.zip
+          rm *.zip
+          mv llvm-mingw-* /llvm-mingw-good
           curl -LO https://martin.st/temp/nightly-bad.zip
           unzip -q *.zip
           rm *.zip
-          mv llvm-mingw-* /llvm-mingw
-          echo /llvm-mingw/bin >> $GITHUB_PATH
+          mv llvm-mingw-* /llvm-mingw-bad
       - uses: actions/checkout@v4
       - name: Run tests
         run: |
-          cp /llvm-mingw/bin/libc++.dll .
-          cp /llvm-mingw/bin/libunwind.dll .
-          /llvm-mingw/bin/g++ test/hello-exception.cpp -o hello-exception-dwarf.exe -g
-          /llvm-mingw/bin/lldb -b -s lldb-test-script -- hello-exception-dwarf.exe -noop < /dev/null
+          cp /llvm-mingw-good/bin/libc++.dll .
+          cp /llvm-mingw-good/bin/libunwind.dll .
+          /llvm-mingw-good/bin/g++ test/hello-exception.cpp -o hello-exception-dwarf.exe -g
+          /llvm-mingw-bad/bin/lldb -b -s lldb-test-script -- hello-exception-dwarf.exe -noop < /dev/null
