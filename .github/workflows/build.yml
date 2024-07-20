@@ -23,7 +23,7 @@ jobs:
           unzip -q *.zip
           rm *.zip
           mv llvm-mingw-* /llvm-mingw-good
-          curl -LO https://martin.st/temp/lldb-bisect5.zip
+          curl -LO https://martin.st/temp/lldb-bisect6.zip
           unzip *.zip
           rm *.zip
           mv bin /lldb-bisect
