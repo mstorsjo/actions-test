@@ -8,6 +8,7 @@ on:
       branch:
         description: 'Branch to extract from'
         type: string
+        default: 'master'
       tag:
         description: 'Tag to create/upload to'
         required: true
@@ -48,6 +49,7 @@ jobs:
       - name: Rearrange files
         run: |
           rm -rf linux-asserts*
+          rm -rf msys2*
           mv *-toolchain/*.zip *-toolchain/*.tar.xz .
       - name: Set environment
         run: |

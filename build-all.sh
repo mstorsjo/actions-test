@@ -16,6 +16,7 @@
 
 set -e
 
+HOST_CLANG=
 LLVM_ARGS=""
 MINGW_ARGS=""
 CFGUARD_ARGS="--enable-cfguard"
@@ -25,6 +26,11 @@ while [ $# -gt 0 ]; do
     case "$1" in
     --enable-asserts)
         LLVM_ARGS="$LLVM_ARGS $1"
+        ;;
+    --host-clang|--host-clang=*)
+        HOST_CLANG=${1#--host-clang}
+        HOST_CLANG=${HOST_CLANG#=}
+        HOST_CLANG=${HOST_CLANG:-clang}
         ;;
     --full-llvm)
         LLVM_ARGS="$LLVM_ARGS $1"
@@ -67,6 +73,9 @@ while [ $# -gt 0 ]; do
     --wipe-runtimes)
         WIPE_RUNTIMES=1
         ;;
+    --clean-runtimes)
+        CLEAN_RUNTIMES=1
+        ;;
     *)
         if [ -n "$PREFIX" ]; then
             echo Unrecognized parameter $1
@@ -78,26 +87,32 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo "$0 [--enable-asserts] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] [--no-tools] [--wipe-runtimes] dest"
+    echo "$0 [--host-clang[=clang]] [--enable-asserts] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] [--no-tools] [--wipe-runtimes] [--clean-runtimes] dest"
     exit 1
 fi
 
-for dep in git cmake; do
+for dep in git cmake ${HOST_CLANG}; do
     if ! command -v $dep >/dev/null; then
         echo "$dep not installed. Please install it and retry" 1>&2
         exit 1
     fi
 done
 
+if [ -n "${HOST_CLANG}" ] && [ "${CFGUARD_ARGS}" = "--enable-cfguard"  ]; then
+    "${HOST_CLANG}" -c -x c -o - - -Werror -mguard=cf </dev/null >/dev/null 2>/dev/null || CFGUARD_ARGS="--disable-cfguard"
+fi
+
 if [ -z "$NO_TOOLS" ]; then
-    ./build-llvm.sh $PREFIX $LLVM_ARGS $HOST_ARGS
-    if [ -z "$NO_LLDB" ] && [ -z "$NO_LLDB_MI" ]; then
-        ./build-lldb-mi.sh $PREFIX $HOST_ARGS
+    if [ -z "${HOST_CLANG}" ]; then
+        ./build-llvm.sh $PREFIX $LLVM_ARGS $HOST_ARGS
+        if [ -z "$NO_LLDB" ] && [ -z "$NO_LLDB_MI" ]; then
+            ./build-lldb-mi.sh $PREFIX $HOST_ARGS
+        fi
+        if [ -z "$FULL_LLVM" ]; then
+            ./strip-llvm.sh $PREFIX $HOST_ARGS
+        fi
     fi
-    if [ -z "$FULL_LLVM" ]; then
-        ./strip-llvm.sh $PREFIX $HOST_ARGS
-    fi
-    ./install-wrappers.sh $PREFIX $HOST_ARGS
+    ./install-wrappers.sh $PREFIX $HOST_ARGS ${HOST_CLANG:+--host-clang=$HOST_CLANG}
     ./build-mingw-w64-tools.sh $PREFIX $HOST_ARGS
 fi
 if [ -n "$NO_RUNTIMES" ]; then
@@ -107,9 +122,11 @@ if [ -n "$WIPE_RUNTIMES" ]; then
     # Remove the runtime code built previously.
     #
     # This roughly matches the setup as if --no-runtimes had been passed,
-    #  --no-runtimes, except that compiler-rt headers are left installed
-    # in lib/clang/*/include.
+    # except that compiler-rt headers are left installed in lib/clang/*/include.
     rm -rf $PREFIX/*-w64-mingw32 $PREFIX/lib/clang/*/lib
+fi
+if [ -n "$CLEAN_RUNTIMES" ]; then
+    export CLEAN=1
 fi
 ./build-mingw-w64.sh $PREFIX $MINGW_ARGS $CFGUARD_ARGS
 ./build-compiler-rt.sh $PREFIX $CFGUARD_ARGS

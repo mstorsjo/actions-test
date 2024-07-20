@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-18.1.0-rc1}
+: ${LLVM_VERSION:=llvmorg-18.1.8}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -232,6 +232,11 @@ else
     elif command -v ld.gold >/dev/null; then
         CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=gold"
     fi
+fi
+
+if [ -n "$COMPILER_LAUNCHER" ]; then
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
+    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
 fi
 
 if [ -n "$TARGET_WINDOWS" ]; then
