@@ -19,7 +19,7 @@ jobs:
             make
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/nightly-good.zip
+          curl -LO https://martin.st/temp/nightly-bad.zip
           unzip -q *.zip
           rm *.zip
           mv llvm-mingw-* /llvm-mingw
