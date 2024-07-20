@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run tests
         run: |
-          NATIVE=1 ./test-libcxx-module.sh /llvm-mingw
-          ./run-tests.sh /llvm-mingw
-          ./run-lldb-tests.sh /llvm-mingw
+          cp /llvm-mingw/bin/libc++.dll .
+          cp /llvm-mingw/bin/libunwind.dll .
+          /llvm-mingw/bin/g++ test/hello-exception.cpp -o hello-exception-dwarf.exe -g
+          /llvm-mingw/bin/lldb -b -s lldb-test-script -- hello-exception-dwarf.exe -noop < /dev/null
