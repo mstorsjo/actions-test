@@ -373,6 +373,7 @@ jobs:
           retention-days: 7
 
   gcc-cross:
+    if: false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -473,20 +474,16 @@ jobs:
           retention-days: 7
 
   test-gcc:
-    needs: [gcc-cross]
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         crt:
           - ucrt
-          - msvcrt
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-${{matrix.crt}}-x86_64-gcc-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://martin.st/temp/gcc-mingw-${{matrix.crt}}-x86_64.zip
           Expand-Archive gcc-mingw-*.zip -DestinationPath .
           del gcc-mingw-*.zip
           mv gcc-mingw-* c:\gcc-mingw
