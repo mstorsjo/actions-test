@@ -1,0 +1,29 @@
+From 5e113fe529588db2d5f79073fabfb311ebf8c057 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 21 Sep 2023 17:15:40 +0100
+Subject: [PATCH 50/55] [AArch64] Support neon intrinsics on ARM64EC
+
+When targeting ARM64EC, __aarch64__ isn't defined. This done to ensure
+structure layouts match those of x86_64, but AArch64 intrinsics still
+need to be usable, so also take the __aarch64__ path if __arm64ec__ is
+defined.
+---
+ clang/include/clang/Basic/arm_neon.td | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/clang/include/clang/Basic/arm_neon.td b/clang/include/clang/Basic/arm_neon.td
+index 6390ba3f9fe5..722738d70c7c 100644
+--- a/clang/include/clang/Basic/arm_neon.td
++++ b/clang/include/clang/Basic/arm_neon.td
+@@ -1247,7 +1247,7 @@ def FMAXNM_S32 : SInst<"vmaxnm", "...", "fQf">;
+ def FMINNM_S32 : SInst<"vminnm", "...", "fQf">;
+ }
+ 
+-let ArchGuard = "(defined(__aarch64__)  || defined(__arm64ec__)) && defined(__ARM_FEATURE_NUMERIC_MAXMIN)" in {
++let ArchGuard = "(defined(__aarch64__) || defined(__arm64ec__)) && defined(__ARM_FEATURE_NUMERIC_MAXMIN)" in {
+ def FMAXNM_S64 : SInst<"vmaxnm", "...", "dQd">;
+ def FMINNM_S64 : SInst<"vminnm", "...", "dQd">;
+ }
+-- 
+2.25.1
+

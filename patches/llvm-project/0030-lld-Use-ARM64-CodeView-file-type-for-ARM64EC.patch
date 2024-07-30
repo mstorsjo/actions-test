@@ -1,0 +1,24 @@
+From 3d5d4eca37469ab02060e3cd140bd5e4c11e2ddc Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Fri, 29 Sep 2023 20:01:28 +0200
+Subject: [PATCH 30/55] [lld] Use ARM64 CodeView file type for ARM64EC.
+
+---
+ lld/COFF/PDB.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lld/COFF/PDB.cpp b/lld/COFF/PDB.cpp
+index 13ae71384583..a4846624439a 100644
+--- a/lld/COFF/PDB.cpp
++++ b/lld/COFF/PDB.cpp
+@@ -1364,6 +1364,7 @@ static codeview::CPUType toCodeViewMachine(COFF::MachineTypes machine) {
+   case COFF::IMAGE_FILE_MACHINE_ARM:
+     return codeview::CPUType::ARM7;
+   case COFF::IMAGE_FILE_MACHINE_ARM64:
++  case COFF::IMAGE_FILE_MACHINE_ARM64EC:
+     return codeview::CPUType::ARM64;
+   case COFF::IMAGE_FILE_MACHINE_ARMNT:
+     return codeview::CPUType::ARMNT;
+-- 
+2.25.1
+

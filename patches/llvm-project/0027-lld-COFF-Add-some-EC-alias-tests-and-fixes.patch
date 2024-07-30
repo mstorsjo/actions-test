@@ -1,0 +1,371 @@
+From 1a724d127d49f7ee28404bfd1b10bdb054751466 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Mon, 25 Sep 2023 18:44:29 +0200
+Subject: [PATCH 27/55] [lld][COFF] Add some EC alias tests and fixes.
+
+---
+ lld/COFF/InputFiles.cpp            |  41 ++++++++++
+ lld/COFF/SymbolTable.cpp           |   8 +-
+ lld/COFF/Symbols.h                 |  12 +++
+ lld/test/COFF/anti-dep.test        |  84 +++++++++++++++++++++
+ lld/test/COFF/arm64ec-lib-sym.test | 115 ++++++++++++++++++++++++++++-
+ 5 files changed, 257 insertions(+), 3 deletions(-)
+ create mode 100644 lld/test/COFF/anti-dep.test
+
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index f9fa10efe2af..7499350a8ad3 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -84,6 +84,10 @@ static void checkAndSetWeakAlias(COFFLinkerContext &ctx, InputFile *f,
+       // this weak symbol.
+       if (ctx.config.allowDuplicateWeak)
+         return;
++      // FIXME: This should probably check for anti-dependency, needs more
++      // testing
++      if (ctx.config.machine == ARM64EC)
++        return;
+       ctx.symtab.reportDuplicate(source, f);
+     }
+     u->weakAlias = target;
+@@ -441,6 +445,43 @@ void ObjFile::initializeSymbols() {
+   std::vector<const coff_aux_section_definition *> comdatDefs(
+       coffObj->getNumberOfSections() + 1);
+ 
++  // See a comment for Undefined::isECAlias.
++  // FIXME: This should be implemented nicer, but the whole thing
++  // is still friagle, so I'm planning another pass at it anyway.
++  if (ctx.config.machine == ARM64EC) {
++    for (uint32_t i = 0; i < numSymbols; ++i) {
++      COFFSymbolRef coffSym = check(coffObj->getSymbol(i));
++      if (coffSym.isUndefined() || !coffSym.isWeakExternal())
++        continue;
++      const coff_aux_weak_external *aux = coffSym.getWeakExternal();
++      if (aux->Characteristics != 4 /* IMAGE_WEAK_EXTERN_ANTI_DEPENDENCY */)
++        continue;
++      StringRef name = check(coffObj->getSymbolName(coffSym));
++      std::optional<std::string> mangledName =
++          getArm64ECMangledFunctionName(name);
++      if (!mangledName)
++        continue;
++      uint32_t tagIndex = coffSym.getAux<coff_aux_weak_external>()->TagIndex;
++      COFFSymbolRef targetSym = check(coffObj->getSymbol(tagIndex));
++      if (targetSym.isUndefined() || !targetSym.isWeakExternal())
++        continue;
++      StringRef targetName = check(coffObj->getSymbolName(targetSym));
++      if (*mangledName != targetName)
++        continue;
++
++      Symbol *source = ctx.symtab.addUndefined(name, this, false);
++      Symbol *target = ctx.symtab.addUndefined(targetName, this, false);
++
++      auto s = dyn_cast<Undefined>(source);
++      auto t = dyn_cast<Undefined>(target);
++      if (s && !s->weakAlias && !s->isECAlias() && t && !t->weakAlias &&
++          !t->isECAlias()) {
++        t->ECAlias = s;
++        s->ECAlias = t;
++      }
++    }
++  }
++
+   for (uint32_t i = 0; i < numSymbols; ++i) {
+     COFFSymbolRef coffSym = check(coffObj->getSymbol(i));
+     bool prevailingComdat;
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index 0ac4410877d2..7e6b37467956 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -607,7 +607,9 @@ void SymbolTable::initializeEntryThunks() {
+ Symbol *SymbolTable::addUndefined(StringRef name, InputFile *f,
+                                   bool isWeakAlias) {
+   auto [s, wasInserted] = insert(name, f);
+-  if (wasInserted || (s->isLazy() && isWeakAlias)) {
++  if (wasInserted ||
++      (s->isLazy() && isWeakAlias &&
++       (!isa<Undefined>(s) || !cast<Undefined>(s)->isECAlias()))) {
+     replaceSymbol<Undefined>(s, name);
+     return s;
+   }
+@@ -624,10 +626,12 @@ void SymbolTable::addLazyArchive(ArchiveFile *f, const Archive::Symbol &sym) {
+     return;
+   }
+   auto *u = dyn_cast<Undefined>(s);
+-  if (!u || u->weakAlias || s->pendingArchiveLoad)
++  if (!u || (u->weakAlias && !u->isECAlias()) || s->pendingArchiveLoad)
+     return;
+   s->pendingArchiveLoad = true;
+   f->addMember(sym);
++  if (u->ECAlias)
++    u->ECAlias->pendingArchiveLoad = true;
+ }
+ 
+ void SymbolTable::addLazyObject(InputFile *f, StringRef n) {
+diff --git a/lld/COFF/Symbols.h b/lld/COFF/Symbols.h
+index d88cd84f591f..691d4de898d5 100644
+--- a/lld/COFF/Symbols.h
++++ b/lld/COFF/Symbols.h
+@@ -337,6 +337,14 @@ public:
+   // Alias pointer points to.
+   Symbol *weakAlias = nullptr;
+ 
++  // ARM64EC treats mangled -> unmangled weak anti-dependency aliases
++  // as a special case. It's allowed for archive symbols to replace
++  // such aliases (while it's not allowed for other weak aliases,
++  // even if they are marked as an anti-dependency).
++  Symbol *ECAlias = nullptr;
++
++  bool isECAlias() { return ECAlias != nullptr; }
++
+   // If this symbol is external weak, try to resolve it to a defined
+   // symbol by searching the chain of fallback symbols. Returns the symbol if
+   // successful, otherwise returns null.
+@@ -507,6 +515,10 @@ void replaceSymbol(Symbol *s, ArgT &&... arg) {
+   assert(static_cast<Symbol *>(static_cast<T *>(nullptr)) == nullptr &&
+          "Not a Symbol");
+   bool canInline = s->canInline;
++  if (auto u = dyn_cast<Undefined>(s)) {
++    if (u->ECAlias && isa<Undefined>(u->ECAlias))
++      cast<Undefined>(u->ECAlias)->ECAlias = nullptr;
++  }
+   new (s) T(std::forward<ArgT>(arg)...);
+   s->canInline = canInline;
+ }
+diff --git a/lld/test/COFF/anti-dep.test b/lld/test/COFF/anti-dep.test
+new file mode 100644
+index 000000000000..b6d662e94a85
+--- /dev/null
++++ b/lld/test/COFF/anti-dep.test
+@@ -0,0 +1,84 @@
++REQUIRES: x86
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows test.s -o test.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows test2.s -o test2.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows test3.s -o test3.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows lib.s -o lib.obj
++RUN: llvm-lib -machine:amd64 -out:slib.lib lib.obj
++
++RUN: lld-link -machine:amd64 -dll -noentry -out:test.dll test.obj slib.lib
++RUN: llvm-readobj --hex-dump=.testref test.dll | FileCheck -check-prefix=TESTREF %s
++TESTREF: 0x180002000 00100000 00100000
++RUN: llvm-readobj --hex-dump=.test test.dll | FileCheck -check-prefix=LOCAL %s
++LOCAL: local
++
++Same, but passing .lib file first.
++RUN: lld-link -machine:amd64 -dll -noentry -out:test-2.dll slib.lib test.obj
++RUN: llvm-readobj --hex-dump=.testref test-2.dll | FileCheck -check-prefix=TESTREF %s
++RUN: llvm-readobj --hex-dump=.test test-2.dll | FileCheck -check-prefix=LOCAL %s
++
++Reference othersym symbol to pull lib.obj object file, testsym is replaced by lib.obj.
++RUN: lld-link -machine:amd64 -dll -noentry -out:test2.dll test2.obj slib.lib
++RUN: llvm-readobj --hex-dump=.test test2.dll | FileCheck -check-prefix=EXTERN %s
++EXTERN-NOT: local
++EXTERN: external
++EXTERN-NOT: local
++
++Same, but passing .lib file first.
++RUN: lld-link -machine:amd64 -dll -noentry -out:test2-2.dll slib.lib test2.obj
++RUN: llvm-readobj --hex-dump=.test test2-2.dll | FileCheck -check-prefix=EXTERN %s
++
++Similar to test2.dll, but othersym is pulled by localsym (previously resolved by
++anti-dependency symbol), which is discarded after bein overriden by lib.obj.
++RUN: lld-link -machine:amd64 -dll -noentry -out:test3.dll test3.obj slib.lib
++RUN: llvm-readobj --hex-dump=.test test3.dll | FileCheck -check-prefix=EXTERN %s
++RUN: lld-link -machine:amd64 -dll -noentry -out:test3-2.dll slib.lib test3.obj
++RUN: llvm-readobj --hex-dump=.test test3-2.dll | FileCheck -check-prefix=EXTERN %s
++
++#--- test.s
++    .weak_anti_dep testsym
++.set testsym, localsym
++
++    .section .testref, "r"
++    .rva localsym
++    .rva testsym
++
++    .section .test,"r",discard,localsym
++localsym:
++    .ascii "local"
++
++#--- test2.s
++    .weak_anti_dep testsym
++.set testsym, localsym
++
++    .section .testref, "r"
++    .rva testsym
++    .rva othersym
++
++    .section .test,"r",discard,localsym
++localsym:
++    .ascii "local"
++
++#--- test3.s
++    .weak_anti_dep testsym
++.set testsym, localsym
++
++    .section .testref, "r"
++    .rva testsym
++
++    .section .test,"r",discard,localsym
++localsym:
++    .ascii "local"
++    .rva othersym
++
++#--- lib.s
++    .globl testsym
++    .section .test,"r",discard,testsym
++testsym:
++    .ascii "external"
++
++    .globl othersym
++    .section .other,"r",discard,othersym
++othersym:
++    .ascii "other"
+diff --git a/lld/test/COFF/arm64ec-lib-sym.test b/lld/test/COFF/arm64ec-lib-sym.test
+index 18587af52496..3a2ae8747daa 100644
+--- a/lld/test/COFF/arm64ec-lib-sym.test
++++ b/lld/test/COFF/arm64ec-lib-sym.test
+@@ -2,27 +2,140 @@ REQUIRES: aarch64, x86
+ RUN: split-file %s %t.dir && cd %t.dir
+ 
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test.s -o test.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test2.s -o test2.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test3.s -o test3.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test4.s -o test4.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test5.s -o test5.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test-fail.s -o test-fail.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test-fail2.s -o test-fail2.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test-fail3.s -o test-fail3.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows testsym.s -o testsym.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows test.s -o test-x86_64.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows test-x1.s -o test-x1.obj
+ RUN: llvm-mc -filetype=obj -triple=x86_64-windows testsym.s -o testsym-x86_64.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
+ RUN: llvm-lib -machine:arm64ec -out:testsym.lib testsym.obj
+ RUN: llvm-lib -machine:amd64 -out:testsym-x64.lib testsym-x86_64.obj
++RUN: llvm-lib -machine:arm64ec -out:testsym2.lib test.obj
+ 
+ RUN: lld-link -machine:arm64ec -dll -noentry -out:test.dll test.obj testsym.lib loadconfig-arm64ec.obj
+-
+ RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
+ DISASM:      0000000180001000 <.text>:
+ DISASM-NEXT: 180001000: d65f03c0     ret
++DISASM-EMPTY:
++
++RUN: llvm-readobj --hex-dump=.test test.dll | FileCheck -check-prefix=TESTSEC %s
++TESTSEC: 0x180004000 00100000
+ 
+ RUN: lld-link -machine:arm64ec -dll -noentry -out:test-x64.dll test.obj testsym-x64.lib loadconfig-arm64ec.obj
+ RUN: llvm-objdump -d test-x64.dll | FileCheck -check-prefix=DISASM-X64 %s
+ DISASM-X64:      0000000180001000 <.text>:
+ DISASM-X64-NEXT: 180001000: c3                           retq
+ 
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test2.dll test2.obj testsym.lib loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test2.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-readobj --hex-dump=.test test2.dll | FileCheck -check-prefix=TESTSEC %s
++
++RUN: llvm-readobj --sections test2.dll | FileCheck -check-prefix=SECS %s
++SECS: Name: .text
++SECS: Name: .test
++SECS-NOT: .thnk
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test2-2.dll testsym.lib test2.obj loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test2-2.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-readobj --sections test2-2.dll | FileCheck -check-prefix=SECS %s
++RUN: llvm-readobj --hex-dump=.test test2-2.dll | FileCheck -check-prefix=TESTSEC %s
++RUN: llvm-readobj --sections test2-2.dll | FileCheck -check-prefix=SECS %s
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test3.dll test3.obj testsym.lib loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test3.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-readobj --sections test3.dll | FileCheck -check-prefix=SECS %s
++RUN: llvm-readobj --hex-dump=.test test3.dll | FileCheck -check-prefix=TESTSEC %s
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test3.dll testsym.lib test3.obj loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test3.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-readobj --sections test3.dll | FileCheck -check-prefix=SECS %s
++RUN: llvm-readobj --hex-dump=.test test3.dll | FileCheck -check-prefix=TESTSEC %s
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test4.dll test4.obj testsym.lib loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test3.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-readobj --sections test3.dll | FileCheck -check-prefix=SECS %s
++RUN: llvm-readobj --hex-dump=.test test3.dll | FileCheck -check-prefix=TESTSEC %s
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test5.dll test5.obj testsym.lib loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test3.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-readobj --sections test3.dll | FileCheck -check-prefix=SECS %s
++RUN: llvm-readobj --hex-dump=.test test3.dll | FileCheck -check-prefix=TESTSEC %s
++
++RUN: not lld-link -machine:arm64ec -dll -noentry -out:test-fail.dll test-fail.obj testsym.lib loadconfig-arm64ec.obj
++RUN: not lld-link -machine:arm64ec -dll -noentry -out:test-fail2.dll test-fail2.obj testsym.lib loadconfig-arm64ec.obj
++
+ #--- test.s
+     .section .test, "r"
+     .rva "#testsym"
+ 
++#--- test2.s
++    .weak_anti_dep testsym
++.set testsym, "#testsym"
++
++    .section .test, "r"
++    .rva testsym
++
++#--- test3.s
++    .weak_anti_dep testsym
++.set testsym, "#testsym"
++    .weak_anti_dep "#testsym"
++.set "#testsym", thunksym
++
++    .section .test, "r"
++    .rva testsym
++
++    .section .thnk,"xr",discard,thunksym
++thunksym:
++    mov w0, #2
++    ret
++
++#--- test4.s
++    .weak testsym
++.set testsym, "#testsym"
++
++    .section .test, "r"
++    .rva testsym
++
++#--- test5.s
++    .weak_anti_dep testsym
++.set testsym, "#testsym"
++    .weak_anti_dep "#testsym"
++.set "#testsym", thunksym
++
++    .section .test, "r"
++    .rva "#testsym"
++
++    .section .thnk,"xr",discard,thunksym
++thunksym:
++    mov w0, #2
++    ret
++
++#--- test-x1.s
++    .section .test, "r"
++    .rva testsym
++
++#--- test-fail.s
++    .section .test, "r"
++    .rva testsym
++
++#--- test-fail2.s
++    .weak_anti_dep "#testsym"
++.set "#testsym", thunksym
++    .section .test, "r"
++    .rva testsym
++
++#--- test-fail3.s
++    .weak_anti_dep testimpsym
++.set testimpsym, "#testsym"
++    .section .test, "r"
++    .rva testimpsym
++
+ #--- testsym.s
+     .text
+     .globl "#testsym"
+-- 
+2.25.1
+

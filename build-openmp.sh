@@ -42,7 +42,7 @@ PREFIX="$(cd "$PREFIX" && pwd)"
 
 export PATH="$PREFIX/bin:$PATH"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 if [ ! -d llvm-project/openmp ] || [ -n "$SYNC" ]; then
     CHECKOUT_ONLY=1 ./build-llvm.sh
@@ -69,6 +69,10 @@ for arch in $ARCHS; do
     case $arch in
     x86_64)
         CMAKEFLAGS="$CMAKEFLAGS -DLIBOMP_ASMFLAGS=-m64"
+        ;;
+    arm64ec)
+        # Not supported
+        continue
         ;;
     esac
 

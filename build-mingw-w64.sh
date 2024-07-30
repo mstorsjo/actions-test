@@ -18,7 +18,7 @@ set -e
 
 : ${DEFAULT_WIN32_WINNT:=0x601}
 : ${DEFAULT_MSVCRT:=ucrt}
-: ${MINGW_W64_VERSION:=7c9cfe6708cafc83c14a2654308b2db62b126eae}
+: ${MINGW_W64_VERSION:=ed6f48299924df827315ebf9bc99284fdd7433fe}
 
 CFGUARD_FLAGS="--enable-cfguard"
 
@@ -65,6 +65,7 @@ cd mingw-w64
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
     [ -z "$SYNC" ] || git fetch
     git checkout $MINGW_W64_VERSION
+    git am -3 ../patches/mingw-w64/*.patch
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0
@@ -87,7 +88,7 @@ unset CC
 : ${CORES:=$(nproc 2>/dev/null)}
 : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
 : ${CORES:=4}
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 if [ -z "$SKIP_INCLUDE_TRIPLET_PREFIX" ]; then
     HEADER_ROOT="$PREFIX/generic-w64-mingw32"
@@ -121,7 +122,7 @@ for arch in $ARCHS; do
     armv7)
         FLAGS="--disable-lib32 --disable-lib64 --enable-libarm32"
         ;;
-    aarch64)
+    aarch64|arm64ec)
         FLAGS="--disable-lib32 --disable-lib64 --enable-libarm64"
         ;;
     i686)

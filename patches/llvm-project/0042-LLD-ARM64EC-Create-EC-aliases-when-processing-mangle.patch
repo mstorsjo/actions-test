@@ -1,0 +1,73 @@
+From cc1c04f168fce70cd3654164ffe150a2d3164cc1 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Mon, 20 May 2024 20:57:27 +0200
+Subject: [PATCH 42/55] [LLD][ARM64EC] Create EC aliases when processing
+ mangled symbols too.
+
+---
+ lld/COFF/Driver.cpp                 | 16 +++++++++++-----
+ lld/test/COFF/arm64ec-ec-alias.test | 18 ++++++++++++++++++
+ 2 files changed, 29 insertions(+), 5 deletions(-)
+ create mode 100644 lld/test/COFF/arm64ec-ec-alias.test
+
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index becef930892b..f58af329271d 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -707,17 +707,23 @@ Symbol *LinkerDriver::addUndefined(COFFTargetContext &target, StringRef name,
+     b->isGCRoot = true;
+     ctx.config.gcroot.push_back(b);
+   }
+-  if (aliasEC && target.machine == ARM64EC && isa<Undefined>(b)) {
+-    auto u = cast<Undefined>(b);
+-    if (!u->weakAlias) {
+-      if (std::optional<std::string> mangledName =
+-              getArm64ECMangledFunctionName(name)) {
++  if (aliasEC && target.machine == ARM64EC) {
++    if (std::optional<std::string> mangledName =
++            getArm64ECMangledFunctionName(name)) {
++      auto u = dyn_cast<Undefined>(b);
++      if (u && !u->weakAlias) {
+         u->weakAlias = target.symtab.addUndefined(saver().save(*mangledName));
+         if (Undefined *ut = dyn_cast<Undefined>(u->weakAlias)) {
+           u->ECAlias = ut;
+           ut->ECAlias = u;
+         }
+       }
++    } else {
++      std::optional<std::string> unmangledName = getArm64ECDemangledFunctionName(name);
++      Symbol *us = target.symtab.addUndefined(saver().save(*unmangledName));
++      auto u = dyn_cast<Undefined>(us);
++      if (u && !u->weakAlias)
++        u->weakAlias = b;
+     }
+   }
+   return b;
+diff --git a/lld/test/COFF/arm64ec-ec-alias.test b/lld/test/COFF/arm64ec-ec-alias.test
+new file mode 100644
+index 000000000000..29a62ca7b051
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-ec-alias.test
+@@ -0,0 +1,18 @@
++REQUIRES: aarch64
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows mangled-func.s -o mangled-func.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows ref.s -o ref.obj
++RUN: lld-link -machine:arm64ec -dll -noentry mangled-func.obj ref.obj "-export:#func"
++
++#--- mangled-func.s
++        .text
++	.globl	"#func"
++	.p2align 2
++"#func":
++	mov x0, #1
++	ret
++
++#--- ref.s
++        .data
++        .rva func
+\ No newline at end of file
+-- 
+2.25.1
+

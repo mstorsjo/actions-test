@@ -1,0 +1,43 @@
+From ff1ecf3609f52b3f25b9756f235c794a151f8ff8 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 14 Sep 2023 20:06:19 +0100
+Subject: [PATCH 09/29] headers: Use aarch64 TEB accessors for ARM64EC
+
+---
+ mingw-w64-headers/include/winnt.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/mingw-w64-headers/include/winnt.h b/mingw-w64-headers/include/winnt.h
+index a2e729a73..418322e36 100644
+--- a/mingw-w64-headers/include/winnt.h
++++ b/mingw-w64-headers/include/winnt.h
+@@ -10159,7 +10159,7 @@ typedef DWORD (WINAPI *PRTL_RUN_ONCE_INIT_FN)(PRTL_RUN_ONCE, PVOID, PVOID *);
+     FORCEINLINE VOID TpDestroyCallbackEnviron (PTP_CALLBACK_ENVIRON cbe) { UNREFERENCED_PARAMETER (cbe); }
+ #endif
+ 
+-#if defined(__x86_64) && !defined (__WIDL__)
++#if defined(__x86_64) && !defined (__arm64ec__) && !defined (__WIDL__)
+     struct _TEB *NtCurrentTeb(VOID);
+     PVOID GetCurrentFiber(VOID);
+     PVOID GetFiberData(VOID);
+@@ -10181,7 +10181,7 @@ typedef DWORD (WINAPI *PRTL_RUN_ONCE_INIT_FN)(PRTL_RUN_ONCE, PVOID, PVOID *);
+     FORCEINLINE PVOID GetFiberData (VOID) { return *(PVOID *)GetCurrentFiber (); }
+ #endif /* arm */
+ 
+-#if defined (__aarch64__) && !defined (__WIDL__)
++#if (defined (__aarch64__) || defined (__arm64ec__)) && !defined (__WIDL__)
+     struct _TEB *NtCurrentTeb (VOID);
+     PVOID GetCurrentFiber (VOID);
+     PVOID GetFiberData (VOID);
+@@ -10190,7 +10190,7 @@ typedef DWORD (WINAPI *PRTL_RUN_ONCE_INIT_FN)(PRTL_RUN_ONCE, PVOID, PVOID *);
+     return teb; }
+     FORCEINLINE PVOID GetCurrentFiber(VOID) { return (PVOID)(((PNT_TIB)NtCurrentTeb())->FiberData); }
+     FORCEINLINE PVOID GetFiberData (VOID) { return *(PVOID *)GetCurrentFiber (); }
+-#endif /* aarch64 */
++#endif /* aarch64 || arm64ec */
+ 
+ #ifndef _NTTMAPI_
+ #define _NTTMAPI_
+-- 
+2.25.1
+

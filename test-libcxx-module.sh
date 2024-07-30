@@ -24,7 +24,7 @@ PREFIX="$1"
 PREFIX="$(cd "$PREFIX" && pwd)"
 export PATH=$PREFIX/bin:$PATH
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 for arch in $ARCHS; do
     # TODO: This should ideally use "$CXX -print-file-name=libc++.modules.json", then parse the json to find the relevant cppm file and include directory.

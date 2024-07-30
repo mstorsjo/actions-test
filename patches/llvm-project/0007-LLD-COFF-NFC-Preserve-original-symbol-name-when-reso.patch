@@ -1,0 +1,90 @@
+From e2b6ad81831be7fe8688478515c7f75ffa9c2fff Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Tue, 16 Apr 2024 12:10:44 +0200
+Subject: [PATCH 07/55] [LLD][COFF][NFC] Preserve original symbol name when
+ resolving weak aliases.
+
+---
+ lld/COFF/SymbolTable.cpp | 14 +-------------
+ lld/COFF/Symbols.cpp     | 24 ++++++++++++++++++++++++
+ lld/COFF/Symbols.h       |  3 +++
+ 3 files changed, 28 insertions(+), 13 deletions(-)
+
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index aa1bc33c6d80..8e5f1c782030 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -517,20 +517,8 @@ void SymbolTable::resolveRemainingUndefines() {
+     StringRef name = undef->getName();
+ 
+     // A weak alias may have been resolved, so check for that.
+-    if (Defined *d = undef->getWeakAlias()) {
+-      // We want to replace Sym with D. However, we can't just blindly
+-      // copy sizeof(SymbolUnion) bytes from D to Sym because D may be an
+-      // internal symbol, and internal symbols are stored as "unparented"
+-      // Symbols. For that reason we need to check which type of symbol we
+-      // are dealing with and copy the correct number of bytes.
+-      if (isa<DefinedRegular>(d))
+-        memcpy(sym, d, sizeof(DefinedRegular));
+-      else if (isa<DefinedAbsolute>(d))
+-        memcpy(sym, d, sizeof(DefinedAbsolute));
+-      else
+-        memcpy(sym, d, sizeof(SymbolUnion));
++    if (undef->resolveWeakAlias())
+       continue;
+-    }
+ 
+     // If we can resolve a symbol by removing __imp_ prefix, do that.
+     // This odd rule is for compatibility with MSVC linker.
+diff --git a/lld/COFF/Symbols.cpp b/lld/COFF/Symbols.cpp
+index f4efcf2266cd..10e0fc58d313 100644
+--- a/lld/COFF/Symbols.cpp
++++ b/lld/COFF/Symbols.cpp
+@@ -132,6 +132,30 @@ Defined *Undefined::getWeakAlias() {
+   return nullptr;
+ }
+ 
++bool Undefined::resolveWeakAlias() {
++  // A weak alias may have been resolved, so check for that.
++  Defined *d = getWeakAlias();
++  if (!d)
++    return false;
++
++  // We want to replace Sym with D. However, we can't just blindly
++  // copy sizeof(SymbolUnion) bytes from D to Sym because D may be an
++  // internal symbol, and internal symbols are stored as "unparented"
++  // Symbols. For that reason we need to check which type of symbol we
++  // are dealing with and copy the correct number of bytes.
++  StringRef name = getName();
++  if (isa<DefinedRegular>(d))
++    memcpy(this, d, sizeof(DefinedRegular));
++  else if (isa<DefinedAbsolute>(d))
++    memcpy(this, d, sizeof(DefinedAbsolute));
++  else
++    memcpy(this, d, sizeof(SymbolUnion));
++
++  nameData = name.data();
++  nameSize = name.size();
++  return true;
++}
++
+ MemoryBufferRef LazyArchive::getMemberBuffer() {
+   Archive::Child c =
+       CHECK(sym.getMember(), "could not get the member for symbol " +
+diff --git a/lld/COFF/Symbols.h b/lld/COFF/Symbols.h
+index 5ef46f5af6a6..83a5cf3d9d10 100644
+--- a/lld/COFF/Symbols.h
++++ b/lld/COFF/Symbols.h
+@@ -341,6 +341,9 @@ public:
+   // symbol by searching the chain of fallback symbols. Returns the symbol if
+   // successful, otherwise returns null.
+   Defined *getWeakAlias();
++
++  // If this symbol is external weak, replace this object with aliased symbol.
++  bool resolveWeakAlias();
+ };
+ 
+ // Windows-specific classes.
+-- 
+2.25.1
+

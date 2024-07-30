@@ -1,0 +1,214 @@
+From 1541789ef86ed4de2890c21e34c104362d2926a4 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Wed, 27 Sep 2023 23:48:49 +0200
+Subject: [PATCH 28/55] [lld] Create EC alias symbols for entry points.
+
+---
+ lld/COFF/Driver.cpp                     | 31 ++++++---
+ lld/COFF/Driver.h                       |  2 +-
+ lld/test/COFF/arm64ec-entry-mangle.test | 88 +++++++++++++++++++++++++
+ 3 files changed, 112 insertions(+), 9 deletions(-)
+ create mode 100644 lld/test/COFF/arm64ec-entry-mangle.test
+
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index 02da983fafc5..5e6dd5617bc2 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -415,13 +415,13 @@ void LinkerDriver::parseDirectives(InputFile *file) {
+     case OPT_entry:
+       if (!arg->getValue()[0])
+         fatal("missing entry point symbol name");
+-      ctx.config.entry = addUndefined(mangle(arg->getValue()));
++      ctx.config.entry = addUndefined(mangle(arg->getValue()), true);
+       break;
+     case OPT_failifmismatch:
+       checkFailIfMismatch(arg->getValue(), file);
+       break;
+     case OPT_incl:
+-      addUndefined(arg->getValue());
++      addUndefined(arg->getValue(), true);
+       break;
+     case OPT_manifestdependency:
+       ctx.config.manifestDependencies.insert(arg->getValue());
+@@ -696,12 +696,25 @@ void LinkerDriver::addLibSearchPaths() {
+   }
+ }
+ 
+-Symbol *LinkerDriver::addUndefined(StringRef name) {
++Symbol *LinkerDriver::addUndefined(StringRef name, bool aliasEC) {
+   Symbol *b = ctx.symtab.addUndefined(name);
+   if (!b->isGCRoot) {
+     b->isGCRoot = true;
+     ctx.config.gcroot.push_back(b);
+   }
++  if (aliasEC && ctx.config.machine == ARM64EC && isa<Undefined>(b)) {
++    auto u = cast<Undefined>(b);
++    if (!u->weakAlias) {
++      if (std::optional<std::string> mangledName =
++              getArm64ECMangledFunctionName(name)) {
++        u->weakAlias = ctx.symtab.addUndefined(saver().save(*mangledName));
++        if (Undefined *ut = dyn_cast<Undefined>(u->weakAlias)) {
++          u->ECAlias = ut;
++          ut->ECAlias = u;
++        }
++      }
++    }
++  }
+   return b;
+ }
+ 
+@@ -2289,22 +2302,22 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+     if (auto *arg = args.getLastArg(OPT_entry)) {
+       if (!arg->getValue()[0])
+         fatal("missing entry point symbol name");
+-      config->entry = addUndefined(mangle(arg->getValue()));
++      config->entry = addUndefined(mangle(arg->getValue()), true);
+     } else if (!config->entry && !config->noEntry) {
+       if (args.hasArg(OPT_dll)) {
+         StringRef s = (config->machine == I386) ? "__DllMainCRTStartup@12"
+                                                 : "_DllMainCRTStartup";
+-        config->entry = addUndefined(s);
++        config->entry = addUndefined(s, true);
+       } else if (config->driverWdm) {
+         // /driver:wdm implies /entry:_NtProcessStartup
+-        config->entry = addUndefined(mangle("_NtProcessStartup"));
++        config->entry = addUndefined(mangle("_NtProcessStartup"), true);
+       } else {
+         // Windows specific -- If entry point name is not given, we need to
+         // infer that from user-defined entry name.
+         StringRef s = findDefaultEntry();
+         if (s.empty())
+           fatal("entry point must be defined");
+-        config->entry = addUndefined(s);
++        config->entry = addUndefined(s, true);
+         log("Entry name inferred: " + s);
+       }
+     }
+@@ -2436,6 +2449,8 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+     if (ctx.symtab.findUnderscore("__buildid"))
+       ctx.symtab.addUndefined(mangle("__buildid"));
+ 
++  run();
++
+   // This code may add new undefined symbols to the link, which may enqueue more
+   // symbol resolution tasks, so we need to continue executing tasks until we
+   // converge.
+@@ -2451,7 +2466,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+       for (Export &e : config->exports) {
+         if (!e.forwardTo.empty())
+           continue;
+-        e.sym = addUndefined(e.name);
++        e.sym = addUndefined(e.name, true);
+         if (e.source != ExportSource::Directives)
+           e.symbolName = mangleMaybe(e.sym);
+       }
+diff --git a/lld/COFF/Driver.h b/lld/COFF/Driver.h
+index 313aaea85eec..ea929a6dde37 100644
+--- a/lld/COFF/Driver.h
++++ b/lld/COFF/Driver.h
+@@ -171,7 +171,7 @@ private:
+ 
+   std::set<std::string> visitedLibs;
+ 
+-  Symbol *addUndefined(StringRef sym);
++  Symbol *addUndefined(StringRef sym, bool aliasEC = false);
+ 
+   StringRef mangleMaybe(Symbol *s);
+ 
+diff --git a/lld/test/COFF/arm64ec-entry-mangle.test b/lld/test/COFF/arm64ec-entry-mangle.test
+new file mode 100644
+index 000000000000..2c66478d42bc
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-entry-mangle.test
+@@ -0,0 +1,88 @@
++REQUIRES: x86
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows unmangled-dll-main.s -o unmangled-dll-main.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows mangled-dll-main.s -o mangled-dll-main.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows unmangled-func.s -o unmangled-func.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows mangled-func.s -o mangled-func.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows unmangled-dll-main.s -o x64-dll-main.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll unmangled-dll-main.obj loadconfig-arm64ec.obj
++
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++DISASM:      0000000180001000 <.text>:
++DISASM-NEXT: 180001000: d65f03c0     ret
++DISASM-EMPTY:
++DISASM-NEXT: Disassembly of section .hexpthk:
++DISASM-EMPTY:
++DISASM:      180002000: 48 8b c4                     movq    %rsp, %rax
++DISASM-NEXT: 180002003: 48 89 58 20                  movq    %rbx, 0x20(%rax)
++DISASM-NEXT: 180002007: 55                           pushq   %rbp
++DISASM-NEXT: 180002008: 5d                           popq    %rbp
++DISASM-NEXT: 180002009: e9 f2 ef ff ff               jmp     0x180001000 <.text>
++DISASM-NEXT: 18000200e: cc                           int3
++DISASM-NEXT: 18000200f: cc                           int3
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll mangled-dll-main.obj loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll unmangled-func.obj loadconfig-arm64ec.obj -entry:func
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll mangled-func.obj loadconfig-arm64ec.obj -entry:func
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll mangled-func.obj loadconfig-arm64ec.obj "-entry:#func"
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll unmangled-func.obj loadconfig-arm64ec.obj -noentry -export:func
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll mangled-func.obj loadconfig-arm64ec.obj -noentry -export:func
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll mangled-func.obj loadconfig-arm64ec.obj -noentry "-export:#func"
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++
++DISASM2:      0000000180001000 <.text>:
++DISASM2-NEXT: 180001000: d65f03c0     ret
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll mangled-func.obj loadconfig-arm64ec.obj -noentry "-include:#func"
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM2 %s
++
++RUN: not lld-link -machine:arm64ec -dll -out:test.dll unmangled-func.obj loadconfig-arm64ec.obj "-entry:#func" 2>&1 | FileCheck -check-prefix=FUNC-NOT-FOUND %s
++RUN: not lld-link -machine:arm64ec -dll -out:test.dll unmangled-func.obj loadconfig-arm64ec.obj -noentry "-export:#func" 2>&1 | FileCheck -check-prefix=FUNC-NOT-FOUND %s
++FUNC-NOT-FOUND: undefined symbol: #func
++
++RUN: not lld-link -machine:arm64ec -dll -out:test.dll mangled-func.obj loadconfig-arm64ec.obj -noentry -include:func 2>&1 | FileCheck -check-prefix=FUNC-NOT-FOUND2 %s
++FUNC-NOT-FOUND2: undefined symbol: func
++
++RUN: lld-link -machine:arm64ec -dll -out:test.dll x64-dll-main.obj loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM-X64 %s
++DISASM-X64:      0000000180001000 <.text>:
++DISASM-X64-NEXT: 180001000: c3                           retq
++
++#--- unmangled-dll-main.s
++    .text
++    .globl _DllMainCRTStartup
++_DllMainCRTStartup:
++    ret
++
++#--- mangled-dll-main.s
++    .text
++    .globl "#_DllMainCRTStartup"
++"#_DllMainCRTStartup":
++    ret
++
++#--- unmangled-func.s
++    .text
++    .globl func
++func:
++    ret
++
++#--- mangled-func.s
++    .text
++    .globl "#func"
++"#func":
++    ret
+-- 
+2.25.1
+

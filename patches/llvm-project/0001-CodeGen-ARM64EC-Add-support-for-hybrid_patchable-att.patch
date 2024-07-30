@@ -1,0 +1,701 @@
+From b27a1205f893204aca939042f7c17dc7b9196cd4 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Fri, 3 May 2024 00:24:39 +0200
+Subject: [PATCH 01/55] [CodeGen][ARM64EC] Add support for hybrid_patchable
+ attribute.
+
+---
+ llvm/include/llvm/Bitcode/LLVMBitCodes.h      |   1 +
+ llvm/include/llvm/CodeGen/AsmPrinter.h        |   2 +-
+ llvm/include/llvm/IR/Attributes.td            |   3 +
+ llvm/lib/Bitcode/Writer/BitcodeWriter.cpp     |   2 +
+ llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp    |   4 +-
+ .../AArch64/AArch64Arm64ECCallLowering.cpp    | 138 +++++++-
+ llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp |  27 ++
+ .../AArch64/AArch64CallingConvention.td       |   2 +-
+ llvm/lib/Transforms/Utils/CodeExtractor.cpp   |   1 +
+ .../AArch64/arm64ec-hybrid-patchable.ll       | 315 ++++++++++++++++++
+ 10 files changed, 484 insertions(+), 11 deletions(-)
+ create mode 100644 llvm/test/CodeGen/AArch64/arm64ec-hybrid-patchable.ll
+
+diff --git a/llvm/include/llvm/Bitcode/LLVMBitCodes.h b/llvm/include/llvm/Bitcode/LLVMBitCodes.h
+index 184bbe32df69..fb88f2fe75ad 100644
+--- a/llvm/include/llvm/Bitcode/LLVMBitCodes.h
++++ b/llvm/include/llvm/Bitcode/LLVMBitCodes.h
+@@ -757,6 +757,7 @@ enum AttributeKindCodes {
+   ATTR_KIND_RANGE = 92,
+   ATTR_KIND_SANITIZE_NUMERICAL_STABILITY = 93,
+   ATTR_KIND_INITIALIZES = 94,
++  ATTR_KIND_HYBRID_PATCHABLE = 95,
+ };
+ 
+ enum ComdatSelectionKindCodes {
+diff --git a/llvm/include/llvm/CodeGen/AsmPrinter.h b/llvm/include/llvm/CodeGen/AsmPrinter.h
+index dc00bd57d655..1c4e9e911144 100644
+--- a/llvm/include/llvm/CodeGen/AsmPrinter.h
++++ b/llvm/include/llvm/CodeGen/AsmPrinter.h
+@@ -892,7 +892,6 @@ private:
+   virtual void emitModuleCommandLines(Module &M);
+ 
+   GCMetadataPrinter *getOrCreateGCPrinter(GCStrategy &S);
+-  virtual void emitGlobalAlias(const Module &M, const GlobalAlias &GA);
+   void emitGlobalIFunc(Module &M, const GlobalIFunc &GI);
+ 
+ private:
+@@ -900,6 +899,7 @@ private:
+   bool shouldEmitLabelForBasicBlock(const MachineBasicBlock &MBB) const;
+ 
+ protected:
++  virtual void emitGlobalAlias(const Module &M, const GlobalAlias &GA);
+   virtual bool shouldEmitWeakSwiftAsyncExtendedFramePointerFlags() const {
+     return false;
+   }
+diff --git a/llvm/include/llvm/IR/Attributes.td b/llvm/include/llvm/IR/Attributes.td
+index 0457f0c388d2..e1bd193891c1 100644
+--- a/llvm/include/llvm/IR/Attributes.td
++++ b/llvm/include/llvm/IR/Attributes.td
+@@ -112,6 +112,9 @@ def ElementType : TypeAttr<"elementtype", [ParamAttr]>;
+ /// symbol.
+ def FnRetThunkExtern : EnumAttr<"fn_ret_thunk_extern", [FnAttr]>;
+ 
++/// Function has a hybrid patchable thunk.
++def HybridPatchable : EnumAttr<"hybrid_patchable", [FnAttr]>;
++
+ /// Pass structure in an alloca.
+ def InAlloca : TypeAttr<"inalloca", [ParamAttr]>;
+ 
+diff --git a/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp b/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
+index b3ebe70e8c52..324dcbca8137 100644
+--- a/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
++++ b/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
+@@ -727,6 +727,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
+     return bitc::ATTR_KIND_HOT;
+   case Attribute::ElementType:
+     return bitc::ATTR_KIND_ELEMENTTYPE;
++  case Attribute::HybridPatchable:
++    return bitc::ATTR_KIND_HYBRID_PATCHABLE;
+   case Attribute::InlineHint:
+     return bitc::ATTR_KIND_INLINE_HINT;
+   case Attribute::InReg:
+diff --git a/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp b/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
+index 1f59ec545b4f..b46a6d348413 100644
+--- a/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
++++ b/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
+@@ -2859,8 +2859,8 @@ bool AsmPrinter::emitSpecialLLVMGlobal(const GlobalVariable *GV) {
+     auto *Arr = cast<ConstantArray>(GV->getInitializer());
+     for (auto &U : Arr->operands()) {
+       auto *C = cast<Constant>(U);
+-      auto *Src = cast<Function>(C->getOperand(0)->stripPointerCasts());
+-      auto *Dst = cast<Function>(C->getOperand(1)->stripPointerCasts());
++      auto *Src = cast<GlobalValue>(C->getOperand(0)->stripPointerCasts());
++      auto *Dst = cast<GlobalValue>(C->getOperand(1)->stripPointerCasts());
+       int Kind = cast<ConstantInt>(C->getOperand(2))->getZExtValue();
+ 
+       if (Src->hasDLLImportStorageClass()) {
+diff --git a/llvm/lib/Target/AArch64/AArch64Arm64ECCallLowering.cpp b/llvm/lib/Target/AArch64/AArch64Arm64ECCallLowering.cpp
+index 4ff52eb252d2..310b152ef981 100644
+--- a/llvm/lib/Target/AArch64/AArch64Arm64ECCallLowering.cpp
++++ b/llvm/lib/Target/AArch64/AArch64Arm64ECCallLowering.cpp
+@@ -21,6 +21,7 @@
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/IR/CallingConv.h"
++#include "llvm/IR/GlobalAlias.h"
+ #include "llvm/IR/IRBuilder.h"
+ #include "llvm/IR/Instruction.h"
+ #include "llvm/IR/Mangler.h"
+@@ -70,15 +71,21 @@ public:
+   Function *buildEntryThunk(Function *F);
+   void lowerCall(CallBase *CB);
+   Function *buildGuestExitThunk(Function *F);
+-  bool processFunction(Function &F, SetVector<Function *> &DirectCalledFns);
++  Function *buildPatchableThunk(GlobalAlias *UnmangledAlias,
++                                GlobalAlias *MangledAlias);
++  bool processFunction(Function &F, SetVector<GlobalValue *> &DirectCalledFns,
++                       DenseMap<GlobalAlias *, GlobalAlias *> &FnsMap);
+   bool runOnModule(Module &M) override;
+ 
+ private:
+   int cfguard_module_flag = 0;
+   FunctionType *GuardFnType = nullptr;
+   PointerType *GuardFnPtrType = nullptr;
++  FunctionType *DispatchFnType = nullptr;
++  PointerType *DispatchFnPtrType = nullptr;
+   Constant *GuardFnCFGlobal = nullptr;
+   Constant *GuardFnGlobal = nullptr;
++  Constant *DispatchFnGlobal = nullptr;
+   Module *M = nullptr;
+ 
+   Type *PtrTy;
+@@ -672,6 +679,66 @@ Function *AArch64Arm64ECCallLowering::buildGuestExitThunk(Function *F) {
+   return GuestExit;
+ }
+ 
++Function *
++AArch64Arm64ECCallLowering::buildPatchableThunk(GlobalAlias *UnmangledAlias,
++                                                GlobalAlias *MangledAlias) {
++  llvm::raw_null_ostream NullThunkName;
++  FunctionType *Arm64Ty, *X64Ty;
++  Function *F = cast<Function>(MangledAlias->getAliasee());
++  SmallVector<ThunkArgTranslation> ArgTranslations;
++  getThunkType(F->getFunctionType(), F->getAttributes(),
++               Arm64ECThunkType::GuestExit, NullThunkName, Arm64Ty, X64Ty,
++               ArgTranslations);
++  std::string ThunkName(MangledAlias->getName());
++  if (ThunkName[0] == '?' && ThunkName.find("@") != std::string::npos) {
++    ThunkName.insert(ThunkName.find("@"), "$hybpatch_thunk");
++  } else {
++    ThunkName.append("$hybpatch_thunk");
++  }
++
++  Function *GuestExit =
++      Function::Create(Arm64Ty, GlobalValue::WeakODRLinkage, 0, ThunkName, M);
++  GuestExit->setComdat(M->getOrInsertComdat(ThunkName));
++  GuestExit->setSection(".wowthk$aa");
++  BasicBlock *BB = BasicBlock::Create(M->getContext(), "", GuestExit);
++  IRBuilder<> B(BB);
++
++  // Load the global symbol as a pointer to the check function.
++  LoadInst *DispatchLoad = B.CreateLoad(DispatchFnPtrType, DispatchFnGlobal);
++
++  // Create new dispatch call instruction.
++  Function *ExitThunk =
++      buildExitThunk(F->getFunctionType(), F->getAttributes());
++  CallInst *Dispatch =
++      B.CreateCall(DispatchFnType, DispatchLoad,
++                   {UnmangledAlias, ExitThunk, UnmangledAlias->getAliasee()});
++
++  // Ensure that the first arguments are passed in the correct registers.
++  Dispatch->setCallingConv(CallingConv::CFGuard_Check);
++
++  Value *DispatchRetVal = B.CreateBitCast(Dispatch, PtrTy);
++  SmallVector<Value *> Args;
++  for (Argument &Arg : GuestExit->args())
++    Args.push_back(&Arg);
++  CallInst *Call = B.CreateCall(Arm64Ty, DispatchRetVal, Args);
++  Call->setTailCallKind(llvm::CallInst::TCK_MustTail);
++
++  if (Call->getType()->isVoidTy())
++    B.CreateRetVoid();
++  else
++    B.CreateRet(Call);
++
++  auto SRetAttr = F->getAttributes().getParamAttr(0, Attribute::StructRet);
++  auto InRegAttr = F->getAttributes().getParamAttr(0, Attribute::InReg);
++  if (SRetAttr.isValid() && !InRegAttr.isValid()) {
++    GuestExit->addParamAttr(0, SRetAttr);
++    Call->addParamAttr(0, SRetAttr);
++  }
++
++  MangledAlias->setAliasee(GuestExit);
++  return GuestExit;
++}
++
+ // Lower an indirect call with inline code.
+ void AArch64Arm64ECCallLowering::lowerCall(CallBase *CB) {
+   assert(Triple(CB->getModule()->getTargetTriple()).isOSWindows() &&
+@@ -727,17 +794,57 @@ bool AArch64Arm64ECCallLowering::runOnModule(Module &Mod) {
+ 
+   GuardFnType = FunctionType::get(PtrTy, {PtrTy, PtrTy}, false);
+   GuardFnPtrType = PointerType::get(GuardFnType, 0);
++  DispatchFnType = FunctionType::get(PtrTy, {PtrTy, PtrTy, PtrTy}, false);
++  DispatchFnPtrType = PointerType::get(DispatchFnType, 0);
+   GuardFnCFGlobal =
+       M->getOrInsertGlobal("__os_arm64x_check_icall_cfg", GuardFnPtrType);
+   GuardFnGlobal =
+       M->getOrInsertGlobal("__os_arm64x_check_icall", GuardFnPtrType);
++  DispatchFnGlobal =
++      M->getOrInsertGlobal("__os_arm64x_dispatch_call", DispatchFnPtrType);
++
++  DenseMap<GlobalAlias *, GlobalAlias *> FnsMap;
++  SetVector<GlobalAlias *> PatchableFns;
+ 
+-  SetVector<Function *> DirectCalledFns;
++  for (Function &F : Mod) {
++    if (!F.hasFnAttribute(Attribute::HybridPatchable) || F.isDeclaration() ||
++        F.hasLocalLinkage() || F.getName().ends_with("$hp_target"))
++      continue;
++
++    // Rename hybrid patchable functions and change callers to use a global
++    // alias instead.
++    if (std::optional<std::string> MangledName =
++            getArm64ECMangledFunctionName(F.getName().str())) {
++      std::string OrigName(F.getName());
++      F.setName(MangledName.value() + "$hp_target");
++
++      // The unmangled symbol is a weak alias to an undefined symbol with the
++      // "EXP+" prefix. This undefined symbol is resolved by the linker by
++      // creating an x86 thunk that jumps back to the actual EC target. Since we
++      // can't represent that in IR, we create an alias to the target instead.
++      // The "EXP+" symbol is set as metadata, which is then used by
++      // emitGlobalAlias to emit the right alias.
++      auto *A =
++          GlobalAlias::create(GlobalValue::LinkOnceODRLinkage, OrigName, &F);
++      F.replaceAllUsesWith(A);
++      F.setMetadata("arm64ec_exp_name",
++                    MDNode::get(M->getContext(),
++                                MDString::get(M->getContext(),
++                                              "EXP+" + MangledName.value())));
++      A->setAliasee(&F);
++
++      FnsMap[A] = GlobalAlias::create(GlobalValue::LinkOnceODRLinkage,
++                                      MangledName.value(), &F);
++      PatchableFns.insert(A);
++    }
++  }
++
++  SetVector<GlobalValue *> DirectCalledFns;
+   for (Function &F : Mod)
+     if (!F.isDeclaration() &&
+         F.getCallingConv() != CallingConv::ARM64EC_Thunk_Native &&
+         F.getCallingConv() != CallingConv::ARM64EC_Thunk_X64)
+-      processFunction(F, DirectCalledFns);
++      processFunction(F, DirectCalledFns, FnsMap);
+ 
+   struct ThunkInfo {
+     Constant *Src;
+@@ -755,14 +862,20 @@ bool AArch64Arm64ECCallLowering::runOnModule(Module &Mod) {
+           {&F, buildEntryThunk(&F), Arm64ECThunkType::Entry});
+     }
+   }
+-  for (Function *F : DirectCalledFns) {
++  for (GlobalValue *O : DirectCalledFns) {
++    auto GA = dyn_cast<GlobalAlias>(O);
++    auto F = dyn_cast<Function>(GA ? GA->getAliasee() : O);
+     ThunkMapping.push_back(
+-        {F, buildExitThunk(F->getFunctionType(), F->getAttributes()),
++        {O, buildExitThunk(F->getFunctionType(), F->getAttributes()),
+          Arm64ECThunkType::Exit});
+-    if (!F->hasDLLImportStorageClass())
++    if (!GA && !F->hasDLLImportStorageClass())
+       ThunkMapping.push_back(
+           {buildGuestExitThunk(F), F, Arm64ECThunkType::GuestExit});
+   }
++  for (GlobalAlias *A : PatchableFns) {
++    Function *Thunk = buildPatchableThunk(A, FnsMap[A]);
++    ThunkMapping.push_back({Thunk, A, Arm64ECThunkType::GuestExit});
++  }
+ 
+   if (!ThunkMapping.empty()) {
+     SmallVector<Constant *> ThunkMappingArrayElems;
+@@ -785,7 +898,8 @@ bool AArch64Arm64ECCallLowering::runOnModule(Module &Mod) {
+ }
+ 
+ bool AArch64Arm64ECCallLowering::processFunction(
+-    Function &F, SetVector<Function *> &DirectCalledFns) {
++    Function &F, SetVector<GlobalValue *> &DirectCalledFns,
++    DenseMap<GlobalAlias *, GlobalAlias *> &FnsMap) {
+   SmallVector<CallBase *, 8> IndirectCalls;
+ 
+   // For ARM64EC targets, a function definition's name is mangled differently
+@@ -837,6 +951,16 @@ bool AArch64Arm64ECCallLowering::processFunction(
+         continue;
+       }
+ 
++      // Use mangled global alias for direct calls to patchable functions.
++      if (GlobalAlias *A = dyn_cast<GlobalAlias>(CB->getCalledOperand())) {
++        auto I = FnsMap.find(A);
++        if (I != FnsMap.end()) {
++          CB->setCalledOperand(I->second);
++          DirectCalledFns.insert(I->first);
++          continue;
++        }
++      }
++
+       IndirectCalls.push_back(CB);
+       ++Arm64ECCallsLowered;
+     }
+diff --git a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
+index 6f6b551993b6..63358c1568a3 100644
+--- a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
++++ b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
+@@ -201,6 +201,7 @@ private:
+   void PrintDebugValueComment(const MachineInstr *MI, raw_ostream &OS);
+ 
+   void emitFunctionBodyEnd() override;
++  void emitGlobalAlias(const Module &M, const GlobalAlias &GA) override;
+ 
+   MCSymbol *GetCPISymbol(unsigned CPID) const override;
+   void emitEndOfAsmFile(Module &M) override;
+@@ -1263,6 +1264,32 @@ void AArch64AsmPrinter::emitFunctionEntryLabel() {
+   }
+ }
+ 
++void AArch64AsmPrinter::emitGlobalAlias(const Module &M,
++                                        const GlobalAlias &GA) {
++  if (auto F = dyn_cast_or_null<Function>(GA.getAliasee())) {
++    // Global aliases must point to a definition, but unmangled patchable
++    // symbols are special and need to point to an undefined symbol with "EXP+"
++    // prefix. Such undefined symbol is resolved by the linker by creating
++    // x86 thunk that jumps back to the actual EC target.
++    if (MDNode *Node = F->getMetadata("arm64ec_exp_name")) {
++      StringRef ExpStr = cast<MDString>(Node->getOperand(0))->getString();
++      MCSymbol *ExpSym = MMI->getContext().getOrCreateSymbol(ExpStr);
++      MCSymbol *Sym = MMI->getContext().getOrCreateSymbol(GA.getName());
++      OutStreamer->beginCOFFSymbolDef(Sym);
++      OutStreamer->emitCOFFSymbolStorageClass(COFF::IMAGE_SYM_CLASS_EXTERNAL);
++      OutStreamer->emitCOFFSymbolType(COFF::IMAGE_SYM_DTYPE_FUNCTION
++                                      << COFF::SCT_COMPLEX_TYPE_SHIFT);
++      OutStreamer->endCOFFSymbolDef();
++      OutStreamer->emitSymbolAttribute(Sym, MCSA_Weak);
++      OutStreamer->emitAssignment(
++          Sym, MCSymbolRefExpr::create(ExpSym, MCSymbolRefExpr::VK_None,
++                                       MMI->getContext()));
++      return;
++    }
++  }
++  AsmPrinter::emitGlobalAlias(M, GA);
++}
++
+ /// Small jump tables contain an unsigned byte or half, representing the offset
+ /// from the lowest-addressed possible destination to the desired basic
+ /// block. Since all instructions are 4-byte aligned, this is further compressed
+diff --git a/llvm/lib/Target/AArch64/AArch64CallingConvention.td b/llvm/lib/Target/AArch64/AArch64CallingConvention.td
+index 2f7e226fd09b..6f885f4588c4 100644
+--- a/llvm/lib/Target/AArch64/AArch64CallingConvention.td
++++ b/llvm/lib/Target/AArch64/AArch64CallingConvention.td
+@@ -333,7 +333,7 @@ def CC_AArch64_Win64_CFGuard_Check : CallingConv<[
+ 
+ let Entry = 1 in
+ def CC_AArch64_Arm64EC_CFGuard_Check : CallingConv<[
+-  CCIfType<[i64], CCAssignToReg<[X11, X10]>>
++  CCIfType<[i64], CCAssignToReg<[X11, X10, X9]>>
+ ]>;
+ 
+ let Entry = 1 in
+diff --git a/llvm/lib/Transforms/Utils/CodeExtractor.cpp b/llvm/lib/Transforms/Utils/CodeExtractor.cpp
+index a05e955943f7..5bca5cf8ff91 100644
+--- a/llvm/lib/Transforms/Utils/CodeExtractor.cpp
++++ b/llvm/lib/Transforms/Utils/CodeExtractor.cpp
+@@ -932,6 +932,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
+       case Attribute::DisableSanitizerInstrumentation:
+       case Attribute::FnRetThunkExtern:
+       case Attribute::Hot:
++      case Attribute::HybridPatchable:
+       case Attribute::NoRecurse:
+       case Attribute::InlineHint:
+       case Attribute::MinSize:
+diff --git a/llvm/test/CodeGen/AArch64/arm64ec-hybrid-patchable.ll b/llvm/test/CodeGen/AArch64/arm64ec-hybrid-patchable.ll
+new file mode 100644
+index 000000000000..e5387d40b9c6
+--- /dev/null
++++ b/llvm/test/CodeGen/AArch64/arm64ec-hybrid-patchable.ll
+@@ -0,0 +1,315 @@
++; RUN: llc -mtriple=arm64ec-pc-windows-msvc < %s | FileCheck %s
++; RUN: llc -mtriple=arm64ec-pc-windows-msvc -filetype=obj -o %t.o < %s
++; RUN: llvm-objdump -t %t.o | FileCheck --check-prefix=SYM %s
++
++define dso_local ptr @func() hybrid_patchable nounwind {
++; SYM: [ 8](sec  4)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #func$hp_target
++; CHECK-LABEL:     .def    "#func$hp_target";
++; CHECK:           .section        .text,"xr",discard,"#func$hp_target"
++; CHECK-NEXT:      .globl  "#func$hp_target"               // -- Begin function #func$hp_target
++; CHECK-NEXT:      .p2align        2
++; CHECK-NEXT:  "#func$hp_target":                      // @"#func$hp_target"
++; CHECK-NEXT:      // %bb.0:
++; CHECK-NEXT:      adrp x0, func
++; CHECK-NEXT:      add x0, x0, :lo12:func
++; CHECK-NEXT:      ret
++  ret ptr @func
++}
++
++define void @has_varargs(...) hybrid_patchable nounwind {
++; SYM: [11](sec  5)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #has_varargs$hp_target
++; CHECK-LABEL:     .def "#has_varargs$hp_target";
++; CHECK:           .section .text,"xr",discard,"#has_varargs$hp_target"
++; CHECK-NEXT:      .globl  "#has_varargs$hp_target"        // -- Begin function #has_varargs$hp_target
++; CHECK-NEXT:      .p2align 2
++; CHECK-NEXT:  "#has_varargs$hp_target":               // @"#has_varargs$hp_target"
++; CHECK-NEXT:  // %bb.0:
++; CHECK-NEXT:      sub     sp, sp, #32
++; CHECK-NEXT:      stp     x0, x1, [x4, #-32]
++; CHECK-NEXT:      stp     x2, x3, [x4, #-16]
++; CHECK-NEXT:      add     sp, sp, #32
++; CHECK-NEXT:      ret
++  ret void
++}
++
++define void @has_sret(ptr sret([100 x i8])) hybrid_patchable nounwind {
++; SYM: [14](sec  6)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #has_sret$hp_target
++; CHECK-LABEL:     .def    "#has_sret$hp_target";
++; CHECK:           .section        .text,"xr",discard,"#has_sret$hp_target"
++; CHECK-NEXT:      .globl  "#has_sret$hp_target"           // -- Begin function #has_sret$hp_target
++; CHECK-NEXT:      .p2align        2
++; CHECK-NEXT:  "#has_sret$hp_target":                  // @"#has_sret$hp_target"
++; CHECK-NEXT:  // %bb.0:
++; CHECK-NEXT:      ret
++  ret void
++}
++
++define dllexport void @exp() hybrid_patchable nounwind {
++; CHECK-LABEL:     .def    "#exp$hp_target";
++; CHECK:           .section        .text,"xr",discard,"#exp$hp_target"
++; CHECK-NEXT:      .globl  "#exp$hp_target"                // -- Begin function #exp$hp_target
++; CHECK-NEXT:      .p2align        2
++; CHECK-NEXT:  "#exp$hp_target":                       // @"#exp$hp_target"
++; CHECK-NEXT:  // %bb.0:
++; CHECK-NEXT:      ret
++  ret void
++}
++
++; hybrid_patchable attribute is ignored on internal functions
++define internal i32 @static_func() hybrid_patchable nounwind {
++; CHECK-LABEL:     .def    static_func;
++; CHECK:       static_func:                            // @static_func
++; CHECK-NEXT:      // %bb.0:
++; CHECK-NEXT:      mov     w0, #2                          // =0x2
++; CHECK-NEXT:      ret
++  ret i32 2
++}
++
++define dso_local void @caller() nounwind {
++; CHECK-LABEL:     .def    "#caller";
++; CHECK:           .section        .text,"xr",discard,"#caller"
++; CHECK-NEXT:      .globl  "#caller"                       // -- Begin function #caller
++; CHECK-NEXT:      .p2align        2
++; CHECK-NEXT:  "#caller":                              // @"#caller"
++; CHECK-NEXT:      .weak_anti_dep  caller
++; CHECK-NEXT:  .set caller, "#caller"{{$}}
++; CHECK-NEXT:  // %bb.0:
++; CHECK-NEXT:      str     x30, [sp, #-16]!                // 8-byte Folded Spill
++; CHECK-NEXT:      bl      "#func"
++; CHECK-NEXT:      bl      static_func
++; CHECK-NEXT:      adrp    x8, __os_arm64x_check_icall
++; CHECK-NEXT:      adrp    x11, func
++; CHECK-NEXT:      add     x11, x11, :lo12:func
++; CHECK-NEXT:      ldr     x8, [x8, :lo12:__os_arm64x_check_icall]
++; CHECK-NEXT:      adrp    x10, ($iexit_thunk$cdecl$v$v)
++; CHECK-NEXT:      add     x10, x10, :lo12:($iexit_thunk$cdecl$v$v)
++; CHECK-NEXT:      str     x11, [sp, #8]
++; CHECK-NEXT:      blr     x8
++; CHECK-NEXT:      blr     x11
++; CHECK-NEXT:      ldr     x30, [sp], #16                  // 8-byte Folded Reload
++; CHECK-NEXT:      ret
++  %1 = call i32 @func()
++  %2 = call i32 @static_func()
++  %3 = alloca ptr, align 8
++  store ptr @func, ptr %3, align 8
++  %4 = load ptr, ptr %3, align 8
++  call void %4()
++  ret void
++}
++
++; CHECK-LABEL:       def    "#func$hybpatch_thunk";
++; CHECK:            .section        .wowthk$aa,"xr",discard,"#func$hybpatch_thunk"
++; CHECK-NEXT:       .globl  "#func$hybpatch_thunk"          // -- Begin function #func$hybpatch_thunk
++; CHECK-NEXT:       .p2align        2
++; CHECK-NEXT:   "#func$hybpatch_thunk":                 // @"#func$hybpatch_thunk"
++; CHECK-NEXT:   .seh_proc "#func$hybpatch_thunk"
++; CHECK-NEXT:   // %bb.0:
++; CHECK-NEXT:       str     x30, [sp, #-16]!                // 8-byte Folded Spill
++; CHECK-NEXT:       .seh_save_reg_x x30, 16
++; CHECK-NEXT:       .seh_endprologue
++; CHECK-NEXT:       adrp    x8, __os_arm64x_dispatch_call
++; CHECK-NEXT:       adrp    x11, func
++; CHECK-NEXT:       add     x11, x11, :lo12:func
++; CHECK-NEXT:       ldr     x8, [x8, :lo12:__os_arm64x_dispatch_call]
++; CHECK-NEXT:       adrp    x10, ($iexit_thunk$cdecl$i8$v)
++; CHECK-NEXT:       add     x10, x10, :lo12:($iexit_thunk$cdecl$i8$v)
++; CHECK-NEXT:       adrp    x9, "#func$hp_target"
++; CHECK-NEXT:       add     x9, x9, :lo12:"#func$hp_target"
++; CHECK-NEXT:       blr     x8
++; CHECK-NEXT:       .seh_startepilogue
++; CHECK-NEXT:       ldr     x30, [sp], #16                  // 8-byte Folded Reload
++; CHECK-NEXT:       .seh_save_reg_x x30, 16
++; CHECK-NEXT:       .seh_endepilogue
++; CHECK-NEXT:       br      x11
++; CHECK-NEXT:       .seh_endfunclet
++; CHECK-NEXT:       .seh_endproc
++
++; CHECK-LABEL:      .def    "#has_varargs$hybpatch_thunk";
++; CHECK:            .section        .wowthk$aa,"xr",discard,"#has_varargs$hybpatch_thunk"
++; CHECK-NEXT:       .globl  "#has_varargs$hybpatch_thunk"   // -- Begin function #has_varargs$hybpatch_thunk
++; CHECK-NEXT:       .p2align        2
++; CHECK-NEXT:"#has_varargs$hybpatch_thunk":          // @"#has_varargs$hybpatch_thunk"
++; CHECK-NEXT:.seh_proc "#has_varargs$hybpatch_thunk"
++; CHECK-NEXT:// %bb.0:
++; CHECK-NEXT:       str     x30, [sp, #-16]!                // 8-byte Folded Spill
++; CHECK-NEXT:       .seh_save_reg_x x30, 16
++; CHECK-NEXT:       .seh_endprologue
++; CHECK-NEXT:       adrp    x8, __os_arm64x_dispatch_call
++; CHECK-NEXT:       adrp    x11, has_varargs
++; CHECK-NEXT:       add     x11, x11, :lo12:has_varargs
++; CHECK-NEXT:       ldr     x8, [x8, :lo12:__os_arm64x_dispatch_call]
++; CHECK-NEXT:       adrp    x10, ($iexit_thunk$cdecl$v$varargs)
++; CHECK-NEXT:       add     x10, x10, :lo12:($iexit_thunk$cdecl$v$varargs)
++; CHECK-NEXT:       adrp    x9, "#has_varargs$hp_target"
++; CHECK-NEXT:       add     x9, x9, :lo12:"#has_varargs$hp_target"
++; CHECK-NEXT:       blr     x8
++; CHECK-NEXT:       .seh_startepilogue
++; CHECK-NEXT:       ldr     x30, [sp], #16                  // 8-byte Folded Reload
++; CHECK-NEXT:       .seh_save_reg_x x30, 16
++; CHECK-NEXT:       .seh_endepilogue
++; CHECK-NEXT:       br      x11
++; CHECK-NEXT:       .seh_endfunclet
++; CHECK-NEXT:       .seh_endproc
++
++; CHECK-LABEL:     .def    "#has_sret$hybpatch_thunk";
++; CHECK:           .section        .wowthk$aa,"xr",discard,"#has_sret$hybpatch_thunk"
++; CHECK-NEXT:      .globl  "#has_sret$hybpatch_thunk"      // -- Begin function #has_sret$hybpatch_thunk
++; CHECK-NEXT:      .p2align        2
++; CHECK-NEXT:  "#has_sret$hybpatch_thunk":             // @"#has_sret$hybpatch_thunk"
++; CHECK-NEXT:  .seh_proc "#has_sret$hybpatch_thunk"
++; CHECK-NEXT:  // %bb.0:
++; CHECK-NEXT:      str     x30, [sp, #-16]!                // 8-byte Folded Spill
++; CHECK-NEXT:      .seh_save_reg_x x30, 16
++; CHECK-NEXT:      .seh_endprologue
++; CHECK-NEXT:      adrp    x9, __os_arm64x_dispatch_call
++; CHECK-NEXT:      adrp    x11, has_sret
++; CHECK-NEXT:      add     x11, x11, :lo12:has_sret
++; CHECK-NEXT:      ldr     x12, [x9, :lo12:__os_arm64x_dispatch_call]
++; CHECK-NEXT:      adrp    x10, ($iexit_thunk$cdecl$m100$v)
++; CHECK-NEXT:      add     x10, x10, :lo12:($iexit_thunk$cdecl$m100$v)
++; CHECK-NEXT:      adrp    x9, "#has_sret$hp_target"
++; CHECK-NEXT:      add     x9, x9, :lo12:"#has_sret$hp_target"
++; CHECK-NEXT:      blr     x12
++; CHECK-NEXT:      .seh_startepilogue
++; CHECK-NEXT:      ldr     x30, [sp], #16                  // 8-byte Folded Reload
++; CHECK-NEXT:      .seh_save_reg_x x30, 16
++; CHECK-NEXT:      .seh_endepilogue
++; CHECK-NEXT:      br      x11
++; CHECK-NEXT:      .seh_endfunclet
++; CHECK-NEXT:      .seh_endproc
++
++; CHECK-LABEL:     .def    "#exp$hybpatch_thunk";
++; CHECK:           .section        .wowthk$aa,"xr",discard,"#exp$hybpatch_thunk"
++; CHECK-NEXT:      .globl  "#exp$hybpatch_thunk"           // -- Begin function #exp$hybpatch_thunk
++; CHECK-NEXT:      .p2align        2
++; CHECK-NEXT:  "#exp$hybpatch_thunk":                // @"#exp$hybpatch_thunk"
++; CHECK-NEXT:  .seh_proc "#exp$hybpatch_thunk"
++; CHECK-NEXT:  // %bb.0:
++; CHECK-NEXT:      str     x30, [sp, #-16]!                // 8-byte Folded Spill
++; CHECK-NEXT:      .seh_save_reg_x x30, 16
++; CHECK-NEXT:      .seh_endprologue
++; CHECK-NEXT:      adrp    x8, __os_arm64x_dispatch_call
++; CHECK-NEXT:      adrp    x11, exp
++; CHECK-NEXT:      add     x11, x11, :lo12:exp
++; CHECK-NEXT:      ldr     x8, [x8, :lo12:__os_arm64x_dispatch_call]
++; CHECK-NEXT:      adrp    x10, ($iexit_thunk$cdecl$v$v)
++; CHECK-NEXT:      add     x10, x10, :lo12:($iexit_thunk$cdecl$v$v)
++; CHECK-NEXT:      adrp    x9, "#exp$hp_target"
++; CHECK-NEXT:      add     x9, x9, :lo12:"#exp$hp_target"
++; CHECK-NEXT:      blr     x8
++; CHECK-NEXT:      .seh_startepilogue
++; CHECK-NEXT:      ldr     x30, [sp], #16                  // 8-byte Folded Reload
++; CHECK-NEXT:      .seh_save_reg_x x30, 16
++; CHECK-NEXT:      .seh_endepilogue
++; CHECK-NEXT:      br      x11
++; CHECK-NEXT:      .seh_endfunclet
++; CHECK-NEXT:      .seh_endproc
++
++; Verify the hybrid bitmap
++; CHECK-LABEL:     .section        .hybmp$x,"yi"
++; CHECK-NEXT:      .symidx "#func$hp_target"
++; CHECK-NEXT:      .symidx $ientry_thunk$cdecl$i8$v
++; CHECK-NEXT:      .word   1
++; CHECK-NEXT:      .symidx "#has_varargs$hp_target"
++; CHECK-NEXT:      .symidx $ientry_thunk$cdecl$v$varargs
++; CHECK-NEXT:      .word   1
++; CHECK-NEXT:      .symidx "#has_sret$hp_target"
++; CHECK-NEXT:      .symidx $ientry_thunk$cdecl$m100$v
++; CHECK-NEXT:      .word   1
++; CHECK-NEXT:      .symidx "#exp$hp_target"
++; CHECK-NEXT:      .symidx $ientry_thunk$cdecl$v$v
++; CHECK-NEXT:      .word   1
++; CHECK-NEXT:      .symidx "#caller"
++; CHECK-NEXT:      .symidx $ientry_thunk$cdecl$v$v
++; CHECK-NEXT:      .word   1
++; CHECK-NEXT:      .symidx func
++; CHECK-NEXT:      .symidx $iexit_thunk$cdecl$i8$v
++; CHECK-NEXT:      .word   4
++; CHECK-NEXT:      .symidx "#func$hybpatch_thunk"
++; CHECK-NEXT:      .symidx func
++; CHECK-NEXT:      .word   0
++; CHECK-NEXT:      .symidx "#has_varargs$hybpatch_thunk"
++; CHECK-NEXT:      .symidx has_varargs
++; CHECK-NEXT:      .word   0
++; CHECK-NEXT:      .symidx "#has_sret$hybpatch_thunk"
++; CHECK-NEXT:      .symidx has_sret
++; CHECK-NEXT:      .word   0
++; CHECK-NEXT:      .symidx "#exp$hybpatch_thunk"
++; CHECK-NEXT:      .symidx exp
++; CHECK-NEXT:      .word   0
++; CHECK-NEXT:      .section        .drectve,"yni"
++; CHECK-NEXT:      .ascii  " /EXPORT:\"#exp$hp_target,EXPORTAS,exp$hp_target\""
++
++; CHECK-NEXT:      .def    func;
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:      .weak  func
++; CHECK-NEXT:  .set func, "EXP+#func"{{$}}
++; CHECK-NEXT:      .weak  "#func"
++; CHECK-NEXT:      .def    "#func";
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:  .set "#func", "#func$hybpatch_thunk"{{$}}
++; CHECK-NEXT:      .def    has_varargs;
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:      .weak   has_varargs
++; CHECK-NEXT:  .set has_varargs, "EXP+#has_varargs"
++; CHECK-NEXT:      .weak   "#has_varargs"
++; CHECK-NEXT:      .def    "#has_varargs";
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:  .set "#has_varargs", "#has_varargs$hybpatch_thunk"
++; CHECK-NEXT:      .def    has_sret;
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:      .weak   has_sret
++; CHECK-NEXT:  .set has_sret, "EXP+#has_sret"
++; CHECK-NEXT:      .weak   "#has_sret"
++; CHECK-NEXT:      .def    "#has_sret";
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:  .set "#has_sret", "#has_sret$hybpatch_thunk"
++; CHECK-NEXT:      .def    exp;
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:      .weak   exp
++; CHECK-NEXT:  .set exp, "EXP+#exp"
++; CHECK-NEXT:      .weak   "#exp"
++; CHECK-NEXT:      .def    "#exp";
++; CHECK-NEXT:      .scl    2;
++; CHECK-NEXT:      .type   32;
++; CHECK-NEXT:      .endef
++; CHECK-NEXT:  .set "#exp", "#exp$hybpatch_thunk"
++
++; SYM:      [53](sec 15)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #func$hybpatch_thunk
++; SYM:      [58](sec 16)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #has_varargs$hybpatch_thunk
++; SYM:      [68](sec 18)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #has_sret$hybpatch_thunk
++; SYM:      [78](sec 20)(fl 0x00)(ty  20)(scl   2) (nx 0) 0x00000000 #exp$hybpatch_thunk
++; SYM:      [110](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 func
++; SYM-NEXT: AUX indx 112 srch 3
++; SYM-NEXT: [112](sec  0)(fl 0x00)(ty   0)(scl   2) (nx 0) 0x00000000 EXP+#func
++; SYM:      [116](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 #func
++; SYM-NEXT: AUX indx 53 srch 3
++; SYM:      [122](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 has_varargs
++; SYM-NEXT: AUX indx 124 srch 3
++; SYM-NEXT: [124](sec  0)(fl 0x00)(ty   0)(scl   2) (nx 0) 0x00000000 EXP+#has_varargs
++; SYM-NEXT: [125](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 has_sret
++; SYM-NEXT: AUX indx 127 srch 3
++; SYM-NEXT: [127](sec  0)(fl 0x00)(ty   0)(scl   2) (nx 0) 0x00000000 EXP+#has_sret
++; SYM-NEXT: [128](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 exp
++; SYM-NEXT: AUX indx 130 srch 3
++; SYM-NEXT: [130](sec  0)(fl 0x00)(ty   0)(scl   2) (nx 0) 0x00000000 EXP+#exp
++; SYM-NEXT: [131](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 #has_varargs
++; SYM-NEXT: AUX indx 58 srch 3
++; SYM-NEXT: [133](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 #has_sret
++; SYM-NEXT: AUX indx 68 srch 3
++; SYM-NEXT: [135](sec  0)(fl 0x00)(ty   0)(scl  69) (nx 1) 0x00000000 #exp
++; SYM-NEXT: AUX indx 78 srch 3
+-- 
+2.25.1
+

@@ -1,0 +1,142 @@
+From 6940639dbe555cf47a2497309702d7ca05cfcb4f Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Tue, 17 Oct 2023 16:15:18 +0200
+Subject: [PATCH 32/55] [lld] Add support for EC symbols in local import
+ thunks.
+
+---
+ lld/COFF/SymbolTable.cpp               | 11 ++++-
+ lld/test/COFF/arm64ec-localimport.s    | 23 ----------
+ lld/test/COFF/arm64ec-localimport.test | 61 ++++++++++++++++++++++++++
+ 3 files changed, 71 insertions(+), 24 deletions(-)
+ delete mode 100644 lld/test/COFF/arm64ec-localimport.s
+ create mode 100644 lld/test/COFF/arm64ec-localimport.test
+
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index 20d1f67638c5..ff2d71aad219 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -18,6 +18,7 @@
+ #include "lld/Common/Timer.h"
+ #include "llvm/DebugInfo/DIContext.h"
+ #include "llvm/IR/LLVMContext.h"
++#include "llvm/IR/Mangler.h"
+ #include "llvm/LTO/LTO.h"
+ #include "llvm/Support/Debug.h"
+ #include "llvm/Support/TimeProfiler.h"
+@@ -524,7 +525,15 @@ void SymbolTable::resolveRemainingUndefines() {
+     // If we can resolve a symbol by removing __imp_ prefix, do that.
+     // This odd rule is for compatibility with MSVC linker.
+     if (name.starts_with("__imp_")) {
+-      Symbol *imp = find(name.substr(strlen("__imp_")));
++      StringRef impName = name.substr(strlen("__imp_"));
++      if (isArm64EC(ctx.config.machine))
++        impName.consume_front("aux_");
++      Symbol *imp = find(impName);
++      if (isArm64EC(ctx.config.machine) && (!imp || !isa<Defined>(imp))) {
++        if (std::optional<std::string> MangledName =
++                getArm64ECMangledFunctionName(impName))
++          imp = find(*MangledName);
++      }
+       if (imp && isa<Defined>(imp)) {
+         auto *d = cast<Defined>(imp);
+         replaceSymbol<DefinedLocalImport>(sym, ctx, name, d);
+diff --git a/lld/test/COFF/arm64ec-localimport.s b/lld/test/COFF/arm64ec-localimport.s
+deleted file mode 100644
+index dfbb8edc045d..000000000000
+--- a/lld/test/COFF/arm64ec-localimport.s
++++ /dev/null
+@@ -1,23 +0,0 @@
+-// REQUIRES: aarch64
+-// RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %s -o %t.obj
+-// RUN: lld-link -machine:arm64ec -dll -noentry %t.obj -out:%t.dll
+-
+-// RUN: llvm-readobj --coff-basereloc %t.dll | FileCheck -check-prefix=RELOCS %s
+-// RELOCS:       Entry {
+-// RELOCS-NEXT:    Type: DIR64
+-// RELOCS-NEXT:    Address: 0x2000
+-// RELOCS-NEXT:  }
+-
+-// RUN: llvm-readobj --hex-dump=.test %t.dll | FileCheck -check-prefix=TEST %s
+-// TEST: 0x180003000 00200000
+-
+-// RUN: llvm-readobj --hex-dump=.rdata %t.dll | FileCheck -check-prefix=RDATA %s
+-// RDATA: 0x180002000 00100080 01000000
+-
+-    .text
+-    .globl myfunc
+-myfunc:
+-    ret
+-
+-    .section .test, "r"
+-    .rva __imp_myfunc
+diff --git a/lld/test/COFF/arm64ec-localimport.test b/lld/test/COFF/arm64ec-localimport.test
+new file mode 100644
+index 000000000000..788d40f4b625
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-localimport.test
+@@ -0,0 +1,61 @@
++REQUIRES: aarch64
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows funcs.s -o funcs.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows funcs2.s -o funcs2.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows impsym.s -o impsym.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows impauxsym.s -o impauxsym.obj
++
++RUN: lld-link -machine:arm64ec -dll -noentry funcs.obj impsym.obj -out:impsym.dll
++
++RUN: llvm-readobj --coff-basereloc impsym.dll | FileCheck -check-prefix=RELOCS %s
++RELOCS:       Entry {
++RELOCS-NEXT:    Type: DIR64
++RELOCS-NEXT:    Address: 0x2000
++RELOCS-NEXT:  }
++
++RUN: llvm-readobj --hex-dump=.test impsym.dll | FileCheck -check-prefix=TEST %s
++TEST: 0x180003000 00200000
++
++RUN: llvm-readobj --hex-dump=.rdata impsym.dll | FileCheck -check-prefix=RDATA %s
++RDATA: 0x180002000 00100080 01000000
++
++RUN: lld-link -machine:arm64ec -dll -noentry funcs.obj impauxsym.obj -out:impauxsym.dll
++RUN: llvm-readobj --hex-dump=.test impauxsym.dll | FileCheck -check-prefix=TEST %s
++RUN: llvm-readobj --hex-dump=.rdata impauxsym.dll | FileCheck -check-prefix=RDATA %s
++
++RUN: lld-link -machine:arm64ec -dll -noentry funcs2.obj impsym.obj -out:impsym.dll
++RUN: llvm-readobj --coff-basereloc impsym.dll | FileCheck -check-prefix=RELOCS %s
++RUN: llvm-readobj --hex-dump=.test impsym.dll | FileCheck -check-prefix=TEST %s
++RUN: llvm-readobj --hex-dump=.rdata impsym.dll | FileCheck -check-prefix=RDATA2 %s
++RDATA2: 0x180002000 04100080 01000000
++
++RUN: lld-link -machine:arm64ec -dll -noentry funcs2.obj impauxsym.obj -out:impauxsym.dll
++RUN: llvm-readobj --hex-dump=.test impauxsym.dll | FileCheck -check-prefix=TEST %s
++RUN: llvm-readobj --hex-dump=.rdata impauxsym.dll | FileCheck -check-prefix=RDATA2 %s
++
++#--- funcs.s
++    .text
++    .globl myfunc
++myfunc:
++    ret
++    .globl "#myfunc"
++"#myfunc":
++    ret
++
++#--- funcs2.s
++    .text
++    .globl myfunc2
++myfunc2:
++    ret
++    .globl "#myfunc"
++"#myfunc":
++    ret
++
++#--- impsym.s
++    .section .test, "r"
++    .rva __imp_myfunc
++
++#--- impauxsym.s
++    .section .test, "r"
++    .rva __imp_aux_myfunc
+-- 
+2.25.1
+

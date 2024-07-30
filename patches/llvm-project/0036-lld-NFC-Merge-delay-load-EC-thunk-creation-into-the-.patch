@@ -1,0 +1,121 @@
+From 9a73551b06b60d8dcd226e8e24be3fdb71917cd0 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Wed, 8 Nov 2023 23:41:32 +0100
+Subject: [PATCH 36/55] [lld][NFC] Merge delay-load EC thunk creation into the
+ main create loop.
+
+FIXME: amend to earlier commits
+---
+ lld/COFF/DLL.cpp | 63 +++++++++++++++++++++---------------------------
+ 1 file changed, 27 insertions(+), 36 deletions(-)
+
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 931b76692ca4..f2f4dc767dfb 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -714,16 +714,30 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+       if (s->getExternalName().empty()) {
+         lookups.push_back(make<OrdinalOnlyChunk>(ctx, ord));
+         addresses.push_back(make<OrdinalOnlyChunk>(ctx, ord));
+-        continue;
++      } else {
++        auto *c = make<HintNameChunk>(s->getExternalName(), ord);
++        lookups.push_back(make<LookupChunk>(ctx, c));
++        addresses.push_back(make<LookupChunk>(ctx, c));
++        hints.push_back(c);
++      }
++
++      if (s->file->impECSym) {
++        auto chunk = make<ECImportChunk>(s->file);
++        auxIat.push_back(chunk);
++        s->file->impECSym->setLocation(chunk);
++
++        chunk = make<ECImportChunk>(s->file);
++        auxIatCopy.push_back(chunk);
++        s->file->auxImpCopySym->setLocation(chunk);
+       }
+-      auto *c = make<HintNameChunk>(s->getExternalName(), ord);
+-      lookups.push_back(make<LookupChunk>(ctx, c));
+-      addresses.push_back(make<LookupChunk>(ctx, c));
+-      hints.push_back(c);
+     }
+     // Terminate with null values.
+     lookups.push_back(make<NullChunk>(ctx.config.wordsize));
+     addresses.push_back(make<NullChunk>(ctx.config.wordsize));
++    if (ctx.config.machine == ARM64EC) {
++      auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
++      auxIatCopy.push_back(make<NullChunk>(ctx.config.wordsize));
++    }
+ 
+     for (int i = 0, e = syms.size(); i < e; ++i)
+       syms[i]->setLocation(addresses[base + i]);
+@@ -737,24 +751,6 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+   }
+   // Add null terminator.
+   dirs.push_back(make<NullChunk>(sizeof(ImportDirectoryTableEntry)));
+-
+-  if (ctx.config.machine == ARM64EC) {
+-    std::vector<std::vector<DefinedImportData *>> av =
+-        binImports(ctx, ECImports);
+-    for (std::vector<DefinedImportData *> &syms : av) {
+-      for (DefinedImportData *s : syms) {
+-        auto chunk = make<ECImportChunk>(s->file);
+-        auxIat.push_back(chunk);
+-        s->setLocation(chunk);
+-
+-        chunk = make<ECImportChunk>(s->file);
+-        auxIatCopy.push_back(chunk);
+-        s->file->auxImpCopySym->setLocation(chunk);
+-      }
+-      auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
+-      auxIatCopy.push_back(make<NullChunk>(ctx.config.wordsize));
+-    }
+-  }
+ }
+ 
+ std::vector<Chunk *> DelayLoadContents::getChunks() {
+@@ -817,6 +813,12 @@ void DelayLoadContents::create(Defined *h) {
+         s->loadThunkSym =
+             cast<DefinedSynthetic>(ctx.symtab.addSynthetic(symName, t));
+       }
++
++      if (s->file->impECSym) {
++        auto chunk = make<ECImportChunk>(s->file);
++        auxIat.push_back(chunk);
++        s->file->impECSym->setLocation(chunk);
++      }
+     }
+     thunks.push_back(tm);
+     if (pdataChunk)
+@@ -827,6 +829,8 @@ void DelayLoadContents::create(Defined *h) {
+     // Terminate with null values.
+     addresses.push_back(make<NullChunk>(8));
+     names.push_back(make<NullChunk>(8));
++    if (ctx.config.machine == ARM64EC)
++      auxIat.push_back(make<NullChunk>(8));
+ 
+     for (int i = 0, e = syms.size(); i < e; ++i)
+       syms[i]->setLocation(addresses[base + i]);
+@@ -845,19 +849,6 @@ void DelayLoadContents::create(Defined *h) {
+     unwindinfo.push_back(unwind);
+   // Add null terminator.
+   dirs.push_back(make<NullChunk>(sizeof(delay_import_directory_table_entry)));
+-
+-  if (ctx.config.machine == ARM64EC) {
+-    std::vector<std::vector<DefinedImportData *>> av =
+-        binImports(ctx, ECImports);
+-    for (std::vector<DefinedImportData *> &syms : av) {
+-      for (DefinedImportData *s : syms) {
+-        auto chunk = make<ECImportChunk>(s->file);
+-        auxIat.push_back(chunk);
+-        s->setLocation(chunk);
+-      }
+-      auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
+-    }
+-  }
+ }
+ 
+ Chunk *DelayLoadContents::newTailMergeChunk(Chunk *dir) {
+-- 
+2.25.1
+

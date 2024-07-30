@@ -1,0 +1,188 @@
+From 9eadd3c039b3e573691104218857a1d259d2d312 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 22 Jun 2023 15:39:29 +0200
+Subject: [PATCH 09/55] [lld] Add support for ARM64EC code ranges to entry
+ point map chunk.
+
+---
+ lld/COFF/Chunks.cpp                         | 16 ++++++++++++++++
+ lld/COFF/Chunks.h                           | 10 ++++++++++
+ lld/COFF/Driver.cpp                         |  2 ++
+ lld/COFF/Writer.cpp                         | 10 ++++++++++
+ lld/test/COFF/Inputs/loadconfig-arm64ec.s   |  4 ++--
+ lld/test/COFF/arm64ec-cust-export-thunk.s   |  4 +++-
+ lld/test/COFF/arm64ec-export-thunks.test    |  9 +++++++--
+ lld/test/COFF/arm64ec-patchable-thunks.test |  4 +++-
+ 8 files changed, 53 insertions(+), 6 deletions(-)
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index e11733a54c10..7800df80c6ec 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -1078,6 +1078,22 @@ void ECThunkChunk::writeTo(uint8_t *buf) const {
+   write32le(buf + 10, target->getRVA() - rva - 14);
+ }
+ 
++size_t ECCodeRangesChunk::getSize() const {
++  return ctx.ECThunks.size() * sizeof(chpe_code_range_entry);
++}
++
++void ECCodeRangesChunk::writeTo(uint8_t *buf) const {
++  auto ranges = reinterpret_cast<chpe_code_range_entry *>(buf);
++
++  for (uint32_t i = 0; i < ctx.ECThunks.size(); i++) {
++    Chunk *thunk = ctx.ECThunks[i].first;
++    uint32_t start = thunk->getRVA();
++    ranges[i].StartRva = start;
++    ranges[i].EndRva = start + thunk->getSize();
++    ranges[i].EntryPoint = start;
++  }
++}
++
+ size_t ECEntryPointsChunk::getSize() const {
+   return ctx.ECThunks.size() * sizeof(chpe_redirection_entry);
+ }
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index c615b310e0c7..f53eb5507bf3 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -749,6 +749,16 @@ private:
+   std::vector<ECCodeMapEntry> &map;
+ };
+ 
++class ECCodeRangesChunk : public NonSectionChunk {
++public:
++  ECCodeRangesChunk(COFFLinkerContext &ctx) : ctx(ctx) {}
++  size_t getSize() const override;
++  void writeTo(uint8_t *buf) const override;
++
++private:
++  COFFLinkerContext &ctx;
++};
++
+ class ECEntryPointsChunk : public NonSectionChunk {
+ public:
+   ECEntryPointsChunk(COFFLinkerContext &ctx) : ctx(ctx) {}
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index 9ae5691fc4c6..47a51a540548 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -2407,6 +2407,8 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata_count", 0);
+     ctx.symtab.addAbsolute("__hybrid_code_map", 0);
+     ctx.symtab.addAbsolute("__hybrid_code_map_count", 0);
++    ctx.symtab.addAbsolute("__x64_code_ranges_to_entry_points", 0);
++    ctx.symtab.addAbsolute("__x64_code_ranges_to_entry_points_count", 0);
+   }
+ 
+   if (config->pseudoRelocs) {
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 09536fcc2750..e8054cb6bdd3 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -2076,6 +2076,12 @@ void Writer::createECChunks() {
+   replaceSymbol<DefinedSynthetic>(codeMapSym, codeMapSym->getName(),
+                                   codeMapChunk);
+ 
++  ECCodeRangesChunk *ranges = make<ECCodeRangesChunk>(ctx);
++  rdataSec->addChunk(ranges);
++  Symbol *rangesSym =
++      ctx.symtab.findUnderscore("__x64_code_ranges_to_entry_points");
++  replaceSymbol<DefinedSynthetic>(rangesSym, rangesSym->getName(), ranges);
++
+   ECEntryPointsChunk *entryPoints = make<ECEntryPointsChunk>(ctx);
+   rdataSec->addChunk(entryPoints);
+   Symbol *entryPointsSym =
+@@ -2191,6 +2197,10 @@ void Writer::setECSymbols() {
+                 pdata.first->getRVA());
+   }
+ 
++  Symbol *rangesCountSym =
++      ctx.symtab.findUnderscore("__x64_code_ranges_to_entry_points_count");
++  cast<DefinedAbsolute>(rangesCountSym)->setVA(ctx.ECThunks.size());
++
+   Symbol *entryPointCountSym =
+       ctx.symtab.findUnderscore("__arm64x_redirection_metadata_count");
+   cast<DefinedAbsolute>(entryPointCountSym)->setVA(ctx.ECThunks.size());
+diff --git a/lld/test/COFF/Inputs/loadconfig-arm64ec.s b/lld/test/COFF/Inputs/loadconfig-arm64ec.s
+index 62a6d0cab642..78e7fba43a0a 100644
+--- a/lld/test/COFF/Inputs/loadconfig-arm64ec.s
++++ b/lld/test/COFF/Inputs/loadconfig-arm64ec.s
+@@ -66,7 +66,7 @@ __chpe_metadata:
+         .word 1
+         .rva __hybrid_code_map
+         .word __hybrid_code_map_count
+-        .word 0 // __x64_code_ranges_to_entry_points
++        .rva __x64_code_ranges_to_entry_points
+         .rva __arm64x_redirection_metadata
+         .rva __os_arm64x_dispatch_call_no_redirect
+         .rva __os_arm64x_dispatch_ret
+@@ -75,7 +75,7 @@ __chpe_metadata:
+         .rva __os_arm64x_check_icall_cfg
+         .word 0 // __arm64x_native_entrypoint
+         .word 0 // __hybrid_auxiliary_iat
+-        .word 0 // __x64_code_ranges_to_entry_points_count
++        .word __x64_code_ranges_to_entry_points_count
+         .word __arm64x_redirection_metadata_count
+         .rva __os_arm64x_get_x64_information
+         .rva __os_arm64x_set_x64_information
+diff --git a/lld/test/COFF/arm64ec-cust-export-thunk.s b/lld/test/COFF/arm64ec-cust-export-thunk.s
+index c99b88eedba0..5edd90f9341e 100644
+--- a/lld/test/COFF/arm64ec-cust-export-thunk.s
++++ b/lld/test/COFF/arm64ec-cust-export-thunk.s
+@@ -29,7 +29,9 @@ CHPE:       CodeMap [
+ CHPE-NEXT:    0x1000 - 0x1008  ARM64EC
+ CHPE-NEXT:    0x2000 - 0x200A  X64
+ CHPE-NEXT:  ]
+-CHPE-NEXT:  CodeRangesToEntryPoints: 0
++CHPE-NEXT:  CodeRangesToEntryPoints [
++CHPE-NEXT:    0x2000 - 0x200A -> 0x2000
++CHPE-NEXT:  ]
+ CHPE-NEXT:  RedirectionMetadata [
+ CHPE-NEXT:    0x2000 -> 0x1000
+ CHPE-NEXT:  ]
+diff --git a/lld/test/COFF/arm64ec-export-thunks.test b/lld/test/COFF/arm64ec-export-thunks.test
+index 78b5f52a1e1f..7a4215318f0e 100644
+--- a/lld/test/COFF/arm64ec-export-thunks.test
++++ b/lld/test/COFF/arm64ec-export-thunks.test
+@@ -57,7 +57,10 @@ EXP-CHPE:       CodeMap [
+ EXP-CHPE-NEXT:    0x1000 - 0x100C  ARM64EC
+ EXP-CHPE-NEXT:    0x2000 - 0x3020  X64
+ EXP-CHPE-NEXT:  ]
+-EXP-CHPE-NEXT:  CodeRangesToEntryPoints: 0
++EXP-CHPE-NEXT:  CodeRangesToEntryPoints [
++EXP-CHPE-NEXT:    0x3000 - 0x3010 -> 0x3000
++EXP-CHPE-NEXT:    0x3010 - 0x3020 -> 0x3010
++EXP-CHPE-NEXT:  ]
+ EXP-CHPE-NEXT:  RedirectionMetadata [
+ EXP-CHPE-NEXT:    0x3000 -> 0x1000
+ EXP-CHPE-NEXT:    0x3010 -> 0x1000
+@@ -104,7 +107,9 @@ ENTRY-CHPE:       CodeMap [
+ ENTRY-CHPE-NEXT:    0x1000 - 0x100C  ARM64EC
+ ENTRY-CHPE-NEXT:    0x2000 - 0x2010  X64
+ ENTRY-CHPE-NEXT:  ]
+-ENTRY-CHPE-NEXT:  CodeRangesToEntryPoints: 0
++ENTRY-CHPE-NEXT:  CodeRangesToEntryPoints [
++ENTRY-CHPE-NEXT:    0x2000 - 0x2010 -> 0x2000
++ENTRY-CHPE-NEXT:  ]
+ ENTRY-CHPE-NEXT:  RedirectionMetadata [
+ ENTRY-CHPE-NEXT:    0x2000 -> 0x1000
+ ENTRY-CHPE-NEXT:  ]
+diff --git a/lld/test/COFF/arm64ec-patchable-thunks.test b/lld/test/COFF/arm64ec-patchable-thunks.test
+index 0b5a0987d2ec..5459b5483eab 100644
+--- a/lld/test/COFF/arm64ec-patchable-thunks.test
++++ b/lld/test/COFF/arm64ec-patchable-thunks.test
+@@ -33,7 +33,9 @@ PATCH-CHPE:       CodeMap [
+ PATCH-CHPE-NEXT:    0x1000 - 0x1008  ARM64EC
+ PATCH-CHPE-NEXT:    0x2000 - 0x2010  X64
+ PATCH-CHPE-NEXT:  ]
+-PATCH-CHPE-NEXT:  CodeRangesToEntryPoints: 0
++PATCH-CHPE-NEXT:  CodeRangesToEntryPoints [
++PATCH-CHPE-NEXT:    0x2000 - 0x2010 -> 0x2000
++PATCH-CHPE-NEXT:  ]
+ PATCH-CHPE-NEXT:  RedirectionMetadata [
+ PATCH-CHPE-NEXT:    0x2000 -> 0x1000
+ PATCH-CHPE-NEXT:  ]
+-- 
+2.25.1
+

@@ -1,0 +1,59 @@
+From 9e7783bb520dac6a2602098017625ec407d3b578 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Mon, 20 May 2024 21:00:31 +0200
+Subject: [PATCH 43/55] [LLD] Create EC alias symbols for undefined symbols in
+ x86_64 object files.
+
+---
+ lld/COFF/InputFiles.cpp             | 17 ++++++++++++++++-
+ lld/test/COFF/arm64ec-ec-alias.test |  4 +++-
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 91f47b672813..830b2b86abba 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -571,7 +571,22 @@ void ObjFile::initializeSymbols() {
+ 
+ Symbol *ObjFile::createUndefined(COFFSymbolRef sym) {
+   StringRef name = check(coffObj->getSymbolName(sym));
+-  return getTarget().symtab.addUndefined(name, this, sym.isWeakExternal());
++  Symbol *s = getTarget().symtab.addUndefined(name, this, sym.isWeakExternal());
++  auto u = dyn_cast<Undefined>(s);
++  if (u && !u->weakAlias && getMachineType() == AMD64) {
++    COFFTargetContext &target = ctx.getTarget(AMD64);
++    if (target.machine == ARM64EC) {
++       if (std::optional<std::string> mangledName = getArm64ECMangledFunctionName(name)) {
++         Symbol *m = getTarget().symtab.addUndefined(saver().save(*mangledName), this, false);
++         u->weakAlias = m;
++         if (auto *um = dyn_cast<Undefined>(m)) {
++           u->ECAlias = um;
++           um->ECAlias = u;
++         }
++       }
++    }
++  }
++  return s;
+ }
+ 
+ static const coff_aux_section_definition *findSectionDef(COFFObjectFile *obj,
+diff --git a/lld/test/COFF/arm64ec-ec-alias.test b/lld/test/COFF/arm64ec-ec-alias.test
+index 29a62ca7b051..66cafaa4a133 100644
+--- a/lld/test/COFF/arm64ec-ec-alias.test
++++ b/lld/test/COFF/arm64ec-ec-alias.test
+@@ -1,9 +1,11 @@
+-REQUIRES: aarch64
++REQUIRES: aarch64, x86
+ RUN: split-file %s %t.dir && cd %t.dir
+ 
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows mangled-func.s -o mangled-func.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows ref.s -o ref.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows ref.s -o ref-x64.obj
+ RUN: lld-link -machine:arm64ec -dll -noentry mangled-func.obj ref.obj "-export:#func"
++RUN: lld-link -machine:arm64ec -dll -noentry mangled-func.obj ref-x64.obj
+ 
+ #--- mangled-func.s
+         .text
+-- 
+2.25.1
+

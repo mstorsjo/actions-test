@@ -1,0 +1,168 @@
+From 2ea5e767bf3ca40a09af7bfb2a1c5f4e2ee411ad Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sun, 1 Oct 2023 10:57:19 +0200
+Subject: [PATCH 31/55] [lld] Add demangled lazy archive symbols in addition to
+ mangled ones when importing a static library.
+
+FIXME: Add tests, non-EC static libs probably need a similar treatment.
+---
+ lld/COFF/InputFiles.cpp           |  7 +++-
+ lld/COFF/SymbolTable.cpp          |  4 +--
+ lld/COFF/SymbolTable.h            |  6 +++-
+ lld/test/COFF/arm64ec-import.test | 59 +++++++++++++++++++++++++++++++
+ 4 files changed, 72 insertions(+), 4 deletions(-)
+
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 7499350a8ad3..e67f056040fd 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -108,10 +108,15 @@ void ArchiveFile::parse() {
+   if (ctx.config.machine == ARM64EC) {
+     auto symbols = file->ec_symbols();
+     if (!symbols)
+-      fatal("Reading EC symbols tailed: " + toString(symbols.takeError()));
++      fatal("Reading EC symbols failed: " + toString(symbols.takeError()));
+     if (!symbols->empty()) {
+       for (const Archive::Symbol &sym : *symbols)
+         ctx.symtab.addLazyArchive(this, sym);
++      for (const Archive::Symbol &sym : *symbols) {
++        if (std::optional<std::string> demangledName =
++                getArm64ECDemangledFunctionName(sym.getName()))
++          ctx.symtab.addLazyArchive(this, sym, saver().save(*demangledName));
++      }
+       return;
+     }
+   }
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index 7e6b37467956..20d1f67638c5 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -618,8 +618,8 @@ Symbol *SymbolTable::addUndefined(StringRef name, InputFile *f,
+   return s;
+ }
+ 
+-void SymbolTable::addLazyArchive(ArchiveFile *f, const Archive::Symbol &sym) {
+-  StringRef name = sym.getName();
++void SymbolTable::addLazyArchive(ArchiveFile *f, const Archive::Symbol &sym,
++                                 StringRef name) {
+   auto [s, wasInserted] = insert(name);
+   if (wasInserted) {
+     replaceSymbol<LazyArchive>(s, f, sym);
+diff --git a/lld/COFF/SymbolTable.h b/lld/COFF/SymbolTable.h
+index c0d7a09b3c8f..6e65b36397f8 100644
+--- a/lld/COFF/SymbolTable.h
++++ b/lld/COFF/SymbolTable.h
+@@ -88,7 +88,11 @@ public:
+   Symbol *addAbsolute(StringRef n, uint64_t va);
+ 
+   Symbol *addUndefined(StringRef name, InputFile *f, bool isWeakAlias);
+-  void addLazyArchive(ArchiveFile *f, const Archive::Symbol &sym);
++  void addLazyArchive(ArchiveFile *f, const Archive::Symbol &sym,
++                      StringRef name);
++  void addLazyArchive(ArchiveFile *f, const Archive::Symbol &sym) {
++    addLazyArchive(f, sym, sym.getName());
++  }
+   void addLazyObject(InputFile *f, StringRef n);
+   void addLazyDLLSymbol(DLLFile *f, DLLFile::Symbol *sym, StringRef n);
+   Symbol *addAbsolute(StringRef n, COFFSymbolRef s);
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index 5e51f4cf4885..350e6c22147a 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -4,6 +4,8 @@ RUN: split-file %s %t.dir && cd %t.dir
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test.s -o test.obj
+ RUN: llvm-mc -filetype=obj -triple=x86_64-windows test.s -o test-x86_64.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows arm64ec-stubs.s -o arm64ec-stubs.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows arm64ec-stubs2.s -o arm64ec-stubs2.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows arm64ec-stubs3.s -o arm64ec-stubs3.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
+ RUN: llvm-lib -machine:arm64ec -def:test.def -out:test-arm64ec.lib
+ RUN: llvm-lib -machine:arm64ec -def:test2.def -out:test2-arm64ec.lib
+@@ -15,6 +17,10 @@ RUN: lld-link -machine:arm64ec -dll -noentry -out:out2.dll loadconfig-arm64ec.ob
+ RUN:          test.obj test-x64.lib test2-arm64ec.lib
+ RUN: lld-link -machine:arm64ec -dll -noentry -out:out3.dll loadconfig-arm64ec.obj arm64ec-stubs.obj \
+ RUN:          test-x86_64.obj test-x64.lib test2-arm64ec.lib
++RUN: lld-link -machine:arm64ec -dll -noentry -out:out4.dll loadconfig-arm64ec.obj arm64ec-stubs2.obj \
++RUN:          test.obj test-arm64ec.lib test2-arm64ec.lib
++RUN: lld-link -machine:arm64ec -dll -noentry -out:out5.dll loadconfig-arm64ec.obj arm64ec-stubs3.obj \
++RUN:          test.obj test-arm64ec.lib test2-arm64ec.lib
+ 
+ RUN: llvm-readobj --coff-imports out.dll | FileCheck -check-prefix=IMPORTS %s
+ RUN: llvm-readobj --coff-imports out2.dll | FileCheck -check-prefix=IMPORTS %s
+@@ -44,6 +50,8 @@ HEADERS:  IATSize: 0x1000
+ RUN: llvm-objdump -d out.dll | FileCheck -check-prefix=DISASM %s
+ RUN: llvm-objdump -d out2.dll | FileCheck -check-prefix=DISASM %s
+ RUN: llvm-objdump -d out3.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-objdump -d out4.dll | FileCheck -check-prefix=DISASM %s
++RUN: llvm-objdump -d out5.dll | FileCheck -check-prefix=DISASM %s
+ DISASM:      180001000: 52800040     mov     w0, #0x2                // =2
+ DISASM-NEXT: 180001004: d65f03c0     ret
+ DISASM-NEXT: 180001008: 90000030     adrp    x16, 0x180005000
+@@ -71,6 +79,7 @@ DISASM-NEXT: 180002000: ff 25 02 10 00 00            jmpq    *0x1002(%rip)
+ 
+ RUN: llvm-readobj --hex-dump=.test out.dll | FileCheck -check-prefix=TESTSEC %s
+ RUN: llvm-readobj --hex-dump=.test out2.dll | FileCheck -check-prefix=TESTSEC %s
++RUN: llvm-readobj --hex-dump=.test out4.dll | FileCheck -check-prefix=TESTSEC %s
+ TESTSEC:      0x180008000 08500000 08300000 00200000 08100000
+ TESTSEC-NEXT: 0x180008010 00300000 00500000 10500000 10300000
+ TESTSEC-NEXT: 0x180008020 20500000
+@@ -164,6 +173,56 @@ myfunc_exit_thunk:
+     mov w0, #3
+     ret
+ 
++#--- arm64ec-stubs2.s
++    .text
++    .globl __icall_helper_arm64ec
++    .p2align 2, 0x0
++__icall_helper_arm64ec:
++    mov w0, #2
++    ret
++
++    .section .cfg, "r"
++    .globl __os_arm64x_dispatch_icall
++    .p2align 2, 0x0
++__os_arm64x_dispatch_icall:
++    .xword 1
++
++    .section .hybmp$x, "yi"
++    .symidx myfunc
++    .symidx myfunc_exit_thunk
++    .word 4
++
++    .section .wowthk$aa,"xr",discard,myfunc_exit_thunk
++    .globl myfunc_exit_thunk
++myfunc_exit_thunk:
++    mov w0, #3
++    ret
++
++#--- arm64ec-stubs3.s
++    .text
++    .globl __icall_helper_arm64ec
++    .p2align 2, 0x0
++__icall_helper_arm64ec:
++    mov w0, #2
++    ret
++
++    .section .cfg, "r"
++    .globl __os_arm64x_dispatch_icall
++    .p2align 2, 0x0
++__os_arm64x_dispatch_icall:
++    .xword 1
++
++    .section .hybmp$x, "yi"
++    .symidx __imp_aux_myfunc
++    .symidx myfunc_exit_thunk
++    .word 4
++
++    .section .wowthk$aa,"xr",discard,myfunc_exit_thunk
++    .globl myfunc_exit_thunk
++myfunc_exit_thunk:
++    mov w0, #3
++    ret
++
+ #--- test.def
+ NAME test.dll
+ EXPORTS
+-- 
+2.25.1
+

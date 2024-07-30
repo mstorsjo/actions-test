@@ -1,0 +1,184 @@
+From 6415bf94a2ddc03569284505fc082c0314365704 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 2 Nov 2023 17:51:50 +0100
+Subject: [PATCH 35/55] [lld] Add support for __auximpcopy_* symbols.
+
+FIXME: We shouldn't emit those for delay-loaded DLLs.
+---
+ lld/COFF/DLL.cpp                  | 41 ++++---------------------------
+ lld/COFF/DLL.h                    |  3 +--
+ lld/COFF/InputFiles.cpp           |  5 ++++
+ lld/COFF/InputFiles.h             |  2 ++
+ lld/COFF/Writer.cpp               | 10 +++-----
+ lld/test/COFF/arm64ec-import.test |  1 +
+ 6 files changed, 18 insertions(+), 44 deletions(-)
+
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 110a8be04c39..931b76692ca4 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -164,36 +164,6 @@ private:
+   ImportFile *file;
+ };
+ 
+-class AuxIATCopyChunk : public NonSectionChunk {
+-public:
+-  explicit AuxIATCopyChunk(std::vector<Chunk *> &auxIat) : auxIat(auxIat) {
+-    setAlignment(sizeof(uint64_t));
+-  }
+-
+-  size_t getSize() const override { return auxIat.size() * sizeof(uint64_t); }
+-
+-  void writeTo(uint8_t *buf) const override {
+-    for (Chunk *chunk : auxIat) {
+-      chunk->writeTo(buf);
+-      buf += chunk->getSize();
+-    }
+-  }
+-
+-  void getBaserels(std::vector<Baserel> *res) override {
+-    uint32_t off = 0;
+-    for (Chunk *chunk : auxIat) {
+-      std::vector<Baserel> rels;
+-      chunk->getBaserels(&rels);
+-      for (Baserel &rel : rels)
+-        res->emplace_back(rel.rva - chunk->getRVA() + rva + off, ARM64EC);
+-      off += chunk->getSize();
+-    }
+-  }
+-
+-private:
+-  std::vector<Chunk *> &auxIat;
+-};
+-
+ static std::vector<std::vector<DefinedImportData *>>
+ binImports(COFFLinkerContext &ctx,
+            const std::vector<DefinedImportData *> &imports) {
+@@ -776,12 +746,14 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+         auto chunk = make<ECImportChunk>(s->file);
+         auxIat.push_back(chunk);
+         s->setLocation(chunk);
++
++        chunk = make<ECImportChunk>(s->file);
++        auxIatCopy.push_back(chunk);
++        s->file->auxImpCopySym->setLocation(chunk);
+       }
+       auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
++      auxIatCopy.push_back(make<NullChunk>(ctx.config.wordsize));
+     }
+-
+-    if (!auxIat.empty())
+-      auxIatCopyChunk = make<AuxIATCopyChunk>(auxIat);
+   }
+ }
+ 
+@@ -885,9 +857,6 @@ void DelayLoadContents::create(Defined *h) {
+       }
+       auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
+     }
+-
+-    if (!auxIat.empty())
+-      auxIatCopyChunk = make<AuxIATCopyChunk>(auxIat);
+   }
+ }
+ 
+diff --git a/lld/COFF/DLL.h b/lld/COFF/DLL.h
+index f753bc3cdc1a..c03dbf74519b 100644
+--- a/lld/COFF/DLL.h
++++ b/lld/COFF/DLL.h
+@@ -37,7 +37,7 @@ public:
+   std::vector<Chunk *> hints;
+   std::vector<Chunk *> dllNames;
+   std::vector<Chunk *> auxIat;
+-  Chunk *auxIatCopyChunk = nullptr;
++  std::vector<Chunk *> auxIatCopy;
+ };
+ 
+ // Windows-specific.
+@@ -81,7 +81,6 @@ private:
+   std::vector<Chunk *> unwindinfo;
+   std::vector<Chunk *> dllNames;
+   std::vector<Chunk *> auxIat;
+-  Chunk *auxIatCopyChunk = nullptr;
+ 
+   COFFLinkerContext &ctx;
+ };
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 3713a3573fe1..ae866e72542d 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -1107,6 +1107,11 @@ void ImportFile::parse() {
+     }
+     if (!impECSym)
+       return;
++
++    StringRef auxImpCopyName = saver().save("__auximpcopy_" + name);
++    auxImpCopySym = ctx.symtab.addImportData(auxImpCopyName, this, auxChkLocation);
++    if (!auxImpCopySym)
++      return;
+   }
+   // If this was a duplicate, we logged an error but may continue;
+   // in this case, impSym is nullptr.
+diff --git a/lld/COFF/InputFiles.h b/lld/COFF/InputFiles.h
+index 78c1bdbd6889..95d5e2c2e856 100644
+--- a/lld/COFF/InputFiles.h
++++ b/lld/COFF/InputFiles.h
+@@ -347,6 +347,7 @@ public:
+ 
+   DefinedImportData *impSym = nullptr;
+   DefinedImportData *impECSym = nullptr;
++  DefinedImportData *auxImpCopySym = nullptr;
+   Symbol *thunkSym = nullptr;
+   Symbol *auxThunkSym = nullptr;
+   DefinedImportThunk *chkECSym = nullptr;
+@@ -360,6 +361,7 @@ public:
+   const coff_import_header *hdr;
+   Chunk *location = nullptr;
+   Chunk *ECLocation = nullptr;
++  Chunk *auxChkLocation = nullptr;
+ 
+   // We want to eliminate dllimported symbols if no one actually refers to them.
+   // These "Live" bits are used to keep track of which import library members
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index f1a723448edb..f436be6f46b5 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -909,11 +909,8 @@ void Writer::addSyntheticIdata() {
+   if (!idata.hints.empty())
+     add(".idata$6", idata.hints);
+   add(".idata$7", idata.dllNames);
+-
+-  if (idata.auxIatCopyChunk) {
+-    PartialSection *pSec = createPartialSection(".idata$a", rdata);
+-    pSec->chunks.push_back(idata.auxIatCopyChunk);
+-  }
++  if (!idata.auxIatCopy.empty())
++    add(".idata$a", idata.auxIatCopy);
+ }
+ 
+ void Writer::appendECImportTables() {
+@@ -2265,7 +2262,8 @@ void Writer::setECSymbols() {
+ 
+   Symbol *iatCopySym = ctx.symtab.findUnderscore("__hybrid_auxiliary_iat_copy");
+   replaceSymbol<DefinedSynthetic>(iatCopySym, "__hybrid_auxiliary_iat_copy",
+-                                  idata.auxIatCopyChunk);
++                                  idata.auxIatCopy.empty() ? nullptr
++                                                           : idata.auxIatCopy.front());
+ 
+   Symbol *sym = ctx.symtab.findUnderscore("__arm64x_native_entrypoint");
+   cast<DefinedAbsolute>(sym)->setVA(ctx.config.imageBase);
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index 3ac1466c3b81..6ff8e9cddc68 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -148,6 +148,7 @@ arm64ec_data_sym:
+     .rva __imp_aux_otherfunc
+     .rva __imp_myfunc2
+     .rva __impchk_myfunc
++    .rva __auximpcopy_myfunc
+ 
+ #--- arm64ec-stubs.s
+     .text
+-- 
+2.25.1
+

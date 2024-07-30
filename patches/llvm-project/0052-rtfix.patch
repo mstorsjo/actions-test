@@ -1,0 +1,54 @@
+From d3a7a6ed8ebd646238229aacb5b0e865790f77c9 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Wed, 21 Feb 2024 15:22:39 +0000
+Subject: [PATCH 52/55] rtfix
+
+---
+ compiler-rt/lib/builtins/assembly.h |  6 +++++-
+ compiler-rt/lib/builtins/atomic.c   | 10 +++++-----
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/compiler-rt/lib/builtins/assembly.h b/compiler-rt/lib/builtins/assembly.h
+index 95c424cd6622..982148e3a063 100644
+--- a/compiler-rt/lib/builtins/assembly.h
++++ b/compiler-rt/lib/builtins/assembly.h
+@@ -210,9 +210,13 @@
+ #ifdef __arm64ec__
+ #define QUOTE(a) #a
+ #define STR(a) QUOTE(a)
+-#define SYMBOL_NAME(name) STR(GLUE(#, name))
++#define HASH_LIT #
++#define HASH() HASH_LIT
++#define SYMBOL_NAME_C(name) name
++#define SYMBOL_NAME(name) STR(HASH()name)
+ #else
+ #define SYMBOL_NAME(name) GLUE(__USER_LABEL_PREFIX__, name)
++#define SYMBOL_NAME_C(name) SYMBOL_NAME(name)
+ #endif
+ 
+ #ifdef VISIBILITY_HIDDEN
+diff --git a/compiler-rt/lib/builtins/atomic.c b/compiler-rt/lib/builtins/atomic.c
+index aded25d9baa9..36998dcfa87f 100644
+--- a/compiler-rt/lib/builtins/atomic.c
++++ b/compiler-rt/lib/builtins/atomic.c
+@@ -35,12 +35,12 @@
+ 
+ // Clang objects if you redefine a builtin.  This little hack allows us to
+ // define a function with the same name as an intrinsic.
+-#pragma redefine_extname __atomic_load_c SYMBOL_NAME(__atomic_load)
+-#pragma redefine_extname __atomic_store_c SYMBOL_NAME(__atomic_store)
+-#pragma redefine_extname __atomic_exchange_c SYMBOL_NAME(__atomic_exchange)
+-#pragma redefine_extname __atomic_compare_exchange_c SYMBOL_NAME(              \
++#pragma redefine_extname __atomic_load_c SYMBOL_NAME_C(__atomic_load)
++#pragma redefine_extname __atomic_store_c SYMBOL_NAME_C(__atomic_store)
++#pragma redefine_extname __atomic_exchange_c SYMBOL_NAME_C(__atomic_exchange)
++#pragma redefine_extname __atomic_compare_exchange_c SYMBOL_NAME_C(              \
+     __atomic_compare_exchange)
+-#pragma redefine_extname __atomic_is_lock_free_c SYMBOL_NAME(                  \
++#pragma redefine_extname __atomic_is_lock_free_c SYMBOL_NAME_C(                  \
+     __atomic_is_lock_free)
+ 
+ /// Number of locks.  This allocates one page on 32-bit platforms, two on
+-- 
+2.25.1
+

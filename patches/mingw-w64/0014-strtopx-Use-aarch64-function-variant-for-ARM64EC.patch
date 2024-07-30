@@ -1,0 +1,51 @@
+From 89a6e9d91d08f06ace1e0df81de52a02952c6d67 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 14 Sep 2023 21:35:14 +0100
+Subject: [PATCH 14/29] strtopx: Use aarch64 function variant for ARM64EC
+
+---
+ mingw-w64-crt/gdtoa/strtodnrp.c | 3 ++-
+ mingw-w64-crt/gdtoa/strtopx.c   | 6 ++++--
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/mingw-w64-crt/gdtoa/strtodnrp.c b/mingw-w64-crt/gdtoa/strtodnrp.c
+index bc5e86111..450e070c7 100644
+--- a/mingw-w64-crt/gdtoa/strtodnrp.c
++++ b/mingw-w64-crt/gdtoa/strtodnrp.c
+@@ -86,7 +86,8 @@ __mingw_strtod (const char * __restrict__ src, char ** __restrict__ endptr)
+   __attribute__((alias("__strtod")));
+ 
+ #if !(defined(_AMD64_) || defined(__x86_64__) || \
+-  defined(_X86_) || defined(__i386__))
++  defined(_X86_) || defined(__i386__)) || \
++  defined(_ARM64EC_) || defined(__arm64ec__)
+ /* For systems other than x86, where long double == double, provide the
+  * long double functions as aliases to __strtod. */
+ 
+diff --git a/mingw-w64-crt/gdtoa/strtopx.c b/mingw-w64-crt/gdtoa/strtopx.c
+index a5bc3ec60..22aae3ec2 100644
+--- a/mingw-w64-crt/gdtoa/strtopx.c
++++ b/mingw-w64-crt/gdtoa/strtopx.c
+@@ -54,7 +54,8 @@ THIS SOFTWARE.
+ #endif
+ 
+ /* This is specific to the x86 80 bit long doubles. */
+-#if defined(_AMD64_) || defined(__x86_64__) || \
++#if (defined(_AMD64_) && !defined(_ARM64EC)) || \
++ (defined(__x86_64__) && !defined(__arm64ec__)) || \
+   defined(_X86_) || defined(__i386__)
+ 
+ typedef union lD {
+@@ -133,7 +134,8 @@ long double __cdecl
+ strtold (const char * __restrict__ src, char ** __restrict__ endptr)
+   __attribute__((alias("__strtold")));
+ 
+-#elif defined(__arm__) || defined(__aarch64__) || defined(_ARM_) || defined(_ARM64_)
++#elif defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__) || \
++  defined(_ARM_) || defined(_ARM64_) || defined(_ARM64EC_)
+ /* For ARM, where long double == double, provide the long double function as
+  * an alias for __strtod. Do this in a separate object file from other
+  * functions, to avoid linker conflicts if object files import both 'strtold'
+-- 
+2.25.1
+

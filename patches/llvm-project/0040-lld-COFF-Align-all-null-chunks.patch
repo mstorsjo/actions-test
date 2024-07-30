@@ -1,0 +1,185 @@
+From 96fae9d78873da912def75303f9705cabebba952 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Wed, 13 Mar 2024 22:45:20 +0100
+Subject: [PATCH 40/55] [lld][COFF] Align all null chunks.
+
+---
+ lld/COFF/DLL.cpp                 | 38 ++++++++++++------------
+ lld/test/COFF/arm64x-import.test | 50 ++++++++++++++++++++++++++++++++
+ 2 files changed, 70 insertions(+), 18 deletions(-)
+
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 2914d3deaf4d..d1fe7c66916b 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -131,7 +131,11 @@ public:
+ // Contents of this chunk is always null bytes.
+ class NullChunk : public NonSectionChunk {
+ public:
+-  explicit NullChunk(size_t n) : size(n) { hasData = false; }
++  explicit NullChunk(size_t n, uint32_t align) : size(n) {
++    hasData = false;
++    setAlignment(align);
++  }
++  explicit NullChunk(COFFLinkerContext &ctx) : NullChunk(ctx.config.wordsize, ctx.config.wordsize) {}
+   size_t getSize() const override { return size; }
+ 
+   void writeTo(uint8_t *buf) const override {
+@@ -848,8 +852,8 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+           !s->file->hybridFile) {
+         lookupsTerminator = lookupsChunk;
+         addressesTerminator = addressesChunk;
+-        lookupsChunk = make<NullChunk>(ctx.config.wordsize);
+-        addressesChunk = make<NullChunk>(ctx.config.wordsize);
++        lookupsChunk = make<NullChunk>(ctx);
++        addressesChunk = make<NullChunk>(ctx);
+ 
+         ctx.addArm64XReloc(IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE, nullptr,
+                            lookupsChunk, 0, nullptr, hintChunk,
+@@ -878,19 +882,18 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+         auxIatCopy.push_back(chunk);
+         s->file->auxImpCopySym->setLocation(chunk);
+       } else if (ctx.config.machine == ARM64X) {
+-        auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
+-        auxIatCopy.push_back(make<NullChunk>(ctx.config.wordsize));
++        auxIat.push_back(make<NullChunk>(ctx));
++        auxIatCopy.push_back(make<NullChunk>(ctx));
+       }
+     }
+     // Terminate with null values.
+-    lookups.push_back(lookupsTerminator ? lookupsTerminator
+-                                        : make<NullChunk>(ctx.config.wordsize));
++    lookups.push_back(lookupsTerminator ? lookupsTerminator : make<NullChunk>(ctx));
+     addresses.push_back(addressesTerminator
+-                            ? addressesTerminator
+-                            : make<NullChunk>(ctx.config.wordsize));
++                        ? addressesTerminator
++                        : make<NullChunk>(ctx));
+     if (isArm64EC(ctx.config.machine)) {
+-      auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
+-      auxIatCopy.push_back(make<NullChunk>(ctx.config.wordsize));
++      auxIat.push_back(make<NullChunk>(ctx));
++      auxIatCopy.push_back(make<NullChunk>(ctx));
+     }
+ 
+     for (int i = 0, e = syms.size(); i < e; ++i) {
+@@ -926,7 +929,7 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+     }
+   }
+   // Add null terminator.
+-  dirs.push_back(make<NullChunk>(sizeof(ImportDirectoryTableEntry)));
++  dirs.push_back(make<NullChunk>(sizeof(ImportDirectoryTableEntry), 4));
+ }
+ 
+ std::vector<Chunk *> DelayLoadContents::getChunks() {
+@@ -1013,10 +1016,10 @@ void DelayLoadContents::create() {
+           saver().save("__tailMerge_" + syms[0]->getDLLName().lower());
+       target.symtab.addSynthetic(tmName, tm);
+       // Terminate with null values.
+-      addresses.push_back(make<NullChunk>(8));
+-      names.push_back(make<NullChunk>(8));
++      addresses.push_back(make<NullChunk>(8, ctx.config.wordsize));
++      names.push_back(make<NullChunk>(8, ctx.config.wordsize));
+       if (target.machine == ARM64EC) {
+-        auxIat.push_back(make<NullChunk>(8));
++        auxIat.push_back(make<NullChunk>(8, ctx.config.wordsize));
+         if (ctx.hybridTarget) {
+           ctx.addArm64XReloc(IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA, nullptr, dir,
+                              offsetof(delay_import_directory_table_entry,
+@@ -1032,8 +1035,7 @@ void DelayLoadContents::create() {
+       }
+     });
+ 
+-    auto *mh = make<NullChunk>(8);
+-    mh->setAlignment(8);
++    auto *mh = make<NullChunk>(8, 8);
+     moduleHandles.push_back(mh);
+ 
+     // Fill the delay import table header fields.
+@@ -1046,7 +1048,7 @@ void DelayLoadContents::create() {
+   if (unwind)
+     unwindinfo.push_back(unwind);
+   // Add null terminator.
+-  dirs.push_back(make<NullChunk>(sizeof(delay_import_directory_table_entry)));
++  dirs.push_back(make<NullChunk>(sizeof(delay_import_directory_table_entry), 4));
+ }
+ 
+ Chunk *DelayLoadContents::newTailMergeChunk(COFFTargetContext &target,
+diff --git a/lld/test/COFF/arm64x-import.test b/lld/test/COFF/arm64x-import.test
+index 28c6bb4e1851..294dd0851606 100644
+--- a/lld/test/COFF/arm64x-import.test
++++ b/lld/test/COFF/arm64x-import.test
+@@ -11,6 +11,8 @@ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test4-arm64ec.s -o test4-arm6
+ RUN: llvm-mc -filetype=obj -triple=aarch64-windows test4-arm64.s -o test4-arm64.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test5-arm64ec.s -o test5-arm64ec.obj
+ RUN: llvm-mc -filetype=obj -triple=aarch64-windows test5-arm64.s -o test5-arm64.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test6-arm64ec.s -o test6-arm64ec.obj
++RUN: llvm-mc -filetype=obj -triple=aarch64-windows test6-arm64.s -o test6-arm64.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows stubs.s -o stubs.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
+ RUN: llvm-mc -filetype=obj -triple=aarch64-windows %S/Inputs/loadconfig-arm64.s -o loadconfig-arm64.obj
+@@ -214,6 +216,45 @@ RUN: llvm-readobj --hex-dump=.testa test5.dll | FileCheck -check-prefix=TEST5A %
+ TEST5A: 0x180008000 00200000 08200000 28200000
+ 
+ 
++RUN: lld-link -machine:arm64x -dll -noentry -out:test6.dll loadconfig-arm64.obj loadconfig-arm64ec.obj \
++RUN:          stubs.obj test6-arm64ec.obj test6-arm64.obj test-arm64ec.lib test2-arm64.lib
++
++RUN: llvm-readobj --coff-imports test6.dll | FileCheck -check-prefix=IMPORTS6 %s
++
++IMPORTS6:      File: test6.dll
++IMPORTS6-NEXT: Format: COFF-ARM64X
++IMPORTS6-NEXT: Arch: aarch64
++IMPORTS6-NEXT: AddressSize: 64bit
++IMPORTS6-NEXT: Import {
++IMPORTS6-NEXT:   Name: test.dll
++IMPORTS6-NEXT:   ImportLookupTableRVA: 0x3368
++IMPORTS6-NEXT:   ImportAddressTableRVA: 0x2000
++IMPORTS6-NEXT: }
++IMPORTS6-NEXT: Import {
++IMPORTS6-NEXT:   Name: test2.dll
++IMPORTS6-NEXT:   ImportLookupTableRVA: 0x3380
++IMPORTS6-NEXT:   ImportAddressTableRVA: 0x2018
++IMPORTS6-NEXT:   Symbol: otherfunc (0)
++IMPORTS6-NEXT: }
++IMPORTS6-NEXT: HybridObject {
++IMPORTS6-NEXT:   Format: COFF-ARM64EC
++IMPORTS6-NEXT:   Arch: aarch64
++IMPORTS6-NEXT:   AddressSize: 64bit
++IMPORTS6-NEXT:   Import {
++IMPORTS6-NEXT:     Name: test.dll
++IMPORTS6-NEXT:     ImportLookupTableRVA: 0x3368
++IMPORTS6-NEXT:     ImportAddressTableRVA: 0x2000
++IMPORTS6-NEXT:     Symbol: func1 (0)
++IMPORTS6-NEXT:     Symbol: func2 (0)
++IMPORTS6-NEXT:   }
++IMPORTS6-NEXT:   Import {
++IMPORTS6-NEXT:     Name: test2.dll
++IMPORTS6-NEXT:     ImportLookupTableRVA: 0x3388
++IMPORTS6-NEXT:     ImportAddressTableRVA: 0x2020
++IMPORTS6-NEXT:   }
++IMPORTS6-NEXT: }
++
++
+ #--- test1-arm64ec.s
+     .section .test, "r"
+     .rva __imp_func1
+@@ -286,6 +327,15 @@ TEST5A: 0x180008000 00200000 08200000 28200000
+     .rva __imp_func4
+     .rva __imp_otherfunc
+ 
++#--- test6-arm64ec.s
++    .section .test, "r"
++    .rva __imp_func1
++    .rva __imp_func2
++
++#--- test6-arm64.s
++    .section .test, "r"
++    .rva __imp_otherfunc
++
+ #--- stubs.s
+     .text
+     .globl __icall_helper_arm64ec
+-- 
+2.25.1
+

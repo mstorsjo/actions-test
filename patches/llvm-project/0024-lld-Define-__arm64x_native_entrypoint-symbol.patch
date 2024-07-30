@@ -1,0 +1,53 @@
+From 22a46915e4d2e522fda0e84fe814c745c667cfa9 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sat, 10 Jun 2023 21:40:33 +0200
+Subject: [PATCH 24/55] [lld] Define __arm64x_native_entrypoint symbol.
+
+---
+ lld/COFF/Driver.cpp                       | 1 +
+ lld/COFF/Writer.cpp                       | 3 +++
+ lld/test/COFF/Inputs/loadconfig-arm64ec.s | 2 +-
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index d13e4d56241e..80bee3d38eae 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -2412,6 +2412,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+   if (isArm64EC(config->machine)) {
+     ctx.symtab.addAbsolute("__arm64x_extra_rfe_table", 0);
+     ctx.symtab.addAbsolute("__arm64x_extra_rfe_table_size", 0);
++    ctx.symtab.addAbsolute("__arm64x_native_entrypoint", 0);
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata", 0);
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata_count", 0);
+     ctx.symtab.addAbsolute("__hybrid_auxiliary_iat", 0);
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 4e662e97d47b..4c41e7befd38 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -2266,6 +2266,9 @@ void Writer::setECSymbols() {
+   Symbol *iatCopySym = ctx.symtab.findUnderscore("__hybrid_auxiliary_iat_copy");
+   replaceSymbol<DefinedSynthetic>(iatCopySym, "__hybrid_auxiliary_iat_copy",
+                                   idata.auxIatCopyChunk);
++
++  Symbol *sym = ctx.symtab.findUnderscore("__arm64x_native_entrypoint");
++  cast<DefinedAbsolute>(sym)->setVA(ctx.config.imageBase);
+ }
+ 
+ // Write section contents to a mmap'ed file.
+diff --git a/lld/test/COFF/Inputs/loadconfig-arm64ec.s b/lld/test/COFF/Inputs/loadconfig-arm64ec.s
+index 72d6a1ed64d0..e463c4644c97 100644
+--- a/lld/test/COFF/Inputs/loadconfig-arm64ec.s
++++ b/lld/test/COFF/Inputs/loadconfig-arm64ec.s
+@@ -73,7 +73,7 @@ __chpe_metadata:
+         .rva __os_arm64x_check_call
+         .rva __os_arm64x_check_icall
+         .rva __os_arm64x_check_icall_cfg
+-        .word 0 // __arm64x_native_entrypoint
++        .rva __arm64x_native_entrypoint
+         .rva __hybrid_auxiliary_iat
+         .word __x64_code_ranges_to_entry_points_count
+         .word __arm64x_redirection_metadata_count
+-- 
+2.25.1
+

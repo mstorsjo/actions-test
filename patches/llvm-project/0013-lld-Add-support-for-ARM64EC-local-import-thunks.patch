@@ -1,0 +1,80 @@
+From 1e8eb1e6c151070dc19c48bdd03272a06e18b9fa Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Mon, 26 Jun 2023 14:36:36 +0200
+Subject: [PATCH 13/55] [lld] Add support for ARM64EC local import thunks.
+
+FIXME: __imp_aux_ symbols?
+---
+ lld/COFF/Chunks.cpp                 | 11 +----------
+ lld/COFF/Chunks.h                   |  2 +-
+ lld/test/COFF/arm64ec-localimport.s | 23 +++++++++++++++++++++++
+ 3 files changed, 25 insertions(+), 11 deletions(-)
+ create mode 100644 lld/test/COFF/arm64ec-localimport.s
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index 8aa983fee945..efd18eac3cc2 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -998,16 +998,7 @@ void BaserelChunk::writeTo(uint8_t *buf) const {
+ }
+ 
+ uint8_t Baserel::getDefaultType(llvm::COFF::MachineTypes machine) {
+-  switch (machine) {
+-  case AMD64:
+-  case ARM64:
+-    return IMAGE_REL_BASED_DIR64;
+-  case I386:
+-  case ARMNT:
+-    return IMAGE_REL_BASED_HIGHLOW;
+-  default:
+-    llvm_unreachable("unknown machine type");
+-  }
++  return is64Bit(machine) ? IMAGE_REL_BASED_DIR64 : IMAGE_REL_BASED_HIGHLOW;
+ }
+ 
+ MergeChunk::MergeChunk(uint32_t alignment)
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index bc071cc1b2a9..acf44f5795a1 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -712,7 +712,7 @@ public:
+   Baserel(uint32_t v, uint8_t ty) : rva(v), type(ty) {}
+   explicit Baserel(uint32_t v, llvm::COFF::MachineTypes machine)
+       : Baserel(v, getDefaultType(machine)) {}
+-  uint8_t getDefaultType(llvm::COFF::MachineTypes machine);
++  static uint8_t getDefaultType(llvm::COFF::MachineTypes machine);
+ 
+   uint32_t rva;
+   uint8_t type;
+diff --git a/lld/test/COFF/arm64ec-localimport.s b/lld/test/COFF/arm64ec-localimport.s
+new file mode 100644
+index 000000000000..dfbb8edc045d
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-localimport.s
+@@ -0,0 +1,23 @@
++// REQUIRES: aarch64
++// RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %s -o %t.obj
++// RUN: lld-link -machine:arm64ec -dll -noentry %t.obj -out:%t.dll
++
++// RUN: llvm-readobj --coff-basereloc %t.dll | FileCheck -check-prefix=RELOCS %s
++// RELOCS:       Entry {
++// RELOCS-NEXT:    Type: DIR64
++// RELOCS-NEXT:    Address: 0x2000
++// RELOCS-NEXT:  }
++
++// RUN: llvm-readobj --hex-dump=.test %t.dll | FileCheck -check-prefix=TEST %s
++// TEST: 0x180003000 00200000
++
++// RUN: llvm-readobj --hex-dump=.rdata %t.dll | FileCheck -check-prefix=RDATA %s
++// RDATA: 0x180002000 00100080 01000000
++
++    .text
++    .globl myfunc
++myfunc:
++    ret
++
++    .section .test, "r"
++    .rva __imp_myfunc
+-- 
+2.25.1
+

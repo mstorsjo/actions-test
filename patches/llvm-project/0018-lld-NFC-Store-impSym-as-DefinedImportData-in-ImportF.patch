@@ -1,0 +1,60 @@
+From 74535a4b10bca6369e97f269f283607e7683437a Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 7 Sep 2023 14:25:20 +0200
+Subject: [PATCH 18/55] [lld] [NFC] Store impSym as DefinedImportData in
+ ImportFile.
+
+---
+ lld/COFF/InputFiles.h    | 2 +-
+ lld/COFF/SymbolTable.cpp | 4 ++--
+ lld/COFF/SymbolTable.h   | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/lld/COFF/InputFiles.h b/lld/COFF/InputFiles.h
+index cabd87ba673e..deabe95a4d62 100644
+--- a/lld/COFF/InputFiles.h
++++ b/lld/COFF/InputFiles.h
+@@ -343,7 +343,7 @@ public:
+ 
+   static bool classof(const InputFile *f) { return f->kind() == ImportKind; }
+ 
+-  Symbol *impSym = nullptr;
++  DefinedImportData *impSym = nullptr;
+   Symbol *thunkSym = nullptr;
+   std::string dllName;
+ 
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index 4c83770e0241..b504451cc531 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -790,12 +790,12 @@ Symbol *SymbolTable::addCommon(InputFile *f, StringRef n, uint64_t size,
+   return s;
+ }
+ 
+-Symbol *SymbolTable::addImportData(StringRef n, ImportFile *f) {
++DefinedImportData *SymbolTable::addImportData(StringRef n, ImportFile *f) {
+   auto [s, wasInserted] = insert(n, nullptr);
+   s->isUsedInRegularObj = true;
+   if (wasInserted || isa<Undefined>(s) || s->isLazy()) {
+     replaceSymbol<DefinedImportData>(s, n, f);
+-    return s;
++    return cast<DefinedImportData>(s);
+   }
+ 
+   reportDuplicate(s, f);
+diff --git a/lld/COFF/SymbolTable.h b/lld/COFF/SymbolTable.h
+index 93b376b69f7e..d22021e73c87 100644
+--- a/lld/COFF/SymbolTable.h
++++ b/lld/COFF/SymbolTable.h
+@@ -102,7 +102,7 @@ public:
+   Symbol *addCommon(InputFile *f, StringRef n, uint64_t size,
+                     const llvm::object::coff_symbol_generic *s = nullptr,
+                     CommonChunk *c = nullptr);
+-  Symbol *addImportData(StringRef n, ImportFile *f);
++  DefinedImportData *addImportData(StringRef n, ImportFile *f);
+   Symbol *addImportThunk(StringRef name, DefinedImportData *s,
+                          uint16_t machine);
+   void addLibcall(StringRef name);
+-- 
+2.25.1
+

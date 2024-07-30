@@ -1,0 +1,87 @@
+From 793351c886b6591ee5c4844f8e2a66e8028a9202 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 7 Sep 2023 01:32:39 +0200
+Subject: [PATCH 17/55] [lld] Always locate IAT at the beginning of .rdata
+ section and align its size to 4KB on ARM64EC.
+
+---
+ lld/COFF/Writer.cpp               | 22 +++++++++++++++++++++-
+ lld/test/COFF/arm64ec-import.test |  7 ++++++-
+ 2 files changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 0f484c8261e4..f0406d33b504 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -217,6 +217,7 @@ private:
+   void createExportTable();
+   void mergeSections();
+   void sortECChunks();
++  void appendECImportTables();
+   void removeUnusedSections();
+   void assignAddresses();
+   bool isInRange(uint16_t relType, uint64_t s, uint64_t p, int margin);
+@@ -747,6 +748,7 @@ void Writer::run() {
+     createExportTable();
+     mergeSections();
+     sortECChunks();
++    appendECImportTables();
+     removeUnusedSections();
+     finalizeAddresses();
+     removeEmptySections();
+@@ -902,12 +904,30 @@ void Writer::addSyntheticIdata() {
+   // Add each type in the correct order.
+   add(".idata$2", idata.dirs);
+   add(".idata$4", idata.lookups);
+-  add(".idata$5", idata.addresses);
++  if (!isArm64EC(ctx.config.machine))
++    add(".idata$5", idata.addresses);
+   if (!idata.hints.empty())
+     add(".idata$6", idata.hints);
+   add(".idata$7", idata.dllNames);
+ }
+ 
++void Writer::appendECImportTables() {
++  if (!isArm64EC(ctx.config.machine) || idata.addresses.empty())
++    return;
++
++  if (!rdataSec->chunks.empty())
++    rdataSec->chunks.front()->setAlignment(
++        std::max(0x1000u, rdataSec->chunks.front()->getAlignment()));
++
++  iatStart = idata.addresses.front();
++  size_t size = 0;
++  for (Chunk *c : idata.addresses)
++    size += c->getSize();
++  iatSize = alignTo(size, 0x1000);
++  rdataSec->chunks.insert(rdataSec->chunks.begin(), idata.addresses.begin(),
++                          idata.addresses.end());
++}
++
+ // Locate the first Chunk and size of the import directory list and the
+ // IAT.
+ void Writer::locateImportTables() {
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index b7374d92fc6d..0e98c77f04dc 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -13,10 +13,15 @@ RUN: llvm-readobj --coff-imports out.dll | FileCheck -check-prefix=IMPORTS %s
+ IMPORTS:      Import {
+ IMPORTS-NEXT:   Name: test.dll
+ IMPORTS-NEXT:   ImportLookupTableRVA:
+-IMPORTS-NEXT:   ImportAddressTableRVA:
++IMPORTS-NEXT:   ImportAddressTableRVA: 0x2000
+ IMPORTS-NEXT:   Symbol: myfunc (0)
+ IMPORTS-NEXT: }
+ 
++RUN: llvm-readobj --headers out.dll | FileCheck -check-prefix=HEADERS %s
++HEADERS:  LoadConfigTableRVA: 0x3008
++HEADERS:  IATRVA: 0x2000
++HEADERS:  IATSize: 0x1000
++
+ #--- test.s
+     .section .test, "r"
+     .globl arm64ec_data_sym
+-- 
+2.25.1
+

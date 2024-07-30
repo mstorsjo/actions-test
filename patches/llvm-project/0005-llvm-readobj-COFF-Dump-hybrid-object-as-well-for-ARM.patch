@@ -1,0 +1,318 @@
+From 95312bce504ad44bd85c3bba2012d68435a8af0b Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sat, 20 Jan 2024 01:07:17 +0100
+Subject: [PATCH 05/55] [llvm-readobj][COFF] Dump hybrid object as well for
+ ARM64X files.
+
+---
+ llvm/include/llvm/Object/COFF.h               |  1 +
+ llvm/lib/Object/COFFObjectFile.cpp            | 50 +++++++++++++++++++
+ .../tools/llvm-readobj/COFF/arm64x-reloc.yaml | 27 ++++++++++
+ llvm/tools/llvm-readobj/COFFDumper.cpp        | 16 ++++++
+ llvm/tools/llvm-readobj/ObjDumper.cpp         | 28 ++++++-----
+ llvm/tools/llvm-readobj/ObjDumper.h           |  5 ++
+ llvm/tools/llvm-readobj/llvm-readobj.cpp      | 13 +++--
+ 7 files changed, 123 insertions(+), 17 deletions(-)
+
+diff --git a/llvm/include/llvm/Object/COFF.h b/llvm/include/llvm/Object/COFF.h
+index 16f0d469d9aa..ad09441fc25e 100644
+--- a/llvm/include/llvm/Object/COFF.h
++++ b/llvm/include/llvm/Object/COFF.h
+@@ -1085,6 +1085,7 @@ public:
+   Expected<SubtargetFeatures> getFeatures() const override {
+     return SubtargetFeatures();
+   }
++  Expected<std::unique_ptr<MemoryBuffer>> getHybridObjectView() const;
+ 
+   import_directory_iterator import_directory_begin() const;
+   import_directory_iterator import_directory_end() const;
+diff --git a/llvm/lib/Object/COFFObjectFile.cpp b/llvm/lib/Object/COFFObjectFile.cpp
+index 65564689f092..274d6d618488 100644
+--- a/llvm/lib/Object/COFFObjectFile.cpp
++++ b/llvm/lib/Object/COFFObjectFile.cpp
+@@ -1646,6 +1646,56 @@ StringRef COFFObjectFile::mapDebugSectionName(StringRef Name) const {
+       .Default(Name);
+ }
+ 
++Expected<std::unique_ptr<MemoryBuffer>>
++COFFObjectFile::getHybridObjectView() const {
++  if (getMachine() != COFF::IMAGE_FILE_MACHINE_ARM64X)
++    return nullptr;
++
++  std::unique_ptr<WritableMemoryBuffer> HybridData =
++      WritableMemoryBuffer::getNewUninitMemBuffer(Data.getBufferSize());
++  memcpy(HybridData->getBufferStart(), Data.getBufferStart(),
++         Data.getBufferSize());
++
++  bool gotArm64XReloc = false;
++
++  for (auto DynReloc : dynamic_relocs()) {
++    if (DynReloc.getType() != COFF::IMAGE_DYNAMIC_RELOCATION_ARM64X)
++      continue;
++
++    for (auto reloc : DynReloc.arm64x_relocs()) {
++      gotArm64XReloc = true;
++
++      uint32_t rva = reloc.getRVA();
++      void *Ptr;
++      uint64_t IntPtr;
++      if (rva & ~0xfff) {
++        cantFail(getRvaPtr(rva, IntPtr));
++        Ptr = HybridData->getBufferStart() + IntPtr -
++              reinterpret_cast<uintptr_t>(base());
++      } else {
++        Ptr = HybridData->getBufferStart() + rva;
++      }
++
++      switch (reloc.getType()) {
++      case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL:
++        memset(Ptr, 0, reloc.getSize());
++        break;
++      case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE: {
++        auto Value = static_cast<ulittle64_t>(reloc.getValue());
++        memcpy(Ptr, &Value, reloc.getSize());
++        break;
++      }
++      case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA:
++        *reinterpret_cast<ulittle32_t *>(Ptr) += reloc.getValue();
++        break;
++      }
++    }
++  }
++  if (!gotArm64XReloc)
++    return nullptr;
++  return std::move(HybridData);
++}
++
+ bool ImportDirectoryEntryRef::
+ operator==(const ImportDirectoryEntryRef &Other) const {
+   return ImportTable == Other.ImportTable && Index == Other.Index;
+diff --git a/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml b/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml
+index df2d83db3a6a..6e71e5397217 100644
+--- a/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml
++++ b/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml
+@@ -86,6 +86,32 @@
+ # CHECK-NEXT:   ]
+ # CHECK-NEXT: ]
+ 
++# RUN: llvm-readobj --hex-dump=.test %t.dll | FileCheck --check-prefix=TEST %s
++# TEST:      Format: COFF-ARM64X
++# TEST-NEXT: Arch: aarch64
++# TEST-NEXT: AddressSize: 64bit
++# TEST-EMPTY:
++# TEST-NEXT: Hex dump of section '.test':
++# TEST-NEXT: 0x180006000 11112222 33334444 55556666 77778888 ..""33DDUUffww..
++# TEST-NEXT: 0x180006010 9999aaaa bbbbcccc ddddeeee ffff0000 ................
++# TEST-NEXT: 0x180006020 00000000 00000000 00000000 00000000 ................
++# TEST-NEXT: 0x180006030 00000000 00000000 00000000 00000000 ................
++# TEST-NEXT: 0x180006040 10101010 20202020 30303030 40404040 ....    0000@@@@
++# TEST-NEXT: 0x180006050 50505050 60606060 70707070 80808080 PPPP````pppp....
++# TEST-NEXT: HybridObject {
++# TEST-NEXT:   Format: COFF-ARM64EC
++# TEST-NEXT:   Arch: aarch64
++# TEST-NEXT:   AddressSize: 64bit
++# TEST-EMPTY:
++# TEST-NEXT:   Hex dump of section '.test':
++# TEST-NEXT:   0x180006000 00002222 00000000 55556666 77778888 ..""....UUffww..
++# TEST-NEXT:   0x180006010 00000000 00000000 ddddeeee ffff0000 ................
++# TEST-NEXT:   0x180006020 12340000 23456789 11223344 55667788 .4..#Eg.."3DUfw.
++# TEST-NEXT:   0x180006030 00000000 00000000 00000000 00000000 ................
++# TEST-NEXT:   0x180006040 941c1110 28392220 20303030 20404040 ....(9"  000 @@@
++# TEST-NEXT:   0x180006050 50505050 60606060 70707070 80808080 PPPP````pppp....
++# TEST-NEXT: }
++
+ 
+ --- !COFF
+ OptionalHeader:
+@@ -203,6 +229,7 @@ symbols:         []
+ 
+ # RUN: yaml2obj %s --docnum=2 -o %t2.dll
+ # RUN: llvm-readobj --coff-load-config %t2.dll | FileCheck  --check-prefixes=CHECK,V2 %s
++# RUN: llvm-readobj --hex-dump=.test %t2.dll | FileCheck --check-prefix=TEST %s
+ 
+ --- !COFF
+ OptionalHeader:
+diff --git a/llvm/tools/llvm-readobj/COFFDumper.cpp b/llvm/tools/llvm-readobj/COFFDumper.cpp
+index 65d67d29a5aa..214b2be96cab 100644
+--- a/llvm/tools/llvm-readobj/COFFDumper.cpp
++++ b/llvm/tools/llvm-readobj/COFFDumper.cpp
+@@ -99,6 +99,7 @@ public:
+   void printCOFFTLSDirectory() override;
+   void printCOFFResources() override;
+   void printCOFFLoadConfig() override;
++  void printCOFFHybridObject() override;
+   void printCodeViewDebugInfo() override;
+   void mergeCodeViewTypes(llvm::codeview::MergingTypeTableBuilder &CVIDs,
+                           llvm::codeview::MergingTypeTableBuilder &CVTypes,
+@@ -2271,3 +2272,18 @@ void COFFDumper::printCOFFTLSDirectory(
+                ArrayRef(ImageSectionCharacteristics),
+                COFF::SectionCharacteristics(COFF::IMAGE_SCN_ALIGN_MASK));
+ }
++
++void COFFDumper::printCOFFHybridObject() {
++  Expected<std::unique_ptr<MemoryBuffer>> HybridViewOrErr =
++      Obj->getHybridObjectView();
++  if (!HybridViewOrErr)
++    reportError(HybridViewOrErr.takeError(), Obj->getFileName().str());
++  if (*HybridViewOrErr) {
++    Expected<std::unique_ptr<COFFObjectFile>> HybridObjOrErr =
++        COFFObjectFile::create(**HybridViewOrErr);
++    if (!HybridObjOrErr)
++      reportError(HybridObjOrErr.takeError(), Obj->getFileName().str());
++    DictScope D(Writer, "HybridObject");
++    ObjDumper::dumpObject(**HybridObjOrErr, Writer, nullptr, true);
++  }
++}
+diff --git a/llvm/tools/llvm-readobj/ObjDumper.cpp b/llvm/tools/llvm-readobj/ObjDumper.cpp
+index 0980d2ad3a85..2700191c739f 100644
+--- a/llvm/tools/llvm-readobj/ObjDumper.cpp
++++ b/llvm/tools/llvm-readobj/ObjDumper.cpp
+@@ -91,8 +91,10 @@ void ObjDumper::printAsStringList(StringRef StringContent,
+ void ObjDumper::printFileSummary(StringRef FileStr, object::ObjectFile &Obj,
+                                  ArrayRef<std::string> InputFilenames,
+                                  const object::Archive *A) {
+-  W.startLine() << "\n";
+-  W.printString("File", FileStr);
++  if (!FileStr.empty()) {
++    W.startLine() << "\n";
++    W.printString("File", FileStr);
++  }
+   W.printString("Format", Obj.getFileFormatName());
+   W.printString("Arch", Triple::getArchTypeName(Obj.getArch()));
+   W.printString("AddressSize",
+@@ -163,7 +165,8 @@ void ObjDumper::printSectionsAsString(const object::ObjectFile &Obj,
+   for (object::SectionRef Section :
+        getSectionRefsByNameOrIndex(Obj, Sections)) {
+     StringRef SectionName = unwrapOrError(Obj.getFileName(), Section.getName());
+-    W.startLine() << "\nString dump of section '" << SectionName << "':\n";
++    W.getOStream() << '\n';
++    W.startLine() << "String dump of section '" << SectionName << "':\n";
+ 
+     StringRef SectionContent =
+         unwrapOrError(Obj.getFileName(), Section.getContents());
+@@ -180,7 +183,8 @@ void ObjDumper::printSectionsAsHex(const object::ObjectFile &Obj,
+   for (object::SectionRef Section :
+        getSectionRefsByNameOrIndex(Obj, Sections)) {
+     StringRef SectionName = unwrapOrError(Obj.getFileName(), Section.getName());
+-    W.startLine() << "\nHex dump of section '" << SectionName << "':\n";
++    W.getOStream() << '\n';
++    W.startLine() << "Hex dump of section '" << SectionName << "':\n";
+ 
+     StringRef SectionContent =
+         unwrapOrError(Obj.getFileName(), Section.getContents());
+@@ -196,13 +200,13 @@ void ObjDumper::printSectionsAsHex(const object::ObjectFile &Obj,
+ 
+       W.startLine() << format_hex(Section.getAddress() + (SecPtr - SecContent),
+                                   10);
+-      W.startLine() << ' ';
++      W.getOStream() << ' ';
+       for (i = 0; TmpSecPtr < SecEnd && i < 4; ++i) {
+         for (k = 0; TmpSecPtr < SecEnd && k < 4; k++, TmpSecPtr++) {
+           uint8_t Val = *(reinterpret_cast<const uint8_t *>(TmpSecPtr));
+-          W.startLine() << format_hex_no_prefix(Val, 2);
++          W.getOStream() << format_hex_no_prefix(Val, 2);
+         }
+-        W.startLine() << ' ';
++        W.getOStream() << ' ';
+       }
+ 
+       // We need to print the correct amount of spaces to match the format.
+@@ -211,15 +215,15 @@ void ObjDumper::printSectionsAsHex(const object::ObjectFile &Obj,
+       // Least, if we cut in a middle of a row, we add the remaining characters,
+       // which is (8 - (k * 2)).
+       if (i < 4)
+-        W.startLine() << format("%*c", (4 - i) * 8 + (4 - i), ' ');
++        W.getOStream() << format("%*c", (4 - i) * 8 + (4 - i), ' ');
+       if (k < 4)
+-        W.startLine() << format("%*c", 8 - k * 2, ' ');
++        W.getOStream() << format("%*c", 8 - k * 2, ' ');
+ 
+       TmpSecPtr = SecPtr;
+       for (i = 0; TmpSecPtr + i < SecEnd && i < 16; ++i)
+-        W.startLine() << (isPrint(TmpSecPtr[i])
+-                              ? static_cast<char>(TmpSecPtr[i])
+-                              : '.');
++        W.getOStream() << (isPrint(TmpSecPtr[i])
++                               ? static_cast<char>(TmpSecPtr[i])
++                               : '.');
+ 
+       W.startLine() << '\n';
+     }
+diff --git a/llvm/tools/llvm-readobj/ObjDumper.h b/llvm/tools/llvm-readobj/ObjDumper.h
+index cd744e3bbfb7..ffe6797711c8 100644
+--- a/llvm/tools/llvm-readobj/ObjDumper.h
++++ b/llvm/tools/llvm-readobj/ObjDumper.h
+@@ -149,6 +149,7 @@ public:
+   virtual void printCOFFTLSDirectory() {}
+   virtual void printCOFFResources() {}
+   virtual void printCOFFLoadConfig() { }
++  virtual void printCOFFHybridObject() {}
+   virtual void printCodeViewDebugInfo() { }
+   virtual void
+   mergeCodeViewTypes(llvm::codeview::MergingTypeTableBuilder &CVIDs,
+@@ -185,6 +186,10 @@ public:
+   void reportUniqueWarning(Error Err) const;
+   void reportUniqueWarning(const Twine &Msg) const;
+ 
++  static void dumpObject(object::ObjectFile &Obj, ScopedPrinter &Writer,
++                         const object::Archive *A = nullptr,
++                         bool IsHybrid = false);
++
+ protected:
+   ScopedPrinter &W;
+ 
+diff --git a/llvm/tools/llvm-readobj/llvm-readobj.cpp b/llvm/tools/llvm-readobj/llvm-readobj.cpp
+index 15d838617063..b3df584a410d 100644
+--- a/llvm/tools/llvm-readobj/llvm-readobj.cpp
++++ b/llvm/tools/llvm-readobj/llvm-readobj.cpp
+@@ -360,8 +360,8 @@ createDumper(const ObjectFile &Obj, ScopedPrinter &Writer) {
+ }
+ 
+ /// Dumps the specified object file.
+-static void dumpObject(ObjectFile &Obj, ScopedPrinter &Writer,
+-                       const Archive *A = nullptr) {
++void ObjDumper::dumpObject(ObjectFile &Obj, ScopedPrinter &Writer,
++                           const Archive *A, bool IsHybrid) {
+   std::string FileStr =
+       A ? Twine(A->getFileName() + "(" + Obj.getFileName() + ")").str()
+         : Obj.getFileName().str();
+@@ -538,6 +538,9 @@ static void dumpObject(ObjectFile &Obj, ScopedPrinter &Writer,
+     Dumper->printStackMap();
+   if (opts::PrintStackSizes)
+     Dumper->printStackSizes();
++
++  if (!IsHybrid && Obj.isCOFF())
++    Dumper->printCOFFHybridObject();
+ }
+ 
+ /// Dumps each object file in \a Arc;
+@@ -553,7 +556,7 @@ static void dumpArchive(const Archive *Arc, ScopedPrinter &Writer) {
+ 
+     Binary *Bin = ChildOrErr->get();
+     if (ObjectFile *Obj = dyn_cast<ObjectFile>(Bin))
+-      dumpObject(*Obj, Writer, Arc);
++      ObjDumper::dumpObject(*Obj, Writer, Arc);
+     else if (COFFImportFile *Imp = dyn_cast<COFFImportFile>(Bin))
+       dumpCOFFImportFile(Imp, Writer);
+     else
+@@ -572,7 +575,7 @@ static void dumpMachOUniversalBinary(const MachOUniversalBinary *UBinary,
+   for (const MachOUniversalBinary::ObjectForArch &Obj : UBinary->objects()) {
+     Expected<std::unique_ptr<MachOObjectFile>> ObjOrErr = Obj.getAsObjectFile();
+     if (ObjOrErr)
+-      dumpObject(*ObjOrErr.get(), Writer);
++      ObjDumper::dumpObject(*ObjOrErr.get(), Writer);
+     else if (auto E = isNotObjectErrorInvalidFileType(ObjOrErr.takeError()))
+       reportError(ObjOrErr.takeError(), UBinary->getFileName());
+     else if (Expected<std::unique_ptr<Archive>> AOrErr = Obj.getAsArchive())
+@@ -618,7 +621,7 @@ static void dumpInput(StringRef File, ScopedPrinter &Writer) {
+                dyn_cast<MachOUniversalBinary>(Bin.get()))
+     dumpMachOUniversalBinary(UBinary, Writer);
+   else if (ObjectFile *Obj = dyn_cast<ObjectFile>(Bin.get()))
+-    dumpObject(*Obj, Writer);
++    ObjDumper::dumpObject(*Obj, Writer);
+   else if (COFFImportFile *Import = dyn_cast<COFFImportFile>(Bin.get()))
+     dumpCOFFImportFile(Import, Writer);
+   else if (WindowsResource *WinRes = dyn_cast<WindowsResource>(Bin.get()))
+-- 
+2.25.1
+

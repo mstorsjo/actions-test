@@ -1,0 +1,72 @@
+From 3a2a6f01f0bd5a9a11e4b5c0cd0ed86915f744ac Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Mon, 18 Sep 2023 19:21:21 +0200
+Subject: [PATCH 29/55] [lld] Allow overriding EC alias symbols with alternate
+ names.
+
+---
+ lld/COFF/Driver.cpp                 |  7 ++++++-
+ lld/test/COFF/arm64ec-altnames.test | 32 +++++++++++++++++++++++++++++
+ 2 files changed, 38 insertions(+), 1 deletion(-)
+ create mode 100644 lld/test/COFF/arm64ec-altnames.test
+
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index 5e6dd5617bc2..db18ff55d207 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -2480,8 +2480,13 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+         if (!sym)
+           continue;
+         if (auto *u = dyn_cast<Undefined>(sym))
+-          if (!u->weakAlias)
++          if (!u->weakAlias || u->isECAlias()) {
+             u->weakAlias = ctx.symtab.addUndefined(to);
++            if (u->ECAlias) {
++              cast<Undefined>(u->ECAlias)->ECAlias = nullptr;
++              u->ECAlias = nullptr;
++            }
++          }
+       }
+ 
+       // If any inputs are bitcode files, the LTO code generator may create
+diff --git a/lld/test/COFF/arm64ec-altnames.test b/lld/test/COFF/arm64ec-altnames.test
+new file mode 100644
+index 000000000000..2ab1bdb8b79c
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-altnames.test
+@@ -0,0 +1,32 @@
++REQUIRES: x86
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test.s -o test.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test.dll test.obj loadconfig-arm64ec.obj "-alternatename:#testsym=altsym"
++
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++DISASM:      0000000180001000 <.text>:
++DISASM-NEXT: 180001000: 52800020     mov     w0, #0x1                // =1
++DISASM-NEXT: 180001004: d65f03c0     ret
++
++#--- test.s
++    .weak_anti_dep testsym
++.set testsym, "#testsym"
++    .weak_anti_dep "#testsym"
++.set "#testsym", thunksym
++
++    .section .test, "r"
++    .rva "#testsym"
++
++    .section .thnk,"xr",discard,thunksym
++thunksym:
++    mov w0, #2
++    ret
++
++    .section .text,"xr",discard,altsym
++    .globl altsym
++altsym:
++    mov w0, #1
++    ret
+-- 
+2.25.1
+

@@ -1,0 +1,324 @@
+From c2c61d0a04d07c899e1aae09cafc70b854c1e928 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 7 Sep 2023 21:54:19 +0200
+Subject: [PATCH 19/55] [lld] Add initial support for auxiliary IAT symbols.
+
+---
+ lld/COFF/DLL.cpp                          | 30 ++++++++++++++++++++++-
+ lld/COFF/DLL.h                            |  8 +++++-
+ lld/COFF/Driver.cpp                       |  1 +
+ lld/COFF/InputFiles.cpp                   | 21 +++++++++++++---
+ lld/COFF/InputFiles.h                     |  2 ++
+ lld/COFF/SymbolTable.cpp                  |  5 ++--
+ lld/COFF/SymbolTable.h                    |  2 +-
+ lld/COFF/Symbols.h                        | 17 ++++++++-----
+ lld/COFF/Writer.cpp                       | 11 ++++++++-
+ lld/test/COFF/Inputs/loadconfig-arm64ec.s |  2 +-
+ lld/test/COFF/arm64ec-import.test         |  7 ++++++
+ 11 files changed, 90 insertions(+), 16 deletions(-)
+
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 5f00eaded76d..6b77e3a30fa8 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -142,6 +142,16 @@ private:
+   size_t size;
+ };
+ 
++class ECImportChunk : public NonSectionChunk {
++public:
++  explicit ECImportChunk() { setAlignment(sizeof(uint64_t)); }
++  size_t getSize() const override { return sizeof(uint64_t); }
++
++  void writeTo(uint8_t *buf) const override {
++    write64le(buf, 0); // FIXME
++  }
++};
++
+ static std::vector<std::vector<DefinedImportData *>>
+ binImports(COFFLinkerContext &ctx,
+            const std::vector<DefinedImportData *> &imports) {
+@@ -160,7 +170,12 @@ binImports(COFFLinkerContext &ctx,
+     // Sort symbols by name for each group.
+     std::vector<DefinedImportData *> &syms = kv.second;
+     llvm::sort(syms, [](DefinedImportData *a, DefinedImportData *b) {
+-      return a->getName() < b->getName();
++      auto getBaseName = [](StringRef name) {
++        name.consume_front("__imp_");
++        name.consume_front("aux_");
++        return name;
++      };
++      return getBaseName(a->getName()) < getBaseName(b->getName());
+     });
+     v.push_back(std::move(syms));
+   }
+@@ -710,6 +725,19 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+   }
+   // Add null terminator.
+   dirs.push_back(make<NullChunk>(sizeof(ImportDirectoryTableEntry)));
++
++  if (ctx.config.machine == ARM64EC) {
++    std::vector<std::vector<DefinedImportData *>> av =
++        binImports(ctx, ECImports);
++    for (std::vector<DefinedImportData *> &syms : av) {
++      for (DefinedImportData *s : syms) {
++        auto chunk = make<ECImportChunk>();
++        auxIat.push_back(chunk);
++        s->setLocation(chunk);
++      }
++      auxIat.push_back(make<NullChunk>(ctx.config.wordsize));
++    }
++  }
+ }
+ 
+ std::vector<Chunk *> DelayLoadContents::getChunks() {
+diff --git a/lld/COFF/DLL.h b/lld/COFF/DLL.h
+index 7cf71f59d7c7..b2ad33d51b6b 100644
+--- a/lld/COFF/DLL.h
++++ b/lld/COFF/DLL.h
+@@ -20,17 +20,23 @@ namespace lld::coff {
+ // call create() to populate the chunk vectors.
+ class IdataContents {
+ public:
+-  void add(DefinedImportData *sym) { imports.push_back(sym); }
++  void add(ImportFile *file) {
++    imports.push_back(file->impSym);
++    if (file->impECSym)
++      ECImports.push_back(file->impECSym);
++  }
+   bool empty() { return imports.empty(); }
+ 
+   void create(COFFLinkerContext &ctx);
+ 
+   std::vector<DefinedImportData *> imports;
++  std::vector<DefinedImportData *> ECImports;
+   std::vector<Chunk *> dirs;
+   std::vector<Chunk *> lookups;
+   std::vector<Chunk *> addresses;
+   std::vector<Chunk *> hints;
+   std::vector<Chunk *> dllNames;
++  std::vector<Chunk *> auxIat;
+ };
+ 
+ // Windows-specific.
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index 47a51a540548..80f79c625b73 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -2405,6 +2405,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+     ctx.symtab.addAbsolute("__arm64x_extra_rfe_table_size", 0);
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata", 0);
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata_count", 0);
++    ctx.symtab.addAbsolute("__hybrid_auxiliary_iat", 0);
+     ctx.symtab.addAbsolute("__hybrid_code_map", 0);
+     ctx.symtab.addAbsolute("__hybrid_code_map_count", 0);
+     ctx.symtab.addAbsolute("__x64_code_ranges_to_entry_points", 0);
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 4d20106ebc89..f62c67495ece 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -1044,19 +1044,34 @@ void ImportFile::parse() {
+   this->hdr = hdr;
+   externalName = extName;
+ 
+-  impSym = ctx.symtab.addImportData(impName, this);
++  bool isCode = hdr->getType() == llvm::COFF::IMPORT_CODE;
++
++  if (ctx.config.machine != ARM64EC) {
++    impSym = ctx.symtab.addImportData(impName, this, false);
++  } else {
++    StringRef auxImpName = saver().save("__imp_aux_" + name);
++    if (isCode) {
++      impSym = ctx.symtab.addImportData(auxImpName, this, false);
++      impECSym = ctx.symtab.addImportData(impName, this, true);
++    } else {
++      impSym = ctx.symtab.addImportData(impName, this, false);
++      impECSym = ctx.symtab.addImportData(auxImpName, this, true);
++    }
++    if (!impECSym)
++      return;
++  }
+   // If this was a duplicate, we logged an error but may continue;
+   // in this case, impSym is nullptr.
+   if (!impSym)
+     return;
+ 
+   if (hdr->getType() == llvm::COFF::IMPORT_CONST)
+-    static_cast<void>(ctx.symtab.addImportData(name, this));
++    static_cast<void>(ctx.symtab.addImportData(name, this, false));
+ 
+   // If type is function, we need to create a thunk which jump to an
+   // address pointed by the __imp_ symbol. (This allows you to call
+   // DLL functions just like regular non-DLL functions.)
+-  if (hdr->getType() == llvm::COFF::IMPORT_CODE)
++  if (isCode)
+     thunkSym = ctx.symtab.addImportThunk(
+         name, cast_or_null<DefinedImportData>(impSym), hdr->Machine);
+ }
+diff --git a/lld/COFF/InputFiles.h b/lld/COFF/InputFiles.h
+index deabe95a4d62..e05438eb5e1e 100644
+--- a/lld/COFF/InputFiles.h
++++ b/lld/COFF/InputFiles.h
+@@ -344,6 +344,7 @@ public:
+   static bool classof(const InputFile *f) { return f->kind() == ImportKind; }
+ 
+   DefinedImportData *impSym = nullptr;
++  DefinedImportData *impECSym = nullptr;
+   Symbol *thunkSym = nullptr;
+   std::string dllName;
+ 
+@@ -354,6 +355,7 @@ public:
+   StringRef externalName;
+   const coff_import_header *hdr;
+   Chunk *location = nullptr;
++  Chunk *ECLocation = nullptr;
+ 
+   // We want to eliminate dllimported symbols if no one actually refers to them.
+   // These "Live" bits are used to keep track of which import library members
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index b504451cc531..78c067a06520 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -790,11 +790,12 @@ Symbol *SymbolTable::addCommon(InputFile *f, StringRef n, uint64_t size,
+   return s;
+ }
+ 
+-DefinedImportData *SymbolTable::addImportData(StringRef n, ImportFile *f) {
++DefinedImportData *SymbolTable::addImportData(StringRef n, ImportFile *f,
++                                              bool isEC) {
+   auto [s, wasInserted] = insert(n, nullptr);
+   s->isUsedInRegularObj = true;
+   if (wasInserted || isa<Undefined>(s) || s->isLazy()) {
+-    replaceSymbol<DefinedImportData>(s, n, f);
++    replaceSymbol<DefinedImportData>(s, n, f, isEC);
+     return cast<DefinedImportData>(s);
+   }
+ 
+diff --git a/lld/COFF/SymbolTable.h b/lld/COFF/SymbolTable.h
+index d22021e73c87..8d328c4273e2 100644
+--- a/lld/COFF/SymbolTable.h
++++ b/lld/COFF/SymbolTable.h
+@@ -102,7 +102,7 @@ public:
+   Symbol *addCommon(InputFile *f, StringRef n, uint64_t size,
+                     const llvm::object::coff_symbol_generic *s = nullptr,
+                     CommonChunk *c = nullptr);
+-  DefinedImportData *addImportData(StringRef n, ImportFile *f);
++  DefinedImportData *addImportData(StringRef n, ImportFile *f, bool isEC);
+   Symbol *addImportThunk(StringRef name, DefinedImportData *s,
+                          uint16_t machine);
+   void addLibcall(StringRef name);
+diff --git a/lld/COFF/Symbols.h b/lld/COFF/Symbols.h
+index 83a5cf3d9d10..cd4823a562dd 100644
+--- a/lld/COFF/Symbols.h
++++ b/lld/COFF/Symbols.h
+@@ -354,23 +354,28 @@ public:
+ // table in an output. The former has "__imp_" prefix.
+ class DefinedImportData : public Defined {
+ public:
+-  DefinedImportData(StringRef n, ImportFile *f)
+-      : Defined(DefinedImportDataKind, n), file(f) {
+-  }
++  DefinedImportData(StringRef n, ImportFile *f, bool isEC)
++      : Defined(DefinedImportDataKind, n), file(f), isEC(isEC) {}
+ 
+   static bool classof(const Symbol *s) {
+     return s->kind() == DefinedImportDataKind;
+   }
+ 
+-  uint64_t getRVA() { return file->location->getRVA(); }
+-  Chunk *getChunk() { return file->location; }
+-  void setLocation(Chunk *addressTable) { file->location = addressTable; }
++  uint64_t getRVA() { return getChunk()->getRVA(); }
++  Chunk *getChunk() { return isEC ? file->ECLocation : file->location; }
++  void setLocation(Chunk *addressTable) {
++    if (isEC)
++      file->ECLocation = addressTable;
++    else
++      file->location = addressTable;
++  }
+ 
+   StringRef getDLLName() { return file->dllName; }
+   StringRef getExternalName() { return file->externalName; }
+   uint16_t getOrdinal() { return file->hdr->OrdinalHint; }
+ 
+   ImportFile *file;
++  bool isEC;
+ 
+   // This is a pointer to the synthetic symbol associated with the load thunk
+   // for this symbol that will be called if the DLL is delay-loaded. This is
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index f0406d33b504..265f77515872 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -926,6 +926,10 @@ void Writer::appendECImportTables() {
+   iatSize = alignTo(size, 0x1000);
+   rdataSec->chunks.insert(rdataSec->chunks.begin(), idata.addresses.begin(),
+                           idata.addresses.end());
++
++  idata.auxIat.front()->setAlignment(0x1000);
++  rdataSec->chunks.insert(rdataSec->chunks.end(), idata.auxIat.begin(),
++                          idata.auxIat.end());
+ }
+ 
+ // Locate the first Chunk and size of the import directory list and the
+@@ -1207,7 +1211,7 @@ void Writer::createImportTables() {
+               " due to import of data: " + toString(ctx, *impSym));
+       delayIdata.add(impSym);
+     } else {
+-      idata.add(impSym);
++      idata.add(file);
+     }
+   }
+ }
+@@ -2236,6 +2240,11 @@ void Writer::setECSymbols() {
+   Symbol *entryPointCountSym =
+       ctx.symtab.findUnderscore("__arm64x_redirection_metadata_count");
+   cast<DefinedAbsolute>(entryPointCountSym)->setVA(ctx.ECThunks.size());
++
++  Symbol *iatSym = ctx.symtab.findUnderscore("__hybrid_auxiliary_iat");
++  replaceSymbol<DefinedSynthetic>(iatSym, "__hybrid_auxiliary_iat",
++                                  idata.auxIat.empty() ? nullptr
++                                                       : idata.auxIat.front());
+ }
+ 
+ // Write section contents to a mmap'ed file.
+diff --git a/lld/test/COFF/Inputs/loadconfig-arm64ec.s b/lld/test/COFF/Inputs/loadconfig-arm64ec.s
+index 78e7fba43a0a..49197910f201 100644
+--- a/lld/test/COFF/Inputs/loadconfig-arm64ec.s
++++ b/lld/test/COFF/Inputs/loadconfig-arm64ec.s
+@@ -74,7 +74,7 @@ __chpe_metadata:
+         .rva __os_arm64x_check_icall
+         .rva __os_arm64x_check_icall_cfg
+         .word 0 // __arm64x_native_entrypoint
+-        .word 0 // __hybrid_auxiliary_iat
++        .rva __hybrid_auxiliary_iat
+         .word __x64_code_ranges_to_entry_points_count
+         .word __arm64x_redirection_metadata_count
+         .rva __os_arm64x_get_x64_information
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index 0e98c77f04dc..ccd519606011 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -22,12 +22,19 @@ HEADERS:  LoadConfigTableRVA: 0x3008
+ HEADERS:  IATRVA: 0x2000
+ HEADERS:  IATSize: 0x1000
+ 
++RUN: llvm-readobj --hex-dump=.test out.dll | FileCheck -check-prefix=TESTSEC %s
++TESTSEC: 0x180007000 00400000 00200000
++
++RUN: llvm-readobj --coff-load-config out.dll | FileCheck -check-prefix=LOADCONFIG %s
++LOADCONFIG: AuxiliaryIAT: 0x4000
++
+ #--- test.s
+     .section .test, "r"
+     .globl arm64ec_data_sym
+     .p2align 2, 0x0
+ arm64ec_data_sym:
+     .rva __imp_myfunc
++    .rva __imp_aux_myfunc
+ 
+ #--- arm64ec-stubs.s
+     .text
+-- 
+2.25.1
+

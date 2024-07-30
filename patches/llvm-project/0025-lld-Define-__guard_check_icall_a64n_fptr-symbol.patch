@@ -1,0 +1,25 @@
+From 1cd570f37f154c2d192a9c7289570cee545723be Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sat, 10 Jun 2023 21:40:33 +0200
+Subject: [PATCH 25/55] [lld] Define __guard_check_icall_a64n_fptr symbol.
+
+FIXME: what is it for?
+---
+ lld/COFF/Driver.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index 80bee3d38eae..02da983fafc5 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -2415,6 +2415,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
+     ctx.symtab.addAbsolute("__arm64x_native_entrypoint", 0);
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata", 0);
+     ctx.symtab.addAbsolute("__arm64x_redirection_metadata_count", 0);
++    ctx.symtab.addAbsolute("__guard_check_icall_a64n_fptr", 0);
+     ctx.symtab.addAbsolute("__hybrid_auxiliary_iat", 0);
+     ctx.symtab.addAbsolute("__hybrid_auxiliary_iat_copy", 0);
+     ctx.symtab.addAbsolute("__hybrid_code_map", 0);
+-- 
+2.25.1
+

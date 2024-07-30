@@ -57,7 +57,7 @@ mkdir -p "$PREFIX"
 PREFIX="$(cd "$PREFIX" && pwd)"
 export PATH="$PREFIX/bin:$PATH"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 ANY_ARCH=$(echo $ARCHS | awk '{print $1}')
 CLANG_RESOURCE_DIR="$("$PREFIX/bin/$ANY_ARCH-w64-mingw32-clang" --print-resource-dir)"
@@ -130,8 +130,15 @@ for arch in $ARCHS; do
     if [ -n "$SANITIZERS" ]; then
         mv "${WORKDIR}/install/lib/windows/"*.dll "$PREFIX/$arch-w64-mingw32/bin"
     fi
+    INSTALLED=1
     cd ..
 done
+
+if [ -z "$INSTALLED" ]; then
+    # Don't try to move the installed files in place, if nothing was
+    # installed (e.g. if building with --build-sanitizers but not for x86).
+    exit 0
+fi
 
 if [ -h "$CLANG_RESOURCE_DIR/include" ]; then
     # symlink to system headers - skip copy

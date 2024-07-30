@@ -1,0 +1,36 @@
+From 567c84f15fbe2c730ebd94bad7c306d79f91ff32 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Mon, 26 Jun 2023 16:47:39 +0200
+Subject: [PATCH 14/55] [lld] Support ARM64EC in BitcodeFile::getMachineType.
+
+FIXME: add test
+---
+ lld/COFF/InputFiles.cpp | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index fdbe90390f5c..5a9b26a68506 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -1140,7 +1140,8 @@ void BitcodeFile::parseLazy() {
+ }
+ 
+ MachineTypes BitcodeFile::getMachineType() {
+-  switch (Triple(obj->getTargetTriple()).getArch()) {
++  Triple t(obj->getTargetTriple());
++  switch (t.getArch()) {
+   case Triple::x86_64:
+     return AMD64;
+   case Triple::x86:
+@@ -1149,7 +1150,7 @@ MachineTypes BitcodeFile::getMachineType() {
+   case Triple::thumb:
+     return ARMNT;
+   case Triple::aarch64:
+-    return ARM64;
++    return t.isWindowsArm64EC() ? ARM64EC : ARM64;
+   default:
+     return IMAGE_FILE_MACHINE_UNKNOWN;
+   }
+-- 
+2.25.1
+

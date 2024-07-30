@@ -1,0 +1,215 @@
+From 21798658b8260d14a7f60f343c7cca36a83bed2e Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sat, 24 Jun 2023 00:14:18 +0200
+Subject: [PATCH 12/55] [lld] Add support for range extention thunks for
+ ARM64EC targets.
+
+---
+ lld/COFF/Chunks.cpp                  |  7 +--
+ lld/COFF/Chunks.h                    |  9 ++--
+ lld/COFF/Writer.cpp                  | 20 ++++---
+ lld/test/COFF/arm64ec-range-thunks.s | 78 ++++++++++++++++++++++++++++
+ 4 files changed, 96 insertions(+), 18 deletions(-)
+ create mode 100644 lld/test/COFF/arm64ec-range-thunks.s
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index 1fda2343f7a5..8aa983fee945 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -840,14 +840,9 @@ const uint8_t arm64Thunk[] = {
+     0x00, 0x02, 0x1f, 0xd6, // br   x16
+ };
+ 
+-size_t RangeExtensionThunkARM64::getSize() const {
+-  assert(ctx.config.machine == ARM64);
+-  (void)&ctx;
+-  return sizeof(arm64Thunk);
+-}
++size_t RangeExtensionThunkARM64::getSize() const { return sizeof(arm64Thunk); }
+ 
+ void RangeExtensionThunkARM64::writeTo(uint8_t *buf) const {
+-  assert(ctx.config.machine == ARM64);
+   memcpy(buf, arm64Thunk, sizeof(arm64Thunk));
+   applyArm64Addr(buf + 0, target->getRVA(), rva, 12);
+   applyArm64Imm(buf + 4, target->getRVA() & 0xfff, 0);
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index f53eb5507bf3..bc071cc1b2a9 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -617,18 +617,19 @@ private:
+ 
+ class RangeExtensionThunkARM64 : public NonSectionCodeChunk {
+ public:
+-  explicit RangeExtensionThunkARM64(COFFLinkerContext &ctx, Defined *t)
+-      : target(t), ctx(ctx) {
++  explicit RangeExtensionThunkARM64(MachineTypes machine, Defined *t)
++      : target(t), machine(machine) {
+     setAlignment(4);
++    assert(llvm::COFF::isAnyArm64(machine));
+   }
+   size_t getSize() const override;
+   void writeTo(uint8_t *buf) const override;
+-  MachineTypes getMachine() const override { return ARM64; }
++  MachineTypes getMachine() const override { return machine; }
+ 
+   Defined *target;
+ 
+ private:
+-  COFFLinkerContext &ctx;
++  MachineTypes machine;
+ };
+ 
+ // Windows-specific.
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 445f310311a6..0f484c8261e4 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -222,7 +222,8 @@ private:
+   bool isInRange(uint16_t relType, uint64_t s, uint64_t p, int margin);
+   std::pair<Defined *, bool> getThunk(DenseMap<uint64_t, Defined *> &lastThunks,
+                                       Defined *target, uint64_t p,
+-                                      uint16_t type, int margin);
++                                      uint16_t type, int margin,
++                                      MachineTypes machine);
+   bool createThunks(OutputSection *os, int margin);
+   bool verifyRanges(const std::vector<Chunk *> chunks);
+   void createECCodeMap();
+@@ -404,7 +405,7 @@ bool Writer::isInRange(uint16_t relType, uint64_t s, uint64_t p, int margin) {
+     default:
+       return true;
+     }
+-  } else if (ctx.config.machine == ARM64) {
++  } else if (isAnyArm64(ctx.config.machine)) {
+     int64_t diff = AbsoluteDifference(s, p) + margin;
+     switch (relType) {
+     case IMAGE_REL_ARM64_BRANCH26:
+@@ -425,17 +426,19 @@ bool Writer::isInRange(uint16_t relType, uint64_t s, uint64_t p, int margin) {
+ // or create a new one.
+ std::pair<Defined *, bool>
+ Writer::getThunk(DenseMap<uint64_t, Defined *> &lastThunks, Defined *target,
+-                 uint64_t p, uint16_t type, int margin) {
++                 uint64_t p, uint16_t type, int margin, MachineTypes machine) {
+   Defined *&lastThunk = lastThunks[target->getRVA()];
+-  if (lastThunk && isInRange(type, lastThunk->getRVA(), p, margin))
++  if (lastThunk && isInRange(type, lastThunk->getRVA(), p, margin) &&
++      lastThunk->getChunk()->getMachine() == machine)
+     return {lastThunk, false};
+   Chunk *c;
+-  switch (ctx.config.machine) {
++  switch (machine) {
+   case ARMNT:
+     c = make<RangeExtensionThunkARM>(ctx, target);
+     break;
+   case ARM64:
+-    c = make<RangeExtensionThunkARM64>(ctx, target);
++  case ARM64EC:
++    c = make<RangeExtensionThunkARM64>(machine, target);
+     break;
+   default:
+     llvm_unreachable("Unexpected architecture");
+@@ -497,7 +500,8 @@ bool Writer::createThunks(OutputSection *os, int margin) {
+         continue;
+ 
+       // If the target isn't in range, hook it up to an existing or new thunk.
+-      auto [thunk, wasNew] = getThunk(lastThunks, sym, p, rel.Type, margin);
++      auto [thunk, wasNew] =
++          getThunk(lastThunks, sym, p, rel.Type, margin, sc->getMachine());
+       if (wasNew) {
+         Chunk *thunkChunk = thunk->getChunk();
+         thunkChunk->setRVA(
+@@ -621,7 +625,7 @@ bool Writer::verifyRanges(const std::vector<Chunk *> chunks) {
+ // Assign addresses and add thunks if necessary.
+ void Writer::finalizeAddresses() {
+   assignAddresses();
+-  if (ctx.config.machine != ARMNT && ctx.config.machine != ARM64)
++  if (ctx.config.machine != ARMNT && !isAnyArm64(ctx.config.machine))
+     return;
+ 
+   size_t origNumChunks = 0;
+diff --git a/lld/test/COFF/arm64ec-range-thunks.s b/lld/test/COFF/arm64ec-range-thunks.s
+new file mode 100644
+index 000000000000..d599144a62a1
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-range-thunks.s
+@@ -0,0 +1,78 @@
++// REQUIRES: aarch64
++
++// RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %s -o %t.obj
++// RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o %t-loadcfg.obj
++
++// RUN: lld-link -machine:arm64ec -entry:main -subsystem:console %t.obj %t-loadcfg.obj -out:%t.exe -map \
++// RUN:          -verbose 2>&1 | FileCheck -check-prefix=VERBOSE %s
++// RUN: llvm-objdump --no-print-imm-hex -d %t.exe | FileCheck --check-prefix=DISASM %s
++// RUN: llvm-readobj --coff-load-config %t.exe | FileCheck --check-prefix=LOADCFG %s
++
++// VERBOSE: Added 3 thunks with margin {{.*}} in 1 passes
++
++    .globl main
++    .globl func1
++    .globl func2
++    .text
++main:
++    tbz w0, #0, func1
++    ret
++    .section .text$a, "xr"
++    .space 0x8000
++    .section .text$b, "xr"
++func1:
++    tbz w0, #0, func2
++    ret
++    .space 1
++    .section .text$c, "xr"
++    .space 0x8000
++    .section .text$d, "xr"
++    .align 2
++func2:
++    tbz w0, #0, main
++    ret
++
++
++// DISASM:      Disassembly of section .text:
++// DISASM-EMPTY:
++// DISASM-NEXT: 0000000140001000 <.text>:
++// DISASM-NEXT: 140001000: 36000040     tbz     w0, #0, 0x140001008 <.text+0x8>
++// DISASM-NEXT: 140001004: d65f03c0     ret
++// DISASM-NEXT: 140001008: 90000050     adrp    x16, 0x140009000 <.text+0x8000>
++// DISASM-NEXT: 14000100c: 91005210     add     x16, x16, #20
++// DISASM-NEXT: 140001010: d61f0200     br      x16
++// DISASM-NEXT:                 ...
++// DISASM-NEXT: 140009014: 36000060     tbz     w0, #0, 0x140009020 <.text+0x8020>
++// DISASM-NEXT: 140009018: d65f03c0     ret
++// DISASM-NEXT: 14000901c: 00000000     udf     #0
++// DISASM-NEXT: 140009020: 90000050     adrp    x16, 0x140011000 <.text+0x10000>
++// DISASM-NEXT: 140009024: 9100b210     add     x16, x16, #44
++// DISASM-NEXT: 140009028: d61f0200     br      x16
++// DISASM-NEXT:                 ...
++// DISASM-NEXT: 14001102c: 36000040     tbz     w0, #0, 0x140011034 <.text+0x10034>
++// DISASM-NEXT: 140011030: d65f03c0     ret
++// DISASM-NEXT: 140011034: 90ffff90     adrp    x16, 0x140001000 <.text>
++// DISASM-NEXT: 140011038: 91000210     add     x16, x16, #0
++// DISASM-NEXT: 14001103c: d61f0200     br      x16
++// DISASM-EMPTY:
++// DISASM-NEXT: Disassembly of section .hexpthk:
++// DISASM-EMPTY:
++// DISASM-NEXT: 0000000140012000 <.hexpthk>:
++// DISASM-NEXT: 140012000: 48 8b c4                     movq    %rsp, %rax
++// DISASM-NEXT: 140012003: 48 89 58 20                  movq    %rbx, 32(%rax)
++// DISASM-NEXT: 140012007: 55                           pushq   %rbp
++// DISASM-NEXT: 140012008: 5d                           popq    %rbp
++// DISASM-NEXT: 140012009: e9 f2 ef fe ff               jmp     0x140001000 <.text>
++// DISASM-NEXT: 14001200e: cc                           int3
++// DISASM-NEXT: 14001200f: cc                           int3
++
++// LOADCFG:       CodeMap [
++// LOADCFG-NEXT:    0x1000 - 0x11040  ARM64EC
++// LOADCFG-NEXT:    0x12000 - 0x12010  X64
++// LOADCFG-NEXT:  ]
++// LOADCFG-NEXT:  CodeRangesToEntryPoints [
++// LOADCFG-NEXT:    0x12000 - 0x12010 -> 0x12000
++// LOADCFG-NEXT:  ]
++// LOADCFG-NEXT:  RedirectionMetadata [
++// LOADCFG-NEXT:    0x12000 -> 0x1000
++// LOADCFG-NEXT:  ]
+-- 
+2.25.1
+

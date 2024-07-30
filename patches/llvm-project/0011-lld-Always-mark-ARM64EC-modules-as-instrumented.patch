@@ -1,0 +1,73 @@
+From 9424ce4f2c1633e2947da30a991a85a427f717f6 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Wed, 14 Jun 2023 22:03:25 +0200
+Subject: [PATCH 11/55] [lld] Always mark ARM64EC modules as instrumented.
+
+FIXME: The test doesn't seem to work on MSVC, but it's observed in real-world images, needs more investigation.
+---
+ lld/COFF/Writer.cpp                   | 12 ++++++++++--
+ lld/test/COFF/cfguard-flags-arm64ec.s | 22 ++++++++++++++++++++++
+ 2 files changed, 32 insertions(+), 2 deletions(-)
+ create mode 100644 lld/test/COFF/cfguard-flags-arm64ec.s
+
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index e8054cb6bdd3..445f310311a6 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -1145,8 +1145,7 @@ void Writer::createMiscChunks() {
+     createSEHTable();
+ 
+   // Create /guard:cf tables if requested.
+-  if (config->guardCF != GuardCFLevel::Off)
+-    createGuardCFTables();
++  createGuardCFTables();
+ 
+   if (isArm64EC(config->machine))
+     createECChunks();
+@@ -1895,6 +1894,15 @@ void Writer::markSymbolsWithRelocations(ObjFile *file,
+ void Writer::createGuardCFTables() {
+   Configuration *config = &ctx.config;
+ 
++  if (config->guardCF == GuardCFLevel::Off) {
++    if (isArm64EC(config->machine)) {
++      Symbol *flagSym = ctx.symtab.findUnderscore("__guard_flags");
++      cast<DefinedAbsolute>(flagSym)->setVA(
++          uint32_t(GuardFlags::CF_INSTRUMENTED));
++    }
++    return;
++  }
++
+   SymbolRVASet addressTakenSyms;
+   SymbolRVASet giatsRVASet;
+   std::vector<Symbol *> giatsSymbols;
+diff --git a/lld/test/COFF/cfguard-flags-arm64ec.s b/lld/test/COFF/cfguard-flags-arm64ec.s
+new file mode 100644
+index 000000000000..1425e294cd70
+--- /dev/null
++++ b/lld/test/COFF/cfguard-flags-arm64ec.s
+@@ -0,0 +1,22 @@
++// ARM64EC code is always instrumented, check that CF_INSTRUMENTED flag is set even with -guard:no argument.
++
++// REQUIRES: aarch64
++
++// RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %s -o %t.obj
++// RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o %t-loadconfig.obj
++
++// RUN: lld-link -out:%t1.dll -machine:arm64ec %t.obj %t-loadconfig.obj -dll -noentry
++// RUN: lld-link -out:%t2.dll -machine:arm64ec %t.obj %t-loadconfig.obj -dll -noentry -guard:no
++
++// RUN: llvm-readobj --coff-load-config %t1.dll | FileCheck %s
++// RUN: llvm-readobj --coff-load-config %t2.dll | FileCheck %s
++// CHECK:       GuardFlags [ (0x100)
++// CHECK-NEXT:    CF_INSTRUMENTED (0x100)
++// CHECK-NEXT:  ]
++
++// RUN: llvm-readobj --hex-dump=.test %t1.dll | FileCheck --check-prefix=SYM %s
++// RUN: llvm-readobj --hex-dump=.test %t2.dll | FileCheck --check-prefix=SYM %s
++// SYM: 0x180003000 00010000
++
++        .section .test, "r"
++        .word __guard_flags
+-- 
+2.25.1
+

@@ -1,0 +1,137 @@
+From ddd745642d5ff73c5410ed8512477d654bc4bd52 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 7 Sep 2023 00:51:40 +0200
+Subject: [PATCH 16/55] [lld] Initial support for ARM64EC importlibs.
+
+---
+ lld/COFF/Chunks.h                 | 10 ++++---
+ lld/COFF/InputFiles.cpp           | 12 +++++++--
+ lld/COFF/Symbols.cpp              |  4 +--
+ lld/test/COFF/arm64ec-import.test | 44 +++++++++++++++++++++++++++++++
+ 4 files changed, 63 insertions(+), 7 deletions(-)
+ create mode 100644 lld/test/COFF/arm64ec-import.test
+
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index acf44f5795a1..ee01443de7cd 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -590,13 +590,17 @@ public:
+ 
+ class ImportThunkChunkARM64 : public ImportThunkChunk {
+ public:
+-  explicit ImportThunkChunkARM64(COFFLinkerContext &ctx, Defined *s)
+-      : ImportThunkChunk(ctx, s) {
++  explicit ImportThunkChunkARM64(COFFLinkerContext &ctx, Defined *s,
++                                 MachineTypes machine)
++      : ImportThunkChunk(ctx, s), machine(machine) {
+     setAlignment(4);
+   }
+   size_t getSize() const override { return sizeof(importThunkARM64); }
+   void writeTo(uint8_t *buf) const override;
+-  MachineTypes getMachine() const override { return ARM64; }
++  MachineTypes getMachine() const override { return machine; }
++
++private:
++  MachineTypes machine;
+ };
+ 
+ class RangeExtensionThunkARM : public NonSectionCodeChunk {
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 01aeb2a1c5e2..4d20106ebc89 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -25,6 +25,7 @@
+ #include "llvm/DebugInfo/CodeView/TypeDeserializer.h"
+ #include "llvm/DebugInfo/PDB/Native/NativeSession.h"
+ #include "llvm/DebugInfo/PDB/Native/PDBFile.h"
++#include "llvm/IR/Mangler.h"
+ #include "llvm/LTO/LTO.h"
+ #include "llvm/Object/Binary.h"
+ #include "llvm/Object/COFF.h"
+@@ -1009,9 +1010,16 @@ void ImportFile::parse() {
+ 
+   // Read names and create an __imp_ symbol.
+   StringRef buf = mb.getBuffer().substr(sizeof(*hdr));
+-  StringRef name = saver().save(buf.split('\0').first);
++  StringRef nameBuf = buf.split('\0').first, name;
++  if (isArm64EC(hdr->Machine)) {
++    if (std::optional<std::string> demangledName =
++            getArm64ECDemangledFunctionName(nameBuf))
++      name = saver().save(*demangledName);
++  }
++  if (name.empty())
++    name = saver().save(nameBuf);
+   StringRef impName = saver().save("__imp_" + name);
+-  buf = buf.substr(name.size() + 1);
++  buf = buf.substr(nameBuf.size() + 1);
+   dllName = buf.split('\0').first;
+   StringRef extName;
+   switch (hdr->getNameType()) {
+diff --git a/lld/COFF/Symbols.cpp b/lld/COFF/Symbols.cpp
+index 10e0fc58d313..f0a653f8f416 100644
+--- a/lld/COFF/Symbols.cpp
++++ b/lld/COFF/Symbols.cpp
+@@ -113,8 +113,8 @@ static Chunk *makeImportThunk(COFFLinkerContext &ctx, DefinedImportData *s,
+     return make<ImportThunkChunkX64>(ctx, s);
+   if (machine == I386)
+     return make<ImportThunkChunkX86>(ctx, s);
+-  if (machine == ARM64)
+-    return make<ImportThunkChunkARM64>(ctx, s);
++  if (COFF::isAnyArm64(machine))
++    return make<ImportThunkChunkARM64>(ctx, s, MachineTypes(machine));
+   assert(machine == ARMNT);
+   return make<ImportThunkChunkARM>(ctx, s);
+ }
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+new file mode 100644
+index 000000000000..b7374d92fc6d
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -0,0 +1,44 @@
++REQUIRES: aarch64, x86
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test.s -o test.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows arm64ec-stubs.s -o arm64ec-stubs.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
++RUN: llvm-lib -machine:arm64ec -def:test.def -out:test-arm64ec.lib
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:out.dll loadconfig-arm64ec.obj arm64ec-stubs.obj \
++RUN:          test.obj test-arm64ec.lib
++
++RUN: llvm-readobj --coff-imports out.dll | FileCheck -check-prefix=IMPORTS %s
++IMPORTS:      Import {
++IMPORTS-NEXT:   Name: test.dll
++IMPORTS-NEXT:   ImportLookupTableRVA:
++IMPORTS-NEXT:   ImportAddressTableRVA:
++IMPORTS-NEXT:   Symbol: myfunc (0)
++IMPORTS-NEXT: }
++
++#--- test.s
++    .section .test, "r"
++    .globl arm64ec_data_sym
++    .p2align 2, 0x0
++arm64ec_data_sym:
++    .rva __imp_myfunc
++
++#--- arm64ec-stubs.s
++    .text
++    .globl __icall_helper_arm64ec
++    .p2align 2, 0x0
++__icall_helper_arm64ec:
++    mov w0, #2
++    ret
++
++    .section .cfg, "r"
++    .globl __os_arm64x_dispatch_icall
++    .p2align 2, 0x0
++__os_arm64x_dispatch_icall:
++    .xword 1
++
++#--- test.def
++NAME test.dll
++EXPORTS
++    myfunc
+-- 
+2.25.1
+

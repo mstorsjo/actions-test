@@ -1,0 +1,174 @@
+From a8f59be225dba0fa38e9909144c2fb7dcfc1f0c9 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Wed, 26 Jun 2024 12:02:45 +0100
+Subject: [PATCH 29/29] fixup
+
+---
+ mingw-w64-crt/math/sqrt.def.h     |  2 +-
+ mingw-w64-crt/stdio/fseeki64.c    |  4 +-
+ mingw-w64-headers/include/winnt.h | 93 ++++++++++++++++---------------
+ 3 files changed, 51 insertions(+), 48 deletions(-)
+
+diff --git a/mingw-w64-crt/math/sqrt.def.h b/mingw-w64-crt/math/sqrt.def.h
+index 8219c27ac..3734b1ed9 100644
+--- a/mingw-w64-crt/math/sqrt.def.h
++++ b/mingw-w64-crt/math/sqrt.def.h
+@@ -84,7 +84,7 @@ __FLT_ABI (sqrt) (__FLT_TYPE x)
+   asm volatile ("fsqrt %d[dst], %d[src]\n" : [dst] "=w" (res) : [src] "w" (x));
+ #endif
+ #elif (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__)) || \
+-  defined(_X86_) || defined(__i386__) || 
++  defined(_X86_) || defined(__i386__)
+   asm volatile ("fsqrt" : "=t" (res) : "0" (x));
+ #else
+ #error Not supported on your platform yet
+diff --git a/mingw-w64-crt/stdio/fseeki64.c b/mingw-w64-crt/stdio/fseeki64.c
+index f70062e39..0a6b93921 100644
+--- a/mingw-w64-crt/stdio/fseeki64.c
++++ b/mingw-w64-crt/stdio/fseeki64.c
+@@ -7,7 +7,7 @@
+ #include <io.h>
+ #include <errno.h>
+ 
+-#if !defined(__arm__) && !defined(__aarch64__) /* we have F_ARM_ANY(_fseeki64) in msvcrt.def.in */
++#if !defined(__arm__) && !defined(__aarch64__) && !defined(__arm64ec__) /* we have F_ARM_ANY(_fseeki64) in msvcrt.def.in */
+ int __cdecl _fseeki64(FILE* stream, __int64 offset, int whence)
+ {
+   fpos_t pos;
+@@ -35,7 +35,7 @@ int __cdecl _fseeki64(FILE* stream, __int64 offset, int whence)
+ }
+ 
+ int __cdecl (*__MINGW_IMP_SYMBOL(_fseeki64))(FILE*, __int64, int) = _fseeki64;
+-#endif /* !defined(__arm__) && !defined(__aarch64__) */
++#endif /* !defined(__arm__) && !defined(__aarch64__) && !defined(__arm64ec__) */
+ 
+ __int64 __cdecl _ftelli64(FILE* stream)
+ {
+diff --git a/mingw-w64-headers/include/winnt.h b/mingw-w64-headers/include/winnt.h
+index 6e11bd03a..1086afe2d 100644
+--- a/mingw-w64-headers/include/winnt.h
++++ b/mingw-w64-headers/include/winnt.h
+@@ -723,12 +723,6 @@ inline ENUMTYPE &operator ^= (ENUMTYPE &a, ENUMTYPE b) { return (ENUMTYPE &)(((i
+ #define RTL_BITS_OF_FIELD(type,field) (RTL_BITS_OF(RTL_FIELD_TYPE(type,field)))
+ #define CONTAINING_RECORD(address,type,field) ((type *)((PCHAR)(address) - (ULONG_PTR)(&((type *)0)->field)))
+ 
+-    typedef EXCEPTION_DISPOSITION NTAPI EXCEPTION_ROUTINE (struct _EXCEPTION_RECORD *ExceptionRecord, PVOID EstablisherFrame, struct _CONTEXT *ContextRecord, PVOID DispatcherContext);
+-#ifndef __PEXCEPTION_ROUTINE_DEFINED
+-#define __PEXCEPTION_ROUTINE_DEFINED
+-    typedef EXCEPTION_ROUTINE *PEXCEPTION_ROUTINE;
+-#endif
+-
+ #define ENCLAVE_SHORT_ID_LENGTH             16
+ #define ENCLAVE_LONG_ID_LENGTH              32
+ 
+@@ -2060,26 +2054,6 @@ extern "C" {
+ #define UNW_FLAG_EHANDLER   0x1
+ #define UNW_FLAG_UHANDLER   0x2
+ 
+-  struct _DISPATCHER_CONTEXT;
+-  typedef struct _DISPATCHER_CONTEXT DISPATCHER_CONTEXT;
+-  typedef struct _DISPATCHER_CONTEXT *PDISPATCHER_CONTEXT;
+-
+-  struct _DISPATCHER_CONTEXT {
+-    ULONG ControlPc;
+-    ULONG ImageBase;
+-    PRUNTIME_FUNCTION FunctionEntry;
+-    ULONG EstablisherFrame;
+-    ULONG TargetPc;
+-    PCONTEXT ContextRecord;
+-    PEXCEPTION_ROUTINE LanguageHandler;
+-    PVOID HandlerData;
+-    struct _UNWIND_HISTORY_TABLE *HistoryTable;
+-    ULONG ScopeIndex;
+-    BOOLEAN ControlPcIsUnwound;
+-    PBYTE NonVolatileRegisters;
+-    ULONG VirtualVfpHead;
+-  };
+-
+   typedef struct _KNONVOLATILE_CONTEXT_POINTERS {
+     PDWORD R4;
+     PDWORD R5;
+@@ -2418,25 +2392,6 @@ extern "C" {
+ #define UNW_FLAG_EHANDLER   0x1
+ #define UNW_FLAG_UHANDLER   0x2
+ 
+-  typedef struct _DISPATCHER_CONTEXT_ARM64 {
+-    ULONG_PTR ControlPc;
+-    ULONG_PTR ImageBase;
+-    PARM64_RUNTIME_FUNCTION FunctionEntry;
+-    ULONG_PTR EstablisherFrame;
+-    ULONG_PTR TargetPc;
+-    PARM64_NT_CONTEXT ContextRecord;
+-    PEXCEPTION_ROUTINE LanguageHandler;
+-    PVOID HandlerData;
+-    struct _UNWIND_HISTORY_TABLE *HistoryTable;
+-    ULONG ScopeIndex;
+-    BOOLEAN ControlPcIsUnwound;
+-    PBYTE NonVolatileRegisters;
+-  } DISPATCHER_CONTEXT_ARM64, *PDISPATCHER_CONTEXT_ARM64;
+-
+-#if defined(_ARM64_)
+-  typedef DISPATCHER_CONTEXT_ARM64 DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
+-#endif // defined(_ARM64_)
+-
+   typedef struct _KNONVOLATILE_CONTEXT_POINTERS_ARM64 {
+     PDWORD64 X19;
+     PDWORD64 X20;
+@@ -3055,6 +3010,54 @@ __buildmemorybarrier()
+     NTSYSAPI VOID NTAPI RtlUnwind2 (FRAME_POINTERS TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD ExceptionRecord, PVOID ReturnValue, PCONTEXT ContextRecord);
+ #endif
+ 
++    typedef EXCEPTION_DISPOSITION NTAPI EXCEPTION_ROUTINE (struct _EXCEPTION_RECORD *ExceptionRecord, PVOID EstablisherFrame, CONTEXT *ContextRecord, PVOID DispatcherContext);
++#ifndef __PEXCEPTION_ROUTINE_DEFINED
++#define __PEXCEPTION_ROUTINE_DEFINED
++    typedef EXCEPTION_ROUTINE *PEXCEPTION_ROUTINE;
++#endif
++
++#ifdef _ARM_
++  struct _DISPATCHER_CONTEXT;
++  typedef struct _DISPATCHER_CONTEXT DISPATCHER_CONTEXT;
++  typedef struct _DISPATCHER_CONTEXT *PDISPATCHER_CONTEXT;
++
++  struct _DISPATCHER_CONTEXT {
++    ULONG ControlPc;
++    ULONG ImageBase;
++    PRUNTIME_FUNCTION FunctionEntry;
++    ULONG EstablisherFrame;
++    ULONG TargetPc;
++    PCONTEXT ContextRecord;
++    PEXCEPTION_ROUTINE LanguageHandler;
++    PVOID HandlerData;
++    struct _UNWIND_HISTORY_TABLE *HistoryTable;
++    ULONG ScopeIndex;
++    BOOLEAN ControlPcIsUnwound;
++    PBYTE NonVolatileRegisters;
++    ULONG VirtualVfpHead;
++  };
++#endif
++
++  typedef struct _DISPATCHER_CONTEXT_ARM64 {
++    ULONG_PTR ControlPc;
++    ULONG_PTR ImageBase;
++    PARM64_RUNTIME_FUNCTION FunctionEntry;
++    ULONG_PTR EstablisherFrame;
++    ULONG_PTR TargetPc;
++    PARM64_NT_CONTEXT ContextRecord;
++    PEXCEPTION_ROUTINE LanguageHandler;
++    PVOID HandlerData;
++    struct _UNWIND_HISTORY_TABLE *HistoryTable;
++    ULONG ScopeIndex;
++    BOOLEAN ControlPcIsUnwound;
++    PBYTE NonVolatileRegisters;
++  } DISPATCHER_CONTEXT_ARM64, *PDISPATCHER_CONTEXT_ARM64;
++
++#if defined(_ARM64_)
++  typedef DISPATCHER_CONTEXT_ARM64 DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
++#endif // defined(_ARM64_)
++
++
+ #ifdef __x86_64__
+   /* http://msdn.microsoft.com/en-us/library/b6sf5kbd(VS.80).aspx */
+ 
+-- 
+2.25.1
+

@@ -1,0 +1,283 @@
+From bdc4615202397343c30ddd227528d23031d6242f Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sun, 2 Jul 2023 22:03:01 +0200
+Subject: [PATCH 20/55] [lld] [NFC] Store live flag in ImportThunkChunk.
+
+---
+ lld/COFF/Chunks.cpp               |  4 ++++
+ lld/COFF/Chunks.h                 |  6 ++++--
+ lld/COFF/InputFiles.cpp           | 15 +++++++++++----
+ lld/COFF/InputFiles.h             |  2 +-
+ lld/COFF/MapFile.cpp              |  9 +++++----
+ lld/COFF/MarkLive.cpp             |  2 +-
+ lld/COFF/PDB.cpp                  |  4 ++--
+ lld/COFF/Symbols.cpp              |  7 ++++---
+ lld/COFF/Symbols.h                |  4 ++--
+ lld/COFF/Writer.cpp               | 21 ++++++++++++++-------
+ lld/test/COFF/arm64ec-import.test | 21 ++++++++++++++++-----
+ 11 files changed, 64 insertions(+), 31 deletions(-)
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index efd18eac3cc2..9bd85aa883f3 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -772,6 +772,10 @@ void StringChunk::writeTo(uint8_t *buf) const {
+   buf[str.size()] = '\0';
+ }
+ 
++ImportThunkChunk::ImportThunkChunk(COFFLinkerContext &ctx, Defined *s)
++    : NonSectionCodeChunk(ImportThunkKind), live(!ctx.config.doGC),
++      impSymbol(s), ctx(ctx) {}
++
+ ImportThunkChunkX64::ImportThunkChunkX64(COFFLinkerContext &ctx, Defined *s)
+     : ImportThunkChunk(ctx, s) {
+   // Intel Optimization Manual says that all branch targets
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index ee01443de7cd..ac2bfbc6a256 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -549,10 +549,12 @@ static const uint8_t importThunkARM64[] = {
+ // contents will be a JMP instruction to some __imp_ symbol.
+ class ImportThunkChunk : public NonSectionCodeChunk {
+ public:
+-  ImportThunkChunk(COFFLinkerContext &ctx, Defined *s)
+-      : NonSectionCodeChunk(ImportThunkKind), impSymbol(s), ctx(ctx) {}
++  ImportThunkChunk(COFFLinkerContext &ctx, Defined *s);
++
+   static bool classof(const Chunk *c) { return c->kind() == ImportThunkKind; }
+ 
++  bool live;
++
+ protected:
+   Defined *impSymbol;
+   COFFLinkerContext &ctx;
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index f62c67495ece..126c8ad0920d 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -997,7 +997,7 @@ void ObjFile::enqueuePdbFile(StringRef path, ObjFile *fromFile) {
+ }
+ 
+ ImportFile::ImportFile(COFFLinkerContext &ctx, MemoryBufferRef m)
+-    : InputFile(ctx, ImportKind, m), live(!ctx.config.doGC), thunkLive(live) {}
++    : InputFile(ctx, ImportKind, m), live(!ctx.config.doGC) {}
+ 
+ void ImportFile::parse() {
+   const auto *hdr =
+@@ -1071,9 +1071,16 @@ void ImportFile::parse() {
+   // If type is function, we need to create a thunk which jump to an
+   // address pointed by the __imp_ symbol. (This allows you to call
+   // DLL functions just like regular non-DLL functions.)
+-  if (isCode)
+-    thunkSym = ctx.symtab.addImportThunk(
+-        name, cast_or_null<DefinedImportData>(impSym), hdr->Machine);
++  if (isCode) {
++    if (ctx.config.machine != ARM64EC) {
++      thunkSym = ctx.symtab.addImportThunk(name, impSym, hdr->Machine);
++    } else {
++      thunkSym = ctx.symtab.addImportThunk(name, impSym, AMD64);
++      StringRef auxThunkName =
++          saver().save(*getArm64ECMangledFunctionName(name));
++      auxThunkSym = ctx.symtab.addImportThunk(auxThunkName, impECSym, ARM64EC);
++    }
++  }
+ }
+ 
+ BitcodeFile::BitcodeFile(COFFLinkerContext &ctx, MemoryBufferRef mb,
+diff --git a/lld/COFF/InputFiles.h b/lld/COFF/InputFiles.h
+index e05438eb5e1e..2f0f22d5a957 100644
+--- a/lld/COFF/InputFiles.h
++++ b/lld/COFF/InputFiles.h
+@@ -346,6 +346,7 @@ public:
+   DefinedImportData *impSym = nullptr;
+   DefinedImportData *impECSym = nullptr;
+   Symbol *thunkSym = nullptr;
++  Symbol *auxThunkSym = nullptr;
+   std::string dllName;
+ 
+ private:
+@@ -366,7 +367,6 @@ public:
+   // imported symbol is used separately from whether the thunk is used in order
+   // to avoid creating unnecessary thunks.
+   bool live;
+-  bool thunkLive;
+ };
+ 
+ // Used for LTO.
+diff --git a/lld/COFF/MapFile.cpp b/lld/COFF/MapFile.cpp
+index ed521dd375ed..82b6c52c473d 100644
+--- a/lld/COFF/MapFile.cpp
++++ b/lld/COFF/MapFile.cpp
+@@ -125,11 +125,12 @@ static void getSymbols(const COFFLinkerContext &ctx,
+     if (!file->thunkSym)
+       continue;
+ 
+-    if (!file->thunkLive)
+-      continue;
+-
+-    if (auto *thunkSym = dyn_cast<Defined>(file->thunkSym))
++    if (auto *thunkSym = dyn_cast<Defined>(file->thunkSym)) {
++      auto *chunk = dyn_cast<ImportThunkChunk>(thunkSym->getChunk());
++      if (chunk && !chunk->live)
++        continue;
+       syms.push_back(thunkSym);
++    }
+ 
+     if (auto *impSym = dyn_cast_or_null<Defined>(file->impSym))
+       syms.push_back(impSym);
+diff --git a/lld/COFF/MarkLive.cpp b/lld/COFF/MarkLive.cpp
+index a4a27d6bffa7..b39fec31407c 100644
+--- a/lld/COFF/MarkLive.cpp
++++ b/lld/COFF/MarkLive.cpp
+@@ -49,7 +49,7 @@ void markLive(COFFLinkerContext &ctx) {
+     else if (auto *sym = dyn_cast<DefinedImportData>(b))
+       sym->file->live = true;
+     else if (auto *sym = dyn_cast<DefinedImportThunk>(b))
+-      sym->wrappedSym->file->live = sym->wrappedSym->file->thunkLive = true;
++      sym->wrappedSym->file->live = sym->getChunk()->live = true;
+     else if (auto *sym = dyn_cast<DefinedSynthetic>(b)) {
+       if (auto chunk = dyn_cast_or_null<ECThunkChunk>(sym->getChunk()))
+         addSym(chunk->target);
+diff --git a/lld/COFF/PDB.cpp b/lld/COFF/PDB.cpp
+index c0739b37aeb0..13ae71384583 100644
+--- a/lld/COFF/PDB.cpp
++++ b/lld/COFF/PDB.cpp
+@@ -1527,8 +1527,8 @@ void PDBLinker::addImportFilesToPDB() {
+     if (!file->thunkSym)
+       continue;
+ 
+-    if (!file->thunkLive)
+-        continue;
++    if (!cast<DefinedImportThunk>(file->thunkSym)->getChunk()->live)
++      continue;
+ 
+     std::string dll = StringRef(file->dllName).lower();
+     llvm::pdb::DbiModuleDescriptorBuilder *&mod = dllToModuleDbi[dll];
+diff --git a/lld/COFF/Symbols.cpp b/lld/COFF/Symbols.cpp
+index f0a653f8f416..69f10ad95a45 100644
+--- a/lld/COFF/Symbols.cpp
++++ b/lld/COFF/Symbols.cpp
+@@ -84,7 +84,7 @@ bool Symbol::isLive() const {
+   if (auto *imp = dyn_cast<DefinedImportData>(this))
+     return imp->file->live;
+   if (auto *imp = dyn_cast<DefinedImportThunk>(this))
+-    return imp->wrappedSym->file->thunkLive;
++    return imp->getChunk()->live;
+   // Assume any other kind of symbol is live.
+   return true;
+ }
+@@ -107,8 +107,9 @@ COFFSymbolRef DefinedCOFF::getCOFFSymbol() {
+ 
+ uint64_t DefinedAbsolute::getRVA() { return va - ctx.config.imageBase; }
+ 
+-static Chunk *makeImportThunk(COFFLinkerContext &ctx, DefinedImportData *s,
+-                              uint16_t machine) {
++static ImportThunkChunk *makeImportThunk(COFFLinkerContext &ctx,
++                                         DefinedImportData *s,
++                                         uint16_t machine) {
+   if (machine == AMD64)
+     return make<ImportThunkChunkX64>(ctx, s);
+   if (machine == I386)
+diff --git a/lld/COFF/Symbols.h b/lld/COFF/Symbols.h
+index cd4823a562dd..d88cd84f591f 100644
+--- a/lld/COFF/Symbols.h
++++ b/lld/COFF/Symbols.h
+@@ -400,12 +400,12 @@ public:
+   }
+ 
+   uint64_t getRVA() { return data->getRVA(); }
+-  Chunk *getChunk() { return data; }
++  ImportThunkChunk *getChunk() const { return data; }
+ 
+   DefinedImportData *wrappedSym;
+ 
+ private:
+-  Chunk *data;
++  ImportThunkChunk *data;
+ };
+ 
+ // If you have a symbol "foo" in your object file, a symbol name
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 265f77515872..8ae631f96cc1 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -1225,14 +1225,21 @@ void Writer::appendImportThunks() {
+     if (!file->live)
+       continue;
+ 
+-    if (!file->thunkSym)
+-      continue;
++    if (file->thunkSym) {
++      if (!isa<DefinedImportThunk>(file->thunkSym))
++        fatal(toString(ctx, *file->thunkSym) + " was replaced");
++      auto *chunk = cast<DefinedImportThunk>(file->thunkSym)->getChunk();
++      if (chunk->live)
++        textSec->addChunk(chunk);
++    }
+ 
+-    if (!isa<DefinedImportThunk>(file->thunkSym))
+-      fatal(toString(ctx, *file->thunkSym) + " was replaced");
+-    DefinedImportThunk *thunk = cast<DefinedImportThunk>(file->thunkSym);
+-    if (file->thunkLive)
+-      textSec->addChunk(thunk->getChunk());
++    if (file->auxThunkSym) {
++      if (!isa<DefinedImportThunk>(file->auxThunkSym))
++        fatal(toString(ctx, *file->auxThunkSym) + " was replaced");
++      auto *chunk = cast<DefinedImportThunk>(file->auxThunkSym)->getChunk();
++      if (chunk->live)
++        textSec->addChunk(chunk);
++    }
+   }
+ 
+   if (!delayIdata.empty()) {
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index ccd519606011..de721dd39706 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -13,20 +13,29 @@ RUN: llvm-readobj --coff-imports out.dll | FileCheck -check-prefix=IMPORTS %s
+ IMPORTS:      Import {
+ IMPORTS-NEXT:   Name: test.dll
+ IMPORTS-NEXT:   ImportLookupTableRVA:
+-IMPORTS-NEXT:   ImportAddressTableRVA: 0x2000
++IMPORTS-NEXT:   ImportAddressTableRVA: 0x3000
+ IMPORTS-NEXT:   Symbol: myfunc (0)
+ IMPORTS-NEXT: }
+ 
+ RUN: llvm-readobj --headers out.dll | FileCheck -check-prefix=HEADERS %s
+-HEADERS:  LoadConfigTableRVA: 0x3008
+-HEADERS:  IATRVA: 0x2000
++HEADERS:  LoadConfigTableRVA: 0x4010
++HEADERS:  IATRVA: 0x3000
+ HEADERS:  IATSize: 0x1000
+ 
++RUN: llvm-objdump -d out.dll | FileCheck -check-prefix=DISASM %s
++DISASM:      180001000: 52800040     mov     w0, #0x2
++DISASM-NEXT: 180001004: d65f03c0     ret
++DISASM-NEXT: 180001008: 90000030     adrp    x16, 0x180005000
++DISASM-NEXT: 18000100c: f9400210     ldr     x16, [x16]
++DISASM-NEXT: 180001010: d61f0200     br      x16
++DISASM-NEXT:                 ...
++DISASM-NEXT: 180002000: ff 25 fa 0f 00 00            jmpq    *0xffa(%rip)            # 0x180003000
++
+ RUN: llvm-readobj --hex-dump=.test out.dll | FileCheck -check-prefix=TESTSEC %s
+-TESTSEC: 0x180007000 00400000 00200000
++TESTSEC: 0x180008000 00500000 00300000 00200000 08100000
+ 
+ RUN: llvm-readobj --coff-load-config out.dll | FileCheck -check-prefix=LOADCONFIG %s
+-LOADCONFIG: AuxiliaryIAT: 0x4000
++LOADCONFIG: AuxiliaryIAT: 0x5000
+ 
+ #--- test.s
+     .section .test, "r"
+@@ -35,6 +44,8 @@ LOADCONFIG: AuxiliaryIAT: 0x4000
+ arm64ec_data_sym:
+     .rva __imp_myfunc
+     .rva __imp_aux_myfunc
++    .rva myfunc
++    .rva "#myfunc"
+ 
+ #--- arm64ec-stubs.s
+     .text
+-- 
+2.25.1
+

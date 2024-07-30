@@ -1,0 +1,2422 @@
+From 7a0de7b5eeb7a829699dd05746e6a2b1f2cc40f7 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sat, 20 Jan 2024 01:07:17 +0100
+Subject: [PATCH 04/55] [llvm-readobj][COFF] Add support for ARM64X dynamic
+ relocations.
+
+---
+ llvm/include/llvm/BinaryFormat/COFF.h         |   15 +
+ llvm/include/llvm/Object/COFF.h               |   91 ++
+ llvm/lib/Object/COFFObjectFile.cpp            |  385 +++++
+ .../COFF/arm64x-reloc-invalid.yaml            | 1382 +++++++++++++++++
+ .../tools/llvm-readobj/COFF/arm64x-reloc.yaml |  322 ++++
+ .../test/tools/yaml2obj/COFF/load-config.yaml |   16 +-
+ llvm/tools/llvm-readobj/COFFDumper.cpp        |   37 +
+ 7 files changed, 2244 insertions(+), 4 deletions(-)
+ create mode 100644 llvm/test/tools/llvm-readobj/COFF/arm64x-reloc-invalid.yaml
+ create mode 100644 llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml
+
+diff --git a/llvm/include/llvm/BinaryFormat/COFF.h b/llvm/include/llvm/BinaryFormat/COFF.h
+index c8642864af63..3fc543f73c49 100644
+--- a/llvm/include/llvm/BinaryFormat/COFF.h
++++ b/llvm/include/llvm/BinaryFormat/COFF.h
+@@ -417,6 +417,21 @@ enum RelocationTypesARM64 : unsigned {
+   IMAGE_REL_ARM64_REL32 = 0x0011,
+ };
+ 
++enum DynamicRelocationType : unsigned {
++  IMAGE_DYNAMIC_RELOCATION_GUARD_RF_PROLOGUE = 1,
++  IMAGE_DYNAMIC_RELOCATION_GUARD_RF_EPILOGUE = 2,
++  IMAGE_DYNAMIC_RELOCATION_GUARD_IMPORT_CONTROL_TRANSFER = 3,
++  IMAGE_DYNAMIC_RELOCATION_GUARD_INDIR_CONTROL_TRANSFER = 4,
++  IMAGE_DYNAMIC_RELOCATION_GUARD_SWITCHTABLE_BRANCH = 5,
++  IMAGE_DYNAMIC_RELOCATION_ARM64X = 6,
++};
++
++enum Arm64XFixupType : uint8_t {
++  IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL = 0,
++  IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE = 1,
++  IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA = 2,
++};
++
+ enum COMDATType : uint8_t {
+   IMAGE_COMDAT_SELECT_NODUPLICATES = 1,
+   IMAGE_COMDAT_SELECT_ANY,
+diff --git a/llvm/include/llvm/Object/COFF.h b/llvm/include/llvm/Object/COFF.h
+index a548b2c15c5f..16f0d469d9aa 100644
+--- a/llvm/include/llvm/Object/COFF.h
++++ b/llvm/include/llvm/Object/COFF.h
+@@ -35,8 +35,10 @@ template <typename T> class ArrayRef;
+ 
+ namespace object {
+ 
++class Arm64XRelocRef;
+ class BaseRelocRef;
+ class DelayImportDirectoryEntryRef;
++class DynamicRelocRef;
+ class ExportDirectoryEntryRef;
+ class ImportDirectoryEntryRef;
+ class ImportedSymbolRef;
+@@ -48,6 +50,8 @@ using delay_import_directory_iterator =
+ using export_directory_iterator = content_iterator<ExportDirectoryEntryRef>;
+ using imported_symbol_iterator = content_iterator<ImportedSymbolRef>;
+ using base_reloc_iterator = content_iterator<BaseRelocRef>;
++using dynamic_reloc_iterator = content_iterator<DynamicRelocRef>;
++using arm64x_reloc_iterator = content_iterator<Arm64XRelocRef>;
+ 
+ /// The DOS compatible header at the front of all PE/COFF executables.
+ struct dos_header {
+@@ -832,6 +836,37 @@ struct debug_h_header {
+   support::ulittle16_t HashAlgorithm;
+ };
+ 
++struct coff_dynamic_reloc_table {
++  support::ulittle32_t Version;
++  support::ulittle32_t Size;
++};
++
++struct coff_dynamic_relocation32 {
++  support::ulittle32_t Symbol;
++  support::ulittle32_t BaseRelocSize;
++};
++
++struct coff_dynamic_relocation64 {
++  support::ulittle64_t Symbol;
++  support::ulittle32_t BaseRelocSize;
++};
++
++struct coff_dynamic_relocation32_v2 {
++  support::ulittle32_t HeaderSize;
++  support::ulittle32_t FixupInfoSize;
++  support::ulittle32_t Symbol;
++  support::ulittle32_t SymbolGroup;
++  support::ulittle32_t Flags;
++};
++
++struct coff_dynamic_relocation64_v2 {
++  support::ulittle32_t HeaderSize;
++  support::ulittle32_t FixupInfoSize;
++  support::ulittle64_t Symbol;
++  support::ulittle32_t SymbolGroup;
++  support::ulittle32_t Flags;
++};
++
+ class COFFObjectFile : public ObjectFile {
+ private:
+   COFFObjectFile(MemoryBufferRef Object);
+@@ -861,6 +896,8 @@ private:
+   // Either coff_load_configuration32 or coff_load_configuration64.
+   const void *LoadConfig = nullptr;
+   const chpe_metadata *CHPEMetadata = nullptr;
++  const coff_dynamic_reloc_table *DynamicRelocTable = nullptr;
++  std::shared_ptr<WritableMemoryBuffer> HybridBufferRef;
+ 
+   Expected<StringRef> getString(uint32_t offset) const;
+ 
+@@ -986,6 +1023,9 @@ public:
+   }
+ 
+   const chpe_metadata *getCHPEMetadata() const { return CHPEMetadata; }
++  const coff_dynamic_reloc_table *getDynamicRelocTable() const {
++    return DynamicRelocTable;
++  }
+ 
+   StringRef getRelocationTypeName(uint16_t Type) const;
+ 
+@@ -1054,6 +1094,8 @@ public:
+   export_directory_iterator export_directory_end() const;
+   base_reloc_iterator base_reloc_begin() const;
+   base_reloc_iterator base_reloc_end() const;
++  dynamic_reloc_iterator dynamic_reloc_begin() const;
++  dynamic_reloc_iterator dynamic_reloc_end() const;
+   const debug_directory *debug_directory_begin() const {
+     return DebugDirectoryBegin;
+   }
+@@ -1066,6 +1108,7 @@ public:
+       delay_import_directories() const;
+   iterator_range<export_directory_iterator> export_directories() const;
+   iterator_range<base_reloc_iterator> base_relocs() const;
++  iterator_range<dynamic_reloc_iterator> dynamic_relocs() const;
+   iterator_range<const debug_directory *> debug_directories() const {
+     return make_range(debug_directory_begin(), debug_directory_end());
+   }
+@@ -1295,6 +1338,54 @@ private:
+   uint32_t Index;
+ };
+ 
++class DynamicRelocRef {
++public:
++  DynamicRelocRef() = default;
++  DynamicRelocRef(const void *Header, const COFFObjectFile *Owner)
++      : Obj(Owner), Header(reinterpret_cast<const uint8_t *>(Header)) {}
++
++  bool operator==(const DynamicRelocRef &Other) const;
++  void moveNext();
++  uint32_t getType() const;
++  void getContents(ArrayRef<uint8_t> &Ref) const;
++
++  arm64x_reloc_iterator arm64x_reloc_begin() const;
++  arm64x_reloc_iterator arm64x_reloc_end() const;
++  iterator_range<arm64x_reloc_iterator> arm64x_relocs() const;
++
++private:
++  const COFFObjectFile *Obj;
++  const uint8_t *Header;
++};
++
++class Arm64XRelocRef {
++public:
++  Arm64XRelocRef() = default;
++  Arm64XRelocRef(const coff_base_reloc_block_header *Header, uint32_t Index = 0)
++      : Header(Header), Index(Index) {}
++
++  bool operator==(const Arm64XRelocRef &Other) const;
++  void moveNext();
++
++  COFF::Arm64XFixupType getType() const {
++    return COFF::Arm64XFixupType((getReloc() >> 12) & 3);
++  }
++  uint32_t getRVA() const { return Header->PageRVA + (getReloc() & 0xfff); }
++  uint8_t getSize() const;
++  uint64_t getValue() const;
++
++  const coff_base_reloc_block_header *Header;
++
++private:
++  uint32_t Index;
++
++  const support::ulittle16_t &getReloc() const {
++    return reinterpret_cast<const support::ulittle16_t *>(Header + 1)[Index];
++  }
++
++  uint16_t getArg() const { return getReloc() >> 14; }
++};
++
+ class ResourceSectionRef {
+ public:
+   ResourceSectionRef() = default;
+diff --git a/llvm/lib/Object/COFFObjectFile.cpp b/llvm/lib/Object/COFFObjectFile.cpp
+index 5a85b8e00c63..65564689f092 100644
+--- a/llvm/lib/Object/COFFObjectFile.cpp
++++ b/llvm/lib/Object/COFFObjectFile.cpp
+@@ -800,6 +800,217 @@ Error COFFObjectFile::initLoadConfigPtr() {
+     }
+   }
+ 
++  uint32_t DynamicRelocTableOffset = 0, DynamicRelocTableSection = 0;
++  if (is64()) {
++    auto Config = getLoadConfig64();
++    if (Config->Size >=
++        offsetof(coff_load_configuration64, DynamicValueRelocTableSection) +
++            sizeof(Config->DynamicValueRelocTableSection)) {
++      DynamicRelocTableSection = Config->DynamicValueRelocTableSection;
++      DynamicRelocTableOffset = Config->DynamicValueRelocTableOffset;
++    }
++  } else {
++    auto Config = getLoadConfig32();
++    if (Config->Size >=
++        offsetof(coff_load_configuration32, DynamicValueRelocTableSection) +
++            sizeof(Config->DynamicValueRelocTableSection)) {
++      DynamicRelocTableSection = Config->DynamicValueRelocTableSection;
++      DynamicRelocTableOffset = Config->DynamicValueRelocTableOffset;
++    }
++  }
++
++  Expected<const coff_section *> Section = getSection(DynamicRelocTableSection);
++  if (!Section)
++    return Section.takeError();
++  if (*Section) {
++    ArrayRef<uint8_t> Contents;
++    if (Error E = getSectionContents(*Section, Contents))
++      return E;
++
++    Contents = Contents.drop_front(DynamicRelocTableOffset);
++    if (Contents.size() < sizeof(coff_dynamic_reloc_table))
++      return createStringError(object_error::parse_failed,
++                               "Too large DynamicValueRelocTableOffset (" +
++                                   Twine(DynamicRelocTableOffset) + ")");
++
++    DynamicRelocTable =
++        reinterpret_cast<const coff_dynamic_reloc_table *>(Contents.data());
++
++    if (DynamicRelocTable->Version != 1 && DynamicRelocTable->Version != 2) {
++      DynamicRelocTable = nullptr;
++      return Error::success();
++    }
++
++    Contents = Contents.drop_front(sizeof(*DynamicRelocTable));
++    if (DynamicRelocTable->Size > Contents.size())
++      return createStringError(object_error::parse_failed,
++                               "Indvalid dynamic relocations directory size (" +
++                                   Twine(DynamicRelocTable->Size) + ")");
++    Contents = Contents.take_front(DynamicRelocTable->Size);
++
++    while (!Contents.empty()) {
++      uint32_t DynRelocSize;
++      uint64_t Symbol;
++
++      if (DynamicRelocTable->Version == 1) {
++        if (is64()) {
++          if (Contents.size() < sizeof(coff_dynamic_relocation64))
++            return createStringError(
++                object_error::parse_failed,
++                "Unexpected end of dynamic relocations data");
++
++          auto DynReloc = reinterpret_cast<const coff_dynamic_relocation64 *>(
++              Contents.data());
++          Symbol = DynReloc->Symbol;
++          DynRelocSize = DynReloc->BaseRelocSize;
++          Contents = Contents.drop_front(sizeof(*DynReloc));
++        } else {
++          if (Contents.size() < sizeof(coff_dynamic_relocation32))
++            return createStringError(
++                object_error::parse_failed,
++                "Unexpected end of dynamic relocations data");
++
++          auto DynReloc = reinterpret_cast<const coff_dynamic_relocation32 *>(
++              Contents.data());
++          Symbol = DynReloc->Symbol;
++          DynRelocSize = DynReloc->BaseRelocSize;
++          Contents = Contents.drop_front(sizeof(*DynReloc));
++        }
++      } else {
++        if (is64()) {
++          if (Contents.size() < sizeof(coff_dynamic_relocation64_v2))
++            return createStringError(
++                object_error::parse_failed,
++                "Unexpected end of dynamic relocations data");
++
++          auto DynReloc =
++              reinterpret_cast<const coff_dynamic_relocation64_v2 *>(
++                  Contents.data());
++          if (DynReloc->HeaderSize < sizeof(*DynReloc) ||
++              Contents.size() < DynReloc->HeaderSize)
++            return createStringError(
++                object_error::parse_failed,
++                "Invalid dynamic relocation header size (" +
++                    Twine(DynReloc->HeaderSize) + ")");
++
++          Symbol = DynReloc->Symbol;
++          DynRelocSize = DynReloc->FixupInfoSize;
++          Contents = Contents.drop_front(DynReloc->HeaderSize);
++        } else {
++          if (Contents.size() < sizeof(coff_dynamic_relocation32_v2))
++            return createStringError(
++                object_error::parse_failed,
++                "Unexpected end of dynamic relocations data");
++
++          auto DynReloc =
++              reinterpret_cast<const coff_dynamic_relocation32_v2 *>(
++                  Contents.data());
++          if (DynReloc->HeaderSize < sizeof(*DynReloc) ||
++              Contents.size() < DynReloc->HeaderSize)
++            return createStringError(
++                object_error::parse_failed,
++                "Invalid dynamic relocation header size (" +
++                    Twine(DynReloc->HeaderSize) + ")");
++
++          Symbol = DynReloc->Symbol;
++          DynRelocSize = DynReloc->FixupInfoSize;
++          Contents = Contents.drop_front(DynReloc->HeaderSize);
++        }
++      }
++      if (DynRelocSize > Contents.size())
++        return createStringError(object_error::parse_failed,
++                                 "Too large dynamic relocation size (" +
++                                     Twine(DynRelocSize) + ")");
++
++      ArrayRef<uint8_t> RelocContents = Contents.take_front(DynRelocSize);
++      Contents = Contents.drop_front(DynRelocSize);
++
++      switch (Symbol) {
++      case COFF::IMAGE_DYNAMIC_RELOCATION_ARM64X:
++        while (!RelocContents.empty()) {
++          if (RelocContents.size() < sizeof(coff_base_reloc_block_header))
++            return createStringError(
++                object_error::parse_failed,
++                "Unexpected end of ARM64X relocations data");
++
++          auto Header = reinterpret_cast<const coff_base_reloc_block_header *>(
++              RelocContents.data());
++          if (Header->BlockSize <= sizeof(*Header))
++            return createStringError(object_error::parse_failed,
++                                     "ARM64X relocations block size (" +
++                                         Twine(Header->BlockSize) +
++                                         ") is too small");
++          if (Header->BlockSize % sizeof(uint32_t))
++            return createStringError(
++                object_error::parse_failed,
++                "Unaligned ARM64X relocations block size (" +
++                    Twine(Header->BlockSize) + ")");
++          if (Header->BlockSize > RelocContents.size())
++            return createStringError(object_error::parse_failed,
++                                     "ARM64X relocations block size (" +
++                                         Twine(Header->BlockSize) +
++                                         ") is too large");
++          if (Header->PageRVA & 0xfff)
++            return createStringError(object_error::parse_failed,
++                                     "Unaligned ARM64X relocations page RVA (" +
++                                         Twine(Header->PageRVA) + ")");
++
++          ArrayRef<uint16_t> Relocs(
++              reinterpret_cast<const uint16_t *>(RelocContents.data() +
++                                                 sizeof(*Header)),
++              (Header->BlockSize - sizeof(*Header)) / sizeof(uint16_t));
++          RelocContents = RelocContents.drop_front(Header->BlockSize);
++
++          while (!Relocs.empty()) {
++            if (!Relocs[0]) {
++              if (Relocs.size() != 1)
++                return createStringError(
++                    object_error::parse_failed,
++                    "Unexpected ARM64X relocations terminator");
++              break;
++            }
++
++            uint16_t Arg = Relocs[0] >> 14, RelocSize = 1, Size;
++            switch ((Relocs[0] >> 12) & 3) {
++            case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL:
++              Size = 1 << Arg;
++              break;
++            case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE:
++              if (!Arg)
++                return createStringError(
++                    object_error::parse_failed,
++                    "Invalid ARM64X relocation value size (0)");
++              Size = 1 << Arg;
++              RelocSize += Size / sizeof(Relocs[0]);
++              break;
++            case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA:
++              ++RelocSize;
++              Size = sizeof(uint32_t);
++              break;
++            default:
++              return createStringError(object_error::parse_failed,
++                                       "Invalid relocation type");
++            }
++            if (Header->PageRVA) {
++              uint64_t IntPtr;
++              uint16_t Offset = Relocs[0] & 0xfff;
++              if (Offset % Size)
++                return createStringError(object_error::parse_failed,
++                                         "Unaligned ARM64X relocation RVA (" +
++                                             Twine(Header->PageRVA + Offset) +
++                                             ")");
++              if (Error E = getRvaPtr(Header->PageRVA + Offset + Size, IntPtr,
++                                      "ARM64X reloc"))
++                return E;
++            }
++            Relocs = Relocs.drop_front(RelocSize);
++          }
++        }
++        break;
++      }
++    }
++  }
++
+   return Error::success();
+ }
+ 
+@@ -1047,6 +1258,19 @@ base_reloc_iterator COFFObjectFile::base_reloc_end() const {
+   return base_reloc_iterator(BaseRelocRef(BaseRelocEnd, this));
+ }
+ 
++dynamic_reloc_iterator COFFObjectFile::dynamic_reloc_begin() const {
++  const void *Header = DynamicRelocTable ? DynamicRelocTable + 1 : nullptr;
++  return dynamic_reloc_iterator(DynamicRelocRef(Header, this));
++}
++
++dynamic_reloc_iterator COFFObjectFile::dynamic_reloc_end() const {
++  const void *Header = nullptr;
++  if (DynamicRelocTable)
++    Header = reinterpret_cast<const uint8_t *>(DynamicRelocTable + 1) +
++             DynamicRelocTable->Size;
++  return dynamic_reloc_iterator(DynamicRelocRef(Header, this));
++}
++
+ uint8_t COFFObjectFile::getBytesInAddress() const {
+   return getArch() == Triple::x86_64 || getArch() == Triple::aarch64 ? 8 : 4;
+ }
+@@ -1100,6 +1324,10 @@ iterator_range<base_reloc_iterator> COFFObjectFile::base_relocs() const {
+   return make_range(base_reloc_begin(), base_reloc_end());
+ }
+ 
++iterator_range<dynamic_reloc_iterator> COFFObjectFile::dynamic_relocs() const {
++  return make_range(dynamic_reloc_begin(), dynamic_reloc_end());
++}
++
+ const data_directory *COFFObjectFile::getDataDirectory(uint32_t Index) const {
+   if (!DataDirectory)
+     return nullptr;
+@@ -1789,6 +2017,163 @@ Error BaseRelocRef::getRVA(uint32_t &Result) const {
+   return Error::success();
+ }
+ 
++bool DynamicRelocRef::operator==(const DynamicRelocRef &Other) const {
++  return Header == Other.Header;
++}
++
++void DynamicRelocRef::moveNext() {
++  switch (Obj->getDynamicRelocTable()->Version) {
++  case 1:
++    if (Obj->is64()) {
++      auto H = reinterpret_cast<const coff_dynamic_relocation64 *>(Header);
++      Header += sizeof(*H) + H->BaseRelocSize;
++    } else {
++      auto H = reinterpret_cast<const coff_dynamic_relocation32 *>(Header);
++      Header += sizeof(*H) + H->BaseRelocSize;
++    }
++    break;
++  case 2:
++    if (Obj->is64()) {
++      auto H = reinterpret_cast<const coff_dynamic_relocation64_v2 *>(Header);
++      Header += H->HeaderSize + H->FixupInfoSize;
++    } else {
++      auto H = reinterpret_cast<const coff_dynamic_relocation32_v2 *>(Header);
++      Header += H->HeaderSize + H->FixupInfoSize;
++    }
++    break;
++  }
++}
++
++uint32_t DynamicRelocRef::getType() const {
++  switch (Obj->getDynamicRelocTable()->Version) {
++  case 1:
++    if (Obj->is64()) {
++      auto H = reinterpret_cast<const coff_dynamic_relocation64 *>(Header);
++      return H->Symbol;
++    } else {
++      auto H = reinterpret_cast<const coff_dynamic_relocation32 *>(Header);
++      return H->Symbol;
++    }
++    break;
++  case 2:
++    if (Obj->is64()) {
++      auto H = reinterpret_cast<const coff_dynamic_relocation64_v2 *>(Header);
++      return H->Symbol;
++    } else {
++      auto H = reinterpret_cast<const coff_dynamic_relocation32_v2 *>(Header);
++      return H->Symbol;
++    }
++    break;
++  default:
++    llvm_unreachable("invalid version");
++  }
++}
++
++void DynamicRelocRef::getContents(ArrayRef<uint8_t> &Ref) const {
++  switch (Obj->getDynamicRelocTable()->Version) {
++  case 1:
++    if (Obj->is64()) {
++      auto H = reinterpret_cast<const coff_dynamic_relocation64 *>(Header);
++      Ref = ArrayRef(Header + sizeof(*H), H->BaseRelocSize);
++    } else {
++      auto H = reinterpret_cast<const coff_dynamic_relocation32 *>(Header);
++      Ref = ArrayRef(Header + sizeof(*H), H->BaseRelocSize);
++    }
++    break;
++  case 2:
++    if (Obj->is64()) {
++      auto H = reinterpret_cast<const coff_dynamic_relocation64_v2 *>(Header);
++      Ref = ArrayRef(Header + H->HeaderSize, H->FixupInfoSize);
++    } else {
++      auto H = reinterpret_cast<const coff_dynamic_relocation32_v2 *>(Header);
++      Ref = ArrayRef(Header + H->HeaderSize, H->FixupInfoSize);
++    }
++    break;
++  }
++}
++
++arm64x_reloc_iterator DynamicRelocRef::arm64x_reloc_begin() const {
++  assert(getType() == COFF::IMAGE_DYNAMIC_RELOCATION_ARM64X);
++  ArrayRef<uint8_t> Content;
++  getContents(Content);
++  auto Header =
++      reinterpret_cast<const coff_base_reloc_block_header *>(Content.begin());
++  return arm64x_reloc_iterator(Arm64XRelocRef(Header));
++}
++
++arm64x_reloc_iterator DynamicRelocRef::arm64x_reloc_end() const {
++  assert(getType() == COFF::IMAGE_DYNAMIC_RELOCATION_ARM64X);
++  ArrayRef<uint8_t> Content;
++  getContents(Content);
++  auto Header =
++      reinterpret_cast<const coff_base_reloc_block_header *>(Content.end());
++  return arm64x_reloc_iterator(Arm64XRelocRef(Header, 0));
++}
++
++iterator_range<arm64x_reloc_iterator> DynamicRelocRef::arm64x_relocs() const {
++  return make_range(arm64x_reloc_begin(), arm64x_reloc_end());
++}
++
++bool Arm64XRelocRef::operator==(const Arm64XRelocRef &Other) const {
++  return Header == Other.Header && Index == Other.Index;
++}
++
++void Arm64XRelocRef::moveNext() {
++  switch (getType()) {
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE:
++    Index += (1u << getArg()) / sizeof(uint16_t);
++    break;
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA:
++    ++Index;
++    break;
++  default:
++    break;
++  }
++
++  ++Index;
++  if (sizeof(*Header) + Index * sizeof(uint16_t) < Header->BlockSize &&
++      !getReloc())
++    ++Index; // Skip padding
++  if (sizeof(*Header) + Index * sizeof(uint16_t) == Header->BlockSize) {
++    Header =
++        reinterpret_cast<const coff_base_reloc_block_header *>(&getReloc());
++    Index = 0;
++  }
++}
++
++uint8_t Arm64XRelocRef::getSize() const {
++  switch (getType()) {
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL:
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE:
++    return 1 << getArg();
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA:
++    return sizeof(uint32_t);
++  }
++}
++
++uint64_t Arm64XRelocRef::getValue() const {
++  auto Ptr = reinterpret_cast<const ulittle16_t *>(Header + 1) + Index + 1;
++
++  switch (getType()) {
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE: {
++    ulittle64_t Value(0);
++    memcpy(&Value, Ptr, getSize());
++    return Value;
++  }
++  case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA: {
++    uint16_t arg = getArg();
++    int delta = *Ptr;
++
++    if (arg & 1)
++      delta = -delta;
++    delta *= (arg & 2) ? 8 : 4;
++    return delta;
++  }
++  default:
++    return 0;
++  }
++}
++
+ #define RETURN_IF_ERROR(Expr)                                                  \
+   do {                                                                         \
+     Error E = (Expr);                                                          \
+diff --git a/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc-invalid.yaml b/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc-invalid.yaml
+new file mode 100644
+index 000000000000..7a7951a41a46
+--- /dev/null
++++ b/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc-invalid.yaml
+@@ -0,0 +1,1382 @@
++# Test ARM64X dynamic relocation validation.
++
++# RUN: yaml2obj %s --docnum=1 -o %t1.dll
++# RUN: not llvm-readobj %t1.dll 2>&1 | FileCheck --check-prefix=ERR-HEADER-RVA %s
++# ERR-HEADER-RVA: RVA 0x1002 for ARM64X reloc not found
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x5000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x2000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x5000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x6000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0x1000    # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 0040      # ZERO offset 0xf00, size 2
++      - Binary: 0000      # terminator
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=2 -o %t2.dll
++# RUN: not llvm-readobj %t2.dll 2>&1 | FileCheck --check-prefix=ERR-SEC-INDEX %s
++# ERR-SEC-INDEX: section index out of bounds
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 5
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=3 -o %t3.dll
++# RUN: not llvm-readobj %t3.dll 2>&1 | FileCheck --check-prefix=ERR-DIR-INDEX %s
++# ERR-DIR-INDEX: Too large DynamicValueRelocTableOffset (4)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     11
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - Binary: 010000    # coff_dynamic_reloc_table.Size
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=4 -o %t4.dll
++# RUN: not llvm-readobj %t4.dll 2>&1 | FileCheck --check-prefix=ERR-DIR-SIZE %s
++# ERR-DIR-SIZE: Indvalid dynamic relocations directory size (2)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     13
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 2         # coff_dynamic_reloc_table.Size
++      - Binary: 00
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=5 -o %t5.dll
++# RUN: not llvm-readobj %t5.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-SIZE %s
++# ERR-RELOC-SIZE: Unexpected end of dynamic relocations data
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 11        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - Binary: 000000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=6 -o %t6.dll
++# RUN: not llvm-readobj %t6.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-SIZE2 %s
++# ERR-RELOC-SIZE2: Too large dynamic relocation size (4)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 15        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 4         # coff_dynamic_relocation64.BaseRelocSize
++      - Binary: 000000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=7 -o %t7.dll
++# RUN: not llvm-readobj %t7.dll 2>&1 | FileCheck --check-prefix=ERR-BLOCK-SIZE %s
++# ERR-BLOCK-SIZE: ARM64X relocations block size (7) is too small
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 21        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 9         # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 7         # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 00
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=8 -o %t8.dll
++# RUN: not llvm-readobj %t8.dll 2>&1 | FileCheck --check-prefix=ERR-BLOCK-SIZE2 %s
++# ERR-BLOCK-SIZE2: Unaligned ARM64X relocations block size (10)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 22        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 10        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 10        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 0000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=9 -o %t9.dll
++# RUN: not llvm-readobj %t9.dll 2>&1 | FileCheck --check-prefix=ERR-BLOCK-SIZE3 %s
++# ERR-BLOCK-SIZE3: ARM64X relocations block size (12) is too large
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 23        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 11        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 000000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=10 -o %t10.dll
++# RUN: not llvm-readobj %t10.dll 2>&1 | FileCheck --check-prefix=ERR-TERMINATOR %s
++# ERR-TERMINATOR: Unexpected ARM64X relocations terminator
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 00000000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=11 -o %t11.dll
++# RUN: not llvm-readobj %t11.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-TYPE %s
++# ERR-RELOC-TYPE: Invalid relocation type
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 00300000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=12 -o %t12.dll
++# RUN: not llvm-readobj %t12.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-VALUE %s
++# ERR-RELOC-VALUE: Invalid ARM64X relocation value size (0)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 00100000
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=13 -o %t13.dll
++# RUN: not llvm-readobj %t13.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-RVA %s
++# ERR-RELOC-RVA: RVA 0x6062 for ARM64X reloc not found
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0x6000    # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 6040      # ZERO offset 0x60, size 2
++      - Binary: 0000      # terminator
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=14 -o %t14.dll
++# RUN: not llvm-readobj %t14.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-RVA-SIZE %s
++# ERR-RELOC-RVA-SIZE: RVA 0x6062 for ARM64X reloc not found
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0x6000    # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 6040      # ZERO offset 0x60, size 2
++      - Binary: 0000      # terminator
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=15 -o %t15.dll
++# RUN: not llvm-readobj %t15.dll 2>&1 | FileCheck --check-prefix=ERR-PAGE-RVA %s
++# ERR-PAGE-RVA: Unaligned ARM64X relocations page RVA (24577)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0x6001    # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 0040      # ZERO offset 0, size 2
++      - Binary: 0000      # terminator
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=16 -o %t16.dll
++# RUN: not llvm-readobj %t16.dll 2>&1 | FileCheck --check-prefix=ERR-V2-HEADER-SIZE %s
++# ERR-V2-HEADER-SIZE: Invalid dynamic relocation header size (23)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 2         # coff_dynamic_reloc_table.Version
++      - UInt32: 36        # coff_dynamic_reloc_table.Size
++      - UInt32: 23        # coff_dynamic_relocation64_v2.HeaderSize
++      - UInt32: 12        # coff_dynamic_relocation64_v2.FixupInfoSize
++      - UInt32: 6         # coff_dynamic_relocation64_v2.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64_v2.Symbol(high)
++      - UInt32: 0         # coff_dynamic_relocation64_v2.SymbolGroup
++      - UInt32: 0         # coff_dynamic_relocation64_v2.Flags
++      - UInt32: 0x6000    # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 0040      # ZERO offset 0, size 2
++      - Binary: 0000      # terminator
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=17 -o %t17.dll
++# RUN: not llvm-readobj %t17.dll 2>&1 | FileCheck --check-prefix=ERR-RELOC-SIZE %s
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 2         # coff_dynamic_reloc_table.Version
++      - UInt32: 20        # coff_dynamic_reloc_table.Size
++      - UInt32: 24        # coff_dynamic_relocation64_v2.HeaderSize
++      - UInt32: 12        # coff_dynamic_relocation64_v2.FixupInfoSize
++      - UInt32: 6         # coff_dynamic_relocation64_v2.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64_v2.Symbol(high)
++      - UInt32: 0         # coff_dynamic_relocation64_v2.SymbolGroup
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=18 -o %t18.dll
++# RUN: not llvm-readobj %t18.dll 2>&1 | FileCheck --check-prefix=ERR-RVA-ALIGN %s
++# ERR-RVA-ALIGN: Unaligned ARM64X relocation RVA (24577)
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 4
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0       # CodeRangesToEntryPointsCount
++      - UInt32: 0       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 24        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 12        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0x6000    # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 0140      # ZERO offset 0, size 2
++      - Binary: 0000      # terminator
++symbols:         []
++...
+diff --git a/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml b/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml
+new file mode 100644
+index 000000000000..df2d83db3a6a
+--- /dev/null
++++ b/llvm/test/tools/llvm-readobj/COFF/arm64x-reloc.yaml
+@@ -0,0 +1,322 @@
++# Test reading ARM64X dynamic relocations.
++
++# RUN: yaml2obj %s -o %t.dll
++# RUN: llvm-readobj --coff-load-config %t.dll | FileCheck --check-prefixes=CHECK,V1 %s
++
++# CHECK: CHPEMetadataPointer: 0x180005000
++# CHECK:      CHPEMetadata [
++# CHECK-NEXT:   Version: 0x1
++# CHECK-NEXT:   CodeMap [
++# CHECK-NEXT:     0x1000 - 0x1030  ARM64EC
++# CHECK-NEXT:     0x2000 - 0x2040  ARM64
++# CHECK-NEXT:     0x3000 - 0x3050  X64
++# CHECK-NEXT:   ]
++# CHECK-NEXT:   CodeRangesToEntryPoints [
++# CHECK-NEXT:     0x1000 - 0x1020 -> 0x1000
++# CHECK-NEXT:     0x1020 - 0x1040 -> 0x2000
++# CHECK-NEXT:   ]
++# CHECK-NEXT:   RedirectionMetadata [
++# CHECK-NEXT:     0x1000 -> 0x2000
++# CHECK-NEXT:     0x1020 -> 0x2030
++# CHECK-NEXT:   ]
++
++# CHECK:      DynamicRelocations [
++# V1:           Version: 0x1
++# V2:           Version: 0x2
++# CHECK:        Arm64X [
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x84
++# CHECK-NEXT:       Type: VALUE
++# CHECK-NEXT:       Size: 0x2
++# CHECK-NEXT:       Value: 0x8664
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6020
++# CHECK-NEXT:       Type: VALUE
++# CHECK-NEXT:       Size: 0x2
++# CHECK-NEXT:       Value: 0x3412
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6024
++# CHECK-NEXT:       Type: VALUE
++# CHECK-NEXT:       Size: 0x4
++# CHECK-NEXT:       Value: 0x89674523
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6028
++# CHECK-NEXT:       Type: VALUE
++# CHECK-NEXT:       Size: 0x8
++# CHECK-NEXT:       Value: 0x8877665544332211
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6000
++# CHECK-NEXT:       Type: ZERO
++# CHECK-NEXT:       Size: 0x2
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6004
++# CHECK-NEXT:       Type: ZERO
++# CHECK-NEXT:       Size: 0x4
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6010
++# CHECK-NEXT:       Type: ZERO
++# CHECK-NEXT:       Size: 0x8
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6040
++# CHECK-NEXT:       Type: DELTA
++# CHECK-NEXT:       Value: 68740
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6044
++# CHECK-NEXT:       Type: DELTA
++# CHECK-NEXT:       Value: 137480
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x6048
++# CHECK-NEXT:       Type: DELTA
++# CHECK-NEXT:       Value: -16
++# CHECK-NEXT:     ]
++# CHECK-NEXT:     Entry [
++# CHECK-NEXT:       RVA: 0x604C
++# CHECK-NEXT:       Type: DELTA
++# CHECK-NEXT:       Value: -32
++# CHECK-NEXT:     ]
++# CHECK-NEXT:   ]
++# CHECK-NEXT: ]
++
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 5
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 2       # CodeRangesToEntryPointsCount
++      - UInt32: 2       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++      - UInt32: 0x1000  # CodeRangesToEntryPoints[0]
++      - UInt32: 0x1020
++      - UInt32: 0x1000
++      - UInt32: 0x1020  # CodeRangesToEntryPoints[1]
++      - UInt32: 0x1040
++      - UInt32: 0x2000
++      - UInt32: 0x1000  # RedirectionMetadata[0]
++      - UInt32: 0x2000
++      - UInt32: 0x1020  # RedirectionMetadata[1]
++      - UInt32: 0x2030
++  - Name:            .test
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x6000
++    VirtualSize:     0x60
++    StructuredData:
++      - Binary: 111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000
++      - Binary: 0000000000000000000000000000000000000000000000000000000000000000
++      - Binary: 1010101020202020303030304040404050505050606060607070707080808080
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 1         # coff_dynamic_reloc_table.Version
++      - UInt32: 76        # coff_dynamic_reloc_table.Size
++      - UInt32: 6         # coff_dynamic_relocation64.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64.Symbol(high)
++      - UInt32: 64        # coff_dynamic_relocation64.BaseRelocSize
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 8450      # VALUE offset 0x84 (PE header Machine), size 2
++      - Binary: 6486      # IMAGE_FILE_MACHINE_AMD64
++      - UInt32: 0x6000    # coff_base_reloc_block_header[1].PageRVA
++      - UInt32: 52        # coff_base_reloc_block_header[1].BlockSize
++      - Binary: 2050      # VALUE offset 0x20, size 2
++      - Binary: 1234      # test value
++      - Binary: 2490      # VALUE offset 0x24, size 4
++      - Binary: 23456789  # test value
++      - Binary: 28d0      # VALUE offset 0x28, size 4
++      - Binary: 11223344  # test value
++      - Binary: 55667788  # test value
++      - Binary: 0040      # ZERO offset 0, size 2
++      - Binary: 0480      # ZERO offset 4, size 4
++      - Binary: 10c0      # ZERO offset 16, size 8
++      - Binary: 4020      # DELTA offset 0x40, mul 4
++      - Binary: 2143
++      - Binary: 44a0      # DELTA offset 0x44, mul 8
++      - Binary: 2143
++      - Binary: 4860      # DELTA offset 0x48, mul 4
++      - Binary: 0400
++      - Binary: 4ce0      # DELTA offset 0x4c, mul 8
++      - Binary: 0400
++      - Binary: 0000      # terminator
++symbols:         []
++...
++
++# RUN: yaml2obj %s --docnum=2 -o %t2.dll
++# RUN: llvm-readobj --coff-load-config %t2.dll | FileCheck  --check-prefixes=CHECK,V2 %s
++
++--- !COFF
++OptionalHeader:
++  ImageBase:       0x180000000
++  SectionAlignment: 4096
++  FileAlignment:   512
++  DLLCharacteristics: [ ]
++  LoadConfigTable:
++    RelativeVirtualAddress: 0x4000
++    Size:            320
++header:
++  Machine:         IMAGE_FILE_MACHINE_ARM64
++  Characteristics: [ IMAGE_FILE_EXECUTABLE_IMAGE, IMAGE_FILE_LARGE_ADDRESS_AWARE, IMAGE_FILE_DLL ]
++sections:
++  - Name:            .text
++    Characteristics: [ IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x1000
++    VirtualSize:     0x2050
++  - Name:            .rdata
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x4000
++    VirtualSize:     328
++    StructuredData:
++      - LoadConfig:
++          CHPEMetadataPointer: 0x180005000
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 5
++  - Name:            .data
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE ]
++    VirtualAddress:  0x5000
++    VirtualSize:     144
++    StructuredData:
++      - UInt32: 1       # Version
++      - UInt32: 0x5050  # CodeMap
++      - UInt32: 3       # CodeMapCount
++      - UInt32: 0x5068  # CodeRangesToEntryPoints
++      - UInt32: 0x5080  # RedirectionMetadata
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 2       # CodeRangesToEntryPointsCount
++      - UInt32: 2       # RedirectionMetadataCount
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0
++      - UInt32: 0x1001  # CodeMap[0]
++      - UInt32: 0x30
++      - UInt32: 0x2000  # CodeMap[1]
++      - UInt32: 0x40
++      - UInt32: 0x3002  # CodeMap[2]
++      - UInt32: 0x50
++      - UInt32: 0x1000  # CodeRangesToEntryPoints[0]
++      - UInt32: 0x1020
++      - UInt32: 0x1000
++      - UInt32: 0x1020  # CodeRangesToEntryPoints[1]
++      - UInt32: 0x1040
++      - UInt32: 0x2000
++      - UInt32: 0x1000  # RedirectionMetadata[0]
++      - UInt32: 0x2000
++      - UInt32: 0x1020  # RedirectionMetadata[1]
++      - UInt32: 0x2030
++  - Name:            .test
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x6000
++    VirtualSize:     0x60
++    StructuredData:
++      - Binary: 111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000
++      - Binary: 0000000000000000000000000000000000000000000000000000000000000000
++      - Binary: 1010101020202020303030304040404050505050606060607070707080808080
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_DISCARDABLE ]
++    VirtualAddress:  0x7000
++    VirtualSize:     328
++    StructuredData:
++      - UInt32: 0         # pad
++      - UInt32: 2         # coff_dynamic_reloc_table.Version
++      - UInt32: 88        # coff_dynamic_reloc_table.Size
++      - UInt32: 24        # coff_dynamic_relocation64_v2.HeaderSize
++      - UInt32: 64        # coff_dynamic_relocation64_v2.FixupInfoSize
++      - UInt32: 6         # coff_dynamic_relocation64_v2.Symbol(low) = IMAGE_DYNAMIC_RELOCATION_ARM64X
++      - UInt32: 0         # coff_dynamic_relocation64_v2.Symbol(high)
++      - UInt32: 0         # coff_dynamic_relocation64_v2.SymbolGroup
++      - UInt32: 0         # coff_dynamic_relocation64_v2.Flags
++      - UInt32: 0         # coff_base_reloc_block_header[0].PageRVA
++      - UInt32: 12        # coff_base_reloc_block_header[0].BlockSize
++      - Binary: 8450      # VALUE offset 0x84 (PE header Machine), size 2
++      - Binary: 6486      # IMAGE_FILE_MACHINE_AMD64
++      - UInt32: 0x6000    # coff_base_reloc_block_header[1].PageRVA
++      - UInt32: 52        # coff_base_reloc_block_header[1].BlockSize
++      - Binary: 2050      # VALUE offset 0x20, size 2
++      - Binary: 1234      # test value
++      - Binary: 2490      # VALUE offset 0x24, size 4
++      - Binary: 23456789  # test value
++      - Binary: 28d0      # VALUE offset 0x28, size 4
++      - Binary: 11223344  # test value
++      - Binary: 55667788  # test value
++      - Binary: 0040      # ZERO offset 0, size 2
++      - Binary: 0480      # ZERO offset 4, size 4
++      - Binary: 10c0      # ZERO offset 16, size 8
++      - Binary: 4020      # DELTA offset 0x40, mul 4
++      - Binary: 2143
++      - Binary: 44a0      # DELTA offset 0x44, mul 8
++      - Binary: 2143
++      - Binary: 4860      # DELTA offset 0x48, mul 4
++      - Binary: 0400
++      - Binary: 4ce0      # DELTA offset 0x4c, mul 8
++      - Binary: 0400
++      - Binary: 0000      # terminator
++symbols:         []
++...
+diff --git a/llvm/test/tools/yaml2obj/COFF/load-config.yaml b/llvm/test/tools/yaml2obj/COFF/load-config.yaml
+index 8d177bdc3e12..619062a242ae 100644
+--- a/llvm/test/tools/yaml2obj/COFF/load-config.yaml
++++ b/llvm/test/tools/yaml2obj/COFF/load-config.yaml
+@@ -40,8 +40,8 @@
+ # ALL-NEXT:   CHPEMetadataPointer: 0x0
+ # ALL-NEXT:   GuardRFFailureRoutine: 0x4
+ # ALL-NEXT:   GuardRFFailureRoutineFunctionPointer: 0x5
+-# ALL-NEXT:   DynamicValueRelocTableOffset: 0x6
+-# ALL-NEXT:   DynamicValueRelocTableSection: 7
++# ALL-NEXT:   DynamicValueRelocTableOffset: 0x4
++# ALL-NEXT:   DynamicValueRelocTableSection: 2
+ # ALL-NEXT:   GuardRFVerifyStackPointerFunctionPointer: 0x8
+ # ALL-NEXT:   HotPatchTableOffset: 0x9
+ # ALL-NEXT:   EnclaveConfigurationPointer: 0x1
+@@ -106,8 +106,8 @@ sections:
+           CHPEMetadataPointer: 0
+           GuardRFFailureRoutine: 4
+           GuardRFFailureRoutineFunctionPointer: 5
+-          DynamicValueRelocTableOffset: 6
+-          DynamicValueRelocTableSection: 7
++          DynamicValueRelocTableOffset: 4
++          DynamicValueRelocTableSection: 2
+           GuardRFVerifyStackPointerFunctionPointer: 8
+           HotPatchTableOffset: 9
+           EnclaveConfigurationPointer: 1
+@@ -118,6 +118,14 @@ sections:
+           GuardXFGDispatchFunctionPointer: 6
+           GuardXFGTableDispatchFunctionPointer: 7
+           CastGuardOsDeterminedFailureMode: 8
++  - Name:            .reloc
++    Characteristics: [ IMAGE_SCN_CNT_INITIALIZED_DATA, IMAGE_SCN_MEM_READ ]
++    VirtualAddress:  0x2000
++    VirtualSize:     12
++    StructuredData:
++      - UInt32: 1 # pad
++      - UInt32: 0x10b # Version
++      - UInt32: 0 # Size
+ symbols: []
+ ...
+ 
+diff --git a/llvm/tools/llvm-readobj/COFFDumper.cpp b/llvm/tools/llvm-readobj/COFFDumper.cpp
+index b104774d37a9..65d67d29a5aa 100644
+--- a/llvm/tools/llvm-readobj/COFFDumper.cpp
++++ b/llvm/tools/llvm-readobj/COFFDumper.cpp
+@@ -972,6 +972,43 @@ void COFFDumper::printCOFFLoadConfig() {
+     printRVATable(Tables.GuardEHContTableVA, Tables.GuardEHContTableCount,
+                   4 + Stride, PrintExtra);
+   }
++
++  if (const coff_dynamic_reloc_table *DynRelocTable =
++          Obj->getDynamicRelocTable()) {
++    ListScope LS(W, "DynamicRelocations");
++    W.printHex("Version", DynRelocTable->Version);
++    for (auto reloc : Obj->dynamic_relocs()) {
++      switch (reloc.getType()) {
++      case COFF::IMAGE_DYNAMIC_RELOCATION_ARM64X: {
++        ListScope TLS(W, "Arm64X");
++        for (auto Arm64XReloc : reloc.arm64x_relocs()) {
++          ListScope ELS(W, "Entry");
++          W.printHex("RVA", Arm64XReloc.getRVA());
++          switch (Arm64XReloc.getType()) {
++          case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL:
++            W.printString("Type", "ZEROFILL");
++            W.printHex("Size", Arm64XReloc.getSize());
++            break;
++          case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE:
++            W.printString("Type", "VALUE");
++            W.printHex("Size", Arm64XReloc.getSize());
++            W.printHex("Value", Arm64XReloc.getValue());
++            break;
++          case COFF::IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA:
++            W.printString("Type", "DELTA");
++            W.printNumber("Value",
++                          static_cast<int32_t>(Arm64XReloc.getValue()));
++            break;
++          }
++        }
++        break;
++      }
++      default:
++        W.printHex("Type", reloc.getType());
++        break;
++      }
++    }
++  }
+ }
+ 
+ template <typename T>
+-- 
+2.25.1
+

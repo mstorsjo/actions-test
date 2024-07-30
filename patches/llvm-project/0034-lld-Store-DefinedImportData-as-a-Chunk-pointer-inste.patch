@@ -1,0 +1,120 @@
+From 17f2894253095aa8bb9a2d889224c7b171595054 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 2 Nov 2023 17:30:22 +0100
+Subject: [PATCH 34/55] [lld] Store DefinedImportData as a Chunk pointer
+ instead of using EC flag to access it.
+
+---
+ lld/COFF/InputFiles.cpp  | 12 ++++++------
+ lld/COFF/SymbolTable.cpp |  4 ++--
+ lld/COFF/SymbolTable.h   |  3 ++-
+ lld/COFF/Symbols.h       | 15 +++++----------
+ 4 files changed, 15 insertions(+), 19 deletions(-)
+
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 39cf091267b5..3713a3573fe1 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -1095,15 +1095,15 @@ void ImportFile::parse() {
+   bool isCode = hdr->getType() == llvm::COFF::IMPORT_CODE;
+ 
+   if (ctx.config.machine != ARM64EC) {
+-    impSym = ctx.symtab.addImportData(impName, this, false);
++    impSym = ctx.symtab.addImportData(impName, this, location);
+   } else {
+     StringRef auxImpName = saver().save("__imp_aux_" + name);
+     if (isCode) {
+-      impSym = ctx.symtab.addImportData(auxImpName, this, false);
+-      impECSym = ctx.symtab.addImportData(impName, this, true);
++      impSym = ctx.symtab.addImportData(auxImpName, this, location);
++      impECSym = ctx.symtab.addImportData(impName, this, ECLocation);
+     } else {
+-      impSym = ctx.symtab.addImportData(impName, this, false);
+-      impECSym = ctx.symtab.addImportData(auxImpName, this, true);
++      impSym = ctx.symtab.addImportData(impName, this, location);
++      impECSym = ctx.symtab.addImportData(auxImpName, this, ECLocation);
+     }
+     if (!impECSym)
+       return;
+@@ -1114,7 +1114,7 @@ void ImportFile::parse() {
+     return;
+ 
+   if (hdr->getType() == llvm::COFF::IMPORT_CONST)
+-    static_cast<void>(ctx.symtab.addImportData(name, this, false));
++    static_cast<void>(ctx.symtab.addImportData(name, this, location));
+ 
+   // If type is function, we need to create a thunk which jump to an
+   // address pointed by the __imp_ symbol. (This allows you to call
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index 34c92dd4e9fb..bfb95c865880 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -814,11 +814,11 @@ Symbol *SymbolTable::addCommon(InputFile *f, StringRef n, uint64_t size,
+ }
+ 
+ DefinedImportData *SymbolTable::addImportData(StringRef n, ImportFile *f,
+-                                              bool isEC) {
++                                              Chunk *&location) {
+   auto [s, wasInserted] = insert(n, nullptr);
+   s->isUsedInRegularObj = true;
+   if (wasInserted || isa<Undefined>(s) || s->isLazy()) {
+-    replaceSymbol<DefinedImportData>(s, n, f, isEC);
++    replaceSymbol<DefinedImportData>(s, n, f, location);
+     return cast<DefinedImportData>(s);
+   }
+ 
+diff --git a/lld/COFF/SymbolTable.h b/lld/COFF/SymbolTable.h
+index 0f5f363dab47..0d343b9131b4 100644
+--- a/lld/COFF/SymbolTable.h
++++ b/lld/COFF/SymbolTable.h
+@@ -106,7 +106,8 @@ public:
+   Symbol *addCommon(InputFile *f, StringRef n, uint64_t size,
+                     const llvm::object::coff_symbol_generic *s = nullptr,
+                     CommonChunk *c = nullptr);
+-  DefinedImportData *addImportData(StringRef n, ImportFile *f, bool isEC);
++  DefinedImportData *addImportData(StringRef n, ImportFile *f,
++                                   Chunk *&location);
+   Symbol *addImportThunk(StringRef name, DefinedImportData *s,
+                          uint16_t machine);
+   DefinedImportThunk *addImportCheckThunk(StringRef name, ImportFile *file);
+diff --git a/lld/COFF/Symbols.h b/lld/COFF/Symbols.h
+index 9ee2064ce8b3..7c24f5b56d05 100644
+--- a/lld/COFF/Symbols.h
++++ b/lld/COFF/Symbols.h
+@@ -362,28 +362,23 @@ public:
+ // table in an output. The former has "__imp_" prefix.
+ class DefinedImportData : public Defined {
+ public:
+-  DefinedImportData(StringRef n, ImportFile *f, bool isEC)
+-      : Defined(DefinedImportDataKind, n), file(f), isEC(isEC) {}
++  DefinedImportData(StringRef n, ImportFile *file, Chunk *&location)
++      : Defined(DefinedImportDataKind, n), file(file), location(location) {}
+ 
+   static bool classof(const Symbol *s) {
+     return s->kind() == DefinedImportDataKind;
+   }
+ 
+   uint64_t getRVA() { return getChunk()->getRVA(); }
+-  Chunk *getChunk() { return isEC ? file->ECLocation : file->location; }
+-  void setLocation(Chunk *addressTable) {
+-    if (isEC)
+-      file->ECLocation = addressTable;
+-    else
+-      file->location = addressTable;
+-  }
++  Chunk *getChunk() { return location; }
++  void setLocation(Chunk *addressTable) { location = addressTable; }
+ 
+   StringRef getDLLName() { return file->dllName; }
+   StringRef getExternalName() { return file->externalName; }
+   uint16_t getOrdinal() { return file->hdr->OrdinalHint; }
+ 
+   ImportFile *file;
+-  bool isEC;
++  Chunk *&location;
+ 
+   // This is a pointer to the synthetic symbol associated with the load thunk
+   // for this symbol that will be called if the DLL is delay-loaded. This is
+-- 
+2.25.1
+

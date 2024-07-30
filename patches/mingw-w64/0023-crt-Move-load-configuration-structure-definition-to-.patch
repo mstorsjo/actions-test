@@ -1,0 +1,40 @@
+From 1aececa69c2e7562ea3c6753f6a1dff8c5faf0ed Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Sat, 16 Sep 2023 00:04:07 +0100
+Subject: [PATCH 23/29] crt: Move load configuration structure definition to
+ misc
+
+Now loadcfg is used by more than just CFGuard it doesn't make sense to
+keep it in the cfguard subdir anymore.
+---
+ mingw-w64-crt/Makefile.am                                     | 4 ++--
+ .../{cfguard/mingw_cfguard_loadcfg.S => misc/mingw_loadcfg.S} | 0
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+ rename mingw-w64-crt/{cfguard/mingw_cfguard_loadcfg.S => misc/mingw_loadcfg.S} (100%)
+
+diff --git a/mingw-w64-crt/Makefile.am b/mingw-w64-crt/Makefile.am
+index 5acebdf9b..488021de6 100644
+--- a/mingw-w64-crt/Makefile.am
++++ b/mingw-w64-crt/Makefile.am
+@@ -838,12 +838,12 @@ src_libmingwex=\
+ # Include the default load config struct only for Control Flow Guard support or ARM64EC.
+ if ARM64EC
+ src_libmingwex+=\
+-  cfguard/mingw_cfguard_loadcfg.S \
++  misc/mingw_loadcfg.S \
+   misc/mingw_arm64ec_support.S
+ else
+ if CFGUARD
+ src_libmingwex+=\
+-  cfguard/mingw_cfguard_loadcfg.S
++  misc/mingw_loadcfg.S
+ endif
+ endif
+ 
+diff --git a/mingw-w64-crt/cfguard/mingw_cfguard_loadcfg.S b/mingw-w64-crt/misc/mingw_loadcfg.S
+similarity index 100%
+rename from mingw-w64-crt/cfguard/mingw_cfguard_loadcfg.S
+rename to mingw-w64-crt/misc/mingw_loadcfg.S
+-- 
+2.25.1
+

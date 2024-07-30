@@ -16,7 +16,7 @@ WORKDIR /build
 
 ENV TOOLCHAIN_PREFIX=/opt/llvm-mingw
 
-ARG TOOLCHAIN_ARCHS="i686 x86_64 armv7 aarch64"
+ARG TOOLCHAIN_ARCHS="i686 x86_64 armv7 aarch64 arm64ec"
 
 ARG DEFAULT_CRT=ucrt
 
@@ -25,6 +25,7 @@ ARG CFGUARD_ARGS=--enable-cfguard
 # Build everything that uses the llvm monorepo. We need to build the mingw runtime before the compiler-rt/libunwind/libcxxabi/libcxx runtimes.
 COPY build-llvm.sh build-lldb-mi.sh strip-llvm.sh install-wrappers.sh build-mingw-w64.sh build-mingw-w64-tools.sh build-compiler-rt.sh build-libcxx.sh build-mingw-w64-libraries.sh build-openmp.sh ./
 COPY wrappers/*.sh wrappers/*.c wrappers/*.h ./wrappers/
+COPY patches/llvm-project/*.patch ./patches/llvm-project/
 RUN ./build-llvm.sh $TOOLCHAIN_PREFIX && \
     ./build-lldb-mi.sh $TOOLCHAIN_PREFIX && \
     ./strip-llvm.sh $TOOLCHAIN_PREFIX && \

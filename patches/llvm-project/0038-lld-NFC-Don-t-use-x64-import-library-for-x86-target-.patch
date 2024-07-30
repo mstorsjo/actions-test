@@ -1,0 +1,128 @@
+From b820d85e346080d9b4652eae0db4a75e9d69fd8c Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Thu, 14 Mar 2024 22:09:30 +0100
+Subject: [PATCH 38/55] [lld][NFC] Don't use x64 import library for x86 target
+ in safeseh-md tests.
+
+Use llvm-lib to generate input library instead of a binary blob.
+---
+ lld/test/COFF/Inputs/except_handler3.lib | Bin 1364 -> 0 bytes
+ lld/test/COFF/safeseh-md.s               |  35 ------------------
+ lld/test/COFF/safeseh-md.test            |  43 +++++++++++++++++++++++
+ 3 files changed, 43 insertions(+), 35 deletions(-)
+ delete mode 100644 lld/test/COFF/Inputs/except_handler3.lib
+ delete mode 100644 lld/test/COFF/safeseh-md.s
+ create mode 100644 lld/test/COFF/safeseh-md.test
+
+diff --git a/lld/test/COFF/Inputs/except_handler3.lib b/lld/test/COFF/Inputs/except_handler3.lib
+deleted file mode 100644
+index fdc51ed7328555ededd6e03d629840b1bb487a44..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 1364
+zcmcIk%}&BV5FUPvrt#pxt4U4Nc%smjf`*t9F_DNsu$-4lNg%0)5DwhD@d!SIPr;M;
+z7+!H^yIb2*Lx^#c*_rwF+wIKGbWdyUY&gDAG&Meo5jU`-v#ORX$rvaAum_Nt1LUqz
+zz5w!{B#bp5yPclH8h1~(y=K?x^w?-I98KqJ?7n*bXl4Lo?S8AZNrblqGvGP*{q_TE
+z)SWu+oV-jKOF1#I6SQP<k=)YEswvTdk~pj2`M&m7P?J|DJ`;7Lw``d~AjXvpXrOq@
+zEM7Oj2g*LT016Y&ox5kcaN!sY4`m^M9BLbiE5Wk_%z5w95!wcIm4LW=h%<ee&I;xn
+z9HEuxUdk;Ijjxi<pk!ll5;B$uk0>}@#Awnk8X>0~_=M27lrHMvM(Q!-8NL7QKTR*m
+zHsN|(6-#<W@TrQFKR_2Hu)-=Dd;uq_Vof?iQxy|X=u#zU(0N%n!THyJOVLbyx7aH(
+z*Pjl=-#r<7Sfc}6qYjJ?8*JHuVReb;M@eWCF9C5kp5HlQTb~F;vy7ecELSC+UbXca
+Rvslu{FGK{JuT5I#e*^9C_SOIZ
+
+diff --git a/lld/test/COFF/safeseh-md.s b/lld/test/COFF/safeseh-md.s
+deleted file mode 100644
+index d065af872b8f..000000000000
+--- a/lld/test/COFF/safeseh-md.s
++++ /dev/null
+@@ -1,35 +0,0 @@
+-# REQUIRES: x86
+-# RUN: llvm-mc -triple i686-windows-msvc %s -filetype=obj -o %t.obj
+-# RUN: lld-link %t.obj %S/Inputs/except_handler3.lib -safeseh -out:%t.exe -opt:noref -entry:main
+-# RUN: llvm-readobj --coff-load-config %t.exe | FileCheck %s
+-
+-# CHECK: SEHTable [
+-# CHECK-NEXT: 0x
+-# CHECK-NEXT: ]
+-
+-        .def     @feat.00;
+-        .scl    3;
+-        .type   0;
+-        .endef
+-        .globl  @feat.00
+-@feat.00 = 1
+-
+-        .def     _main;
+-        .scl    2;
+-        .type   32;
+-        .endef
+-        .section        .text,"xr",one_only,_main
+-        .globl  _main
+-_main:
+-        movl $42, %eax
+-        ret
+-
+-.safeseh __except_handler3
+-
+-	.section .rdata,"dr"
+-.globl __load_config_used
+-__load_config_used:
+-        .long 72
+-        .fill 60, 1, 0
+-        .long ___safe_se_handler_table
+-        .long ___safe_se_handler_count
+diff --git a/lld/test/COFF/safeseh-md.test b/lld/test/COFF/safeseh-md.test
+new file mode 100644
+index 000000000000..f9657f80e73c
+--- /dev/null
++++ b/lld/test/COFF/safeseh-md.test
+@@ -0,0 +1,43 @@
++EQUIRES: x86
++RUN: split-file %s %t.dir
++RUN: llvm-lib -machine:x86 -out:%t.dir/except_handler3.lib -def:%t.dir/except_handler3.def
++RUN: llvm-mc -triple i686-windows-msvc %t.dir/safeseh-md.s -filetype=obj -o %t.dir/safeseh-md.obj
++RUN: lld-link %t.dir/safeseh-md.obj %t.dir/except_handler3.lib -safeseh -out:%t.exe -opt:noref -entry:main
++RUN: llvm-readobj --coff-load-config %t.exe | FileCheck %s
++
++CHECK: SEHTable [
++CHECK-NEXT: 0x
++CHECK-NEXT: ]
++
++#--- safeseh-md.s
++        .def     @feat.00;
++        .scl    3;
++        .type   0;
++        .endef
++        .globl  @feat.00
++@feat.00 = 1
++
++        .def     _main;
++        .scl    2;
++        .type   32;
++        .endef
++        .section        .text,"xr",one_only,_main
++        .globl  _main
++_main:
++        movl $42, %eax
++        ret
++
++.safeseh __except_handler3
++
++	.section .rdata,"dr"
++.globl __load_config_used
++__load_config_used:
++        .long 72
++        .fill 60, 1, 0
++        .long ___safe_se_handler_table
++        .long ___safe_se_handler_count
++
++#--- except_handler3.def
++NAME except_handler3.dll
++EXPORTS
++        _except_handler3
+\ No newline at end of file
+-- 
+2.25.1
+

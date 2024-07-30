@@ -1,0 +1,348 @@
+From ebceb381cd2c0e7563004c1268366664f341cddd Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Tue, 14 Nov 2023 20:18:27 +0100
+Subject: [PATCH 37/55] [lld] Add support for delay load helper.
+
+This is different than MS link.exe. Instead of going through an emulator
+for delay loading, add a separated chunk type that takes care of it.
+
+Since CRT has no support for modifying auxiliary delay IAT, this
+moves aux IAT to .data section and modifies it directly in the chunk.
+---
+ lld/COFF/Chunks.cpp                     |   2 +-
+ lld/COFF/Chunks.h                       |   1 +
+ lld/COFF/DLL.cpp                        | 117 +++++++++++++++++++++---
+ lld/COFF/DLL.h                          |   1 -
+ lld/COFF/Writer.cpp                     |   2 -
+ lld/test/COFF/arm64ec-delay-import.test |  50 ++++++++--
+ 6 files changed, 146 insertions(+), 27 deletions(-)
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index a70a50395388..dd6c476bd510 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -267,7 +267,7 @@ void applyArm64Imm(uint8_t *off, uint64_t imm, uint32_t rangeLimit) {
+ // Even if larger loads/stores have a larger range, limit the
+ // effective offset to 12 bit, since it is intended to be a
+ // page offset.
+-static void applyArm64Ldr(uint8_t *off, uint64_t imm) {
++void applyArm64Ldr(uint8_t *off, uint64_t imm) {
+   uint32_t orig = read32le(off);
+   uint32_t size = orig >> 30;
+   // 0x04000000 indicates SIMD/FP registers
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index 7013d0fd9084..0f991bb0feb9 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -878,6 +878,7 @@ void applyBranch24T(uint8_t *off, int32_t v);
+ void applyArm64Addr(uint8_t *off, uint64_t s, uint64_t p, int shift);
+ void applyArm64Imm(uint8_t *off, uint64_t imm, uint32_t rangeLimit);
+ void applyArm64Branch26(uint8_t *off, int64_t v);
++void applyArm64Ldr(uint8_t *off, uint64_t imm);
+ 
+ // Convenience class for initializing a coff_section with specific flags.
+ class FakeSection {
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index f2f4dc767dfb..c2d0f45deae4 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -144,24 +144,23 @@ private:
+ 
+ class ECImportChunk : public NonSectionChunk {
+ public:
+-  explicit ECImportChunk(ImportFile *file) : file(file) {
++  explicit ECImportChunk(COFFLinkerContext &ctx, Chunk *c) : ctx(ctx), thunkChunk(c) {
+     setAlignment(sizeof(uint64_t));
+   }
+   size_t getSize() const override { return sizeof(uint64_t); }
+ 
+   void writeTo(uint8_t *buf) const override {
+-    write64le(buf, file->chkECSym
+-                       ? file->chkECSym->getRVA() + file->ctx.config.imageBase
+-                       : 0);
++    write64le(buf, thunkChunk ? thunkChunk->getRVA() + ctx.config.imageBase : 0);
+   }
+ 
+   void getBaserels(std::vector<Baserel> *res) override {
+-    if (file->chkECSym)
+-      res->emplace_back(rva, file->ctx.config.machine);
++    if (thunkChunk)
++      res->emplace_back(rva, ARM64EC);
+   }
+ 
+ private:
+-  ImportFile *file;
++  COFFLinkerContext &ctx;
++  Chunk *thunkChunk;
+ };
+ 
+ static std::vector<std::vector<DefinedImportData *>>
+@@ -339,6 +338,46 @@ static const uint8_t tailMergeARM64[] = {
+     0x00, 0x02, 0x1f, 0xd6, // br      x16
+ };
+ 
++static const uint8_t thunkARM64EC[] = {
++    0x11, 0x00, 0x00, 0x90, // adrp    x17, #0      __imp_aux_<FUNCNAME>
++    0x31, 0x02, 0x00, 0x91, // add     x17, x17, #0 :lo12:__imp_aux_<FUNCNAME>
++    0xfe, 0x0f, 0x1f, 0xf8, // str     x30, [sp, #-0x10]!
++    0x00, 0x00, 0x00, 0x94, // bl      __tailMerge_<lib>
++    0xfe, 0x07, 0x41, 0xf8, // ldr     x30, [sp], #0x10
++    0x08, 0x00, 0x00, 0x90, // adrp    x0, __impchk_<FUNCNAME>
++    0x08, 0x01, 0x00, 0x91, // add     x0, x0, :lo12:__impchk_<FUNCNAME>
++    0x09, 0x00, 0x00, 0x90, // adrp    x0, __imp_<FUNCNAME>
++    0x28, 0x01, 0x00, 0xf9, // str     x8, [x9, :lo12:__imp_<FUNCNAME>]
++    0x00, 0x01, 0x1f, 0xd6, // br      x8
++};
++
++static const uint8_t delayHelperARM64EC[] = {
++    0xfd, 0x7b, 0xb3, 0xa9, // stp     x29, x30, [sp, #-208]!
++    0xfd, 0x03, 0x00, 0x91, // mov     x29, sp
++    0xe0, 0x07, 0x01, 0xa9, // stp     x0, x1, [sp, #16]
++    0xe2, 0x0f, 0x02, 0xa9, // stp     x2, x3, [sp, #32]
++    0xe4, 0x17, 0x03, 0xa9, // stp     x4, x5, [sp, #48]
++    0xe6, 0x1f, 0x04, 0xa9, // stp     x6, x7, [sp, #64]
++    0xe0, 0x87, 0x02, 0xad, // stp     q0, q1, [sp, #80]
++    0xe2, 0x8f, 0x03, 0xad, // stp     q2, q3, [sp, #112]
++    0xe4, 0x97, 0x04, 0xad, // stp     q4, q5, [sp, #144]
++    0xe6, 0x9f, 0x05, 0xad, // stp     q6, q7, [sp, #176]
++    0xe1, 0x03, 0x11, 0xaa, // mov     x1, x17
++    0x00, 0x00, 0x00, 0x90, // adrp    x0, #0     DELAY_IMPORT_DESCRIPTOR
++    0x00, 0x00, 0x00, 0x91, // add     x0, x0, #0 :lo12:DELAY_IMPORT_DESCRIPTOR
++    0x00, 0x00, 0x00, 0x94, // bl      #0 __delayLoadHelper2
++    0xe6, 0x9f, 0x45, 0xad, // ldp     q6, q7, [sp, #176]
++    0xe4, 0x97, 0x44, 0xad, // ldp     q4, q5, [sp, #144]
++    0xe2, 0x8f, 0x43, 0xad, // ldp     q2, q3, [sp, #112]
++    0xe0, 0x87, 0x42, 0xad, // ldp     q0, q1, [sp, #80]
++    0xe6, 0x1f, 0x44, 0xa9, // ldp     x6, x7, [sp, #64]
++    0xe4, 0x17, 0x43, 0xa9, // ldp     x4, x5, [sp, #48]
++    0xe2, 0x0f, 0x42, 0xa9, // ldp     x2, x3, [sp, #32]
++    0xe0, 0x07, 0x41, 0xa9, // ldp     x0, x1, [sp, #16]
++    0xfd, 0x7b, 0xcd, 0xa8, // ldp     x29, x30, [sp], #208
++    0xc0, 0x03, 0x5f, 0xd6, // ret
++};
++
+ // A chunk for the delay import thunk.
+ class ThunkChunkX64 : public NonSectionCodeChunk {
+ public:
+@@ -553,6 +592,50 @@ public:
+   Defined *helper = nullptr;
+ };
+ 
++class ThunkChunkARM64EC : public NonSectionCodeChunk {
++public:
++  ThunkChunkARM64EC(ImportFile *f, Chunk *tm) : file(f), tailMerge(tm) {
++    setAlignment(4);
++  }
++
++  size_t getSize() const override { return sizeof(thunkARM64EC); }
++  MachineTypes getMachine() const override { return ARM64EC; }
++
++  void writeTo(uint8_t *buf) const override {
++    memcpy(buf, thunkARM64EC, sizeof(thunkARM64EC));
++    applyArm64Addr(buf + 0, file->impSym->getRVA(), rva + 0, 12);
++    applyArm64Imm(buf + 4, file->impSym->getRVA() & 0xfff, 0);
++    applyArm64Branch26(buf + 12, tailMerge->getRVA() - rva - 12);
++    applyArm64Addr(buf + 20, file->chkECSym->getRVA(), rva + 20, 12);
++    applyArm64Imm(buf + 24, file->chkECSym->getRVA() & 0xfff, 0);
++    applyArm64Addr(buf + 28, file->impECSym->getRVA(), rva + 28, 12);
++    applyArm64Ldr(buf + 32, file->impECSym->getRVA() & 0xfff);
++  }
++
++  ImportFile *file;
++  Chunk *tailMerge;
++};
++
++class DelayHelperChunkARM64EC : public NonSectionCodeChunk {
++public:
++  DelayHelperChunkARM64EC(Chunk *d, Defined *h) : desc(d), helper(h) {
++    setAlignment(4);
++  }
++
++  size_t getSize() const override { return sizeof(delayHelperARM64EC); }
++  MachineTypes getMachine() const override { return ARM64EC; }
++
++  void writeTo(uint8_t *buf) const override {
++    memcpy(buf, delayHelperARM64EC, sizeof(delayHelperARM64EC));
++    applyArm64Addr(buf + 44, desc->getRVA(), rva + 44, 12);
++    applyArm64Imm(buf + 48, desc->getRVA() & 0xfff, 0);
++    applyArm64Branch26(buf + 52, helper->getRVA() - rva - 52);
++  }
++
++  Chunk *desc = nullptr;
++  Defined *helper = nullptr;
++};
++
+ // A chunk for the import descriptor table.
+ class DelayAddressChunk : public NonSectionChunk {
+ public:
+@@ -722,11 +805,12 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+       }
+ 
+       if (s->file->impECSym) {
+-        auto chunk = make<ECImportChunk>(s->file);
++        Chunk *chkChunk = s->file->chkECSym ? s->file->chkECSym->getChunk() : nullptr;
++        auto chunk = make<ECImportChunk>(ctx, chkChunk);
+         auxIat.push_back(chunk);
+         s->file->impECSym->setLocation(chunk);
+ 
+-        chunk = make<ECImportChunk>(s->file);
++        chunk = make<ECImportChunk>(ctx, chkChunk);
+         auxIatCopy.push_back(chunk);
+         s->file->auxImpCopySym->setLocation(chunk);
+       }
+@@ -766,11 +850,6 @@ std::vector<Chunk *> DelayLoadContents::getDataChunks() {
+   std::vector<Chunk *> v;
+   v.insert(v.end(), moduleHandles.begin(), moduleHandles.end());
+   v.insert(v.end(), addresses.begin(), addresses.end());
+-  return v;
+-}
+-
+-std::vector<Chunk *> DelayLoadContents::getRdataChunks() {
+-  std::vector<Chunk *> v;
+   v.insert(v.end(), auxIat.begin(), auxIat.end());
+   return v;
+ }
+@@ -794,6 +873,10 @@ void DelayLoadContents::create(Defined *h) {
+     size_t base = addresses.size();
+     Chunk *tm = newTailMergeChunk(dir);
+     Chunk *pdataChunk = unwind ? newTailMergePDataChunk(tm, unwind) : nullptr;
++    Chunk *tmEC = nullptr;
++    if (ctx.config.machine == ARM64EC)
++      tmEC = make<DelayHelperChunkARM64EC>(dir, helper);
++
+     for (DefinedImportData *s : syms) {
+       Chunk *t = newThunkChunk(s, tm);
+       auto *a = make<DelayAddressChunk>(ctx, t);
+@@ -815,12 +898,16 @@ void DelayLoadContents::create(Defined *h) {
+       }
+ 
+       if (s->file->impECSym) {
+-        auto chunk = make<ECImportChunk>(s->file);
++        auto thunkEC = make<ThunkChunkARM64EC>(s->file, tmEC);
++        thunks.push_back(thunkEC);
++        auto chunk = make<ECImportChunk>(ctx, thunkEC);
+         auxIat.push_back(chunk);
+         s->file->impECSym->setLocation(chunk);
+       }
+     }
+     thunks.push_back(tm);
++    if (tmEC)
++      thunks.push_back(tmEC);
+     if (pdataChunk)
+       pdata.push_back(pdataChunk);
+     StringRef tmName =
+diff --git a/lld/COFF/DLL.h b/lld/COFF/DLL.h
+index c03dbf74519b..9af42a6da9d1 100644
+--- a/lld/COFF/DLL.h
++++ b/lld/COFF/DLL.h
+@@ -54,7 +54,6 @@ public:
+   void create(Defined *helper);
+   std::vector<Chunk *> getChunks();
+   std::vector<Chunk *> getDataChunks();
+-  std::vector<Chunk *> getRdataChunks();
+   ArrayRef<Chunk *> getCodeChunks() { return thunks; }
+   ArrayRef<Chunk *> getCodePData() { return pdata; }
+   ArrayRef<Chunk *> getCodeUnwindInfo() { return unwindinfo; }
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index f436be6f46b5..1fcaecd9ae15 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -1258,8 +1258,6 @@ void Writer::appendImportThunks() {
+       textSec->addChunk(c);
+     for (Chunk *c : delayIdata.getCodePData())
+       pdataSec->addChunk(c);
+-    for (Chunk *c : delayIdata.getRdataChunks())
+-      rdataSec->addChunk(c);
+     for (Chunk *c : delayIdata.getCodeUnwindInfo())
+       rdataSec->addChunk(c);
+   }
+diff --git a/lld/test/COFF/arm64ec-delay-import.test b/lld/test/COFF/arm64ec-delay-import.test
+index 6f13a87712de..f0805f97314f 100644
+--- a/lld/test/COFF/arm64ec-delay-import.test
++++ b/lld/test/COFF/arm64ec-delay-import.test
+@@ -10,7 +10,7 @@ RUN: lld-link -machine:arm64ec -dll -noentry -out:out.dll loadconfig-arm64ec.obj
+ RUN:          test.obj test-arm64ec.lib -delayload:test.dll
+ 
+ RUN: llvm-readobj --hex-dump=.test out.dll | FileCheck -check-prefix=TESTSEC %s
+-TESTSEC: 0x180006000 00300000 88400000 00200000 10100000
++TESTSEC: 0x180006000 98400000 88400000 00200000 10100000
+ 
+ RUN: llvm-objdump -d out.dll | FileCheck -check-prefix=DISASM %s
+ DISASM:      0000000180001000 <.text>:
+@@ -18,16 +18,50 @@ DISASM-NEXT: 180001000: 52800040     mov     w0, #0x2                // =2
+ DISASM-NEXT: 180001004: d65f03c0     ret
+ DISASM-NEXT: 180001008: 52800060     mov     w0, #0x3                // =3
+ DISASM-NEXT: 18000100c: d65f03c0     ret
+-DISASM-NEXT: 180001010: d0000010     adrp    x16, 0x180003000
+-DISASM-NEXT: 180001014: f9400210     ldr     x16, [x16]
++DISASM-NEXT: 180001010: f0000010     adrp    x16, 0x180004000
++DISASM-NEXT: 180001014: f9404e10     ldr     x16, [x16, #0x98]
+ DISASM-NEXT: 180001018: d61f0200     br      x16
+ DISASM-NEXT: 18000101c: f000000b     adrp    x11, 0x180004000
+ DISASM-NEXT: 180001020: f940456b     ldr     x11, [x11, #0x88]
+ DISASM-NEXT: 180001024: 9000000a     adrp    x10, 0x180001000 <.text>
+-DISASM-NEXT: 180001028: 9100c14a     add     x10, x10, #0x30
++DISASM-NEXT: 180001028: 9102e14a     add x10, x10, #0xb8
+ DISASM-NEXT: 18000102c: 17fffff5     b       0x180001000 <.text>
+-DISASM-NEXT: 180001030: 52800080     mov     w0, #0x4                // =4
+-DISASM-NEXT: 180001034: d65f03c0     ret
++DISASM-NEXT: 180001030: f0000011     adrp    x17, 0x180004000
++DISASM-NEXT: 180001034: 91022231     add     x17, x17, #0x88
++DISASM-NEXT: 180001038: f81f0ffe     str     x30, [sp, #-0x10]!
++DISASM-NEXT: 18000103c: 94000007     bl      0x180001058 <.text+0x58>
++DISASM-NEXT: 180001040: f84107fe     ldr     x30, [sp], #0x10
++DISASM-NEXT: 180001044: 90000008     adrp    x8, 0x180001000 <.text>
++DISASM-NEXT: 180001048: 91007108     add     x8, x8, #0x1c
++DISASM-NEXT: 18000104c: f0000009     adrp    x9, 0x180004000
++DISASM-NEXT: 180001050: f9004d28     str     x8, [x9, #0x98]
++DISASM-NEXT: 180001054: d61f0100     br      x8
++DISASM-NEXT: 180001058: a9b37bfd     stp     x29, x30, [sp, #-0xd0]!
++DISASM-NEXT: 18000105c: 910003fd     mov     x29, sp
++DISASM-NEXT: 180001060: a90107e0     stp     x0, x1, [sp, #0x10]
++DISASM-NEXT: 180001064: a9020fe2     stp     x2, x3, [sp, #0x20]
++DISASM-NEXT: 180001068: a90317e4     stp     x4, x5, [sp, #0x30]
++DISASM-NEXT: 18000106c: a9041fe6     stp     x6, x7, [sp, #0x40]
++DISASM-NEXT: 180001070: ad0287e0     stp     q0, q1, [sp, #0x50]
++DISASM-NEXT: 180001074: ad038fe2     stp     q2, q3, [sp, #0x70]
++DISASM-NEXT: 180001078: ad0497e4     stp     q4, q5, [sp, #0x90]
++DISASM-NEXT: 18000107c: ad059fe6     stp     q6, q7, [sp, #0xb0]
++DISASM-NEXT: 180001080: aa1103e1     mov     x1, x17
++DISASM-NEXT: 180001084: d0000000     adrp    x0, 0x180003000
++DISASM-NEXT: 180001088: 9107c000     add     x0, x0, #0x1f0
++DISASM-NEXT: 18000108c: 97ffffdf     bl      0x180001008 <.text+0x8>
++DISASM-NEXT: 180001090: ad459fe6     ldp     q6, q7, [sp, #0xb0]
++DISASM-NEXT: 180001094: ad4497e4     ldp     q4, q5, [sp, #0x90]
++DISASM-NEXT: 180001098: ad438fe2     ldp     q2, q3, [sp, #0x70]
++DISASM-NEXT: 18000109c: ad4287e0     ldp     q0, q1, [sp, #0x50]
++DISASM-NEXT: 1800010a0: a9441fe6     ldp     x6, x7, [sp, #0x40]
++DISASM-NEXT: 1800010a4: a94317e4     ldp     x4, x5, [sp, #0x30]
++DISASM-NEXT: 1800010a8: a9420fe2     ldp     x2, x3, [sp, #0x20]
++DISASM-NEXT: 1800010ac: a94107e0     ldp     x0, x1, [sp, #0x10]
++DISASM-NEXT: 1800010b0: a8cd7bfd     ldp     x29, x30, [sp], #0xd0
++DISASM-NEXT: 1800010b4: d65f03c0     ret
++DISASM-NEXT: 1800010b8: 52800080     mov     w0, #0x4                // =4
++DISASM-NEXT: 1800010bc: d65f03c0     ret
+ DISASM-NEXT:                 ...
+ DISASM-NEXT: 180002000: ff 25 82 20 00 00            jmpq    *0x2082(%rip)           # 0x180004088
+ DISASM-NEXT: 180002006: 48 8d 05 7b 20 00 00         leaq    0x207b(%rip), %rax      # 0x180004088
+@@ -42,7 +76,7 @@ DISASM-NEXT: 180002021: 66 0f 7f 4c 24 10            movdqa  %xmm1, 0x10(%rsp)
+ DISASM-NEXT: 180002027: 66 0f 7f 54 24 20            movdqa  %xmm2, 0x20(%rsp)
+ DISASM-NEXT: 18000202d: 66 0f 7f 5c 24 30            movdqa  %xmm3, 0x30(%rsp)
+ DISASM-NEXT: 180002033: 48 8b d0                     movq    %rax, %rdx
+-DISASM-NEXT: 180002036: 48 8d 0d c3 11 00 00         leaq    0x11c3(%rip), %rcx      # 0x180003200
++DISASM-NEXT: 180002036: 48 8d 0d b3 11 00 00         leaq    0x11b3(%rip), %rcx      # 0x1800031f0
+ DISASM-NEXT: 18000203d: e8 c6 ef ff ff               callq   0x180001008 <.text+0x8>
+ DISASM-NEXT: 180002042: 66 0f 6f 04 24               movdqa  (%rsp), %xmm0
+ DISASM-NEXT: 180002047: 66 0f 6f 4c 24 10            movdqa  0x10(%rsp), %xmm1
+@@ -61,7 +95,7 @@ IMPORTS-NEXT:   Name: test.dll
+ IMPORTS-NEXT:   Attributes: 0x1
+ IMPORTS-NEXT:   ModuleHandle: 0x4080
+ IMPORTS-NEXT:   ImportAddressTable: 0x4088
+-IMPORTS-NEXT:   ImportNameTable: 0x3240
++IMPORTS-NEXT:   ImportNameTable: 0x3230
+ IMPORTS-NEXT:   BoundDelayImportTable: 0x0
+ IMPORTS-NEXT:   UnloadDelayImportTable: 0x0
+ IMPORTS-NEXT:   Import {
+-- 
+2.25.1
+

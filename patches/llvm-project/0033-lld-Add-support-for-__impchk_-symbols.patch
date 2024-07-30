@@ -1,0 +1,227 @@
+From 6edaa4847929d79de4bf9d504e3a4551ddc3651b Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Tue, 31 Oct 2023 23:57:33 +0100
+Subject: [PATCH 33/55] [lld] Add support for __impchk_* symbols.
+
+---
+ lld/COFF/Chunks.cpp               |  5 ++++-
+ lld/COFF/Chunks.h                 |  4 ++--
+ lld/COFF/DLL.cpp                  |  6 +++---
+ lld/COFF/InputFiles.cpp           |  5 +++--
+ lld/COFF/InputFiles.h             |  2 +-
+ lld/COFF/SymbolTable.cpp          | 16 +++++++++++++++-
+ lld/COFF/SymbolTable.h            |  1 +
+ lld/COFF/Symbols.cpp              |  5 +++++
+ lld/COFF/Symbols.h                |  2 ++
+ lld/COFF/Writer.cpp               |  4 ++--
+ lld/test/COFF/arm64ec-import.test |  3 ++-
+ 11 files changed, 40 insertions(+), 13 deletions(-)
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index 2249d3ae6fc9..a70a50395388 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -425,7 +425,7 @@ void SectionChunk::applyRelocation(uint8_t *off,
+   if (sym && getMachine() == AMD64 && file->ctx.config.machine == ARM64EC &&
+       isa<DefinedImportData>(sym)) {
+     ImportFile *importFile = cast<DefinedImportData>(sym)->file;
+-    if (importFile->ECThunk)
++    if (importFile->chkECSym)
+       sym = importFile->impSym;
+   }
+ 
+@@ -823,6 +823,9 @@ void ImportThunkChunkARM64::writeTo(uint8_t *buf) const {
+   applyArm64Ldr(buf + 4, off);
+ }
+ 
++ImportThunkChunkARM64EC::ImportThunkChunkARM64EC(ImportFile *file)
++    : ImportThunkChunk(file->ctx, file->impSym), file(file) {}
++
+ void ImportThunkChunkARM64EC::writeTo(uint8_t *buf) const {
+   memcpy(buf, importThunkARM64EC, sizeof(importThunkARM64EC));
+   applyArm64Addr(buf, file->impSym->getRVA(), rva, 12);
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index 636744e3b7a1..7013d0fd9084 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -613,9 +613,9 @@ private:
+   MachineTypes machine;
+ };
+ 
+-class ImportThunkChunkARM64EC : public NonSectionCodeChunk {
++class ImportThunkChunkARM64EC : public ImportThunkChunk {
+ public:
+-  explicit ImportThunkChunkARM64EC(ImportFile *file) : file(file) {}
++  explicit ImportThunkChunkARM64EC(ImportFile *file);
+   size_t getSize() const override { return sizeof(importThunkARM64EC); };
+   MachineTypes getMachine() const override { return ARM64EC; }
+   void writeTo(uint8_t *buf) const override;
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 87c579933230..110a8be04c39 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -150,13 +150,13 @@ public:
+   size_t getSize() const override { return sizeof(uint64_t); }
+ 
+   void writeTo(uint8_t *buf) const override {
+-    write64le(buf, file->ECThunk
+-                       ? file->ECThunk->getRVA() + file->ctx.config.imageBase
++    write64le(buf, file->chkECSym
++                       ? file->chkECSym->getRVA() + file->ctx.config.imageBase
+                        : 0);
+   }
+ 
+   void getBaserels(std::vector<Baserel> *res) override {
+-    if (file->ECThunk)
++    if (file->chkECSym)
+       res->emplace_back(rva, file->ctx.config.machine);
+   }
+ 
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index e67f056040fd..39cf091267b5 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -1128,13 +1128,14 @@ void ImportFile::parse() {
+           saver().save(*getArm64ECMangledFunctionName(name));
+       auxThunkSym = ctx.symtab.addImportThunk(auxThunkName, impECSym, ARM64EC);
+ 
+-      ECThunk = make<ImportThunkChunkARM64EC>(this);
++      StringRef impChkName = saver().save("__impchk_" + name);
++      chkECSym = ctx.symtab.addImportCheckThunk(impChkName, this);
+     }
+   }
+ }
+ 
+ Symbol *ImportFile::findECExitThunkSymbol() const {
+-  if (!ECThunk)
++  if (!chkECSym)
+     return nullptr;
+   if (Symbol *sym = ctx.symtab.findExitThunk(impECSym))
+     return sym;
+diff --git a/lld/COFF/InputFiles.h b/lld/COFF/InputFiles.h
+index c7cbbac65ebf..78c1bdbd6889 100644
+--- a/lld/COFF/InputFiles.h
++++ b/lld/COFF/InputFiles.h
+@@ -349,7 +349,7 @@ public:
+   DefinedImportData *impECSym = nullptr;
+   Symbol *thunkSym = nullptr;
+   Symbol *auxThunkSym = nullptr;
+-  Chunk *ECThunk = nullptr;
++  DefinedImportThunk *chkECSym = nullptr;
+   std::string dllName;
+ 
+ private:
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index ff2d71aad219..34c92dd4e9fb 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -69,7 +69,7 @@ void SymbolTable::addFile(InputFile *file) {
+       ctx.bitcodeFileInstances.push_back(f);
+     } else if (auto *f = dyn_cast<ImportFile>(file)) {
+       ctx.importFileInstances.push_back(f);
+-      if (f->ECThunk)
++      if (f->chkECSym)
+         ctx.driver.pullImportThunkSymbols();
+     }
+   }
+@@ -839,6 +839,20 @@ Symbol *SymbolTable::addImportThunk(StringRef name, DefinedImportData *id,
+   return nullptr;
+ }
+ 
++DefinedImportThunk *SymbolTable::addImportCheckThunk(StringRef name,
++                                                     ImportFile *file) {
++  auto [s, wasInserted] = insert(name, nullptr);
++  s->isUsedInRegularObj = true;
++  if (wasInserted || isa<Undefined>(s) || s->isLazy()) {
++    replaceSymbol<DefinedImportThunk>(s, ctx, name, file->impSym,
++                                      make<ImportThunkChunkARM64EC>(file));
++    return cast<DefinedImportThunk>(s);
++  }
++
++  reportDuplicate(s, file);
++  return nullptr;
++}
++
+ void SymbolTable::addLibcall(StringRef name) {
+   Symbol *sym = findUnderscore(name);
+   if (!sym)
+diff --git a/lld/COFF/SymbolTable.h b/lld/COFF/SymbolTable.h
+index 6e65b36397f8..0f5f363dab47 100644
+--- a/lld/COFF/SymbolTable.h
++++ b/lld/COFF/SymbolTable.h
+@@ -109,6 +109,7 @@ public:
+   DefinedImportData *addImportData(StringRef n, ImportFile *f, bool isEC);
+   Symbol *addImportThunk(StringRef name, DefinedImportData *s,
+                          uint16_t machine);
++  DefinedImportThunk *addImportCheckThunk(StringRef name, ImportFile *file);
+   void addLibcall(StringRef name);
+   void addEntryThunk(Symbol *from, Symbol *to);
+   void addExitThunk(Symbol *from, Symbol *to);
+diff --git a/lld/COFF/Symbols.cpp b/lld/COFF/Symbols.cpp
+index 27c3057dc9f5..b05ccb95babe 100644
+--- a/lld/COFF/Symbols.cpp
++++ b/lld/COFF/Symbols.cpp
+@@ -126,6 +126,11 @@ DefinedImportThunk::DefinedImportThunk(COFFLinkerContext &ctx, StringRef name,
+     : Defined(DefinedImportThunkKind, name), wrappedSym(s),
+       data(makeImportThunk(ctx, s, machine)) {}
+ 
++DefinedImportThunk::DefinedImportThunk(COFFLinkerContext &ctx, StringRef name,
++                                       DefinedImportData *s,
++                                       ImportThunkChunk *chunk)
++    : Defined(DefinedImportThunkKind, name), wrappedSym(s), data(chunk) {}
++
+ Defined *Undefined::getWeakAlias() {
+   // A weak alias may be a weak alias to another symbol, so check recursively.
+   SmallSet<Symbol *, 4> weakChain;
+diff --git a/lld/COFF/Symbols.h b/lld/COFF/Symbols.h
+index 691d4de898d5..9ee2064ce8b3 100644
+--- a/lld/COFF/Symbols.h
++++ b/lld/COFF/Symbols.h
+@@ -400,6 +400,8 @@ public:
+ // a regular name. A function pointer is given as a DefinedImportData.
+ class DefinedImportThunk : public Defined {
+ public:
++  DefinedImportThunk(COFFLinkerContext &ctx, StringRef name,
++                     DefinedImportData *s, ImportThunkChunk *chunk);
+   DefinedImportThunk(COFFLinkerContext &ctx, StringRef name,
+                      DefinedImportData *s, uint16_t machine);
+ 
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 4c41e7befd38..f1a723448edb 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -1246,8 +1246,8 @@ void Writer::appendImportThunks() {
+         textSec->addChunk(chunk);
+     }
+ 
+-    if (file->ECThunk)
+-      textSec->addChunk(file->ECThunk);
++    if (file->chkECSym)
++      textSec->addChunk(file->chkECSym->getChunk());
+   }
+ 
+   if (!delayIdata.empty()) {
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index 350e6c22147a..3ac1466c3b81 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -82,7 +82,7 @@ RUN: llvm-readobj --hex-dump=.test out2.dll | FileCheck -check-prefix=TESTSEC %s
+ RUN: llvm-readobj --hex-dump=.test out4.dll | FileCheck -check-prefix=TESTSEC %s
+ TESTSEC:      0x180008000 08500000 08300000 00200000 08100000
+ TESTSEC-NEXT: 0x180008010 00300000 00500000 10500000 10300000
+-TESTSEC-NEXT: 0x180008020 20500000
++TESTSEC-NEXT: 0x180008020 20500000 14100000
+ 
+ RUN: llvm-readobj --hex-dump=.test out3.dll | FileCheck -check-prefix=TESTSEC-X64 %s
+ TESTSEC-X64:      0x180008000 08300000 08300000 00200000 08100000
+@@ -147,6 +147,7 @@ arm64ec_data_sym:
+     .rva __imp_otherfunc
+     .rva __imp_aux_otherfunc
+     .rva __imp_myfunc2
++    .rva __impchk_myfunc
+ 
+ #--- arm64ec-stubs.s
+     .text
+-- 
+2.25.1
+

@@ -1,0 +1,52 @@
+From 1ff0956fa1a9153a6723379d0ca90f1ffda8c079 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Fri, 8 Sep 2023 15:26:33 +0100
+Subject: [PATCH 01/29] headers: Define ARM64EC target identification macros
+
+When mingw is built for ARM64EC, both __x86_64__/_X86_64_ and
+__arm64ec__/_ARM64EC_ are set. This is done to ensure structure layouts
+in ARM64EC user code match those of X86_64 compiled code.
+---
+ mingw-w64-headers/crt/_mingw_mac.h | 7 +++++++
+ mingw-w64-headers/include/winnt.h  | 7 +++++++
+ 2 files changed, 14 insertions(+)
+
+diff --git a/mingw-w64-headers/crt/_mingw_mac.h b/mingw-w64-headers/crt/_mingw_mac.h
+index e7fd07220..3fe61328e 100644
+--- a/mingw-w64-headers/crt/_mingw_mac.h
++++ b/mingw-w64-headers/crt/_mingw_mac.h
+@@ -88,6 +88,13 @@
+ #  endif
+ #endif
+ 
++#if defined(__arm64ec__) && !defined(_M_ARM64EC)
++#  define _M_ARM64EC 1
++#  ifndef _ARM64EC_
++#    define _ARM64EC_ 1
++#  endif
++#endif
++
+ #ifndef _X86_
+    /* MS does not prefix symbols by underscores for 64-bit.  */
+ #  ifndef __MINGW_USE_UNDERSCORE_PREFIX
+diff --git a/mingw-w64-headers/include/winnt.h b/mingw-w64-headers/include/winnt.h
+index c4805f917..0a842ec35 100644
+--- a/mingw-w64-headers/include/winnt.h
++++ b/mingw-w64-headers/include/winnt.h
+@@ -48,6 +48,13 @@ extern "C" {
+ #endif
+ #endif /* _ARM64_ */
+ 
++#if defined(__arm64ec__) && \
++  !(defined(_X86_) || defined(__i386__) || defined(_IA64_) || defined (__arm__) || defined(__aarch64__))
++#if !defined(_ARM64EC_)
++#define _ARM64EC_
++#endif
++#endif /* _ARM64EC_ */
++
+ #if defined(__ia64__) && \
+   !(defined(_X86_) || defined(__x86_64) || defined(_AMD64_) || defined (__arm__) || defined(__aarch64__))
+ #if !defined(_IA64_)
+-- 
+2.25.1
+

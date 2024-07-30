@@ -1,0 +1,25 @@
+From b2a44dfb7d7f0819c45de8be170a7d876091d046 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Tue, 25 Jun 2024 22:34:44 +0100
+Subject: [PATCH 54/55] rt fixup
+
+---
+ compiler-rt/lib/builtins/cpu_model/aarch64.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler-rt/lib/builtins/cpu_model/aarch64.h b/compiler-rt/lib/builtins/cpu_model/aarch64.h
+index f6cbf75d582f..6709e8e15dd2 100644
+--- a/compiler-rt/lib/builtins/cpu_model/aarch64.h
++++ b/compiler-rt/lib/builtins/cpu_model/aarch64.h
+@@ -8,7 +8,7 @@
+ 
+ #include "cpu_model.h"
+ 
+-#if !defined(__aarch64__)
++#if !(defined(__aarch64__) || defined(__arm64ec__))
+ #error This file is intended only for aarch64-based targets
+ #endif
+ 
+-- 
+2.25.1
+

@@ -1,0 +1,45 @@
+From c883454684dfe5a91157d521efcd6cffdf0c958e Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Mon, 4 Dec 2023 16:05:59 +0000
+Subject: [PATCH 25/29] build kernelbase def on arm64ec
+
+---
+ mingw-w64-crt/lib-common/kernel32.def.in | 2 +-
+ mingw-w64-crt/libarm64/Makefile.am       | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/mingw-w64-crt/lib-common/kernel32.def.in b/mingw-w64-crt/lib-common/kernel32.def.in
+index 36bed3901..42ea75ba7 100644
+--- a/mingw-w64-crt/lib-common/kernel32.def.in
++++ b/mingw-w64-crt/lib-common/kernel32.def.in
+@@ -1316,7 +1316,6 @@ RtlCopyMemory
+ RtlDeleteFunctionTable
+ RtlFillMemory
+ RtlInstallFunctionTableCallback
+-RtlIsEcCode
+ RtlLookupFunctionEntry
+ RtlMoveMemory
+ RtlPcToFileHeader
+@@ -1326,6 +1325,7 @@ RtlUnwind
+ RtlUnwindEx
+ RtlVirtualUnwind
+ RtlVirtualUnwind2
++RtlIsEcCode
+ RtlZeroMemory
+ ScrollConsoleScreenBufferA
+ ScrollConsoleScreenBufferW
+diff --git a/mingw-w64-crt/libarm64/Makefile.am b/mingw-w64-crt/libarm64/Makefile.am
+index 4f3803f94..4c8b85df0 100644
+--- a/mingw-w64-crt/libarm64/Makefile.am
++++ b/mingw-w64-crt/libarm64/Makefile.am
+@@ -151,6 +151,7 @@ libarm64_DATA += %reldir%/libipnathlp.a
+ libarm64_DATA += %reldir%/libjsproxy.a
+ libarm64_DATA += %reldir%/libkdcom.a
+ #libarm64_DATA += %reldir%/libkernel32.a  # Handled by custom rule
++libarm64_DATA += %reldir%/libkernelbase.a
+ libarm64_DATA += %reldir%/libkeymgr.a
+ libarm64_DATA += %reldir%/libks.a
+ libarm64_DATA += %reldir%/libksecdd.a
+-- 
+2.25.1
+

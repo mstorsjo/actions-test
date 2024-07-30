@@ -1,0 +1,27 @@
+From b9b78c14f0a7bda1328d516691ce64eb4e00dfc0 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 14 Sep 2023 20:05:43 +0100
+Subject: [PATCH 08/29] headers: Declare RtlIsEcCode helper when building for
+ ARM64EC
+
+---
+ mingw-w64-headers/include/winnt.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/mingw-w64-headers/include/winnt.h b/mingw-w64-headers/include/winnt.h
+index 89020bc38..a2e729a73 100644
+--- a/mingw-w64-headers/include/winnt.h
++++ b/mingw-w64-headers/include/winnt.h
+@@ -8971,6 +8971,9 @@ DEFINE_ENUM_FLAG_OPERATORS(JOB_OBJECT_IO_RATE_CONTROL_FLAGS)
+     NTSYSAPI VOID NTAPI RtlUnwindEx (FRAME_POINTERS TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD ExceptionRecord, PVOID ReturnValue, PCONTEXT ContextRecord, PUNWIND_HISTORY_TABLE HistoryTable);
+     NTSYSAPI ULONGLONG NTAPI RtlVirtualUnwind (ULONGLONG ImageBase, ULONGLONG ControlPc, PRUNTIME_FUNCTION FunctionEntry, PCONTEXT ContextRecord, PBOOLEAN InFunction, PFRAME_POINTERS EstablisherFrame, PKNONVOLATILE_CONTEXT_POINTERS ContextPointers);
+ #endif
++#if defined(__arm64ec__)
++    NTSYSAPI BOOLEAN NTAPI RtlIsEcCode(DWORD64 CodePointer);
++#endif
+ #endif
+ 
+ #include <string.h>
+-- 
+2.25.1
+

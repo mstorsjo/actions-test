@@ -1,0 +1,156 @@
+From f6b042b00488300927f80c44764c1b403dffa208 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Fri, 3 May 2024 00:27:20 +0200
+Subject: [PATCH 02/55] [clang][ARM64EC] Add support for hybrid_patchable
+ attribute.
+
+---
+ clang/include/clang/Basic/Attr.td             |  9 ++++++
+ .../clang/Basic/DiagnosticSemaKinds.td        |  3 ++
+ clang/lib/AST/TypePrinter.cpp                 |  3 ++
+ clang/lib/CodeGen/CodeGenFunction.cpp         |  3 ++
+ clang/lib/Sema/SemaDecl.cpp                   |  7 +++++
+ clang/lib/Sema/SemaDeclAttr.cpp               |  3 ++
+ clang/test/CodeGen/arm64ec-hybrid-patchable.c | 29 +++++++++++++++++++
+ 7 files changed, 57 insertions(+)
+ create mode 100644 clang/test/CodeGen/arm64ec-hybrid-patchable.c
+
+diff --git a/clang/include/clang/Basic/Attr.td b/clang/include/clang/Basic/Attr.td
+index 1293d0ddbc11..657316c78c76 100644
+--- a/clang/include/clang/Basic/Attr.td
++++ b/clang/include/clang/Basic/Attr.td
+@@ -477,6 +477,9 @@ def TargetELF : TargetSpec {
+ def TargetELFOrMachO : TargetSpec {
+   let ObjectFormats = ["ELF", "MachO"];
+ }
++def TargetArm64EC : TargetSpec {
++  let CustomCode = [{ Target.getTriple().isWindowsArm64EC() }];
++}
+ 
+ def TargetSupportsInitPriority : TargetSpec {
+   let CustomCode = [{ !Target.getTriple().isOSzOS() }];
+@@ -4011,6 +4014,12 @@ public:
+   }];
+ }
+ 
++def HybridPatchable : DeclOrTypeAttr, TargetSpecificAttr<TargetArm64EC> {
++  let Spellings = [Declspec<"hybrid_patchable">, GCC<"hybrid_patchable">];
++  // let Subjects = SubjectList<[Function]>;
++  let Documentation = [Undocumented];
++}
++
+ def DLLImportStaticLocal : InheritableAttr, TargetSpecificAttr<TargetHasDLLImportExport> {
+   // This attribute is used internally only when -fno-dllexport-inlines is
+   // passed. This attribute is added to inline functions of a class having the
+diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+index de3d94155a9a..60d9f3d0ec02 100644
+--- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
++++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+@@ -3671,6 +3671,9 @@ def err_attribute_weak_static : Error<
+   "weak declaration cannot have internal linkage">;
+ def err_attribute_selectany_non_extern_data : Error<
+   "'selectany' can only be applied to data items with external linkage">;
++def warn_attribute_hybrid_patchable_non_extern : Warning<
++  "'hybrid_patchable' is ignored on functions without external linkage">,
++  InGroup<IgnoredAttributes>;
+ def err_declspec_thread_on_thread_variable : Error<
+   "'__declspec(thread)' applied to variable that already has a "
+   "thread-local storage specifier">;
+diff --git a/clang/lib/AST/TypePrinter.cpp b/clang/lib/AST/TypePrinter.cpp
+index ffec3ef9d226..c2c3807399a8 100644
+--- a/clang/lib/AST/TypePrinter.cpp
++++ b/clang/lib/AST/TypePrinter.cpp
+@@ -1984,6 +1984,9 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
+   case attr::MSABI: OS << "ms_abi"; break;
+   case attr::SysVABI: OS << "sysv_abi"; break;
+   case attr::RegCall: OS << "regcall"; break;
++  case attr::HybridPatchable:
++    OS << "hybrid_patchable";
++    break;
+   case attr::Pcs: {
+     OS << "pcs(";
+    QualType t = T->getEquivalentType();
+diff --git a/clang/lib/CodeGen/CodeGenFunction.cpp b/clang/lib/CodeGen/CodeGenFunction.cpp
+index ea4635c039cb..df2f493b3aa4 100644
+--- a/clang/lib/CodeGen/CodeGenFunction.cpp
++++ b/clang/lib/CodeGen/CodeGenFunction.cpp
+@@ -977,6 +977,9 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
+   if (D && D->hasAttr<NoProfileFunctionAttr>())
+     Fn->addFnAttr(llvm::Attribute::NoProfile);
+ 
++  if (D && D->hasAttr<HybridPatchableAttr>())
++    Fn->addFnAttr(llvm::Attribute::HybridPatchable);
++
+   if (D) {
+     // Function attributes take precedence over command line flags.
+     if (auto *A = D->getAttr<FunctionReturnThunksAttr>()) {
+diff --git a/clang/lib/Sema/SemaDecl.cpp b/clang/lib/Sema/SemaDecl.cpp
+index 1f2fde12c9d2..0843071ed7ec 100644
+--- a/clang/lib/Sema/SemaDecl.cpp
++++ b/clang/lib/Sema/SemaDecl.cpp
+@@ -6886,6 +6886,13 @@ static void checkAttributesAfterMerging(Sema &S, NamedDecl &ND) {
+     }
+   }
+ 
++  if (HybridPatchableAttr *Attr = ND.getAttr<HybridPatchableAttr>()) {
++    if (!ND.isExternallyVisible()) {
++      S.Diag(Attr->getLocation(),
++             diag::warn_attribute_hybrid_patchable_non_extern);
++      ND.dropAttr<SelectAnyAttr>();
++    }
++  }
+   if (const InheritableAttr *Attr = getDLLAttr(&ND)) {
+     auto *VD = dyn_cast<VarDecl>(&ND);
+     bool IsAnonymousNS = false;
+diff --git a/clang/lib/Sema/SemaDeclAttr.cpp b/clang/lib/Sema/SemaDeclAttr.cpp
+index 20f46c003a46..edaeef4bdb2d 100644
+--- a/clang/lib/Sema/SemaDeclAttr.cpp
++++ b/clang/lib/Sema/SemaDeclAttr.cpp
+@@ -7033,6 +7033,9 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
+   case ParsedAttr::AT_MSConstexpr:
+     handleMSConstexprAttr(S, D, AL);
+     break;
++  case ParsedAttr::AT_HybridPatchable:
++    handleSimpleAttribute<HybridPatchableAttr>(S, D, AL);
++    break;
+ 
+   // HLSL attributes:
+   case ParsedAttr::AT_HLSLNumThreads:
+diff --git a/clang/test/CodeGen/arm64ec-hybrid-patchable.c b/clang/test/CodeGen/arm64ec-hybrid-patchable.c
+new file mode 100644
+index 000000000000..30e5c7cdbb10
+--- /dev/null
++++ b/clang/test/CodeGen/arm64ec-hybrid-patchable.c
+@@ -0,0 +1,29 @@
++// REQUIRES: aarch64-registered-target
++// RUN: %clang_cc1 -triple arm64ec-pc-windows -fms-extensions -emit-llvm -o - %s -verify | FileCheck %s
++
++// CHECK: ;    Function Attrs: hybrid_patchable noinline nounwind optnone
++// CHECK-NEXT: define dso_local i32 @func() #0 {
++int __attribute__((hybrid_patchable)) func(void) {  return 1; }
++
++// CHECK: ;    Function Attrs: hybrid_patchable noinline nounwind optnone
++// CHECK-NEXT: define dso_local i32 @func2() #0 {
++int __declspec(hybrid_patchable) func2(void) {  return 2; }
++
++// CHECK: ;    Function Attrs: hybrid_patchable noinline nounwind optnone
++// CHECK-NEXT: define dso_local i32 @func3() #0 {
++int __declspec(hybrid_patchable) func3(void);
++int func3(void) {  return 3; }
++
++// CHECK: ; Function Attrs: hybrid_patchable noinline nounwind optnone
++// CHECK-NEXT: define internal void @static_func() #0 {
++// expected-warning@+1 {{'hybrid_patchable' is ignored on functions without external linkage}}
++static void __declspec(hybrid_patchable) static_func(void) {}
++
++// CHECK: ;    Function Attrs: hybrid_patchable noinline nounwind optnone
++// CHECK-NEXT: define linkonce_odr dso_local i32 @func4() #0 comdat {
++int inline __declspec(hybrid_patchable) func4(void) {  return 4; }
++
++void caller(void) {
++  static_func();
++  func4();
++}
+-- 
+2.25.1
+

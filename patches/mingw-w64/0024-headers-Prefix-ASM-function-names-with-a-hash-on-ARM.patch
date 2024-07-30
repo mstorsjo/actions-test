@@ -1,0 +1,71 @@
+From da2992d302aec2a0872a918acc703c68bb340f90 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 21 Sep 2023 12:30:10 +0100
+Subject: [PATCH 24/29] headers: Prefix ASM function names with a hash on
+ ARM64EC
+
+This is required so that the linker knows any defined symbols refer to
+ARM code rather than X86_64. This doesn't apply to importlib symbols,
+as the linker itself generates thunks for them.
+---
+ mingw-w64-headers/crt/_mingw_mac.h | 26 +++++++++++++++++++++++---
+ 1 file changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/mingw-w64-headers/crt/_mingw_mac.h b/mingw-w64-headers/crt/_mingw_mac.h
+index 3fe61328e..ba5138e1d 100644
+--- a/mingw-w64-headers/crt/_mingw_mac.h
++++ b/mingw-w64-headers/crt/_mingw_mac.h
+@@ -100,8 +100,10 @@
+ #  ifndef __MINGW_USE_UNDERSCORE_PREFIX
+      /* As we have to support older gcc version, which are using underscores
+       as symbol prefix for x64, we have to check here for the user label
+-      prefix defined by gcc. */
+-#    ifdef __USER_LABEL_PREFIX__
++      prefix defined by gcc. ARM64EC also defines __USER_LABEL_PREFIX__ to #,
++      however in that case __imp symbols do not require the prefix so the
++      handling cannot be made generic. */
++#    if defined(__USER_LABEL_PREFIX__) && !defined(_ARM64EC_)
+ #      pragma push_macro ("_")
+ #      undef _
+ #      define _ 1
+@@ -122,10 +124,19 @@
+ #  define __MINGW_USE_UNDERSCORE_PREFIX 1
+ #endif /* ifndef _X86_ */
+ 
++#define __GLUE(x, y) x##y
++#define __MINGW64_GLUE(x, y) __GLUE(x, y)
++#define __HASH #
++
+ #if __MINGW_USE_UNDERSCORE_PREFIX == 0
+ #  define __MINGW_IMP_SYMBOL(sym) __imp_##sym
+ #  define __MINGW_IMP_LSYMBOL(sym) __imp_##sym
+-#  define __MINGW_USYMBOL(sym) sym
++#  ifdef _ARM64EC_
++#    define __MINGW_USYMBOL(sym) \
++       __MINGW64_STRINGIFY(__MINGW64_GLUE(__HASH, sym))
++#  else
++#    define __MINGW_USYMBOL(sym) sym
++#  endif
+ #  define __MINGW_LSYMBOL(sym) _##sym
+ #else /* ! if __MINGW_USE_UNDERSCORE_PREFIX == 0 */
+ #  define __MINGW_IMP_SYMBOL(sym) _imp__##sym
+@@ -134,7 +145,16 @@
+ #  define __MINGW_LSYMBOL(sym) sym
+ #endif /* if __MINGW_USE_UNDERSCORE_PREFIX == 0 */
+ 
++
++#ifdef _ARM64EC_
++/* USYMBOL implictly stringifies on ARM64EC since assembler directives cannot
++otherwise begin with a '#' */
++#define __MINGW_ASM_CALL(func) __asm__(__MINGW_USYMBOL(func))
++#else
+ #define __MINGW_ASM_CALL(func) __asm__(__MINGW64_STRINGIFY(__MINGW_USYMBOL(func)))
++
++#endif
++
+ #define __MINGW_ASM_CRT_CALL(func) __asm__(__STRINGIFY(func))
+ 
+ #ifndef __PTRDIFF_TYPE__
+-- 
+2.25.1
+

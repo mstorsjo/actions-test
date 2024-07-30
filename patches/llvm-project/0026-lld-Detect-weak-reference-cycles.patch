@@ -1,0 +1,98 @@
+From a9520220af9a66471559f3c986ef27c6c3eceb0b Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sun, 10 Sep 2023 22:22:12 +0200
+Subject: [PATCH 26/55] [lld] Detect weak reference cycles.
+
+---
+ lld/COFF/Symbols.cpp              |  8 ++++-
+ lld/test/COFF/weak-ref-cycle.test | 50 +++++++++++++++++++++++++++++++
+ 2 files changed, 57 insertions(+), 1 deletion(-)
+ create mode 100644 lld/test/COFF/weak-ref-cycle.test
+
+diff --git a/lld/COFF/Symbols.cpp b/lld/COFF/Symbols.cpp
+index 69f10ad95a45..27c3057dc9f5 100644
+--- a/lld/COFF/Symbols.cpp
++++ b/lld/COFF/Symbols.cpp
+@@ -13,6 +13,7 @@
+ #include "lld/Common/Memory.h"
+ #include "lld/Common/Strings.h"
+ #include "llvm/ADT/STLExtras.h"
++#include "llvm/ADT/SmallSet.h"
+ #include "llvm/Demangle/Demangle.h"
+ #include "llvm/Support/Debug.h"
+ #include "llvm/Support/raw_ostream.h"
+@@ -127,9 +128,14 @@ DefinedImportThunk::DefinedImportThunk(COFFLinkerContext &ctx, StringRef name,
+ 
+ Defined *Undefined::getWeakAlias() {
+   // A weak alias may be a weak alias to another symbol, so check recursively.
+-  for (Symbol *a = weakAlias; a; a = cast<Undefined>(a)->weakAlias)
++  SmallSet<Symbol *, 4> weakChain;
++  for (Symbol *a = weakAlias; a; a = cast<Undefined>(a)->weakAlias) {
++    if (weakChain.contains(a))
++      break; // We have a cycle.
+     if (auto *d = dyn_cast<Defined>(a))
+       return d;
++    weakChain.insert(a);
++  }
+   return nullptr;
+ }
+ 
+diff --git a/lld/test/COFF/weak-ref-cycle.test b/lld/test/COFF/weak-ref-cycle.test
+new file mode 100644
+index 000000000000..1a49aff2d5c5
+--- /dev/null
++++ b/lld/test/COFF/weak-ref-cycle.test
+@@ -0,0 +1,50 @@
++REQUIRES: x86
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows test.s -o test.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows weak2.s -o weak2.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows weak-anti-dep.s -o weak-anti-dep.obj
++
++RUN: not lld-link -machine:amd64 -dll -noentry -out:test.dll test.obj weak2.obj 2>&1 \
++RUN:              | FileCheck -check-prefix=WEAK %s
++
++WEAK:      lld-link: error: undefined symbol: testsym
++WEAK-NEXT: >>> referenced by test.obj
++WEAK-EMPTY:
++WEAK-NEXT: lld-link: error: undefined symbol: weak1
++WEAK-NEXT: >>> referenced by test.obj
++WEAK-NEXT: >>> referenced by weak2.obj
++WEAK-EMPTY:
++WEAK-NEXT: lld-link: error: undefined symbol: weak2
++WEAK-NEXT: >>> referenced by test.obj:(.test)
++WEAK-NEXT: >>> referenced by weak2.obj
++
++RUN: not lld-link -machine:amd64 -dll -noentry -out:test.dll weak-anti-dep.obj 2>&1 \
++RUN:              | FileCheck -check-prefix=ANTIDEP %s
++
++ANTIDEP:      lld-link: error: undefined symbol: testsym
++ANTIDEP-NEXT: >>> referenced by weak-anti-dep.obj:(.test)
++ANTIDEP-EMPTY:
++ANTIDEP-NEXT: lld-link: error: undefined symbol: testsym2
++ANTIDEP-NEXT: >>> referenced by weak-anti-dep.obj
++
++#--- test.s
++    .weak testsym
++.set testsym, weak1
++    .weak weak1
++.set weak1, weak2
++    .section .test, "r"
++    .rva testsym
++
++#--- weak2.s
++    .weak weak2
++.set weak2, weak1
++
++#--- weak-anti-dep.s
++    .weak_anti_dep testsym
++.set testsym, testsym2
++    .weak_anti_dep testsym2
++.set testsym2, testsym
++
++    .section .test, "r"
++    .rva testsym
+-- 
+2.25.1
+

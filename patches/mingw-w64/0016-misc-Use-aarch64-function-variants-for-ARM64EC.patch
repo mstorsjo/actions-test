@@ -1,0 +1,94 @@
+From 83e9dac9ee266c7626076b752d15a5c51aaa80d8 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 14 Sep 2023 21:38:30 +0100
+Subject: [PATCH 16/29] misc: Use aarch64 function variants for ARM64EC
+
+---
+ mingw-w64-crt/misc/mingw_getsp.S  | 4 ++--
+ mingw-w64-crt/misc/winbs_uint64.c | 2 +-
+ mingw-w64-crt/misc/winbs_ulong.c  | 6 ++++--
+ mingw-w64-crt/misc/winbs_ushort.c | 6 ++++--
+ 4 files changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/mingw-w64-crt/misc/mingw_getsp.S b/mingw-w64-crt/misc/mingw_getsp.S
+index 1e83b7383..f54ade8e8 100644
+--- a/mingw-w64-crt/misc/mingw_getsp.S
++++ b/mingw-w64-crt/misc/mingw_getsp.S
+@@ -15,7 +15,7 @@
+ 	.globl __MINGW_USYMBOL(mingw_getsp)
+ 	.def	__MINGW_USYMBOL(mingw_getsp);	.scl	2;	.type	32;	.endef
+ __MINGW_USYMBOL(mingw_getsp):
+-#if defined(_AMD64_) || defined(__x86_64__)
++#if (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__))
+ 	leaq  8(%rsp),%rax
+ 	ret
+ #elif defined(_X86_) || defined(__i386__)
+@@ -24,7 +24,7 @@ __MINGW_USYMBOL(mingw_getsp):
+ #elif defined(_ARM_) || defined(__arm__)
+ 	mov	r0, sp
+ 	bx	lr
+-#elif defined(_ARM64_) || defined(__aarch64__)
++#elif defined(_ARM64_) || defined(__aarch64__) || defined(_ARM64EC_) || defined(__arm64ec__)
+ 	mov	x0, sp
+ 	ret
+ #endif
+diff --git a/mingw-w64-crt/misc/winbs_uint64.c b/mingw-w64-crt/misc/winbs_uint64.c
+index c0b316221..705782de3 100644
+--- a/mingw-w64-crt/misc/winbs_uint64.c
++++ b/mingw-w64-crt/misc/winbs_uint64.c
+@@ -2,7 +2,7 @@ unsigned long long __cdecl _byteswap_uint64(unsigned long long _Int64);
+ 
+ unsigned long long __cdecl _byteswap_uint64(unsigned long long _Int64)
+ {
+-#if defined(_AMD64_) || defined(__x86_64__)
++#if (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__))
+   unsigned long long retval;
+   __asm__ __volatile__ ("bswapq %[retval]" : [retval] "=rm" (retval) : "[retval]" (_Int64));
+   return retval;
+diff --git a/mingw-w64-crt/misc/winbs_ulong.c b/mingw-w64-crt/misc/winbs_ulong.c
+index 9cd6b2907..5a50f6518 100644
+--- a/mingw-w64-crt/misc/winbs_ulong.c
++++ b/mingw-w64-crt/misc/winbs_ulong.c
+@@ -2,7 +2,8 @@ unsigned long __cdecl _byteswap_ulong (unsigned long _Long);
+ 
+ unsigned long __cdecl _byteswap_ulong (unsigned long _Long)
+ {
+-#if defined(_AMD64_) || defined(__x86_64__) || defined(_X86_) || defined(__i386__)
++#if (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__)) || \
++  defined(_X86_) || defined(__i386__)
+   unsigned long retval;
+   __asm__ __volatile__ ("bswapl %[retval]" : [retval] "=rm" (retval) : "[retval]" (_Long));
+   return retval;
+@@ -16,5 +17,6 @@ unsigned long __cdecl _byteswap_ulong (unsigned long _Long)
+   b[1] = b[2];
+   b[2] = tmp;
+   return _Long;
+-#endif /* defined(_AMD64_) || defined(__x86_64__) || defined(_X86_) || defined(__i386__) */
++#endif /* (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__)) ||
++          defined(_X86_) || defined(__i386__) */
+ }
+diff --git a/mingw-w64-crt/misc/winbs_ushort.c b/mingw-w64-crt/misc/winbs_ushort.c
+index 46b57fda4..6a9b7b2a0 100644
+--- a/mingw-w64-crt/misc/winbs_ushort.c
++++ b/mingw-w64-crt/misc/winbs_ushort.c
+@@ -2,7 +2,8 @@ unsigned short __cdecl _byteswap_ushort(unsigned short _Short);
+ 
+ unsigned short __cdecl _byteswap_ushort(unsigned short _Short)
+ {
+-#if defined(_AMD64_) || defined(__x86_64__) || defined(_X86_) || defined(__i386__)
++#if (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__)) || \
++  defined(_X86_) || defined(__i386__)
+   unsigned short retval;
+   __asm__ __volatile__ ("rorw $8, %w[retval]" : [retval] "=rm" (retval) : "[retval]" (_Short));
+   return retval;
+@@ -13,5 +14,6 @@ unsigned short __cdecl _byteswap_ushort(unsigned short _Short)
+   b[0] = b[1];
+   b[1] = tmp;
+   return _Short;
+-#endif /* defined(_AMD64_) || defined(__x86_64__) || defined(_X86_) || defined(__i386__) */
++#endif /* (defined(_AMD64_) && !defined(_ARM64EC_)) || (defined(__x86_64__) && !defined(__arm64ec__)) ||
++          defined(_X86_) || defined(__i386__) */
+ }
+-- 
+2.25.1
+

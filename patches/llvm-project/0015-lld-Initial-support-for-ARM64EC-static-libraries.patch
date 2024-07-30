@@ -1,0 +1,72 @@
+From 38c443c14b516a5532f0072aba56c8e8e6df45c2 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Fri, 22 Sep 2023 17:50:03 +0200
+Subject: [PATCH 15/55] [lld] Initial support for ARM64EC static libraries.
+
+---
+ lld/COFF/InputFiles.cpp            | 11 +++++++++++
+ lld/test/COFF/arm64ec-lib-sym.test | 30 ++++++++++++++++++++++++++++++
+ 2 files changed, 41 insertions(+)
+ create mode 100644 lld/test/COFF/arm64ec-lib-sym.test
+
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 5a9b26a68506..01aeb2a1c5e2 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -100,6 +100,17 @@ void ArchiveFile::parse() {
+   // Parse a MemoryBufferRef as an archive file.
+   file = CHECK(Archive::create(mb), this);
+ 
++  if (ctx.config.machine == ARM64EC) {
++    auto symbols = file->ec_symbols();
++    if (!symbols)
++      fatal("Reading EC symbols tailed: " + toString(symbols.takeError()));
++    if (!symbols->empty()) {
++      for (const Archive::Symbol &sym : *symbols)
++        ctx.symtab.addLazyArchive(this, sym);
++      return;
++    }
++  }
++
+   // Read the symbol table to construct Lazy objects.
+   for (const Archive::Symbol &sym : file->symbols())
+     ctx.symtab.addLazyArchive(this, sym);
+diff --git a/lld/test/COFF/arm64ec-lib-sym.test b/lld/test/COFF/arm64ec-lib-sym.test
+new file mode 100644
+index 000000000000..18587af52496
+--- /dev/null
++++ b/lld/test/COFF/arm64ec-lib-sym.test
+@@ -0,0 +1,30 @@
++REQUIRES: aarch64, x86
++RUN: split-file %s %t.dir && cd %t.dir
++
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test.s -o test.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows testsym.s -o testsym.obj
++RUN: llvm-mc -filetype=obj -triple=x86_64-windows testsym.s -o testsym-x86_64.obj
++RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
++RUN: llvm-lib -machine:arm64ec -out:testsym.lib testsym.obj
++RUN: llvm-lib -machine:amd64 -out:testsym-x64.lib testsym-x86_64.obj
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test.dll test.obj testsym.lib loadconfig-arm64ec.obj
++
++RUN: llvm-objdump -d test.dll | FileCheck -check-prefix=DISASM %s
++DISASM:      0000000180001000 <.text>:
++DISASM-NEXT: 180001000: d65f03c0     ret
++
++RUN: lld-link -machine:arm64ec -dll -noentry -out:test-x64.dll test.obj testsym-x64.lib loadconfig-arm64ec.obj
++RUN: llvm-objdump -d test-x64.dll | FileCheck -check-prefix=DISASM-X64 %s
++DISASM-X64:      0000000180001000 <.text>:
++DISASM-X64-NEXT: 180001000: c3                           retq
++
++#--- test.s
++    .section .test, "r"
++    .rva "#testsym"
++
++#--- testsym.s
++    .text
++    .globl "#testsym"
++"#testsym":
++    ret
+-- 
+2.25.1
+

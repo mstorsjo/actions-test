@@ -1,0 +1,63 @@
+From 15c0b7b6e475a28ceabdbcfbdad7bcae1fb5bdad Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Wed, 17 Jul 2024 17:25:05 +0200
+Subject: [PATCH 06/55] [llvm-dlltool] Use EXPORTAS name type for renamed
+ imports on ARM64EC.
+
+---
+ llvm/lib/Object/COFFImportFile.cpp        |  5 ++++-
+ llvm/test/tools/llvm-dlltool/arm64ec.test | 18 ++++++++++++++++++
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/llvm/lib/Object/COFFImportFile.cpp b/llvm/lib/Object/COFFImportFile.cpp
+index 2458a53cb6d5..e67b02405a3a 100644
+--- a/llvm/lib/Object/COFFImportFile.cpp
++++ b/llvm/lib/Object/COFFImportFile.cpp
+@@ -729,7 +729,10 @@ Error writeImportLibrary(StringRef ImportName, StringRef Path,
+         else if (Machine == IMAGE_FILE_MACHINE_I386 &&
+                  applyNameType(IMPORT_NAME_NOPREFIX, Name) == E.ImportName)
+           NameType = IMPORT_NAME_NOPREFIX;
+-        else if (Name == E.ImportName)
++        else if (isArm64EC(M)) {
++          NameType = IMPORT_NAME_EXPORTAS;
++          ExportName = E.ImportName;
++        } else if (Name == E.ImportName)
+           NameType = IMPORT_NAME;
+         else {
+           Deferred D;
+diff --git a/llvm/test/tools/llvm-dlltool/arm64ec.test b/llvm/test/tools/llvm-dlltool/arm64ec.test
+index b03b4eaf7b2d..45142461bfc5 100644
+--- a/llvm/test/tools/llvm-dlltool/arm64ec.test
++++ b/llvm/test/tools/llvm-dlltool/arm64ec.test
+@@ -44,6 +44,19 @@ RUN: llvm-nm --print-armap test3.lib | FileCheck --check-prefix=ARMAP2 %s
+ RUN: not llvm-dlltool -m arm64 -d test.def -N test2.def -l test4.lib 2>&1 | FileCheck --check-prefix=ERR %s
+ ERR: native .def file is supported only on arm64ec target
+ 
++RUN: llvm-dlltool -m arm64ec -d test3.def -l test3.lib
++RUN: llvm-readobj test3.lib | FileCheck --check-prefix=ALIAS %s
++
++ALIAS:      File: test.dll
++ALIAS-NEXT: Format: COFF-import-file-ARM64EC
++ALIAS-NEXT: Type: code
++ALIAS-NEXT: Name type: export as
++ALIAS-NEXT: Export name: efunc
++ALIAS-NEXT: Symbol: __imp_func
++ALIAS-NEXT: Symbol: func
++ALIAS-NEXT: Symbol: __imp_aux_func
++ALIAS-NEXT: Symbol: #func
++
+ #--- test.def
+ LIBRARY test.dll
+ EXPORTS
+@@ -53,3 +66,8 @@ EXPORTS
+ LIBRARY test.dll
+ EXPORTS
+     otherfunc
++
++#--- test3.def
++LIBRARY test.dll
++EXPORTS
++    func == efunc
+-- 
+2.25.1
+

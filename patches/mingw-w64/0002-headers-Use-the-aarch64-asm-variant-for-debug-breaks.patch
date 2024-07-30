@@ -1,0 +1,46 @@
+From b5755c1be2739ea67d5b73c1091b74c3218ca715 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Fri, 8 Sep 2023 15:34:22 +0100
+Subject: [PATCH 02/29] headers: Use the aarch64 asm variant for debug breaks
+ on ARM64EC
+
+---
+ mingw-w64-headers/crt/_mingw.h.in | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/mingw-w64-headers/crt/_mingw.h.in b/mingw-w64-headers/crt/_mingw.h.in
+index 5a36facd3..53d1aee05 100644
+--- a/mingw-w64-headers/crt/_mingw.h.in
++++ b/mingw-w64-headers/crt/_mingw.h.in
+@@ -580,11 +580,11 @@ extern "C" {
+ void __cdecl __debugbreak(void);
+ __MINGW_INTRIN_INLINE void __cdecl __debugbreak(void)
+ {
+-#if defined(__i386__) || defined(__x86_64__)
++#if defined(__i386__) || (defined(__x86_64__) && !defined(__arm64ec__))
+   __asm__ __volatile__("int {$}3":);
+ #elif defined(__arm__)
+   __asm__ __volatile__("udf #0xfe");
+-#elif defined(__aarch64__)
++#elif defined(__aarch64__) || defined(__arm64ec__)
+   __asm__ __volatile__("brk #0xf000");
+ #else
+   __asm__ __volatile__("unimplemented");
+@@ -601,12 +601,12 @@ __MINGW_INTRIN_INLINE void __cdecl __debugbreak(void)
+ void __cdecl __MINGW_ATTRIB_NORETURN __fastfail(unsigned int code);
+ __MINGW_INTRIN_INLINE void __cdecl __MINGW_ATTRIB_NORETURN __fastfail(unsigned int code)
+ {
+-#if defined(__i386__) || defined(__x86_64__)
++#if defined(__i386__) || (defined(__x86_64__) && !defined(__arm64ec__))
+   __asm__ __volatile__("int {$}0x29"::"c"(code));
+ #elif defined(__arm__)
+   register unsigned int r0 __asm__("r0") = code;
+   __asm__ __volatile__("udf #0xfb"::"r"(r0));
+-#elif defined(__aarch64__)
++#elif defined(__aarch64__) || defined(__arm64ec__)
+   register unsigned int w0 __asm__("w0") = code;
+   __asm__ __volatile__("brk #0xf003"::"r"(w0));
+ #else
+-- 
+2.25.1
+

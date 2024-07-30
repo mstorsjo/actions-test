@@ -1,0 +1,463 @@
+From ca224302a66bb41a0ea96bbf016a3eb3372c906a Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Fri, 22 Sep 2023 23:25:41 +0200
+Subject: [PATCH 21/55] [lld] Add support for import call thunks.
+
+---
+ lld/COFF/Chunks.cpp               | 22 +++++++++
+ lld/COFF/Chunks.h                 | 19 ++++++++
+ lld/COFF/Config.h                 |  2 +
+ lld/COFF/DLL.cpp                  | 18 +++++--
+ lld/COFF/Driver.cpp               |  7 +++
+ lld/COFF/Driver.h                 |  1 +
+ lld/COFF/InputFiles.cpp           | 16 +++++++
+ lld/COFF/InputFiles.h             |  3 ++
+ lld/COFF/MarkLive.cpp             | 23 ++++++---
+ lld/COFF/SymbolTable.cpp          | 10 ++++
+ lld/COFF/SymbolTable.h            |  3 ++
+ lld/COFF/Writer.cpp               |  3 ++
+ lld/test/COFF/arm64ec-import.test | 80 +++++++++++++++++++++++++++++--
+ 13 files changed, 192 insertions(+), 15 deletions(-)
+
+diff --git a/lld/COFF/Chunks.cpp b/lld/COFF/Chunks.cpp
+index 9bd85aa883f3..3c861f6af034 100644
+--- a/lld/COFF/Chunks.cpp
++++ b/lld/COFF/Chunks.cpp
+@@ -816,6 +816,28 @@ void ImportThunkChunkARM64::writeTo(uint8_t *buf) const {
+   applyArm64Ldr(buf + 4, off);
+ }
+ 
++void ImportThunkChunkARM64EC::writeTo(uint8_t *buf) const {
++  memcpy(buf, importThunkARM64EC, sizeof(importThunkARM64EC));
++  applyArm64Addr(buf, file->impSym->getRVA(), rva, 12);
++  applyArm64Ldr(buf + 4, file->impSym->getRVA() & 0xfff);
++
++  uint32_t exitThunkRVA = 0;
++  if (Symbol *exitThunkSym = file->findECExitThunkSymbol())
++    exitThunkRVA = cast<Defined>(exitThunkSym)->getRVA();
++  else
++    log("exit thunk for " + file->impECSym->getName() + " not found");
++  applyArm64Addr(buf + 8, exitThunkRVA, rva + 8, 12);
++  applyArm64Imm(buf + 12, exitThunkRVA & 0xfff, 0);
++
++  int64_t diff =
++      cast<Defined>(file->ctx.config.arm64ECIcallHelper)->getRVA() - rva - 16;
++  if (!isInt<28>(diff)) {
++    error("FIXME: __icall_helper_arm64ec needs range extension thunk");
++    return;
++  }
++  applyArm64Branch26(buf + 16, diff);
++}
++
+ // A Thumb2, PIC, non-interworking range extension thunk.
+ const uint8_t armThunk[] = {
+     0x40, 0xf2, 0x00, 0x0c, // P:  movw ip,:lower16:S - (P + (L1-P) + 4)
+diff --git a/lld/COFF/Chunks.h b/lld/COFF/Chunks.h
+index ac2bfbc6a256..636744e3b7a1 100644
+--- a/lld/COFF/Chunks.h
++++ b/lld/COFF/Chunks.h
+@@ -544,6 +544,14 @@ static const uint8_t importThunkARM64[] = {
+     0x00, 0x02, 0x1f, 0xd6, // br   x16
+ };
+ 
++static const uint32_t importThunkARM64EC[] = {
++    0x9000000b, // adrp    x11, 0x0
++    0xf940016b, // ldr     x11, [x11]
++    0x9000000a, // adrp    x10, 0x0
++    0x9100014a, // add     x10, x10, #0x0
++    0x14000000  // b       0x0
++};
++
+ // Windows-specific.
+ // A chunk for DLL import jump table entry. In a final output, its
+ // contents will be a JMP instruction to some __imp_ symbol.
+@@ -605,6 +613,17 @@ private:
+   MachineTypes machine;
+ };
+ 
++class ImportThunkChunkARM64EC : public NonSectionCodeChunk {
++public:
++  explicit ImportThunkChunkARM64EC(ImportFile *file) : file(file) {}
++  size_t getSize() const override { return sizeof(importThunkARM64EC); };
++  MachineTypes getMachine() const override { return ARM64EC; }
++  void writeTo(uint8_t *buf) const override;
++
++private:
++  ImportFile *file;
++};
++
+ class RangeExtensionThunkARM : public NonSectionCodeChunk {
+ public:
+   explicit RangeExtensionThunkARM(COFFLinkerContext &ctx, Defined *t)
+diff --git a/lld/COFF/Config.h b/lld/COFF/Config.h
+index 947f3fead54e..6d39796a1025 100644
+--- a/lld/COFF/Config.h
++++ b/lld/COFF/Config.h
+@@ -164,6 +164,8 @@ struct Configuration {
+   std::set<std::string> delayLoads;
+   std::map<std::string, int> dllOrder;
+   Symbol *delayLoadHelper = nullptr;
++  Symbol *arm64ECIcallHelper = nullptr;
++  Symbol *arm64XDispatchIcall = nullptr;
+ 
+   bool saveTemps = false;
+ 
+diff --git a/lld/COFF/DLL.cpp b/lld/COFF/DLL.cpp
+index 6b77e3a30fa8..9098e7066539 100644
+--- a/lld/COFF/DLL.cpp
++++ b/lld/COFF/DLL.cpp
+@@ -144,12 +144,24 @@ private:
+ 
+ class ECImportChunk : public NonSectionChunk {
+ public:
+-  explicit ECImportChunk() { setAlignment(sizeof(uint64_t)); }
++  explicit ECImportChunk(ImportFile *file) : file(file) {
++    setAlignment(sizeof(uint64_t));
++  }
+   size_t getSize() const override { return sizeof(uint64_t); }
+ 
+   void writeTo(uint8_t *buf) const override {
+-    write64le(buf, 0); // FIXME
++    write64le(buf, file->ECThunk
++                       ? file->ECThunk->getRVA() + file->ctx.config.imageBase
++                       : 0);
++  }
++
++  void getBaserels(std::vector<Baserel> *res) override {
++    if (file->ECThunk)
++      res->emplace_back(rva, file->ctx.config.machine);
+   }
++
++private:
++  ImportFile *file;
+ };
+ 
+ static std::vector<std::vector<DefinedImportData *>>
+@@ -731,7 +743,7 @@ void IdataContents::create(COFFLinkerContext &ctx) {
+         binImports(ctx, ECImports);
+     for (std::vector<DefinedImportData *> &syms : av) {
+       for (DefinedImportData *s : syms) {
+-        auto chunk = make<ECImportChunk>();
++        auto chunk = make<ECImportChunk>(s->file);
+         auxIat.push_back(chunk);
+         s->setLocation(chunk);
+       }
+diff --git a/lld/COFF/Driver.cpp b/lld/COFF/Driver.cpp
+index 80f79c625b73..204046168a8a 100644
+--- a/lld/COFF/Driver.cpp
++++ b/lld/COFF/Driver.cpp
+@@ -1346,6 +1346,13 @@ void LinkerDriver::maybeMakeECThunk(StringRef name, Symbol *&sym) {
+   }
+ }
+ 
++void LinkerDriver::pullImportThunkSymbols() {
++  if (!ctx.config.arm64ECIcallHelper)
++    ctx.config.arm64ECIcallHelper = addUndefined("__icall_helper_arm64ec");
++  if (!ctx.config.arm64XDispatchIcall)
++    ctx.config.arm64XDispatchIcall = addUndefined("__os_arm64x_dispatch_icall");
++}
++
+ // In MinGW, if no symbols are chosen to be exported, then all symbols are
+ // automatically exported by default. This behavior can be forced by the
+ // -export-all-symbols option, so that it happens even when exports are
+diff --git a/lld/COFF/Driver.h b/lld/COFF/Driver.h
+index 35962b115a5f..313aaea85eec 100644
+--- a/lld/COFF/Driver.h
++++ b/lld/COFF/Driver.h
+@@ -102,6 +102,7 @@ public:
+   std::unique_ptr<llvm::TarWriter> tar; // for /linkrepro
+ 
+   void maybeMakeECThunk(StringRef name, Symbol *&sym);
++  void pullImportThunkSymbols();
+ 
+ private:
+   // Searches a file from search paths.
+diff --git a/lld/COFF/InputFiles.cpp b/lld/COFF/InputFiles.cpp
+index 126c8ad0920d..f9fa10efe2af 100644
+--- a/lld/COFF/InputFiles.cpp
++++ b/lld/COFF/InputFiles.cpp
+@@ -187,6 +187,8 @@ void ObjFile::initializeECThunks() {
+         ctx.symtab.addEntryThunk(getSymbol(entry->src), getSymbol(entry->dst));
+         break;
+       case Arm64ECThunkType::Exit:
++        ctx.symtab.addExitThunk(getSymbol(entry->src), getSymbol(entry->dst));
++        break;
+       case Arm64ECThunkType::GuestExit:
+         break;
+       default:
+@@ -1079,10 +1081,24 @@ void ImportFile::parse() {
+       StringRef auxThunkName =
+           saver().save(*getArm64ECMangledFunctionName(name));
+       auxThunkSym = ctx.symtab.addImportThunk(auxThunkName, impECSym, ARM64EC);
++
++      ECThunk = make<ImportThunkChunkARM64EC>(this);
+     }
+   }
+ }
+ 
++Symbol *ImportFile::findECExitThunkSymbol() const {
++  if (!ECThunk)
++    return nullptr;
++  if (Symbol *sym = ctx.symtab.findExitThunk(impECSym))
++    return sym;
++  if (Symbol *sym = ctx.symtab.findExitThunk(thunkSym))
++    return sym;
++  if (Symbol *sym = ctx.symtab.findExitThunk(impSym))
++    return sym;
++  return nullptr;
++}
++
+ BitcodeFile::BitcodeFile(COFFLinkerContext &ctx, MemoryBufferRef mb,
+                          StringRef archiveName, uint64_t offsetInArchive,
+                          bool lazy)
+diff --git a/lld/COFF/InputFiles.h b/lld/COFF/InputFiles.h
+index 2f0f22d5a957..c7cbbac65ebf 100644
+--- a/lld/COFF/InputFiles.h
++++ b/lld/COFF/InputFiles.h
+@@ -343,10 +343,13 @@ public:
+ 
+   static bool classof(const InputFile *f) { return f->kind() == ImportKind; }
+ 
++  Symbol *findECExitThunkSymbol() const;
++
+   DefinedImportData *impSym = nullptr;
+   DefinedImportData *impECSym = nullptr;
+   Symbol *thunkSym = nullptr;
+   Symbol *auxThunkSym = nullptr;
++  Chunk *ECThunk = nullptr;
+   std::string dllName;
+ 
+ private:
+diff --git a/lld/COFF/MarkLive.cpp b/lld/COFF/MarkLive.cpp
+index b39fec31407c..075007d963c1 100644
+--- a/lld/COFF/MarkLive.cpp
++++ b/lld/COFF/MarkLive.cpp
+@@ -43,14 +43,23 @@ void markLive(COFFLinkerContext &ctx) {
+     worklist.push_back(c);
+   };
+ 
+-  std::function<void(Symbol *)> addSym = [&](Symbol *b) {
+-    if (auto *sym = dyn_cast<DefinedRegular>(b))
++  std::function<void(Symbol *)> addSym;
++
++  auto addImportFile = [&](ImportFile *file) {
++    file->live = true;
++    if (Symbol *exitThunk = file->findECExitThunkSymbol())
++      addSym(exitThunk);
++  };
++
++  addSym = [&](Symbol *b) {
++    if (auto *sym = dyn_cast<DefinedRegular>(b)) {
+       enqueue(sym->getChunk());
+-    else if (auto *sym = dyn_cast<DefinedImportData>(b))
+-      sym->file->live = true;
+-    else if (auto *sym = dyn_cast<DefinedImportThunk>(b))
+-      sym->wrappedSym->file->live = sym->getChunk()->live = true;
+-    else if (auto *sym = dyn_cast<DefinedSynthetic>(b)) {
++    } else if (auto *sym = dyn_cast<DefinedImportData>(b)) {
++      addImportFile(sym->file);
++    } else if (auto *sym = dyn_cast<DefinedImportThunk>(b)) {
++      addImportFile(sym->wrappedSym->file);
++      sym->getChunk()->live = true;
++    } else if (auto *sym = dyn_cast<DefinedSynthetic>(b)) {
+       if (auto chunk = dyn_cast_or_null<ECThunkChunk>(sym->getChunk()))
+         addSym(chunk->target);
+     }
+diff --git a/lld/COFF/SymbolTable.cpp b/lld/COFF/SymbolTable.cpp
+index 78c067a06520..0ac4410877d2 100644
+--- a/lld/COFF/SymbolTable.cpp
++++ b/lld/COFF/SymbolTable.cpp
+@@ -68,6 +68,8 @@ void SymbolTable::addFile(InputFile *file) {
+       ctx.bitcodeFileInstances.push_back(f);
+     } else if (auto *f = dyn_cast<ImportFile>(file)) {
+       ctx.importFileInstances.push_back(f);
++      if (f->ECThunk)
++        ctx.driver.pullImportThunkSymbols();
+     }
+   }
+ 
+@@ -576,6 +578,14 @@ void SymbolTable::addEntryThunk(Symbol *from, Symbol *to) {
+   entryThunks.push_back({from, to});
+ }
+ 
++void SymbolTable::addExitThunk(Symbol *from, Symbol *to) {
++  exitThunks[from] = to;
++}
++
++Symbol *SymbolTable::findExitThunk(Symbol *from) const {
++  return exitThunks.lookup(from);
++}
++
+ void SymbolTable::initializeEntryThunks() {
+   for (auto it : entryThunks) {
+     auto *to = dyn_cast<Defined>(it.second);
+diff --git a/lld/COFF/SymbolTable.h b/lld/COFF/SymbolTable.h
+index 8d328c4273e2..c0d7a09b3c8f 100644
+--- a/lld/COFF/SymbolTable.h
++++ b/lld/COFF/SymbolTable.h
+@@ -107,6 +107,8 @@ public:
+                          uint16_t machine);
+   void addLibcall(StringRef name);
+   void addEntryThunk(Symbol *from, Symbol *to);
++  void addExitThunk(Symbol *from, Symbol *to);
++  Symbol *findExitThunk(Symbol *from) const;
+   void initializeEntryThunks();
+ 
+   void reportDuplicate(Symbol *existing, InputFile *newFile,
+@@ -137,6 +139,7 @@ private:
+   std::unique_ptr<BitcodeCompiler> lto;
+   bool ltoCompilationDone = false;
+   std::vector<std::pair<Symbol *, Symbol *>> entryThunks;
++  llvm::DenseMap<Symbol *, Symbol *> exitThunks;
+ 
+   COFFLinkerContext &ctx;
+ };
+diff --git a/lld/COFF/Writer.cpp b/lld/COFF/Writer.cpp
+index 8ae631f96cc1..e4b2957f6063 100644
+--- a/lld/COFF/Writer.cpp
++++ b/lld/COFF/Writer.cpp
+@@ -1240,6 +1240,9 @@ void Writer::appendImportThunks() {
+       if (chunk->live)
+         textSec->addChunk(chunk);
+     }
++
++    if (file->ECThunk)
++      textSec->addChunk(file->ECThunk);
+   }
+ 
+   if (!delayIdata.empty()) {
+diff --git a/lld/test/COFF/arm64ec-import.test b/lld/test/COFF/arm64ec-import.test
+index de721dd39706..6f6a4d1ce461 100644
+--- a/lld/test/COFF/arm64ec-import.test
++++ b/lld/test/COFF/arm64ec-import.test
+@@ -5,16 +5,25 @@ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows test.s -o test.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows arm64ec-stubs.s -o arm64ec-stubs.obj
+ RUN: llvm-mc -filetype=obj -triple=arm64ec-windows %S/Inputs/loadconfig-arm64ec.s -o loadconfig-arm64ec.obj
+ RUN: llvm-lib -machine:arm64ec -def:test.def -out:test-arm64ec.lib
++RUN: llvm-lib -machine:arm64ec -def:test2.def -out:test2-arm64ec.lib
+ 
+ RUN: lld-link -machine:arm64ec -dll -noentry -out:out.dll loadconfig-arm64ec.obj arm64ec-stubs.obj \
+-RUN:          test.obj test-arm64ec.lib
++RUN:          test.obj test-arm64ec.lib test2-arm64ec.lib
+ 
+ RUN: llvm-readobj --coff-imports out.dll | FileCheck -check-prefix=IMPORTS %s
+ IMPORTS:      Import {
+ IMPORTS-NEXT:   Name: test.dll
+ IMPORTS-NEXT:   ImportLookupTableRVA:
+ IMPORTS-NEXT:   ImportAddressTableRVA: 0x3000
++IMPORTS-NEXT:   Symbol: mydata (0)
+ IMPORTS-NEXT:   Symbol: myfunc (0)
++IMPORTS-NEXT:   Symbol: otherfunc (0)
++IMPORTS-NEXT: }
++IMPORTS-NEXT: Import {
++IMPORTS-NEXT:   Name: test2.dll
++IMPORTS-NEXT:   ImportLookupTableRVA: 0x4250
++IMPORTS-NEXT:   ImportAddressTableRVA: 0x3020
++IMPORTS-NEXT:   Symbol: myfunc2 (0)
+ IMPORTS-NEXT: }
+ 
+ RUN: llvm-readobj --headers out.dll | FileCheck -check-prefix=HEADERS %s
+@@ -23,20 +32,58 @@ HEADERS:  IATRVA: 0x3000
+ HEADERS:  IATSize: 0x1000
+ 
+ RUN: llvm-objdump -d out.dll | FileCheck -check-prefix=DISASM %s
+-DISASM:      180001000: 52800040     mov     w0, #0x2
++DISASM:      180001000: 52800040     mov     w0, #0x2                // =2
+ DISASM-NEXT: 180001004: d65f03c0     ret
+ DISASM-NEXT: 180001008: 90000030     adrp    x16, 0x180005000
+-DISASM-NEXT: 18000100c: f9400210     ldr     x16, [x16]
++DISASM-NEXT: 18000100c: f9400610     ldr     x16, [x16, #0x8]
+ DISASM-NEXT: 180001010: d61f0200     br      x16
++DISASM-NEXT: 180001014: d000000b     adrp    x11, 0x180003000
++DISASM-NEXT: 180001018: f940056b     ldr     x11, [x11, #0x8]
++DISASM-NEXT: 18000101c: 9000000a     adrp    x10, 0x180001000 <.text>
++DISASM-NEXT: 180001020: 9101414a     add     x10, x10, #0x50
++DISASM-NEXT: 180001024: 17fffff7     b       0x180001000 <.text>
++DISASM-NEXT: 180001028: d000000b     adrp    x11, 0x180003000
++DISASM-NEXT: 18000102c: f940096b     ldr     x11, [x11, #0x10]
++DISASM-NEXT: 180001030: f0ffffea     adrp    x10, 0x180000000
++DISASM-NEXT: 180001034: 9100014a     add     x10, x10, #0x0
++DISASM-NEXT: 180001038: 17fffff2     b       0x180001000 <.text>
++DISASM-NEXT: 18000103c: d000000b     adrp    x11, 0x180003000
++DISASM-NEXT: 180001040: f940116b     ldr     x11, [x11, #0x20]
++DISASM-NEXT: 180001044: f0ffffea     adrp    x10, 0x180000000
++DISASM-NEXT: 180001048: 9100014a     add     x10, x10, #0x0
++DISASM-NEXT: 18000104c: 17ffffed     b       0x180001000 <.text>
++DISASM-NEXT: 180001050: 52800060     mov     w0, #0x3                // =3
++DISASM-NEXT: 180001054: d65f03c0     ret
+ DISASM-NEXT:                 ...
+-DISASM-NEXT: 180002000: ff 25 fa 0f 00 00            jmpq    *0xffa(%rip)            # 0x180003000
++DISASM-NEXT: 180002000: ff 25 02 10 00 00            jmpq    *0x1002(%rip)           # 0x180003008
+ 
+ RUN: llvm-readobj --hex-dump=.test out.dll | FileCheck -check-prefix=TESTSEC %s
+-TESTSEC: 0x180008000 00500000 00300000 00200000 08100000
++TESTSEC:      0x180008000 08500000 08300000 00200000 08100000
++TESTSEC-NEXT: 0x180008010 00300000 00500000 10500000 10300000
++TESTSEC-NEXT: 0x180008020 20500000
+ 
+ RUN: llvm-readobj --coff-load-config out.dll | FileCheck -check-prefix=LOADCONFIG %s
+ LOADCONFIG: AuxiliaryIAT: 0x5000
+ 
++RUN: llvm-readobj --hex-dump=.rdata out.dll | FileCheck -check-prefix=RDATA %s
++RDATA:      0x180005000 00000000 00000000 14100080 01000000
++RDATA-NEXT: 0x180005010 28100080 01000000 00000000 00000000
++RDATA-NEXT: 0x180005020 3c100080 01000000 00000000 00000000
++
++RUN: llvm-readobj --coff-basereloc out.dll | FileCheck -check-prefix=BASERELOC %s
++BASERELOC:      BaseReloc [
++BASERELOC-NOT:      Address: 0x5000
++BASERELOC:          Address: 0x5008
++BASERELOC-NEXT:   }
++BASERELOC-NEXT:   Entry {
++BASERELOC-NEXT:     Type: DIR64
++BASERELOC-NEXT:     Address: 0x5010
++BASERELOC-NEXT:   }
++BASERELOC-NEXT:   Entry {
++BASERELOC-NEXT:     Type: DIR64
++BASERELOC-NEXT:     Address: 0x5020
++BASERELOC-NEXT:   }
++
+ #--- test.s
+     .section .test, "r"
+     .globl arm64ec_data_sym
+@@ -46,6 +93,11 @@ arm64ec_data_sym:
+     .rva __imp_aux_myfunc
+     .rva myfunc
+     .rva "#myfunc"
++    .rva __imp_mydata
++    .rva __imp_aux_mydata
++    .rva __imp_otherfunc
++    .rva __imp_aux_otherfunc
++    .rva __imp_myfunc2
+ 
+ #--- arm64ec-stubs.s
+     .text
+@@ -61,7 +113,25 @@ __icall_helper_arm64ec:
+ __os_arm64x_dispatch_icall:
+     .xword 1
+ 
++    .section .hybmp$x, "yi"
++    .symidx __imp_myfunc
++    .symidx myfunc_exit_thunk
++    .word 4
++
++    .section .wowthk$aa,"xr",discard,myfunc_exit_thunk
++    .globl myfunc_exit_thunk
++myfunc_exit_thunk:
++    mov w0, #3
++    ret
++
+ #--- test.def
+ NAME test.dll
+ EXPORTS
++    mydata DATA
+     myfunc
++    otherfunc
++
++#--- test2.def
++NAME test2.dll
++EXPORTS
++    myfunc2
+-- 
+2.25.1
+
