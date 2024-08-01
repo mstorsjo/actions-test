@@ -1,7 +1,7 @@
 From 1541789ef86ed4de2890c21e34c104362d2926a4 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Wed, 27 Sep 2023 23:48:49 +0200
-Subject: [PATCH 28/55] [lld] Create EC alias symbols for entry points.
+Subject: [PATCH 28/56] [lld] Create EC alias symbols for entry points.
 
 ---
  lld/COFF/Driver.cpp                     | 31 ++++++---

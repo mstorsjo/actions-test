@@ -1,7 +1,7 @@
 From f91d348342b9c9277571221c7640c0b066e5e1a7 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 17:47:53 +0100
-Subject: [PATCH 05/29] headers: Commonize _UNWIND_HISTORY_TABLE structure
+Subject: [PATCH 05/30] headers: Commonize _UNWIND_HISTORY_TABLE structure
  definition
 
 This structure is the same across every architecture that uses it, so

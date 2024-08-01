@@ -1,7 +1,7 @@
 From dae833f2c6b827f5be344c933961843a9cd54c0e Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Wed, 26 Jun 2024 01:37:43 +0100
-Subject: [PATCH 28/29] autoconf
+Subject: [PATCH 28/30] autoconf
 
 ---
  mingw-w64-crt/Makefile.in                     | 1162 +++---

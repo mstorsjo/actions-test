@@ -1,7 +1,7 @@
 From d7082fc4d09f17a6a03f7dbd14c9119daadf34f1 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 24 Feb 2023 01:08:15 +0100
-Subject: [PATCH 08/55] [lld] Add support for ARM64EC redirection metadata
+Subject: [PATCH 08/56] [lld] Add support for ARM64EC redirection metadata
  chunk.
 
 ---

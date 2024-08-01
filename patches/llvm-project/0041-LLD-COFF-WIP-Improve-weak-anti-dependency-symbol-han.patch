@@ -1,7 +1,7 @@
 From 216168fabb6f123a0c659632cea9c5a164e63f84 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sun, 5 May 2024 01:44:25 +0200
-Subject: [PATCH 41/55] [LLD][COFF][WIP] Improve weak anti-dependency symbol
+Subject: [PATCH 41/56] [LLD][COFF][WIP] Improve weak anti-dependency symbol
  handling.
 
 FIXME: Needs more testing

@@ -1,7 +1,7 @@
 From b27a1205f893204aca939042f7c17dc7b9196cd4 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 3 May 2024 00:24:39 +0200
-Subject: [PATCH 01/55] [CodeGen][ARM64EC] Add support for hybrid_patchable
+Subject: [PATCH 01/56] [CodeGen][ARM64EC] Add support for hybrid_patchable
  attribute.
 
 ---

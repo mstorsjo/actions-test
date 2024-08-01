@@ -1,7 +1,7 @@
 From 3a2a6f01f0bd5a9a11e4b5c0cd0ed86915f744ac Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Mon, 18 Sep 2023 19:21:21 +0200
-Subject: [PATCH 29/55] [lld] Allow overriding EC alias symbols with alternate
+Subject: [PATCH 29/56] [lld] Allow overriding EC alias symbols with alternate
  names.
 
 ---

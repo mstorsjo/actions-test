@@ -1,7 +1,7 @@
 From 9eadd3c039b3e573691104218857a1d259d2d312 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 22 Jun 2023 15:39:29 +0200
-Subject: [PATCH 09/55] [lld] Add support for ARM64EC code ranges to entry
+Subject: [PATCH 09/56] [lld] Add support for ARM64EC code ranges to entry
  point map chunk.
 
 ---

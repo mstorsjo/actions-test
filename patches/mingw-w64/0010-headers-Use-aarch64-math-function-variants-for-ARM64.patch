@@ -1,7 +1,7 @@
 From 3cb15e4e7ed09f1f6e40e306ce3f070f69f1ca03 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 20:56:53 +0100
-Subject: [PATCH 10/29] headers: Use aarch64 math function variants for ARM64EC
+Subject: [PATCH 10/30] headers: Use aarch64 math function variants for ARM64EC
 
 ---
  mingw-w64-headers/crt/fenv.h |  4 ++--

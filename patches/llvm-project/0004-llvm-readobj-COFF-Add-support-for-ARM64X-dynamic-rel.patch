@@ -1,7 +1,7 @@
 From 7a0de7b5eeb7a829699dd05746e6a2b1f2cc40f7 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 20 Jan 2024 01:07:17 +0100
-Subject: [PATCH 04/55] [llvm-readobj][COFF] Add support for ARM64X dynamic
+Subject: [PATCH 04/56] [llvm-readobj][COFF] Add support for ARM64X dynamic
  relocations.
 
 ---

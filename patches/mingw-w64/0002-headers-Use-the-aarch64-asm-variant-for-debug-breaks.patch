@@ -1,7 +1,7 @@
 From b5755c1be2739ea67d5b73c1091b74c3218ca715 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Fri, 8 Sep 2023 15:34:22 +0100
-Subject: [PATCH 02/29] headers: Use the aarch64 asm variant for debug breaks
+Subject: [PATCH 02/30] headers: Use the aarch64 asm variant for debug breaks
  on ARM64EC
 
 ---

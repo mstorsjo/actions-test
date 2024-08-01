@@ -1,7 +1,7 @@
 From 793351c886b6591ee5c4844f8e2a66e8028a9202 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 7 Sep 2023 01:32:39 +0200
-Subject: [PATCH 17/55] [lld] Always locate IAT at the beginning of .rdata
+Subject: [PATCH 17/56] [lld] Always locate IAT at the beginning of .rdata
  section and align its size to 4KB on ARM64EC.
 
 ---

@@ -1,7 +1,7 @@
 From 760b4aaeed05a8735e0f70c1d1a10ae2a300b365 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Tue, 2 Apr 2024 17:27:51 +0200
-Subject: [PATCH 10/55] [LLD][COFF] Add Support for ARM64EC pseudo relocations.
+Subject: [PATCH 10/56] [LLD][COFF] Add Support for ARM64EC pseudo relocations.
 
 FIXME: add tests
 ---

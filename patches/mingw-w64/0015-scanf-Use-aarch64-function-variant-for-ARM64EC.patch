@@ -1,7 +1,7 @@
 From 3643612e9c23a775098afca596db0b31997cd414 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 21:36:09 +0100
-Subject: [PATCH 15/29] scanf: Use aarch64 function variant for ARM64EC
+Subject: [PATCH 15/30] scanf: Use aarch64 function variant for ARM64EC
 
 ---
  mingw-w64-crt/stdio/scanf.S           |  4 ++--

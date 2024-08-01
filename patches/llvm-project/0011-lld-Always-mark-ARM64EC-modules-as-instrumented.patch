@@ -1,7 +1,7 @@
 From 9424ce4f2c1633e2947da30a991a85a427f717f6 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Wed, 14 Jun 2023 22:03:25 +0200
-Subject: [PATCH 11/55] [lld] Always mark ARM64EC modules as instrumented.
+Subject: [PATCH 11/56] [lld] Always mark ARM64EC modules as instrumented.
 
 FIXME: The test doesn't seem to work on MSVC, but it's observed in real-world images, needs more investigation.
 ---

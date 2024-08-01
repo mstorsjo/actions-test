@@ -1,7 +1,7 @@
 From 1a724d127d49f7ee28404bfd1b10bdb054751466 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Mon, 25 Sep 2023 18:44:29 +0200
-Subject: [PATCH 27/55] [lld][COFF] Add some EC alias tests and fixes.
+Subject: [PATCH 27/56] [lld][COFF] Add some EC alias tests and fixes.
 
 ---
  lld/COFF/InputFiles.cpp            |  41 ++++++++++

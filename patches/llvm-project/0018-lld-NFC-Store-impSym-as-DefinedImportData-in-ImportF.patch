@@ -1,7 +1,7 @@
 From 74535a4b10bca6369e97f269f283607e7683437a Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 7 Sep 2023 14:25:20 +0200
-Subject: [PATCH 18/55] [lld] [NFC] Store impSym as DefinedImportData in
+Subject: [PATCH 18/56] [lld] [NFC] Store impSym as DefinedImportData in
  ImportFile.
 
 ---

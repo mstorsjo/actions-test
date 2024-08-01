@@ -1,7 +1,7 @@
 From f6b042b00488300927f80c44764c1b403dffa208 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 3 May 2024 00:27:20 +0200
-Subject: [PATCH 02/55] [clang][ARM64EC] Add support for hybrid_patchable
+Subject: [PATCH 02/56] [clang][ARM64EC] Add support for hybrid_patchable
  attribute.
 
 ---

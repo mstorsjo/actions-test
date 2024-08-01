@@ -1,7 +1,7 @@
 From b9b78c14f0a7bda1328d516691ce64eb4e00dfc0 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 20:05:43 +0100
-Subject: [PATCH 08/29] headers: Declare RtlIsEcCode helper when building for
+Subject: [PATCH 08/30] headers: Declare RtlIsEcCode helper when building for
  ARM64EC
 
 ---

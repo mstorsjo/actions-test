@@ -1,7 +1,7 @@
 From 17f2894253095aa8bb9a2d889224c7b171595054 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 2 Nov 2023 17:30:22 +0100
-Subject: [PATCH 34/55] [lld] Store DefinedImportData as a Chunk pointer
+Subject: [PATCH 34/56] [lld] Store DefinedImportData as a Chunk pointer
  instead of using EC flag to access it.
 
 ---

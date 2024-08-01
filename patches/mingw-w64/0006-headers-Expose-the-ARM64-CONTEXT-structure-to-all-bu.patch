@@ -1,7 +1,7 @@
 From 900eff5cc4b5b3c55e87cbbcc39d3e9c86bc5173 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 19:56:20 +0100
-Subject: [PATCH 06/29] headers: Expose the ARM64 CONTEXT structure to all
+Subject: [PATCH 06/30] headers: Expose the ARM64 CONTEXT structure to all
  build architectures
 
 This is necessary to accommodate ARM64EC, under which CONTEXT refers to the

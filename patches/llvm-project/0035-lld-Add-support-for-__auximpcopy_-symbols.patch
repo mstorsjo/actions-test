@@ -1,7 +1,7 @@
 From 6415bf94a2ddc03569284505fc082c0314365704 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 2 Nov 2023 17:51:50 +0100
-Subject: [PATCH 35/55] [lld] Add support for __auximpcopy_* symbols.
+Subject: [PATCH 35/56] [lld] Add support for __auximpcopy_* symbols.
 
 FIXME: We shouldn't emit those for delay-loaded DLLs.
 ---

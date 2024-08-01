@@ -1,7 +1,7 @@
 From 8b9b288d2cbae4a6582743078302ec824ece4ae6 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 21:32:45 +0100
-Subject: [PATCH 13/29] fenv: Use aarch64 function variants for ARM64EC
+Subject: [PATCH 13/30] fenv: Use aarch64 function variants for ARM64EC
 
 ---
  mingw-w64-crt/misc/feclearexcept.c   | 8 +++++---

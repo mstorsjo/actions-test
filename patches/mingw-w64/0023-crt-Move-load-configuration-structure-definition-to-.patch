@@ -1,7 +1,7 @@
 From 1aececa69c2e7562ea3c6753f6a1dff8c5faf0ed Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Sat, 16 Sep 2023 00:04:07 +0100
-Subject: [PATCH 23/29] crt: Move load configuration structure definition to
+Subject: [PATCH 23/30] crt: Move load configuration structure definition to
  misc
 
 Now loadcfg is used by more than just CFGuard it doesn't make sense to

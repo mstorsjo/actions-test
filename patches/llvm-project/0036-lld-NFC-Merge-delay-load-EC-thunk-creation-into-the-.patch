@@ -1,7 +1,7 @@
 From 9a73551b06b60d8dcd226e8e24be3fdb71917cd0 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Wed, 8 Nov 2023 23:41:32 +0100
-Subject: [PATCH 36/55] [lld][NFC] Merge delay-load EC thunk creation into the
+Subject: [PATCH 36/56] [lld][NFC] Merge delay-load EC thunk creation into the
  main create loop.
 
 FIXME: amend to earlier commits

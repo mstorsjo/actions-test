@@ -1,7 +1,7 @@
 From 3d5d4eca37469ab02060e3cd140bd5e4c11e2ddc Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 29 Sep 2023 20:01:28 +0200
-Subject: [PATCH 30/55] [lld] Use ARM64 CodeView file type for ARM64EC.
+Subject: [PATCH 30/56] [lld] Use ARM64 CodeView file type for ARM64EC.
 
 ---
  lld/COFF/PDB.cpp | 1 +

@@ -1,7 +1,7 @@
 From ad07ff2ce66ea2462dfd78bc526563e722296ed4 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Fri, 8 Sep 2023 15:37:08 +0100
-Subject: [PATCH 03/29] headers: Use the aarch64 asm variant for __prefetch on
+Subject: [PATCH 03/30] headers: Use the aarch64 asm variant for __prefetch on
  ARM64EC
 
 ---

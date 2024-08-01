@@ -1,7 +1,7 @@
 From ddd745642d5ff73c5410ed8512477d654bc4bd52 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 7 Sep 2023 00:51:40 +0200
-Subject: [PATCH 16/55] [lld] Initial support for ARM64EC importlibs.
+Subject: [PATCH 16/56] [lld] Initial support for ARM64EC importlibs.
 
 ---
  lld/COFF/Chunks.h                 | 10 ++++---

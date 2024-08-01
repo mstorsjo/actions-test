@@ -1,7 +1,7 @@
 From 96fae9d78873da912def75303f9705cabebba952 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Wed, 13 Mar 2024 22:45:20 +0100
-Subject: [PATCH 40/55] [lld][COFF] Align all null chunks.
+Subject: [PATCH 40/56] [lld][COFF] Align all null chunks.
 
 ---
  lld/COFF/DLL.cpp                 | 38 ++++++++++++------------

@@ -1,7 +1,7 @@
 From b2a44dfb7d7f0819c45de8be170a7d876091d046 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Tue, 25 Jun 2024 22:34:44 +0100
-Subject: [PATCH 54/55] rt fixup
+Subject: [PATCH 54/56] rt fixup
 
 ---
  compiler-rt/lib/builtins/cpu_model/aarch64.h | 2 +-

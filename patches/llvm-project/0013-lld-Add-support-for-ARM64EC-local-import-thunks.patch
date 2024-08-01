@@ -1,7 +1,7 @@
 From 1e8eb1e6c151070dc19c48bdd03272a06e18b9fa Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Mon, 26 Jun 2023 14:36:36 +0200
-Subject: [PATCH 13/55] [lld] Add support for ARM64EC local import thunks.
+Subject: [PATCH 13/56] [lld] Add support for ARM64EC local import thunks.
 
 FIXME: __imp_aux_ symbols?
 ---

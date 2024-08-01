@@ -1,7 +1,7 @@
 From 95312bce504ad44bd85c3bba2012d68435a8af0b Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 20 Jan 2024 01:07:17 +0100
-Subject: [PATCH 05/55] [llvm-readobj][COFF] Dump hybrid object as well for
+Subject: [PATCH 05/56] [llvm-readobj][COFF] Dump hybrid object as well for
  ARM64X files.
 
 ---

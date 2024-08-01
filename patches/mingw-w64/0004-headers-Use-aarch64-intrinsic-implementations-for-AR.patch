@@ -1,7 +1,7 @@
 From 147c05022e80852f2820d6db01be978ff5218929 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 17:42:21 +0100
-Subject: [PATCH 04/29] headers: Use aarch64 intrinsic implementations for
+Subject: [PATCH 04/30] headers: Use aarch64 intrinsic implementations for
  ARM64EC
 
 ---

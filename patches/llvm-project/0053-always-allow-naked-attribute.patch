@@ -1,7 +1,7 @@
 From ba44e5c04a9a83eef49d2e6eac13843db251101d Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Mon, 18 Mar 2024 21:37:48 +0000
-Subject: [PATCH 53/55] always allow naked attribute
+Subject: [PATCH 53/56] always allow naked attribute
 
 ---
  clang/lib/Sema/SemaDeclAttr.cpp | 6 ------

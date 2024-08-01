@@ -1,7 +1,7 @@
 From fec532fd7870c6e3506f28fc5292f49ba507b35c Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 23:36:09 +0100
-Subject: [PATCH 19/29] crt: Define metadata structures used for ARM64EC
+Subject: [PATCH 19/30] crt: Define metadata structures used for ARM64EC
 
 These are populated by the linker, and then used by the loader and
 emulator at runtime to allow for ARM64EC <-> X86_64 interoperability.

@@ -1,7 +1,7 @@
 From 6940639dbe555cf47a2497309702d7ca05cfcb4f Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Tue, 17 Oct 2023 16:15:18 +0200
-Subject: [PATCH 32/55] [lld] Add support for EC symbols in local import
+Subject: [PATCH 32/56] [lld] Add support for EC symbols in local import
  thunks.
 
 ---

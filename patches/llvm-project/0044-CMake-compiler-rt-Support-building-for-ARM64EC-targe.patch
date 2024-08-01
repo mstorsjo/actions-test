@@ -1,7 +1,7 @@
 From d2599030522968da75e09973d570f8cc0cf6d4a0 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 17:27:29 +0100
-Subject: [PATCH 44/55] [CMake][compiler-rt] Support building for ARM64EC
+Subject: [PATCH 44/56] [CMake][compiler-rt] Support building for ARM64EC
  targets
 
 ---

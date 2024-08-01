@@ -1,7 +1,7 @@
 From 2ddb3899bb981091b8362470b2264fddbf59a0f3 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 21:11:39 +0100
-Subject: [PATCH 12/29] math: Use aarch64 function variants for ARM64EC
+Subject: [PATCH 12/30] math: Use aarch64 function variants for ARM64EC
 
 ---
  mingw-w64-crt/math/arm-common/acoshl.c     |  3 ++-

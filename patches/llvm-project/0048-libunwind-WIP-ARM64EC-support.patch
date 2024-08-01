@@ -1,7 +1,7 @@
 From 399fb52333f82eae49d29acccf805c491c1d56df Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 21 Sep 2023 13:15:27 +0100
-Subject: [PATCH 48/55] [libunwind] WIP: ARM64EC support
+Subject: [PATCH 48/56] [libunwind] WIP: ARM64EC support
 
 Needs testing with SEH.
 ---

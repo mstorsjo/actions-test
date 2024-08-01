@@ -1,7 +1,7 @@
 From cc1c04f168fce70cd3654164ffe150a2d3164cc1 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Mon, 20 May 2024 20:57:27 +0200
-Subject: [PATCH 42/55] [LLD][ARM64EC] Create EC aliases when processing
+Subject: [PATCH 42/56] [LLD][ARM64EC] Create EC aliases when processing
  mangled symbols too.
 
 ---

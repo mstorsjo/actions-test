@@ -1,7 +1,7 @@
 From 9f89ecc0ca562ab5d54e68252eadb90d3180ab46 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 9 Sep 2023 23:09:55 +0200
-Subject: [PATCH 22/55] [lld] Add support for auxiliary IAT copy chunk.
+Subject: [PATCH 22/56] [lld] Add support for auxiliary IAT copy chunk.
 
 ---
  lld/COFF/Chunks.cpp                       |  7 ++++

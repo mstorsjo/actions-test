@@ -1,7 +1,7 @@
 From 1cd570f37f154c2d192a9c7289570cee545723be Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 10 Jun 2023 21:40:33 +0200
-Subject: [PATCH 25/55] [lld] Define __guard_check_icall_a64n_fptr symbol.
+Subject: [PATCH 25/56] [lld] Define __guard_check_icall_a64n_fptr symbol.
 
 FIXME: what is it for?
 ---

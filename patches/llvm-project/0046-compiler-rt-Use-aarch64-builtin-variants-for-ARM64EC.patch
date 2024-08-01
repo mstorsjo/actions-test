@@ -1,7 +1,7 @@
 From 6ee24eaae629c3908239f40663ffe657b02ce3f6 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 17:29:08 +0100
-Subject: [PATCH 46/55] [compiler-rt] Use aarch64 builtin variants for ARM64EC
+Subject: [PATCH 46/56] [compiler-rt] Use aarch64 builtin variants for ARM64EC
 
 When targeting ARM64EC, __x86_64__ is defined and __aarch64__ is not
 defined, so all uses of these macros to guard assembly need to be

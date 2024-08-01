@@ -1,7 +1,7 @@
 From 6c5105c63894f3d69e5817b03312d89b95122af7 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 23:46:16 +0100
-Subject: [PATCH 21/29] cfguard: Don't use __guard_dispatch_icall_fptr for
+Subject: [PATCH 21/30] cfguard: Don't use __guard_dispatch_icall_fptr for
  ARM64EC
 
 ---

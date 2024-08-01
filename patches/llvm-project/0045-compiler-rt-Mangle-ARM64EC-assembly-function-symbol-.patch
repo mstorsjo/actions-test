@@ -1,7 +1,7 @@
 From acd14ee90376fa7a698a3b58a97990f652f30a66 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Sun, 28 Jan 2024 23:45:12 +0000
-Subject: [PATCH 45/55] [compiler-rt] Mangle ARM64EC assembly function symbol
+Subject: [PATCH 45/56] [compiler-rt] Mangle ARM64EC assembly function symbol
  names
 
 ARM64EC requires that native function symbols be prefixed with a '#'

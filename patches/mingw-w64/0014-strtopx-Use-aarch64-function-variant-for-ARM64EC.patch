@@ -1,7 +1,7 @@
 From 89a6e9d91d08f06ace1e0df81de52a02952c6d67 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 21:35:14 +0100
-Subject: [PATCH 14/29] strtopx: Use aarch64 function variant for ARM64EC
+Subject: [PATCH 14/30] strtopx: Use aarch64 function variant for ARM64EC
 
 ---
  mingw-w64-crt/gdtoa/strtodnrp.c | 3 ++-

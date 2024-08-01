@@ -1,7 +1,7 @@
 From 38c443c14b516a5532f0072aba56c8e8e6df45c2 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 22 Sep 2023 17:50:03 +0200
-Subject: [PATCH 15/55] [lld] Initial support for ARM64EC static libraries.
+Subject: [PATCH 15/56] [lld] Initial support for ARM64EC static libraries.
 
 ---
  lld/COFF/InputFiles.cpp            | 11 +++++++++++

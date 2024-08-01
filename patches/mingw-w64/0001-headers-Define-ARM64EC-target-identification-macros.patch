@@ -1,7 +1,7 @@
 From 1ff0956fa1a9153a6723379d0ca90f1ffda8c079 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Fri, 8 Sep 2023 15:26:33 +0100
-Subject: [PATCH 01/29] headers: Define ARM64EC target identification macros
+Subject: [PATCH 01/30] headers: Define ARM64EC target identification macros
 
 When mingw is built for ARM64EC, both __x86_64__/_X86_64_ and
 __arm64ec__/_ARM64EC_ are set. This is done to ensure structure layouts

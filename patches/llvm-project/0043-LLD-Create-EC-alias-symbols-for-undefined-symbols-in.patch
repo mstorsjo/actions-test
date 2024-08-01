@@ -1,7 +1,7 @@
 From 9e7783bb520dac6a2602098017625ec407d3b578 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Mon, 20 May 2024 21:00:31 +0200
-Subject: [PATCH 43/55] [LLD] Create EC alias symbols for undefined symbols in
+Subject: [PATCH 43/56] [LLD] Create EC alias symbols for undefined symbols in
  x86_64 object files.
 
 ---

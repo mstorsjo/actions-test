@@ -1,7 +1,7 @@
 From 567c84f15fbe2c730ebd94bad7c306d79f91ff32 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Mon, 26 Jun 2023 16:47:39 +0200
-Subject: [PATCH 14/55] [lld] Support ARM64EC in BitcodeFile::getMachineType.
+Subject: [PATCH 14/56] [lld] Support ARM64EC in BitcodeFile::getMachineType.
 
 FIXME: add test
 ---

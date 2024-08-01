@@ -1,7 +1,7 @@
 From a9520220af9a66471559f3c986ef27c6c3eceb0b Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sun, 10 Sep 2023 22:22:12 +0200
-Subject: [PATCH 26/55] [lld] Detect weak reference cycles.
+Subject: [PATCH 26/56] [lld] Detect weak reference cycles.
 
 ---
  lld/COFF/Symbols.cpp              |  8 ++++-

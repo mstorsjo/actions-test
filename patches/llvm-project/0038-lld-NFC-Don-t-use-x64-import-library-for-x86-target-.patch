@@ -1,7 +1,7 @@
 From b820d85e346080d9b4652eae0db4a75e9d69fd8c Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 14 Mar 2024 22:09:30 +0100
-Subject: [PATCH 38/55] [lld][NFC] Don't use x64 import library for x86 target
+Subject: [PATCH 38/56] [lld][NFC] Don't use x64 import library for x86 target
  in safeseh-md tests.
 
 Use llvm-lib to generate input library instead of a binary blob.

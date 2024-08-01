@@ -1,7 +1,7 @@
 From 21798658b8260d14a7f60f343c7cca36a83bed2e Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 24 Jun 2023 00:14:18 +0200
-Subject: [PATCH 12/55] [lld] Add support for range extention thunks for
+Subject: [PATCH 12/56] [lld] Add support for range extention thunks for
  ARM64EC targets.
 
 ---

@@ -1,0 +1,38 @@
+From 96875250173aa1410d4dcf91560e919729e6c5e8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 1 Aug 2024 14:45:22 +0300
+Subject: [PATCH 56/56] [libunwind] Undo changes to size checking asserts
+
+---
+ libunwind/src/UnwindCursor.hpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/libunwind/src/UnwindCursor.hpp b/libunwind/src/UnwindCursor.hpp
+index 2ea0b403a515..f06ae9ef1342 100644
+--- a/libunwind/src/UnwindCursor.hpp
++++ b/libunwind/src/UnwindCursor.hpp
+@@ -578,7 +578,10 @@ private:
+ template <typename A, typename R>
+ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
+     : _addressSpace(as), _unwindInfoMissing(false) {
+-  static_assert(sizeof(UnwindCursor<A, R>) == sizeof(unw_cursor_t));
++  static_assert((check_fit<UnwindCursor<A, R>, unw_cursor_t>::does_fit),
++                "UnwindCursor<> does not fit in unw_cursor_t");
++  static_assert((alignof(UnwindCursor<A, R>) <= alignof(unw_cursor_t)),
++                "UnwindCursor<> requires more alignment than unw_cursor_t");
+   memset(&_info, 0, sizeof(_info));
+   memset(&_histTable, 0, sizeof(_histTable));
+   memset(&_dispContext, 0, sizeof(_dispContext));
+@@ -722,7 +725,8 @@ UnwindCursor<A, R>::UnwindCursor(unw_context_t *context, A &as)
+ template <typename A, typename R>
+ UnwindCursor<A, R>::UnwindCursor(CONTEXT *context, A &as)
+     : _addressSpace(as), _unwindInfoMissing(false) {
+-  static_assert(sizeof(UnwindCursor<A, R>) == sizeof(unw_cursor_t));
++  static_assert((check_fit<UnwindCursor<A, R>, unw_cursor_t>::does_fit),
++                "UnwindCursor<> does not fit in unw_cursor_t");
+   memset(&_info, 0, sizeof(_info));
+   memset(&_histTable, 0, sizeof(_histTable));
+   memset(&_dispContext, 0, sizeof(_dispContext));
+-- 
+2.25.1
+

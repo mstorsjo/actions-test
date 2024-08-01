@@ -1,7 +1,7 @@
 From a8f59be225dba0fa38e9909144c2fb7dcfc1f0c9 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Wed, 26 Jun 2024 12:02:45 +0100
-Subject: [PATCH 29/29] fixup
+Subject: [PATCH 29/30] fixup
 
 ---
  mingw-w64-crt/math/sqrt.def.h     |  2 +-

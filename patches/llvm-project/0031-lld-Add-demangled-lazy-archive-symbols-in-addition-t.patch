@@ -1,7 +1,7 @@
 From 2ea5e767bf3ca40a09af7bfb2a1c5f4e2ee411ad Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sun, 1 Oct 2023 10:57:19 +0200
-Subject: [PATCH 31/55] [lld] Add demangled lazy archive symbols in addition to
+Subject: [PATCH 31/56] [lld] Add demangled lazy archive symbols in addition to
  mangled ones when importing a static library.
 
 FIXME: Add tests, non-EC static libs probably need a similar treatment.

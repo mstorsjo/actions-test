@@ -1,7 +1,7 @@
 From ff1ecf3609f52b3f25b9756f235c794a151f8ff8 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 20:06:19 +0100
-Subject: [PATCH 09/29] headers: Use aarch64 TEB accessors for ARM64EC
+Subject: [PATCH 09/30] headers: Use aarch64 TEB accessors for ARM64EC
 
 ---
  mingw-w64-headers/include/winnt.h | 6 +++---

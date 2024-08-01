@@ -1,7 +1,7 @@
 From 8da7dc405682868601dd151922927edb7c492ce3 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 23 Sep 2023 01:17:05 +0200
-Subject: [PATCH 23/55] [lld] Add support for ARM64EC delay load imports.
+Subject: [PATCH 23/56] [lld] Add support for ARM64EC delay load imports.
 
 ---
  lld/COFF/DLL.cpp                        |  28 +++++-

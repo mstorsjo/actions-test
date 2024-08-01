@@ -1,7 +1,7 @@
 From 8486d10a00da7a30790cc835d2be7f36fbec5582 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Sat, 16 Sep 2023 00:03:00 +0100
-Subject: [PATCH 22/29] configure: ARM64EC build support
+Subject: [PATCH 22/30] configure: ARM64EC build support
 
 ---
  mingw-w64-crt/Makefile.am  | 15 +++++++++++++--

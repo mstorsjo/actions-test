@@ -1,7 +1,7 @@
 From d2af6fdd39937f69294c15bcd14e506c94f88836 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 14 Sep 2023 20:59:41 +0100
-Subject: [PATCH 11/29] CRT_fp10: Use aarch64 fenv function variants for
+Subject: [PATCH 11/30] CRT_fp10: Use aarch64 fenv function variants for
  ARM64EC
 
 ---

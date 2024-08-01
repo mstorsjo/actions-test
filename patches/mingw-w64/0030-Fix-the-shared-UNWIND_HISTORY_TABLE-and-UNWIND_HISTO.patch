@@ -1,0 +1,43 @@
+From 22dda92c83587e5a8b1ee06d05322943ea205ecb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 1 Aug 2024 14:45:43 +0300
+Subject: [PATCH 30/30] Fix the shared UNWIND_HISTORY_TABLE and
+ UNWIND_HISTORY_TABLE_ENTRY for armv7
+
+---
+ mingw-w64-headers/include/winnt.h | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/mingw-w64-headers/include/winnt.h b/mingw-w64-headers/include/winnt.h
+index 1086afe2d..18b4366fb 100644
+--- a/mingw-w64-headers/include/winnt.h
++++ b/mingw-w64-headers/include/winnt.h
+@@ -8889,7 +8889,11 @@ DEFINE_ENUM_FLAG_OPERATORS(JOB_OBJECT_IO_RATE_CONTROL_FLAGS)
+ #define UNWIND_HISTORY_TABLE_SIZE 12
+ 
+   typedef struct _UNWIND_HISTORY_TABLE_ENTRY {
++#ifdef _WIN64
+     DWORD64 ImageBase;
++#else
++    DWORD   ImageBase;
++#endif
+     PRUNTIME_FUNCTION FunctionEntry;
+   } UNWIND_HISTORY_TABLE_ENTRY, *PUNWIND_HISTORY_TABLE_ENTRY;
+ 
+@@ -8899,8 +8903,13 @@ DEFINE_ENUM_FLAG_OPERATORS(JOB_OBJECT_IO_RATE_CONTROL_FLAGS)
+     BYTE    GlobalHint;
+     BYTE    Search;
+     BYTE    Once;
++#ifdef _WIN64
+     DWORD64 LowAddress;
+     DWORD64 HighAddress;
++#else
++    DWORD   LowAddress;
++    DWORD   HighAddress;
++#endif
+     UNWIND_HISTORY_TABLE_ENTRY Entry[UNWIND_HISTORY_TABLE_SIZE];
+   } UNWIND_HISTORY_TABLE, *PUNWIND_HISTORY_TABLE;
+ #endif /* (_AMD64_) || defined(_ARM_) || defined(_ARM64_) */
+-- 
+2.25.1
+

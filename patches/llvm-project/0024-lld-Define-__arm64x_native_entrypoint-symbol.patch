@@ -1,7 +1,7 @@
 From 22a46915e4d2e522fda0e84fe814c745c667cfa9 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sat, 10 Jun 2023 21:40:33 +0200
-Subject: [PATCH 24/55] [lld] Define __arm64x_native_entrypoint symbol.
+Subject: [PATCH 24/56] [lld] Define __arm64x_native_entrypoint symbol.
 
 ---
  lld/COFF/Driver.cpp                       | 1 +

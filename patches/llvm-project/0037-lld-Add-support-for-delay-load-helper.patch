@@ -1,7 +1,7 @@
 From ebceb381cd2c0e7563004c1268366664f341cddd Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Tue, 14 Nov 2023 20:18:27 +0100
-Subject: [PATCH 37/55] [lld] Add support for delay load helper.
+Subject: [PATCH 37/56] [lld] Add support for delay load helper.
 
 This is different than MS link.exe. Instead of going through an emulator
 for delay loading, add a separated chunk type that takes care of it.

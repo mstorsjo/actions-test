@@ -1,7 +1,7 @@
 From 15c0b7b6e475a28ceabdbcfbdad7bcae1fb5bdad Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Wed, 17 Jul 2024 17:25:05 +0200
-Subject: [PATCH 06/55] [llvm-dlltool] Use EXPORTAS name type for renamed
+Subject: [PATCH 06/56] [llvm-dlltool] Use EXPORTAS name type for renamed
  imports on ARM64EC.
 
 ---

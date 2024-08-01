@@ -1,7 +1,7 @@
 From 9fe3c839c08680593e7ba925ed01d21b700670bc Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 16 Jun 2023 20:05:39 +0200
-Subject: [PATCH 03/55] [lld] Generate X64 thunks for ARM64EC entry points and
+Subject: [PATCH 03/56] [lld] Generate X64 thunks for ARM64EC entry points and
  patchable functions.
 
 ---

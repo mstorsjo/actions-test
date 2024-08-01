@@ -1,7 +1,7 @@
 From c2c61d0a04d07c899e1aae09cafc70b854c1e928 Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Thu, 7 Sep 2023 21:54:19 +0200
-Subject: [PATCH 19/55] [lld] Add initial support for auxiliary IAT symbols.
+Subject: [PATCH 19/56] [lld] Add initial support for auxiliary IAT symbols.
 
 ---
  lld/COFF/DLL.cpp                          | 30 ++++++++++++++++++++++-

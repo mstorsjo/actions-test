@@ -1,7 +1,7 @@
 From bdc4615202397343c30ddd227528d23031d6242f Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Sun, 2 Jul 2023 22:03:01 +0200
-Subject: [PATCH 20/55] [lld] [NFC] Store live flag in ImportThunkChunk.
+Subject: [PATCH 20/56] [lld] [NFC] Store live flag in ImportThunkChunk.
 
 ---
  lld/COFF/Chunks.cpp               |  4 ++++

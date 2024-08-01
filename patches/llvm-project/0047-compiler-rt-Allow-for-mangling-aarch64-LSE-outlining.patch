@@ -1,7 +1,7 @@
 From c67b6b1bc3a8577295e1a0619ee56d633569f131 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 21 Sep 2023 13:07:46 +0100
-Subject: [PATCH 47/55] [compiler-rt] Allow for mangling aarch64 LSE outlining
+Subject: [PATCH 47/56] [compiler-rt] Allow for mangling aarch64 LSE outlining
  builtins
 
 These need to be mangled to begin with a # on ARM64EC so that the

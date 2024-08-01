@@ -1,7 +1,7 @@
 From ca224302a66bb41a0ea96bbf016a3eb3372c906a Mon Sep 17 00:00:00 2001
 From: Jacek Caban <jacek@codeweavers.com>
 Date: Fri, 22 Sep 2023 23:25:41 +0200
-Subject: [PATCH 21/55] [lld] Add support for import call thunks.
+Subject: [PATCH 21/56] [lld] Add support for import call thunks.
 
 ---
  lld/COFF/Chunks.cpp               | 22 +++++++++

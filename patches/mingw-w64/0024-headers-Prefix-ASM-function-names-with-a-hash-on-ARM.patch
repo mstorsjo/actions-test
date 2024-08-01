@@ -1,7 +1,7 @@
 From da2992d302aec2a0872a918acc703c68bb340f90 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 21 Sep 2023 12:30:10 +0100
-Subject: [PATCH 24/29] headers: Prefix ASM function names with a hash on
+Subject: [PATCH 24/30] headers: Prefix ASM function names with a hash on
  ARM64EC
 
 This is required so that the linker knows any defined symbols refer to

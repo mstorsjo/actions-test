@@ -1,7 +1,7 @@
 From 5e113fe529588db2d5f79073fabfb311ebf8c057 Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Thu, 21 Sep 2023 17:15:40 +0100
-Subject: [PATCH 50/55] [AArch64] Support neon intrinsics on ARM64EC
+Subject: [PATCH 50/56] [AArch64] Support neon intrinsics on ARM64EC
 
 When targeting ARM64EC, __aarch64__ isn't defined. This done to ensure
 structure layouts match those of x86_64, but AArch64 intrinsics still

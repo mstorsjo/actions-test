@@ -1,7 +1,7 @@
 From c883454684dfe5a91157d521efcd6cffdf0c958e Mon Sep 17 00:00:00 2001
 From: Billy Laws <blaws05@gmail.com>
 Date: Mon, 4 Dec 2023 16:05:59 +0000
-Subject: [PATCH 25/29] build kernelbase def on arm64ec
+Subject: [PATCH 25/30] build kernelbase def on arm64ec
 
 ---
  mingw-w64-crt/lib-common/kernel32.def.in | 2 +-
