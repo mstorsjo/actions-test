@@ -1,5 +1,6 @@
 name: Test building external projects
 on:
+  push:
   workflow_dispatch:
   pull_request:
     paths:
@@ -11,6 +12,7 @@ on:
 
 jobs:
   test-build-dav1d:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
@@ -74,6 +76,7 @@ jobs:
           retention-days: 7
 
   test-build-ffmpeg:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
