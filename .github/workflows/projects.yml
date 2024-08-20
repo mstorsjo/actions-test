@@ -169,3 +169,132 @@ jobs:
           path: |
             install/*
           retention-days: 7
+
+  test-build-llvm-clang-cl:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update && sudo apt-get install python3 msitools ca-certificates clang lld llvm cmake ninja-build
+      - uses: actions/checkout@v4
+      - name: Download MSVC
+        run: |
+          ./vsdownload.py --accept-license --dest $(pwd)/msvc
+          ./install.sh $(pwd)/msvc
+      - name: Set up clang-cl/lld-link/llvm-ml symlinks
+        run: |
+          if [ ! -e /usr/bin/clang-cl ]; then
+              sudo ln -s /usr/bin/clang /usr/bin/clang-cl
+          fi
+          if [ ! -e /usr/bin/lld-link ]; then
+              sudo ln -s /usr/bin/lld /usr/bin/lld-link
+          fi
+          if [ ! -e /usr/bin/llvm-ml ]; then
+              sudo ln -s $(ls /usr/bin/llvm-ml-* | tail -1) /usr/bin/llvm-ml
+          fi
+      - name: Checkout llvm-project
+        uses: actions/checkout@v4
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-18.1.8
+          path: llvm-project
+      - name: Build LLVM/Clang
+        run: |
+          BIN=$(pwd)/msvc/bin/x64 . ./msvcenv-native.sh
+          cd llvm-project/llvm
+          mkdir build
+          cd build
+          CC="clang-cl --target=x86_64-windows-msvc -fms-compatibility-version=19.27" CXX="clang-cl --target=x86_64-windows-msvc -fms-compatibility-version=19.27" cmake .. \
+            -G Ninja \
+            -DCMAKE_MT=$(which llvm-mt) \
+            -DCMAKE_ASM_MASM_COMPILER=llvm-ml \
+            -DCMAKE_ASM_MASM_FLAGS="-m64" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=$(pwd)/../../../install \
+            -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86" \
+            -DLLVM_ENABLE_PROJECTS="lld;clang" \
+            -DLLVM_HOST_TRIPLE="x86_64-windows-msvc" \
+            -DLLVM_INSTALL_TOOLCHAIN_ONLY=TRUE \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH=$(pwd)/../../../msvc
+          ninja
+          ninja install
+          cp ../../../msvc/vc/Redist/MSVC/1*/x64/*.CRT/vcruntime*.dll ../../../install/bin
+      # The build output from MSVC actually is redistributable, even if the
+      # toolchain itself isn't.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llvm-clangcl
+          path: |
+            install/*
+          retention-days: 7
+
+  test-build-llvm-clang-cl-cmaketoolchain:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update && sudo apt-get install python3 msitools ca-certificates clang lld llvm cmake ninja-build
+      - uses: actions/checkout@v4
+      - name: Download MSVC
+        run: |
+          ./vsdownload.py --accept-license --dest $(pwd)/msvc
+          cd msvc
+          ln -s kits "Windows Kits"
+      - name: Set up clang-cl/lld-link/llvm-ml symlinks
+        run: |
+          if [ ! -e /usr/bin/clang-cl ]; then
+              sudo ln -s /usr/bin/clang /usr/bin/clang-cl
+          fi
+          if [ ! -e /usr/bin/lld-link ]; then
+              sudo ln -s /usr/bin/lld /usr/bin/lld-link
+          fi
+          if [ ! -e /usr/bin/llvm-ml ]; then
+              sudo ln -s $(ls /usr/bin/llvm-ml-* | tail -1) /usr/bin/llvm-ml
+          fi
+      - name: Checkout llvm-project
+        uses: actions/checkout@v4
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-18.1.8
+          path: llvm-project
+      - name: Build LLVM/Clang
+        run: |
+          cd llvm-project/llvm
+          mkdir build
+          cd build
+          cmake .. \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=../cmake/platforms/WinMsvc.cmake \
+            -DHOST_ARCH=x86_64 \
+            -DLLVM_NATIVE_TOOLCHAIN=/usr \
+            -DLLVM_WINSYSROOT=$(pwd)/../../../msvc \
+            -DCMAKE_ASM_MASM_COMPILER=llvm-ml \
+            -DCMAKE_ASM_MASM_FLAGS="-m64" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=$(pwd)/../../../install \
+            -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86" \
+            -DLLVM_ENABLE_PROJECTS="lld;clang" \
+            -DLLVM_HOST_TRIPLE="x86_64-windows-msvc" \
+            -DLLVM_INSTALL_TOOLCHAIN_ONLY=TRUE \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH=$(pwd)/../../../msvc
+          ninja
+          ninja install
+          cp ../../../msvc/VC/Redist/MSVC/1*/x64/*.CRT/vcruntime*.dll ../../../install/bin
+      # The build output from MSVC actually is redistributable, even if the
+      # toolchain itself isn't.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llvm-clangcl-cmaketoolchain
+          path: |
+            install/*
+          retention-days: 7
