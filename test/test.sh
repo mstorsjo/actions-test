@@ -96,6 +96,7 @@ for arch in x86 x64 arm arm64; do
     EXEC "" BIN=$BIN ./test-dumpbin.sh
     EXEC "" BIN=$BIN ./test-asm.sh
     EXEC "" BIN=$BIN ./test-midl.sh
+    EXEC "" BIN=$BIN ./test-mc.sh
     EXEC "" BIN=$BIN ./test-cmake.sh
     EXEC "" BIN=$BIN ./test-meson.sh
 
@@ -109,6 +110,10 @@ for arch in x86 x64 arm arm64; do
          || -d /usr/local/share/wine/mono \
          || -d /opt/wine/mono ]]; then
         EXEC "" BIN=$BIN ./test-msbuild.sh
+
+        if [[ -n $HAVE_WDK && ($arch == "x64" || $arch == "arm64") ]]; then
+            EXEC "" BIN=$BIN ./test-wdk-msbuild.sh
+        fi
     fi
 done
 
