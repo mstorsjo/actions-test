@@ -1,0 +1,68 @@
+name: Check CPU flag detection
+
+on:
+  push:
+
+jobs:
+  winpf:
+    runs-on: ubuntu-latest
+    container: linaro/wine-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*-ucrt-ubuntu-*-x86_64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Build and run Windows PF test executable
+        run: |
+          aarch64-w64-mingw32-clang winpf.c -o winpf.exe
+          wine-arm64 winpf.exe
+
+  inspect-qemu-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: actions/checkout@v4
+      - name: Build and run cpuinfo test executable
+        run: |
+          set -x
+          sudo apt-get update && sudo apt-get install gcc-aarch64-linux-gnu
+          aarch64-linux-gnu-gcc cpuinfo.c -o cpuinfo
+          export QEMU_LD_PREFIX=/usr/aarch64-linux-gnu
+          docker run --privileged --rm tonistiigi/binfmt --version
+          cat /proc/cpuinfo
+          ./cpuinfo
+
+  inspect-qemu-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run cpuinfo test executable
+        run: |
+          set -x
+          sudo apt-get update && sudo apt-get install gcc-aarch64-linux-gnu qemu-user-static
+          aarch64-linux-gnu-gcc cpuinfo.c -o cpuinfo
+          export QEMU_LD_PREFIX=/usr/aarch64-linux-gnu
+          cat /proc/cpuinfo
+          qemu-aarch64-static --version
+          qemu-aarch64-static ./cpuinfo
+
+  inspect-qemu-wine-arm64:
+    runs-on: ubuntu-latest
+    container: linaro/wine-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run cpuinfo test executable
+        run: |
+          set -x
+          apt-get update && apt-get install -y gcc-aarch64-linux-gnu
+          aarch64-linux-gnu-gcc cpuinfo.c -o cpuinfo
+          cat /proc/cpuinfo
+          qemu-aarch64-static --version
+          qemu-aarch64-static -L /usr/aarch64-linux-gnu ./cpuinfo
