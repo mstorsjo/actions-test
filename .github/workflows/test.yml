@@ -159,7 +159,7 @@ jobs:
 
           meson setup --cross-file cross.txt --buildtype release ..
           ninja
-          meson test -v -t 10
+          meson test -v -t 100
 
   openh264-llvm-mingw-meson:
     runs-on: ubuntu-latest
@@ -229,7 +229,7 @@ jobs:
 
           meson setup --cross-file cross.txt --buildtype release ..
           ninja
-          meson test -v -t 10
+          meson test -v -t 100
 
   openh264-llvm-mingw-make:
     runs-on: ubuntu-latest
