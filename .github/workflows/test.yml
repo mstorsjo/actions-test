@@ -1,0 +1,636 @@
+name: Test building various projects with gas-preprocessor
+
+on:
+  push:
+
+jobs:
+  ffmpeg-gcc:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: armv7, gaspp_arch: arm, triple: arm-linux-gnueabihf }
+          - { arch: aarch64, gaspp_arch: aarch64, triple: aarch64-linux-gnu }
+    steps:
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v4
+        with:
+          repository: ffmpeg/ffmpeg
+          ref: e30369bc1c683aeab6ea74bc37b4ae77b03f79b5
+          path: ffmpeg
+      - name: Build and test checkasm
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-${{matrix.triple}} qemu-user
+          mkdir build
+          cd build
+          export PATH=$(pwd)/../gas-preprocessor:$PATH
+          export QEMU_LD_PREFIX=/usr/${{matrix.triple}}
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=linux --cross-prefix=${{matrix.triple}}- --enable-gpl --as="gas-preprocessor.pl -arch ${{matrix.gaspp_arch}} -as-type gas ${{matrix.triple}}-gcc"
+          make -j$(nproc) run-checkasm
+
+  ffmpeg-clang:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: armv7, gaspp_arch: arm, triple: arm-linux-gnueabihf, clang_triple: armv7-linux-gnueabihf }
+          - { arch: aarch64, gaspp_arch: aarch64, triple: aarch64-linux-gnu, clang_triple: aarch64-linux-gnu }
+    steps:
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v4
+        with:
+          repository: ffmpeg/ffmpeg
+          ref: e30369bc1c683aeab6ea74bc37b4ae77b03f79b5
+          path: ffmpeg
+      - name: Build and test checkasm
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-${{matrix.triple}} qemu-user clang
+          mkdir build
+          cd build
+          export PATH=$(pwd)/../gas-preprocessor:$PATH
+          export QEMU_LD_PREFIX=/usr/${{matrix.triple}}
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=linux --cross-prefix=${{matrix.triple}}- --enable-gpl --cc="clang -target ${{matrix.clang_triple}} -B /usr/bin/${{matrix.triple}}-" --as="gas-preprocessor.pl -arch ${{matrix.gaspp_arch}} -as-type clang clang -target ${{matrix.clang_triple}}"
+          make -j$(nproc) run-checkasm
+
+  ffmpeg-msvc-wine:
+    runs-on: ubuntu-latest
+    container: linaro/wine-arm64
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm
+          - arm64
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v4
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 00c2c606c33eb83bc40657aab964b280fe6b4f96
+          path: msvc-wine
+      - name: Install msvc-wine
+        env:
+          WINEPREFIX: /tmp/wine-x64-prefix
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends wine python3 msitools ca-certificates winbind
+          wine wineboot
+          msvc-wine/vsdownload.py --accept-license --dest /opt/msvc
+          msvc-wine/install.sh /opt/msvc
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v4
+        with:
+          repository: ffmpeg/ffmpeg
+          ref: e30369bc1c683aeab6ea74bc37b4ae77b03f79b5
+          path: ffmpeg
+      - name: Build
+        env:
+          WINEPREFIX: /tmp/wine-x64-prefix
+        run: |
+          apt-get update && apt-get install -y make
+          mkdir build
+          cd build
+          export PATH=$(pwd)/../gas-preprocessor:/opt/msvc/bin/${{matrix.arch}}:$PATH
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=win32 --toolchain=msvc --enable-cross-compile --enable-gpl --target-exec=wine-arm64
+          make -j$(nproc) checkasm
+      - name: Test checkasm
+        if: ${{matrix.arch == 'arm64'}}
+        run: |
+          cd build
+          make -j$(nproc) run-checkasm
+
+  ffmpeg-msvc:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm
+          - arm64
+    steps:
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_${{matrix.arch}}
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Checkout ffmpeg
+        uses: actions/checkout@v4
+        with:
+          repository: ffmpeg/ffmpeg
+          ref: e30369bc1c683aeab6ea74bc37b4ae77b03f79b5
+          path: ffmpeg
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: msys
+          path-type: inherit
+          install: >-
+            make
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          mkdir build
+          cd build
+          export PATH=$(pwd)/../gas-preprocessor:$PATH
+          ../ffmpeg/configure --arch=${{matrix.arch}} --target-os=win32 --toolchain=msvc --enable-cross-compile --enable-gpl
+          make -j$(nproc) checkasm
+
+  dav1d-msvc:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64_arm
+          - amd64_arm64
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install meson ninja
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{matrix.arch}}
+      - name: Checkout dav1d
+        uses: actions/checkout@v4
+        with:
+          repository: videolan/dav1d
+          ref: 932b323c3e5bbedf2c535618dbc5ad04fea2aa6e
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Add gas-preprocessor to path
+        run: |
+          echo "$PWD\gas-preprocessor" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Create cross file
+        shell: bash
+        run: |
+          arch=${{matrix.arch}}
+          case $arch in
+          *_arm)
+              cpu=armv7
+              cpu_family=arm
+              ;;
+          *_arm64)
+              cpu=aarch64
+              cpu_family=aarch64
+              ;;
+          esac
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'cl'
+          cpp = 'cl'
+          ar = 'lib'
+          windres = 'rc'
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$cpu'
+          endian = 'little'
+          EOF
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          meson setup --cross-file ../cross.txt -Dtrim_dsp=false --buildtype release --werror ..
+          ninja
+
+  dav1d-msvc-wine:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm
+          - arm64
+    container: linaro/wine-arm64
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v4
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 00c2c606c33eb83bc40657aab964b280fe6b4f96
+          path: msvc-wine
+      - name: Install msvc-wine
+        env:
+          WINEPREFIX: /tmp/wine-x64-prefix
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends wine python3 msitools ca-certificates ninja-build winbind meson
+          wine wineboot
+          cd msvc-wine
+          ./vsdownload.py --accept-license --dest /opt/msvc
+          echo "#!/bin/bash" > wrappers/wine-msvc-new.sh
+          echo "export WINEPREFIX=/tmp/wine-x64-prefix" >> wrappers/wine-msvc-new.sh
+          cat wrappers/wine-msvc.sh >> wrappers/wine-msvc-new.sh
+          chmod a+x wrappers/wine-msvc-new.sh
+          mv wrappers/wine-msvc-new.sh wrappers/wine-msvc.sh
+          ./install.sh /opt/msvc
+      - name: Checkout dav1d
+        uses: actions/checkout@v4
+        with:
+          repository: videolan/dav1d
+          ref: 932b323c3e5bbedf2c535618dbc5ad04fea2aa6e
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build (and test checkasm)
+        run: |
+          mkdir build
+          cd build
+          export PATH=$(pwd)/../gas-preprocessor:/opt/msvc/bin/${{matrix.arch}}:$PATH
+
+          arch=${{matrix.arch}}
+          case $arch in
+          arm)
+              cpu=armv7
+              cpu_family=arm
+              ;;
+          arm64)
+              cpu=aarch64
+              cpu_family=aarch64
+              exe_wrapper="exe_wrapper = ['wine-arm64']"
+              ;;
+          esac
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'cl'
+          cpp = 'cl'
+          ar = 'lib'
+          windres = 'rc'
+          $exe_wrapper
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$cpu'
+          endian = 'little'
+          EOF
+
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
+          ninja
+          meson test checkasm -v
+
+  openh264-msvc-wine-meson:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm
+          - arm64
+    container: linaro/wine-arm64
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v4
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 00c2c606c33eb83bc40657aab964b280fe6b4f96
+          path: msvc-wine
+      - name: Install msvc-wine
+        env:
+          WINEPREFIX: /tmp/wine-x64-prefix
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends wine python3 msitools ca-certificates ninja-build winbind meson
+          wine wineboot
+          cd msvc-wine
+          ./vsdownload.py --accept-license --dest /opt/msvc
+          echo "#!/bin/bash" > wrappers/wine-msvc-new.sh
+          echo "export WINEPREFIX=/tmp/wine-x64-prefix" >> wrappers/wine-msvc-new.sh
+          cat wrappers/wine-msvc.sh >> wrappers/wine-msvc-new.sh
+          chmod a+x wrappers/wine-msvc-new.sh
+          mv wrappers/wine-msvc-new.sh wrappers/wine-msvc.sh
+          ./install.sh /opt/msvc
+      - name: Checkout openh264
+        uses: actions/checkout@v4
+        with:
+          repository: cisco/openh264
+          ref: c59550a2147c255cc8e09451f6deb96de2526b6d
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build (and test)
+        run: |
+          mkdir builddir
+          cd builddir
+          export PATH=$(pwd)/../gas-preprocessor:/opt/msvc/bin/${{matrix.arch}}:$PATH
+
+          arch=${{matrix.arch}}
+          case $arch in
+          arm)
+              cpu=armv7
+              cpu_family=arm
+              ;;
+          arm64)
+              cpu=aarch64
+              cpu_family=aarch64
+              exe_wrapper="exe_wrapper = ['wine-arm64']"
+              ;;
+          esac
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'cl'
+          cpp = 'cl'
+          ar = 'lib'
+          windres = 'rc'
+          #$exe_wrapper
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$cpu'
+          endian = 'little'
+          EOF
+
+          meson setup --cross-file cross.txt --buildtype release ..
+          ninja
+          # Skip testing, these tests don't run well in wine-arm64 via
+          # meson, for some reason. ($exe_wrapper is commented out above,
+          # to avoid meson testing whether exe_wrapper works.)
+          #meson test -v -t 10
+
+  openh264-msvc-wine-make:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm
+          - arm64
+    container: linaro/wine-arm64
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v4
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 00c2c606c33eb83bc40657aab964b280fe6b4f96
+          path: msvc-wine
+      - name: Install msvc-wine
+        env:
+          WINEPREFIX: /tmp/wine-x64-prefix
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends wine python3 msitools ca-certificates ninja-build winbind meson
+          wine wineboot
+          cd msvc-wine
+          ./vsdownload.py --accept-license --dest /opt/msvc
+          echo "#!/bin/bash" > wrappers/wine-msvc-new.sh
+          echo "export WINEPREFIX=/tmp/wine-x64-prefix" >> wrappers/wine-msvc-new.sh
+          cat wrappers/wine-msvc.sh >> wrappers/wine-msvc-new.sh
+          chmod a+x wrappers/wine-msvc-new.sh
+          mv wrappers/wine-msvc-new.sh wrappers/wine-msvc.sh
+          ./install.sh /opt/msvc
+      - name: Checkout openh264
+        uses: actions/checkout@v4
+        with:
+          repository: cisco/openh264
+          ref: c59550a2147c255cc8e09451f6deb96de2526b6d
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build
+        run: |
+          apt-get update && apt-get install -y make clang
+          make gtest-bootstrap
+
+          mkdir builddir
+          cd builddir
+
+          export PATH=$(pwd)/../gas-preprocessor:/opt/msvc/bin/${{matrix.arch}}:$PATH
+          if [ ! -e /usr/bin/clang-cl ]; then
+              ln -s /usr/bin/clang /usr/bin/clang-cl
+          fi
+
+          make -f ../Makefile V=0 OS=msvc ARCH=${{matrix.arch}} -j$(nproc)
+      - name: Build
+        if: ${{matrix.arch == 'arm64'}}
+        run: |
+          cd builddir
+          wine-arm64 codec_unittest.exe
+
+  openh264-llvm-mingw-meson:
+    runs-on: ubuntu-latest
+    container: linaro/wine-arm64
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - armv7
+    steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends meson ninja-build
+      - name: Checkout openh264
+        uses: actions/checkout@v4
+        with:
+          repository: cisco/openh264
+          ref: c59550a2147c255cc8e09451f6deb96de2526b6d
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*-ucrt-ubuntu-*-x86_64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build
+        run: |
+          mkdir builddir
+          cd builddir
+
+          arch=${{matrix.arch}}
+          case $arch in
+          armv7)
+              cpu=armv7
+              cpu_family=arm
+              ;;
+          aarch64)
+              cpu=aarch64
+              cpu_family=aarch64
+              exe_wrapper="exe_wrapper = ['wine-arm64']"
+              ;;
+          esac
+          cat >cross.txt <<EOF
+          [binaries]
+          c = '${{matrix.arch}}-w64-mingw32-clang'
+          cpp = '${{matrix.arch}}-w64-mingw32-clang++'
+          ar = '${{matrix.arch}}-w64-mingw32-ar'
+          windres = '${{matrix.arch}}-w64-mingw32-windres'
+          $exe_wrapper
+
+          [properties]
+          cpp_link_args = ['-static-libgcc', '-static-libstdc++']
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = '$cpu_family'
+          cpu = '$cpu'
+          endian = 'little'
+          EOF
+
+          export PATH=$(pwd)/../gas-preprocessor:$PATH
+
+          meson setup --cross-file cross.txt --buildtype release ..
+          ninja
+          # Skip testing, these tests don't run well in wine-arm64 via
+          # meson, for some reason.
+          #meson test -v -t 10
+
+  openh264-llvm-mingw-make:
+    runs-on: ubuntu-latest
+    container: linaro/wine-arm64
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - armv7
+    steps:
+      - name: Checkout openh264
+        uses: actions/checkout@v4
+        with:
+          repository: cisco/openh264
+          ref: c59550a2147c255cc8e09451f6deb96de2526b6d
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*-ucrt-ubuntu-*-x86_64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build
+        run: |
+          apt-get update && apt-get install -y make
+          make gtest-bootstrap
+
+          mkdir builddir
+          cd builddir
+
+          export PATH=$(pwd)/../gas-preprocessor:$PATH
+
+          make -f ../Makefile V=0 OS=mingw_nt ARCH=${{matrix.arch}} CC=${{matrix.arch}}-w64-mingw32-clang CXX=${{matrix.arch}}-w64-mingw32-clang++ AR=${{matrix.arch}}-w64-mingw32-ar LDFLAGS="-static-libgcc -static-libstdc++" -j$(nproc)
+      - name: Test
+        if: ${{matrix.arch == 'aarch64'}}
+        run: |
+          cd builddir
+          wine-arm64 codec_unittest.exe
+
+  x264-llvm-mingw:
+    runs-on: ubuntu-latest
+    container: linaro/wine-arm64
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - armv7
+    steps:
+      - name: Checkout x264
+        run: |
+          git clone https://code.videolan.org/videolan/x264
+          cd x264
+          git checkout be4f0200ed007c466fd96185c39cde2a2d60ef50
+      - name: Install llvm-mingw
+        run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20231128/llvm-mingw-20231128-ucrt-ubuntu-20.04-x86_64.tar.xz
+          tar -Jxf llvm-mingw-*-ucrt-ubuntu-*-x86_64.tar.xz
+          rm llvm-mingw-*.tar.xz
+          mv llvm-mingw-* /opt/llvm-mingw
+          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build
+        run: |
+          apt-get update && apt-get install -y make
+          cp gas-preprocessor/gas-preprocessor.pl x264/tools
+
+          mkdir build
+          cd build
+
+          ../x264/configure --host=${{matrix.arch}}-w64-mingw32 --cross-prefix=${{matrix.arch}}-w64-mingw32-
+          make -j$(nproc) all checkasm
+      - name: Test checkasm
+        if: ${{matrix.arch == 'aarch64'}}
+        run: |
+          cd build
+          wine-arm64 checkasm8.exe
+          wine-arm64 checkasm10.exe
+
+  x264-msvc-wine:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm
+          - arm64
+    steps:
+      - name: Checkout msvc-wine
+        uses: actions/checkout@v4
+        with:
+          repository: mstorsjo/msvc-wine
+          ref: 00c2c606c33eb83bc40657aab964b280fe6b4f96
+          path: msvc-wine
+      - name: Install msvc-wine
+        run: |
+          sudo apt-get update && sudo apt-get install -y wine64 python3 msitools ca-certificates ninja-build winbind
+          wine64 wineboot
+          cd msvc-wine
+          ./vsdownload.py --accept-license --dest /opt/msvc
+          ./install.sh /opt/msvc
+      - name: Checkout x264
+        run: |
+          git clone https://code.videolan.org/videolan/x264
+          cd x264
+          git checkout be4f0200ed007c466fd96185c39cde2a2d60ef50
+      - name: Checkout gas-preprocessor
+        uses: actions/checkout@v4
+        with:
+          path: gas-preprocessor
+      - name: Build
+        run: |
+          export PATH=/opt/msvc/bin/${{matrix.arch}}:$PATH
+
+          cp gas-preprocessor/gas-preprocessor.pl x264/tools
+
+          mkdir build
+          cd build
+
+          CC=cl ../x264/configure --host=${{matrix.arch}}-w64-mingw32
+          make -j$(nproc) all
+          # x264's checkasm can't be built with MSVC, so no testing here.
