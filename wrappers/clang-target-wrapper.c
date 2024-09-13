@@ -32,16 +32,6 @@ int _tmain(int argc, TCHAR* argv[]) {
     split_argv(argv[0], &dir, NULL, &target, &exe);
     if (!target)
         target = _T(DEFAULT_TARGET);
-    TCHAR *arch = _tcsdup(target);
-    TCHAR *dash = _tcschr(arch, '-');
-    TCHAR *target_without_arch = NULL;
-    if (dash) {
-        *dash = '\0';
-        target_without_arch = dash + 1;
-    }
-    TCHAR *target_os = _tcsrchr(target, '-');
-    if (target_os)
-        target_os++;
 
     TCHAR *basedir = _tcsdup(dir);
     size_t basedirlen = _tcslen(basedir);
@@ -51,12 +41,6 @@ int _tmain(int argc, TCHAR* argv[]) {
     TCHAR *sep = _tcsrchrs(basedir, '/', '\\');
     if (sep)
         *(sep + 1) = '\0';
-    TCHAR *sysroot = concat(basedir, _T("generic-linux-musl"));
-    if (!_tcscmp(arch, _T("arm"))) {
-        arch = _T("armv7");
-        if (target_without_arch)
-            target = concat(_T("armv7-"), target_without_arch);
-    }
 
     // Check if trying to compile Ada; if we try to do this, invoking clang
     // would end up invoking <triplet>-gcc with the same arguments, which ends
@@ -68,7 +52,7 @@ int _tmain(int argc, TCHAR* argv[]) {
         }
     }
 
-    int max_arg = argc + 22;
+    int max_arg = argc + 17;
     const TCHAR **exec_argv = malloc((max_arg + 1) * sizeof(*exec_argv));
     int arg = 0;
     if (getenv("CCACHE"))
@@ -86,28 +70,10 @@ int _tmain(int argc, TCHAR* argv[]) {
 
     exec_argv[arg++] = _T("-target");
     exec_argv[arg++] = target;
-    exec_argv[arg++] = concat(_T("--sysroot="), sysroot);
-    exec_argv[arg++] = _T("-rtlib=compiler-rt");
-    exec_argv[arg++] = _T("-unwindlib=libunwind");
-    exec_argv[arg++] = _T("-stdlib=libc++");
-    exec_argv[arg++] = _T("-fuse-ld=lld");
     exec_argv[arg++] = _T("--end-no-unused-arguments");
 
     for (int i = 1; i < argc; i++)
         exec_argv[arg++] = argv[i];
-
-    if (target_os && !_tcscmp(target_os, _T("mingw32uwp"))) {
-        // Default linker flags; passed after any user specified -l options,
-        // to let the user specified libraries take precedence over these.
-
-        exec_argv[arg++] = _T("--start-no-unused-arguments");
-        // add the minimum runtime to use for UWP targets
-        exec_argv[arg++] = _T("-Wl,-lwindowsapp");
-        // This still requires that the toolchain (in particular, libc++.a) has
-        // been built targeting UCRT originally.
-        exec_argv[arg++] = _T("-Wl,-lucrtapp");
-        exec_argv[arg++] = _T("--end-no-unused-arguments");
-    }
 
     exec_argv[arg] = NULL;
     if (arg > max_arg) {

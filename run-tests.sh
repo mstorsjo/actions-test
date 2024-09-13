@@ -68,7 +68,6 @@ fi
 
 for arch in $ARCHS; do
     triple=$arch-linux-musl
-    fulltriple=$arch-unknown-linux-musl
     normalized_arch=$arch
     musl_arch=$arch
     qemu_arch=$arch
@@ -82,7 +81,6 @@ for arch in $ARCHS; do
         ;;
     arm*)
         triple=$arch-linux-musleabihf
-        fulltriple=armv7-unknown-linux-musleabihf
         normalized_arch=arm
         musl_arch=armhf
         qemu_arch=armhf
