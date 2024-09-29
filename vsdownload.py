@@ -63,7 +63,10 @@ def setPackageSelectionMSVC16(args, packages, userversion, sdk, toolversion, def
             sdkpkg = "Win11SDK_" + sdk
         else:
             sdkpkg = "Win10SDK_" + sdk
-        args.package.extend([sdkpkg, "Microsoft.VisualStudio.Component.VC." + toolversion + ".x86.x64", "Microsoft.VisualStudio.Component.VC." + toolversion + ".ARM", "Microsoft.VisualStudio.Component.VC." + toolversion + ".ARM64"])
+        extraarchs = ["ARM", "ARM64"]
+        args.package.extend([sdkpkg, "Microsoft.VisualStudio.Component.VC." + toolversion + ".x86.x64", "Microsoft.VisualStudio.Component.VC." + toolversion + ".ATL"])
+        for arch in extraarchs:
+            args.package.extend(["Microsoft.VisualStudio.Component.VC." + toolversion + "." + arch, "Microsoft.VisualStudio.Component.VC." + toolversion + ".ATL." + arch])
     else:
         # Options for toolchains for specific versions. The latest version in
         # each manifest isn't available as a pinned version though, so if that
@@ -84,7 +87,10 @@ def setPackageSelectionMSVC15(args, packages, userversion, sdk, toolversion, def
 def setPackageSelection(args, packages):
     # If no packages are selected, install these versionless packages, which
     # gives the latest/recommended version for the current manifest.
-    defaultPackages = ["Microsoft.VisualStudio.Workload.VCTools", "Microsoft.VisualStudio.Component.VC.Tools.ARM", "Microsoft.VisualStudio.Component.VC.Tools.ARM64"]
+    extraarchs = ["ARM", "ARM64"]
+    defaultPackages = ["Microsoft.VisualStudio.Workload.VCTools", "Microsoft.VisualStudio.Component.VC.ATL"]
+    for arch in extraarchs:
+        defaultPackages.extend(["Microsoft.VisualStudio.Component.VC.Tools." + arch, "Microsoft.VisualStudio.Component.VC.ATL." + arch])
 
     # Note, that in the manifest for MSVC version X.Y, only version X.Y-1
     # exists with a package name like "Microsoft.VisualStudio.Component.VC."
@@ -129,6 +135,14 @@ def setPackageSelection(args, packages):
         setPackageSelectionMSVC16(args, packages, args.msvc_version, "10.0.22621", "14.36.17.6", defaultPackages)
     elif args.msvc_version == "17.7":
         setPackageSelectionMSVC16(args, packages, args.msvc_version, "10.0.22621", "14.37.17.7", defaultPackages)
+    elif args.msvc_version == "17.8":
+        setPackageSelectionMSVC16(args, packages, args.msvc_version, "10.0.22621", "14.38.17.8", defaultPackages)
+    elif args.msvc_version == "17.9":
+        setPackageSelectionMSVC16(args, packages, args.msvc_version, "10.0.22621", "14.39.17.9", defaultPackages)
+    elif args.msvc_version == "17.10":
+        setPackageSelectionMSVC16(args, packages, args.msvc_version, "10.0.22621", "14.40.17.10", defaultPackages)
+    elif args.msvc_version == "17.11":
+        setPackageSelectionMSVC16(args, packages, args.msvc_version, "10.0.22621", "14.41.17.11", defaultPackages)
 
     elif args.msvc_version == "15.4":
         setPackageSelectionMSVC15(args, packages, args.msvc_version, "10.0.16299", "14.11", defaultPackages)
@@ -508,7 +522,7 @@ def unzipFiltered(zip, dest):
 def unpackVsix(file, dest, listing):
     temp = os.path.join(dest, "vsix")
     makedirs(temp)
-    with zipfile.ZipFile(file, 'r') as zip:
+    with zipfile.ZipFile(file, "r") as zip:
         unzipFiltered(zip, temp)
         with open(listing, "w") as f:
             for n in zip.namelist():
@@ -570,7 +584,7 @@ def unpackWin10WDK(src, dest):
     kitsPath = os.path.join(dest, "Program Files", "Windows Kits", "10")
     brokenBuildDir = os.path.join(kitsPath, "Build")
     for buildDir in glob.glob(kitsPath + "/build/10.*/"):
-        wdkVersion = buildDir.split('/')[-2];
+        wdkVersion = buildDir.split("/")[-2];
         print("Merging WDK 'Build' and 'build' directories into version", wdkVersion);
         mergeTrees(brokenBuildDir, buildDir)
     shutil.rmtree(brokenBuildDir)
@@ -605,14 +619,12 @@ def moveVCSDK(unpack, dest):
     # Move the VC and Program Files\Windows Kits\10 directories
     # out from the unpack directory, allowing the rest of unpacked
     # files to be removed.
-    makedirs(os.path.join(dest, "kits"))
     mergeTrees(os.path.join(unpack, "VC"), os.path.join(dest, "VC"))
     kitsPath = unpack
     # msiexec extracts to Windows Kits rather than Program Files\Windows Kits
     if sys.platform != "win32":
         kitsPath = os.path.join(kitsPath, "Program Files")
-    kitsPath = os.path.join(kitsPath, "Windows Kits", "10")
-    mergeTrees(kitsPath, os.path.join(dest, "kits", "10"))
+    mergeTrees(os.path.join(kitsPath, "Windows Kits"), os.path.join(dest, "Windows Kits"))
 
     # Move other VC components directories:
     # The DIA SDK isn't necessary for normal use, but can be used when e.g.
