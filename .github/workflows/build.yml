@@ -112,7 +112,7 @@ jobs:
           BIN=$(pwd)/msvc/bin/${{matrix.msvcarch}} . msvc-wine/msvcenv-native.sh
           mkdir build
           cd build
-          CC="clang-cl --target=${{matrix.clangarch}}-windows-msvc" cmake ../ffmpeg -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_MT=$(which llvm-mt)
+          CC="clang-cl --target=${{matrix.clangarch}}-windows-msvc" cmake ../ffmpeg -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_MT=$(which llvm-mt) -DCMAKE_ASM_FLAGS="--target=${{matrix.clangarch}}-windows-msvc"
           ninja
       - name: Install Wine and run tests
         if: (matrix.arch == 'x86_64') || (matrix.arch == 'i386')
