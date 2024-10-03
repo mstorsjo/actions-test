@@ -6,7 +6,7 @@ include(CheckLanguage)
 include(CheckLibraryExists)
 include(CheckLinkerFlag)
 
-project(ffmpeg C CXX ASM)
+project(ffmpeg C ASM)
 
 set(CMAKE_C_STANDARD 17)
 
