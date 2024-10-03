@@ -244,7 +244,7 @@
 #define HAVE_RVV_INLINE 0
 #define HAVE_RV_ZICBOP_INLINE 0
 #define HAVE_RV_ZVBB_INLINE 0
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(__i386__)
 #define HAVE_AESNI_INLINE 1
 #define HAVE_AMD3DNOW_INLINE 1
 #define HAVE_AMD3DNOWEXT_INLINE 1
@@ -614,7 +614,11 @@
 #define HAVE_SYMVER_GNU_ASM 0
 #define HAVE_VFP_ARGS 0
 #define HAVE_XFORM_ASM 0
+#ifdef __x86_64__
 #define HAVE_XMM_CLOBBERS 1
+#else
+#define HAVE_XMM_CLOBBERS 0
+#endif
 #define HAVE_DPI_AWARENESS_CONTEXT 0
 #define HAVE_IDXGIOUTPUT5 0
 #define HAVE_KCMVIDEOCODECTYPE_HEVC 0
