@@ -186,9 +186,17 @@ jobs:
           cd build
           cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_C_COMPILER=${{matrix.arch}}-w64-mingw32-gcc
           ninja
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{matrix.arch}}
+          path: |
+            build/libavutil/tests/cpu.exe
+            build/tests/checkasm/checkasm.exe
+          retention-days: 7
       - name: Run tests
         if: (matrix.arch == 'aarch64')
         run: |
+          set -x
           wine-arm64 wineboot
           cd build
           wine-arm64 libavutil/tests/cpu.exe
