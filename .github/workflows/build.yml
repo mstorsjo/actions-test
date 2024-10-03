@@ -117,8 +117,10 @@ jobs:
       - name: Install Wine and run tests
         if: (matrix.arch == 'x86_64') || (matrix.arch == 'i386')
         run: |
-          sudo apt-get update && sudo apt-get install wine64
+          sudo dpkg --add-architecture i386
+          sudo apt-get update && sudo apt-get install wine32 wine64
           wine wineboot
+          cd build
           wine libavutil/tests/cpu
           wine tests/checkasm/checkasm
 
@@ -153,6 +155,7 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update && sudo apt-get install wine32 wine64
           wine wineboot
+          cd build
           wine libavutil/tests/cpu.exe
           wine tests/checkasm/checkasm.exe
 
@@ -187,5 +190,6 @@ jobs:
         if: (matrix.arch == 'aarch64')
         run: |
           wine-arm64 wineboot
+          cd build
           wine-arm64 libavutil/tests/cpu.exe
           wine-arm64 tests/checkasm/checkasm.exe
