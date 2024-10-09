@@ -37,10 +37,9 @@ int ff_##ifmt##_to_##ofmt##_neon(int w, int h,                                  
                                  int y_offset,                                              \
                                  int y_coeff);                                              \
                                                                                             \
-static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *const src[],       \
-                                           const int srcStride[], int srcSliceY,            \
-                                           int srcSliceH, uint8_t *const dst[],             \
-                                           const int dstStride[]) {                         \
+static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *src[],             \
+                                           int srcStride[], int srcSliceY, int srcSliceH,   \
+                                           uint8_t *dst[], int dstStride[]) {               \
     const int16_t yuv2rgb_table[] = { YUV_TO_RGB_TABLE };                                   \
                                                                                             \
     return ff_##ifmt##_to_##ofmt##_neon(c->srcW, srcSliceH,                                 \
@@ -65,10 +64,9 @@ int ff_##ifmt##_to_##ofmt##_neon(int w, int h,                                  
                                  uint8_t *dst1, int linesize1,                              \
                                  uint8_t *dst2, int linesize2);                             \
                                                                                             \
-static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *const src[],       \
-                                           const int srcStride[], int srcSliceY,            \
-                                           int srcSliceH, uint8_t *const dst[],             \
-                                           const int dstStride[]) {                         \
+static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *src[],             \
+                                           int srcStride[], int srcSliceY, int srcSliceH,   \
+                                           uint8_t *dst[], int dstStride[]) {               \
     const int16_t yuv2rgb_table[] = { YUV_TO_RGB_TABLE };                                   \
                                                                                             \
     return ff_##ifmt##_to_##ofmt##_neon(c->srcW, srcSliceH,                                 \
@@ -102,10 +100,9 @@ int ff_##ifmt##_to_##ofmt##_neon(int w, int h,                                  
                                  int y_offset,                                              \
                                  int y_coeff);                                              \
                                                                                             \
-static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *const src[],       \
-                                           const int srcStride[], int srcSliceY,            \
-                                           int srcSliceH, uint8_t *const dst[],             \
-                                           const int dstStride[]) {                         \
+static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *src[],             \
+                                           int srcStride[], int srcSliceY, int srcSliceH,   \
+                                           uint8_t *dst[], int dstStride[]) {               \
     const int16_t yuv2rgb_table[] = { YUV_TO_RGB_TABLE };                                   \
                                                                                             \
     return ff_##ifmt##_to_##ofmt##_neon(c->srcW, srcSliceH,                                 \
@@ -127,10 +124,9 @@ int ff_##ifmt##_to_##ofmt##_neon(int w, int h,                                  
                                  uint8_t *dst1, int linesize1,                              \
                                  uint8_t *dst2, int linesize2);                             \
                                                                                             \
-static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *const src[],       \
-                                           const int srcStride[], int srcSliceY,            \
-                                           int srcSliceH, uint8_t *const dst[],             \
-                                           const int dstStride[]) {                         \
+static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *src[],             \
+                                           int srcStride[], int srcSliceY, int srcSliceH,   \
+                                           uint8_t *dst[], int dstStride[]) {               \
     const int16_t yuv2rgb_table[] = { YUV_TO_RGB_TABLE };                                   \
                                                                                             \
     return ff_##ifmt##_to_##ofmt##_neon(c->srcW, srcSliceH,                                 \
@@ -148,9 +144,9 @@ void ff_nv24_to_yuv420p_chroma_neon(uint8_t *dst1, int dstStride1,
                                     const uint8_t *src, int srcStride,
                                     int w, int h);
 
-static int nv24_to_yuv420p_neon_wrapper(SwsContext *c, const uint8_t *const src[],
-                                        const int srcStride[], int srcSliceY, int srcSliceH,
-                                        uint8_t *const dst[], const int dstStride[])
+static int nv24_to_yuv420p_neon_wrapper(SwsContext *c, const uint8_t *src[],
+                                        int srcStride[], int srcSliceY, int srcSliceH,
+                                        uint8_t *dst[], int dstStride[])
 {
     uint8_t *dst1 = dst[1] + dstStride[1] * srcSliceY / 2;
     uint8_t *dst2 = dst[2] + dstStride[2] * srcSliceY / 2;

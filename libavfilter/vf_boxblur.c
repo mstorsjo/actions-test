@@ -55,9 +55,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->temp[1]);
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static int query_formats(AVFilterContext *ctx)
 {
     AVFilterFormats *formats = NULL;
     int fmt, ret;
@@ -71,7 +69,7 @@ static int query_formats(const AVFilterContext *ctx,
             return ret;
     }
 
-    return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    return ff_set_common_formats(ctx, formats);
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -305,6 +303,6 @@ const AVFilter ff_vf_boxblur = {
     .uninit        = uninit,
     FILTER_INPUTS(avfilter_vf_boxblur_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

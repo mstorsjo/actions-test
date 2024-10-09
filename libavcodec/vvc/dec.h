@@ -236,7 +236,7 @@ typedef struct VVCContext {
     uint16_t seq_decode;
     uint16_t seq_output;
 
-    struct FFExecutor *executor;
+    struct AVExecutor *executor;
 
     VVCFrameContext *fcs;
     int nb_fcs;

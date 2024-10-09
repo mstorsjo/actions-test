@@ -97,9 +97,7 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static int query_formats(AVFilterContext *ctx)
 {
     const EdgeDetectContext *edgedetect = ctx->priv;
     static const enum AVPixelFormat wires_pix_fmts[] = {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE};
@@ -116,7 +114,7 @@ static int query_formats(const AVFilterContext *ctx,
     } else {
         av_assert0(0);
     }
-    return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, pix_fmts);
+    return ff_set_common_formats_from_list(ctx, pix_fmts);
 }
 
 static int config_props(AVFilterLink *inlink)
@@ -260,7 +258,7 @@ const AVFilter ff_vf_edgedetect = {
     .uninit        = uninit,
     FILTER_INPUTS(edgedetect_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
     .priv_class    = &edgedetect_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

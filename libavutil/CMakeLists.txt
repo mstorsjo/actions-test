@@ -93,8 +93,7 @@ if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
       aarch64/float_dsp_init.c
       aarch64/tx_float_init.c
       aarch64/float_dsp_neon.S
-      aarch64/tx_float_neon.S
-      aarch64/cpu_sve.S)
+      aarch64/tx_float_neon.S)
 elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm")
   list(APPEND avutil_src
       arm/cpu.c

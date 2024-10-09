@@ -96,9 +96,7 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat main_fmts[] = {
         AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA420P,
@@ -107,18 +105,15 @@ static int query_formats(const AVFilterContext *ctx,
         AV_PIX_FMT_NONE
     };
     static const enum AVPixelFormat alpha_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
+    AVFilterFormats *main_formats = ff_make_format_list(main_fmts);
     int ret;
 
-    ret = ff_formats_ref(ff_make_format_list(alpha_fmts),
-                         &cfg_in[1]->formats);
-    if (ret < 0)
-        return ret;
+    if ((ret = ff_formats_ref(main_formats, &ctx->inputs[0]->outcfg.formats)) < 0 ||
+        (ret = ff_formats_ref(main_formats, &ctx->outputs[0]->incfg.formats)) < 0)
+            return ret;
 
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, main_fmts);
-    if (ret < 0)
-        return ret;
-
-    return 0;
+    return ff_formats_ref(ff_make_format_list(alpha_fmts),
+                          &ctx->inputs[1]->outcfg.formats);
 }
 
 static int config_input_main(AVFilterLink *inlink)
@@ -208,7 +203,7 @@ const AVFilter ff_vf_alphamerge = {
     .init           = init,
     FILTER_INPUTS(alphamerge_inputs),
     FILTER_OUTPUTS(alphamerge_outputs),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
     .uninit         = uninit,
     .activate       = activate,
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,

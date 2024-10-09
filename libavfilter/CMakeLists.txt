@@ -157,7 +157,6 @@ set(avfilter_src
     motion_estimation.c
     palette.c
     perlin.c
-    psnr.c
     pthread.c
     qp_table.c
     scale_eval.c
@@ -445,6 +444,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQU
       x86/vf_overlay_init.c
       x86/vf_pp7_init.c
       x86/vf_psnr_init.c
+      x86/vf_xpsnr_init.c
       x86/vf_pullup_init.c
       x86/vf_removegrain_init.c
       x86/avf_showcqt_init.c

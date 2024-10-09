@@ -498,32 +498,12 @@ struct AVFilterContext {
      */
     int nb_threads;
 
-#if FF_API_CONTEXT_PUBLIC
-    /**
-     * @deprecated unused
-     */
-    attribute_deprecated
     struct AVFilterCommand *command_queue;
-#endif
 
     char *enable_str;               ///< enable expression string
-#if FF_API_CONTEXT_PUBLIC
-    /**
-     * @deprecated unused
-     */
-    attribute_deprecated
-    void *enable;
-    /**
-     * @deprecated unused
-     */
-    double *var_values;
-#endif
-    /**
-     * MUST NOT be accessed from outside avfilter.
-     *
-     * the enabled state from the last expression evaluation
-     */
-    int is_disabled;
+    void *enable;                   ///< parsed expression (AVExpr*)
+    double *var_values;             ///< variable values for the enable expression
+    int is_disabled;                ///< the enabled state from the last expression evaluation
 
     /**
      * For filters which will create hardware frames, sets the device the
@@ -538,13 +518,12 @@ struct AVFilterContext {
      */
     AVBufferRef *hw_device_ctx;
 
-#if FF_API_CONTEXT_PUBLIC
     /**
-     * @deprecated this field should never have been accessed by callers
+     * Ready status of the filter.
+     * A non-0 value means that the filter needs activating;
+     * a higher value suggests a more urgent activation.
      */
-    attribute_deprecated
     unsigned ready;
-#endif
 
     /**
      * Sets the number of extra hardware frames which the filter will
@@ -866,9 +845,9 @@ AVFilterContext *avfilter_graph_alloc_filter(AVFilterGraph *graph,
 AVFilterContext *avfilter_graph_get_filter(AVFilterGraph *graph, const char *name);
 
 /**
- * A convenience wrapper that allocates and initializes a filter in a single
- * step. The filter instance is created from the filter filt and inited with the
- * parameter args. opaque is currently ignored.
+ * Create and add a filter instance into an existing graph.
+ * The filter instance is created from the filter filt and inited
+ * with the parameter args. opaque is currently ignored.
  *
  * In case of success put in *filt_ctx the pointer to the created
  * filter instance, otherwise set *filt_ctx to NULL.
@@ -877,12 +856,6 @@ AVFilterContext *avfilter_graph_get_filter(AVFilterGraph *graph, const char *nam
  * @param graph_ctx the filter graph
  * @return a negative AVERROR error code in case of failure, a non
  * negative value otherwise
- *
- * @warning Since the filter is initialized after this function successfully
- *          returns, you MUST NOT set any further options on it. If you need to
- *          do that, call ::avfilter_graph_alloc_filter(), followed by setting
- *          the options, followed by ::avfilter_init_dict() instead of this
- *          function.
  */
 int avfilter_graph_create_filter(AVFilterContext **filt_ctx, const AVFilter *filt,
                                  const char *name, const char *args, void *opaque,

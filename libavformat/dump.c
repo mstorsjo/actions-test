@@ -377,7 +377,7 @@ static void dump_ambient_viewing_environment_metadata(void *ctx, const AVPacketS
            av_q2d(ambient->ambient_light_y));
 }
 
-static void dump_spherical(void *ctx, int w, int h,
+static void dump_spherical(void *ctx, const AVCodecParameters *par,
                            const AVPacketSideData *sd, int log_level)
 {
     const AVSphericalMapping *spherical = (const AVSphericalMapping *)sd->data;
@@ -399,7 +399,7 @@ static void dump_spherical(void *ctx, int w, int h,
 
     if (spherical->projection == AV_SPHERICAL_EQUIRECTANGULAR_TILE) {
         size_t l, t, r, b;
-        av_spherical_tile_bounds(spherical, w, h,
+        av_spherical_tile_bounds(spherical, par->width, par->height,
                                  &l, &t, &r, &b);
         av_log(ctx, log_level,
                "[%"SIZE_SPECIFIER", %"SIZE_SPECIFIER", %"SIZE_SPECIFIER", %"SIZE_SPECIFIER"] ",
@@ -427,7 +427,7 @@ static void dump_dovi_conf(void *ctx, const AVPacketSideData *sd,
            dovi->dv_md_compression);
 }
 
-static void dump_s12m_timecode(void *ctx, AVRational avg_frame_rate, const AVPacketSideData *sd,
+static void dump_s12m_timecode(void *ctx, const AVStream *st, const AVPacketSideData *sd,
                                int log_level)
 {
     const uint32_t *tc = (const uint32_t *)sd->data;
@@ -439,7 +439,7 @@ static void dump_s12m_timecode(void *ctx, AVRational avg_frame_rate, const AVPac
 
     for (int j = 1; j <= tc[0]; j++) {
         char tcbuf[AV_TIMECODE_STR_SIZE];
-        av_timecode_make_smpte_tc_string2(tcbuf, avg_frame_rate, tc[j], 0, 0);
+        av_timecode_make_smpte_tc_string2(tcbuf, st->avg_frame_rate, tc[j], 0, 0);
         av_log(ctx, log_level, "timecode - %s%s", tcbuf, j != tc[0] ? ", " : "");
     }
 }
@@ -461,17 +461,16 @@ static void dump_cropping(void *ctx, const AVPacketSideData *sd)
     av_log(ctx, AV_LOG_INFO, "%d/%d/%d/%d", left, right, top, bottom);
 }
 
-static void dump_sidedata(void *ctx, const AVPacketSideData *side_data, int nb_side_data,
-                          int w, int h, AVRational avg_frame_rate,
-                          const char *indent, int log_level)
+static void dump_sidedata(void *ctx, const AVStream *st, const char *indent,
+                          int log_level)
 {
     int i;
 
-    if (nb_side_data)
+    if (st->codecpar->nb_coded_side_data)
         av_log(ctx, log_level, "%sSide data:\n", indent);
 
-    for (i = 0; i < nb_side_data; i++) {
-        const AVPacketSideData *sd = &side_data[i];
+    for (i = 0; i < st->codecpar->nb_coded_side_data; i++) {
+        const AVPacketSideData *sd = &st->codecpar->coded_side_data[i];
         av_log(ctx, log_level, "%s  ", indent);
 
         switch (sd->type) {
@@ -517,7 +516,7 @@ static void dump_sidedata(void *ctx, const AVPacketSideData *side_data, int nb_s
             break;
         case AV_PKT_DATA_SPHERICAL:
             av_log(ctx, log_level, "spherical: ");
-            dump_spherical(ctx, w, h, sd, log_level);
+            dump_spherical(ctx, st->codecpar, sd, log_level);
             break;
         case AV_PKT_DATA_CONTENT_LIGHT_LEVEL:
             dump_content_light_metadata(ctx, sd, log_level);
@@ -531,7 +530,7 @@ static void dump_sidedata(void *ctx, const AVPacketSideData *side_data, int nb_s
             break;
         case AV_PKT_DATA_S12M_TIMECODE:
             av_log(ctx, log_level, "SMPTE ST 12-1:2014: ");
-            dump_s12m_timecode(ctx, avg_frame_rate, sd, log_level);
+            dump_s12m_timecode(ctx, st, sd, log_level);
             break;
         case AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT:
             dump_ambient_viewing_environment_metadata(ctx, sd);
@@ -603,8 +602,8 @@ static void dump_stream_format(const AVFormatContext *ic, int i,
     const FFStream *const sti = cffstream(st);
     const AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL, 0);
     const char *separator = ic->dump_separator;
-    const char *group_indent = group_index >= 0 ? "  " : "";
-    const char *extra_indent = group_index >= 0 ? "      " : "    ";
+    const char *group_indent = group_index >= 0 ? "    " : "";
+    const char *extra_indent = group_index >= 0 ? "        " : "      ";
     AVCodecContext *avctx;
     int ret;
 
@@ -679,9 +678,7 @@ static void dump_stream_format(const AVFormatContext *ic, int i,
 
     dump_metadata(NULL, st->metadata, extra_indent, log_level);
 
-    dump_sidedata(NULL, st->codecpar->coded_side_data, st->codecpar->nb_coded_side_data,
-                  st->codecpar->width, st->codecpar->height, st->avg_frame_rate,
-                  extra_indent, log_level);
+    dump_sidedata(NULL, st, extra_indent, log_level);
 }
 
 static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,
@@ -785,20 +782,10 @@ static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,
         dump_disposition(stg->disposition, AV_LOG_INFO);
         av_log(NULL, AV_LOG_INFO, "\n");
         dump_metadata(NULL, stg->metadata, "    ", AV_LOG_INFO);
-        dump_sidedata(NULL, tile_grid->coded_side_data, tile_grid->nb_coded_side_data,
-                      tile_grid->width, tile_grid->height, (AVRational) {0,1},
-                      "    ", AV_LOG_INFO);
-        for (int i = 0; i < tile_grid->nb_tiles; i++) {
-            const AVStream *st = stg->streams[tile_grid->offsets[i].idx];
-            dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_VERBOSE);
-            printed[st->index] = 1;
-        }
         for (int i = 0; i < stg->nb_streams; i++) {
             const AVStream *st = stg->streams[i];
-            if (!printed[st->index]) {
-                dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_INFO);
-                printed[st->index] = 1;
-            }
+            dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_VERBOSE);
+            printed[st->index] = 1;
         }
         break;
     }

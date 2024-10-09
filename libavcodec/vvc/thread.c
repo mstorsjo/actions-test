@@ -22,7 +22,7 @@
 
 #include <stdatomic.h>
 
-#include "libavcodec/executor.h"
+#include "libavutil/executor.h"
 #include "libavutil/mem.h"
 #include "libavutil/thread.h"
 
@@ -55,7 +55,7 @@ typedef enum VVCTaskStage {
 typedef struct VVCTask {
     union {
         struct VVCTask *next;                //for executor debug only
-        FFTask task;
+        AVTask task;
     } u;
 
     VVCTaskStage stage;
@@ -103,28 +103,13 @@ typedef struct VVCFrameThread {
     AVCond  cond;
 } VVCFrameThread;
 
-#define PRIORITY_LOWEST 2
 static void add_task(VVCContext *s, VVCTask *t)
 {
-    VVCFrameThread *ft     = t->fc->ft;
-    FFTask *task           = &t->u.task;
-    const int priorities[] = {
-        0,                  // VVC_TASK_STAGE_INIT,
-        0,                  // VVC_TASK_STAGE_PARSE,
-        // For an 8K clip, a CTU line completed in the reference frame may trigger 64 and more inter tasks.
-        // We assign these tasks the lowest priority to avoid being overwhelmed with inter tasks.
-        PRIORITY_LOWEST,    // VVC_TASK_STAGE_INTER
-        1,                  // VVC_TASK_STAGE_RECON,
-        1,                  // VVC_TASK_STAGE_LMCS,
-        1,                  // VVC_TASK_STAGE_DEBLOCK_V,
-        1,                  // VVC_TASK_STAGE_DEBLOCK_H,
-        1,                  // VVC_TASK_STAGE_SAO,
-        1,                  // VVC_TASK_STAGE_ALF,
-    };
+    VVCFrameThread *ft = t->fc->ft;
 
     atomic_fetch_add(&ft->nb_scheduled_tasks, 1);
-    task->priority = priorities[t->stage];
-    ff_executor_execute(s->executor, task);
+
+    av_executor_execute(s->executor, &t->u.task);
 }
 
 static void task_init(VVCTask *t, VVCTaskStage stage, VVCFrameContext *fc, const int rx, const int ry)
@@ -387,6 +372,38 @@ static int task_is_stage_ready(VVCTask *t, int add)
     return task_has_target_score(t, stage, score);
 }
 
+static int task_ready(const AVTask *_t, void *user_data)
+{
+    VVCTask *t = (VVCTask*)_t;
+
+    return task_is_stage_ready(t, 0);
+}
+
+#define CHECK(a, b)                         \
+    do {                                    \
+        if ((a) != (b))                     \
+            return (a) < (b);               \
+    } while (0)
+
+static int task_priority_higher(const AVTask *_a, const AVTask *_b)
+{
+    const VVCTask *a = (const VVCTask*)_a;
+    const VVCTask *b = (const VVCTask*)_b;
+
+
+    if (a->stage <= VVC_TASK_STAGE_PARSE || b->stage <= VVC_TASK_STAGE_PARSE) {
+        CHECK(a->stage, b->stage);
+        CHECK(a->fc->decode_order, b->fc->decode_order);           //decode order
+        CHECK(a->ry, b->ry);
+        return a->rx < b->rx;
+    }
+
+    CHECK(a->fc->decode_order, b->fc->decode_order);              //decode order
+    CHECK(a->rx + a->ry + a->stage, b->rx + b->ry + b->stage);    //zigzag with type
+    CHECK(a->rx + a->ry, b->rx + b->ry);                          //zigzag
+    return a->ry < b->ry;
+}
+
 static void check_colocation(VVCContext *s, VVCTask *t)
 {
     const VVCFrameContext *fc = t->fc;
@@ -644,7 +661,7 @@ static void task_run_stage(VVCTask *t, VVCContext *s, VVCLocalContext *lc)
     return;
 }
 
-static int task_run(FFTask *_t, void *local_context, void *user_data)
+static int task_run(AVTask *_t, void *local_context, void *user_data)
 {
     VVCTask *t          = (VVCTask*)_t;
     VVCContext *s       = (VVCContext *)user_data;
@@ -666,20 +683,21 @@ static int task_run(FFTask *_t, void *local_context, void *user_data)
     return 0;
 }
 
-FFExecutor* ff_vvc_executor_alloc(VVCContext *s, const int thread_count)
+AVExecutor* ff_vvc_executor_alloc(VVCContext *s, const int thread_count)
 {
-    FFTaskCallbacks callbacks = {
+    AVTaskCallbacks callbacks = {
         s,
         sizeof(VVCLocalContext),
-        PRIORITY_LOWEST + 1,
+        task_priority_higher,
+        task_ready,
         task_run,
     };
-    return ff_executor_alloc(&callbacks, thread_count);
+    return av_executor_alloc(&callbacks, thread_count);
 }
 
-void ff_vvc_executor_free(FFExecutor **e)
+void ff_vvc_executor_free(AVExecutor **e)
 {
-    ff_executor_free(e);
+    av_executor_free(e);
 }
 
 void ff_vvc_frame_thread_free(VVCFrameContext *fc)

@@ -178,24 +178,22 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&sine->sin);
 }
 
-static av_cold int query_formats(const AVFilterContext *ctx,
-                                 AVFilterFormatsConfig **cfg_in,
-                                 AVFilterFormatsConfig **cfg_out)
+static av_cold int query_formats(AVFilterContext *ctx)
 {
-    const SineContext *sine = ctx->priv;
+    SineContext *sine = ctx->priv;
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
     int sample_rates[] = { sine->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16,
                                                        AV_SAMPLE_FMT_NONE };
-    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
+    int ret = ff_set_common_formats_from_list(ctx, sample_fmts);
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, chlayouts);
+    ret = ff_set_common_channel_layouts_from_list(ctx, chlayouts);
     if (ret < 0)
         return ret;
 
-    return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
+    return ff_set_common_samplerates_from_list(ctx, sample_rates);
 }
 
 static av_cold int config_props(AVFilterLink *outlink)
@@ -273,6 +271,6 @@ const AVFilter ff_asrc_sine = {
     .priv_size     = sizeof(SineContext),
     .inputs        = NULL,
     FILTER_OUTPUTS(sine_outputs),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
     .priv_class    = &sine_class,
 };

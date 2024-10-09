@@ -139,16 +139,14 @@ static const enum AVPixelFormat out_pix_fmts[] = {
     AV_PIX_FMT_NONE
 };
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static int query_formats(AVFilterContext *ctx)
 {
     int ret;
 
-    if ((ret = ff_formats_ref(ff_make_format_list(in_pix_fmts), &cfg_in[0]->formats)) < 0)
+    if ((ret = ff_formats_ref(ff_make_format_list(in_pix_fmts), &ctx->inputs[0]->outcfg.formats)) < 0)
         return ret;
 
-    if ((ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &cfg_out[0]->formats)) < 0)
+    if ((ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &ctx->outputs[0]->incfg.formats)) < 0)
         return ret;
 
     return 0;
@@ -1561,5 +1559,5 @@ const AVFilter ff_vf_ciescope = {
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
 };

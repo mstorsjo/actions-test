@@ -149,16 +149,14 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static int query_formats(AVFilterContext *ctx)
 {
     FormatContext *s = ctx->priv;
     int ret;
 
-    if (s->formats      && (ret = ff_set_common_formats2     (ctx, cfg_in, cfg_out, s->formats)) < 0 ||
-        s->color_spaces && (ret = ff_set_common_color_spaces2(ctx, cfg_in, cfg_out, s->color_spaces)) < 0 ||
-        s->color_ranges && (ret = ff_set_common_color_ranges2(ctx, cfg_in, cfg_out, s->color_ranges)) < 0)
+    if (s->formats      && (ret = ff_set_common_formats(ctx,      s->formats)) < 0 ||
+        s->color_spaces && (ret = ff_set_common_color_spaces(ctx, s->color_spaces)) < 0 ||
+        s->color_ranges && (ret = ff_set_common_color_ranges(ctx, s->color_ranges)) < 0)
         return ret;
 
     return 0;
@@ -199,7 +197,7 @@ const AVFilter ff_vf_format = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
 };
 #endif /* CONFIG_FORMAT_FILTER */
 
@@ -219,6 +217,6 @@ const AVFilter ff_vf_noformat = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
 };
 #endif /* CONFIG_NOFORMAT_FILTER */

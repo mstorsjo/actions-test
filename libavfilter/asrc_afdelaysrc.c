@@ -80,24 +80,22 @@ static int activate(AVFilterContext *ctx)
     return ff_filter_frame(outlink, frame);
 }
 
-static int query_formats(const AVFilterContext *ctx,
-                         AVFilterFormatsConfig **cfg_in,
-                         AVFilterFormatsConfig **cfg_out)
+static int query_formats(AVFilterContext *ctx)
 {
-    const AFDelaySrcContext *s = ctx->priv;
+    AFDelaySrcContext *s = ctx->priv;
     AVChannelLayout chlayouts[] = { s->chlayout, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP,
                                                        AV_SAMPLE_FMT_NONE };
-    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
+    int ret = ff_set_common_formats_from_list(ctx, sample_fmts);
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, chlayouts);
+    ret = ff_set_common_channel_layouts_from_list(ctx, chlayouts);
     if (ret < 0)
         return ret;
 
-    return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
+    return ff_set_common_samplerates_from_list(ctx, sample_rates);
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -148,5 +146,5 @@ const AVFilter ff_asrc_afdelaysrc = {
     .activate      = activate,
     .inputs        = NULL,
     FILTER_OUTPUTS(afdelaysrc_outputs),
-    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_QUERY_FUNC(query_formats),
 };

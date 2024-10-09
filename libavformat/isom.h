@@ -283,13 +283,8 @@ typedef struct HEIFItem {
     int64_t extent_offset;
     int width;
     int height;
-    int rotation;
-    int hflip;
-    int vflip;
     int type;
     int is_idat_relative;
-    uint8_t *icc_profile;
-    size_t icc_profile_size;
 } HEIFItem;
 
 typedef struct HEIFGrid {

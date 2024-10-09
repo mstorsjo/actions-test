@@ -328,8 +328,6 @@ typedef struct OutputFilterOptions {
     enum AVColorRange   color_range;
 
     enum VideoSyncMethod vsync_method;
-    AVRational           frame_rate;
-    AVRational           max_frame_rate;
 
     int                 sample_rate;
     AVChannelLayout     ch_layout;
@@ -463,6 +461,14 @@ typedef struct InputStream {
      * currently video and audio only */
     InputFilter         **filters;
     int                nb_filters;
+
+    /*
+     * Output targets that do not go through lavfi, i.e. subtitles or
+     * streamcopy. Those two cases are distinguished by the OutputStream
+     * having an encoder or not.
+     */
+    struct OutputStream **outputs;
+    int                nb_outputs;
 } InputStream;
 
 typedef struct InputFile {
@@ -539,6 +545,13 @@ typedef struct EncStats {
     int                 lock_initialized;
 } EncStats;
 
+extern const char *const forced_keyframes_const_names[];
+
+typedef enum {
+    ENCODER_FINISHED = 1,
+    MUXER_FINISHED = 2,
+} OSTFinished ;
+
 enum {
     KF_FORCE_SOURCE         = 1,
 #if FFMPEG_OPT_FORCE_KF_SOURCE_NO_DROP
@@ -562,15 +575,7 @@ typedef struct KeyframeForceCtx {
     int          dropped_keyframe;
 } KeyframeForceCtx;
 
-typedef struct Encoder {
-    const AVClass          *class;
-
-    AVCodecContext         *enc_ctx;
-
-    // number of frames/samples sent to the encoder
-    uint64_t                frames_encoded;
-    uint64_t                samples_encoded;
-} Encoder;
+typedef struct Encoder Encoder;
 
 enum CroppingType {
     CROP_DISABLED = 0,
@@ -589,6 +594,12 @@ typedef struct OutputStream {
 
     int index;               /* stream index in the output file */
 
+    /**
+     * Codec parameters for packets submitted to the muxer (i.e. before
+     * bitstream filtering, if any).
+     */
+    AVCodecParameters *par_in;
+
     /* input stream that is the source for this output stream;
      * may be NULL for streams with no well-defined source, e.g.
      * attachments or outputs from complex filtergraphs */
@@ -597,8 +608,12 @@ typedef struct OutputStream {
     AVStream *st;            /* stream in the output file */
 
     Encoder *enc;
+    AVCodecContext *enc_ctx;
 
     /* video only */
+    AVRational frame_rate;
+    AVRational max_frame_rate;
+    int force_fps;
 #if FFMPEG_OPT_TOP
     int top_field_first;
 #endif
@@ -621,6 +636,9 @@ typedef struct OutputStream {
     /* stats */
     // number of packets send to the muxer
     atomic_uint_least64_t packets_written;
+    // number of frames/samples sent to the encoder
+    uint64_t frames_encoded;
+    uint64_t samples_encoded;
 
     /* packet quality factor */
     atomic_int quality;
@@ -744,11 +762,10 @@ int find_codec(void *logctx, const char *name,
 int parse_and_set_vsync(const char *arg, int *vsync_var, int file_idx, int st_idx, int is_global);
 
 int filtergraph_is_simple(const FilterGraph *fg);
-int fg_create_simple(FilterGraph **pfg,
-                     InputStream *ist,
-                     char *graph_desc,
-                     Scheduler *sch, unsigned sched_idx_enc,
-                     const OutputFilterOptions *opts);
+int init_simple_filtergraph(InputStream *ist, OutputStream *ost,
+                            char *graph_desc,
+                            Scheduler *sch, unsigned sch_idx_enc,
+                            const OutputFilterOptions *opts);
 int fg_finalise_bindings(void);
 
 /**
@@ -762,7 +779,7 @@ const FrameData *frame_data_c(AVFrame *frame);
 FrameData       *packet_data  (AVPacket *pkt);
 const FrameData *packet_data_c(AVPacket *pkt);
 
-int ofilter_bind_enc(OutputFilter *ofilter,
+int ofilter_bind_ost(OutputFilter *ofilter, OutputStream *ost,
                      unsigned sched_idx_enc,
                      const OutputFilterOptions *opts);
 
@@ -841,7 +858,7 @@ int dec_request_view(Decoder *dec, const ViewSpecifier *vs,
                      SchedulerNode *src);
 
 int enc_alloc(Encoder **penc, const AVCodec *codec,
-              Scheduler *sch, unsigned sch_idx, void *log_parent);
+              Scheduler *sch, unsigned sch_idx);
 void enc_free(Encoder **penc);
 
 int enc_open(void *opaque, const AVFrame *frame);
@@ -854,8 +871,7 @@ int enc_loopback(Encoder *enc);
  *
  * Open the muxer once all the streams have been initialized.
  */
-int of_stream_init(OutputFile *of, OutputStream *ost,
-                   const AVCodecContext *enc_ctx);
+int of_stream_init(OutputFile *of, OutputStream *ost);
 int of_write_trailer(OutputFile *of);
 int of_open(const OptionsContext *o, const char *filename, Scheduler *sch);
 void of_free(OutputFile **pof);
@@ -867,8 +883,7 @@ int64_t of_filesize(OutputFile *of);
 int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch);
 void ifile_close(InputFile **f);
 
-int ist_use(InputStream *ist, int decoding_needed,
-            const ViewSpecifier *vs, SchedulerNode *src);
+int ist_output_add(InputStream *ist, OutputStream *ost);
 int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
                    const ViewSpecifier *vs, InputFilterOptions *opts,
                    SchedulerNode *src);
