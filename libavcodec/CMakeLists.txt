@@ -311,6 +311,7 @@ set(avcodec_src
     evc_parser.c
     evc_ps.c
     evrcdec.c
+    executor.c
     exif.c
     exrdsp.c
     faandct.c

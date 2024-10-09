@@ -157,6 +157,7 @@ set(avfilter_src
     motion_estimation.c
     palette.c
     perlin.c
+    psnr.c
     pthread.c
     qp_table.c
     scale_eval.c
@@ -458,7 +459,6 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQU
       x86/af_volume_init.c
       x86/vf_v360_init.c
       x86/vf_w3fdif_init.c
-      x86/vf_xpsnr_init.c
       x86/vf_yadif_init.c)
   if (CMAKE_ASM_NASM_COMPILER)
     set(x86_nasm_sources

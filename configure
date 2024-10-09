@@ -3910,6 +3910,7 @@ mpdecimate_filter_deps="gpl"
 mpdecimate_filter_select="pixelutils"
 minterpolate_filter_select="scene_sad"
 mptestsrc_filter_deps="gpl"
+msad_filter_select="scene_sad"
 negate_filter_deps="lut_filter"
 nlmeans_opencl_filter_deps="opencl"
 nlmeans_vulkan_filter_deps="vulkan spirv_compiler"
@@ -4038,11 +4039,11 @@ cws2fws_extralibs="zlib_extralibs"
 
 # libraries, in any order
 avcodec_deps="avutil"
-avcodec_suggest="libm stdatomic liblcevc_dec"
+avcodec_suggest="libm stdatomic spirv_compiler"
 avdevice_deps="avformat avcodec avutil"
 avdevice_suggest="libm stdatomic"
 avfilter_deps="avutil"
-avfilter_suggest="libm stdatomic"
+avfilter_suggest="libm stdatomic spirv_compiler"
 avformat_deps="avcodec avutil"
 avformat_suggest="libm network zlib stdatomic"
 avutil_suggest="clock_gettime ffnvcodec gcrypt libm libdrm libmfx opencl openssl user32 vaapi vulkan videotoolbox corefoundation corevideo coremedia bcrypt stdatomic"
@@ -4053,7 +4054,7 @@ swresample_suggest="libm libsoxr stdatomic"
 swscale_deps="avutil"
 swscale_suggest="libm stdatomic"
 
-avcodec_extralibs="pthreads_extralibs iconv_extralibs dxva2_extralibs lcms2_extralibs"
+avcodec_extralibs="pthreads_extralibs iconv_extralibs dxva2_extralibs liblcevc_dec_extralibs lcms2_extralibs"
 avfilter_extralibs="pthreads_extralibs"
 avutil_extralibs="d3d11va_extralibs d3d12va_extralibs mediacodec_extralibs nanosleep_extralibs pthreads_extralibs vaapi_drm_extralibs vaapi_x11_extralibs vaapi_win32_extralibs vdpau_x11_extralibs"
 
@@ -4413,16 +4414,6 @@ for opt do
             [ "$list" = "" ] && warn "Option $opt did not match anything"
             test $action = enable && warn_if_gets_disabled $list
             $action $list
-        ;;
-        --enable-yasm|--disable-yasm)
-            warn "The ${opt} option is only provided for compatibility and will be\n"\
-                 "removed in the future. Use --enable-x86asm / --disable-x86asm instead."
-            test $opt = --enable-yasm && x86asm=yes || x86asm=no
-        ;;
-        --yasmexe=*)
-            warn "The --yasmexe option is only provided for compatibility and will be\n"\
-                 "removed in the future. Use --x86asmexe instead."
-            x86asmexe="$optval"
         ;;
         --enable-?*|--disable-?*)
             eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
@@ -6444,26 +6435,19 @@ EOF
         x86asmexe_probe=$1
         if test_cmd $x86asmexe_probe -v; then
             x86asmexe=$x86asmexe_probe
-            x86asm_type=nasm
             x86asm_debug="-g -F dwarf"
             X86ASMDEP=
             X86ASM_DEPFLAGS='-MD $(@:.o=.d)'
-        elif test_cmd $x86asmexe_probe --version; then
-            x86asmexe=$x86asmexe_probe
-            x86asm_type=yasm
-            x86asm_debug="-g dwarf2"
-            X86ASMDEP='$(DEPX86ASM) $(X86ASMFLAGS) -M $(X86ASM_O) $< > $(@:.o=.d)'
-            X86ASM_DEPFLAGS=
         fi
         check_x86asm x86asm "movbe ecx, [5]"
     }
 
     if ! disabled_any asm mmx x86asm; then
         disable x86asm
-        for program in $x86asmexe nasm yasm; do
+        for program in $x86asmexe nasm; do
             probe_x86asm $program && break
         done
-        disabled x86asm && die "nasm/yasm not found or too old. Use --disable-x86asm for a crippled build."
+        disabled x86asm && die "nasm not found or too old. Use --disable-x86asm for a crippled build."
         X86ASMFLAGS="-f $objformat"
         test -n "$extern_prefix"  && append X86ASMFLAGS "-DPREFIX"
         case "$objformat" in
@@ -6568,6 +6552,15 @@ esac
 if test -n "$custom_allocator"; then
     add_extralibs "$custom_allocator_extralibs"
 fi
+
+# Unlike other feature flags or libraries, spirv_compiler is not defined
+# within any of our predefined categories of components.
+# It gets defined if either libshaderc or libglslang check succeeds.
+# As such, its in a state of neither being explicitly enabled, nor
+# explicitly disabled, but even in this state, being mentioned in
+# _deps results in it always passing.
+# Disable it explicitly to fix this.
+disable spirv_compiler
 
 check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  ${malloc_prefix}memalign            && enable memalign
