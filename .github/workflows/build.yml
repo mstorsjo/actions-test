@@ -564,7 +564,8 @@ jobs:
             -DSANITIZER_CXX_ABI=libc++ `
             -DCOMPILER_RT_INCLUDE_TESTS=ON `
             -DCOMPILER_RT_BUILD_LIBFUZZER=OFF `
-            -DCOMPILER_RT_BUILD_ORC=OFF
+            -DCOMPILER_RT_BUILD_ORC=OFF `
+            -DLLVM_LIT_ARGS="-v"
           ninja
           ninja check-compiler-rt
 
