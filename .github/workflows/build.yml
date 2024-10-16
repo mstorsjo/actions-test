@@ -527,7 +527,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: llvm/llvm-project
-          ref: ${{needs.prepare.outputs.LLVM_VERSION}}
+          ref: 464a7ee79efda399c77f0009cc9dc0737d6e3c1e
           path: llvm-project
       - name: Build test executables
         run: |
