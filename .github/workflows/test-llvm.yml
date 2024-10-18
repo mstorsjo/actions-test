@@ -49,7 +49,7 @@ jobs:
           choco install ninja
       - name: Download toolchain
         run: |
-          curl -LO https://martin.st/temp/clang-cfg/llvm-mingw-nightly-ucrt-x86_64.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20241015/llvm-mingw-20241015-ucrt-x86_64.zip
       - name: Unpack toolchain
         run: |
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Checkout llvm-project
         env:
-          LLVM_VERSION: cd12ffb622df5392020d0793e3fff7c3bf8385a2
+          LLVM_VERSION: 09cc75e2ccc3616e1cb3b17f2fb99cb3bb323b12
         run: |
           git config --global core.autocrlf false
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
