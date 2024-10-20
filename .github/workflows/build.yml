@@ -556,7 +556,6 @@ jobs:
           cmake ../compiler-rt `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPython3_EXECUTABLE="$Env:PYTHON_EXE" `
             -DCMAKE_C_COMPILER=clang `
             -DCMAKE_CXX_COMPILER=clang++ `
             -DCMAKE_C_COMPILER_TARGET=${{matrix.arch}}-w64-windows-gnu `
