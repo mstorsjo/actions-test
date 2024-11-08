@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef __linux__
+#if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
 #include <stdio.h>
@@ -32,6 +32,10 @@
 #include <wchar.h>
 #ifdef _WIN32
 #include <windows.h>
+#endif
+
+#if defined(__MINGW32__) && defined(__MSVCRT_VERSION__) && __MSVCRT_VERSION__ < 0xE00 && defined(__USE_MINGW_ANSI_STDIO) && __USE_MINGW_ANSI_STDIO == 0
+#define MSVCRT_DLL_NOANSI
 #endif
 
 #ifndef _WIN32
@@ -284,11 +288,15 @@ void test_strings() {
 
     memset(buf, '#', sizeof(buf));
     snprintf(buf, sizeof(buf), "%f", 3.141592654);
+#ifndef MSVCRT_DLL_NOANSI
     TEST_STR(buf, "3.141593");
+#endif
     TEST_INT(buf[sizeof(buf)-1], '#');
 
     snprintf(buf, sizeof(buf), "%e", 42.0);
+#ifndef MSVCRT_DLL_NOANSI
     TEST_STR(buf, "4.200000e+01");
+#endif
     snprintf(buf, sizeof(buf), "%a", 42.0);
     // Different implementations of printf differ in formatting of %a
     // (with differing number of trailing zeros). Additionally, with
@@ -298,8 +306,11 @@ void test_strings() {
     snprintf(buf, sizeof(buf), "%g", 42.0);
     TEST_STR(buf, "42");
     snprintf(buf, sizeof(buf), "%g", 0.000061035156250);
+#ifndef MSVCRT_DLL_NOANSI
     TEST_STR(buf, "6.10352e-05");
+#endif
     const char formats[] = "feagFEAG";
+#ifndef MSVCRT_DLL_NOANSI
     for (int i = 0; formats[i]; i++) {
         char formatbuf[3] = { '%', formats[i], '\0' };
         snprintf(buf, sizeof(buf), formatbuf, INFINITY);
@@ -321,6 +332,7 @@ void test_strings() {
             TEST_STR(buf, "nan");
 #endif
     }
+#endif /* MSVCRT_DLL_NOANSI */
 #if !defined(__MINGW32__) || (!defined(__i386__) && !defined(__x86_64__)) || (defined(__USE_MINGW_ANSI_STDIO) && __USE_MINGW_ANSI_STDIO)
     // On mingw, long double formatting on x86 only works if __USE_MINGW_ANSI_STDIO is defined.
     long double print_val_ld = 42.0L;
@@ -356,7 +368,7 @@ void test_strings() {
 #endif
     }
 #endif
-    snprintf(buf, sizeof(buf), "%"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64" %"PRIx64, myconst + 0, myconst + 1, myconst + 2, myconst + 3, myconst + 4, myconst + 5, myconst + 6, myconst + 7, myconst + 8, myconst + 9);
+    snprintf(buf, sizeof(buf), "%" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64" %" PRIx64, myconst + 0, myconst + 1, myconst + 2, myconst + 3, myconst + 4, myconst + 5, myconst + 6, myconst + 7, myconst + 8, myconst + 9);
     TEST_STR(buf, "baadf00dcafe baadf00dcaff baadf00dcb00 baadf00dcb01 baadf00dcb02 baadf00dcb03 baadf00dcb04 baadf00dcb05 baadf00dcb06 baadf00dcb07");
     char fmt[10] = { '%', '+', '0', '5', 'd', '\0' };
     snprintf(buf, sizeof(buf), fmt, 42);
@@ -372,7 +384,7 @@ void test_strings() {
     TEST_STR(buf, "0002a");
 
     uint64_t val0, val1, val2, val3, val4, val5, val6, val7, val8, val9;
-    if (sscanf("baadf00dcafe baadf00dcaff baadf00dcb00 baadf00dcb01 baadf00dcb02 baadf00dcb03 baadf00dcb04 baadf00dcb05 baadf00dcb06 baadf00dcb07", "%"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64, &val0, &val1, &val2, &val3, &val4, &val5, &val6, &val7, &val8, &val9) != 10) {
+    if (sscanf("baadf00dcafe baadf00dcaff baadf00dcb00 baadf00dcb01 baadf00dcb02 baadf00dcb03 baadf00dcb04 baadf00dcb05 baadf00dcb06 baadf00dcb07", "%" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64, &val0, &val1, &val2, &val3, &val4, &val5, &val6, &val7, &val8, &val9) != 10) {
         fails++;
         printf("sscanf failed\n");
     } else {
@@ -395,7 +407,7 @@ void test_strings() {
     tests++;
 
     val0 = val1 = val2 = val3 = val4 = val5 = val6 = val7 = val8 = val9 = 0xff;
-    if (vsscanf_wrap("baadf00dcafe baadf00dcaff baadf00dcb00 baadf00dcb01 baadf00dcb02 baadf00dcb03 baadf00dcb04 baadf00dcb05 baadf00dcb06 baadf00dcb07", "%"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64" %"SCNx64, &val0, &val1, &val2, &val3, &val4, &val5, &val6, &val7, &val8, &val9) != 10) {
+    if (vsscanf_wrap("baadf00dcafe baadf00dcaff baadf00dcb00 baadf00dcb01 baadf00dcb02 baadf00dcb03 baadf00dcb04 baadf00dcb05 baadf00dcb06 baadf00dcb07", "%" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64" %" SCNx64, &val0, &val1, &val2, &val3, &val4, &val5, &val6, &val7, &val8, &val9) != 10) {
         fails++;
         printf("vsscanf failed\n");
     } else {
@@ -478,7 +490,9 @@ void test_parse_numbers() {
     TEST_STRTOD(strtod, char, );
     TEST_STRTOD(strtof, char, );
     TEST_STRTOD(strtold, char, );
+#ifndef MSVCRT_DLL_NOANSI
     TEST_STRTOD(wcstod, wchar_t, L);
+#endif
     TEST_STRTOD(wcstof, wchar_t, L);
     TEST_STRTOD(wcstold, wchar_t, L);
 
@@ -512,7 +526,9 @@ void test_parse_numbers() {
     TEST_STRTOD_RANGE_EXPECT(strtod, prefix, -1.e-400, -0.0)
 
     TEST_STRTOD_64B_RANGE(strtod, );
+#ifndef MSVCRT_DLL_NOANSI
     TEST_STRTOD_64B_RANGE(wcstod, L);
+#endif
 
 #if !defined(_MSC_VER) && (__SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__)
 #define TEST_STRTOLD_80B_RANGE(strtold, prefix) \
@@ -531,7 +547,8 @@ void test_parse_numbers() {
 
 void test_environment() {
     int env_ok = 0;
-    putenv("CRT_TEST_VAR=1");
+    char buf1[] = "CRT_TEST_VAR=1";
+    putenv(buf1);
     for (char **ptr = environ; *ptr; ptr++)
         if (!strcmp(*ptr, "CRT_TEST_VAR=1"))
             env_ok = 1;
@@ -541,7 +558,8 @@ void test_environment() {
     }
     tests++;
     env_ok = 0;
-    putenv("CRT_TEST_VAR=2");
+    char buf2[] = "CRT_TEST_VAR=2";
+    putenv(buf2);
     for (char **ptr = environ; *ptr; ptr++)
         if (!strcmp(*ptr, "CRT_TEST_VAR=2"))
             env_ok = 1;
@@ -1974,10 +1992,10 @@ void test_win32_intrinsics() {
     TEST_FUNC(InterlockedExchange(&value, 2), value, 2, 6);
     TEST_FUNC(InterlockedCompareExchange(&value, 7, 1), value, 2, 2);
     TEST_FUNC(InterlockedCompareExchange(&value, 5, 2), value, 5, 2);
-    TEST_FUNC_PTR(InterlockedExchangePointer(&ptr, ptr1), ptr, ptr1, NULL);
+    TEST_FUNC_PTR(InterlockedExchangePointer(&ptr, ptr1), ptr, ptr1, (void*)NULL);
     TEST_FUNC_PTR(InterlockedExchangePointer(&ptr, ptr2), ptr, ptr2, ptr1);
     TEST_FUNC_PTR(InterlockedCompareExchangePointer(&ptr, NULL, ptr1), ptr, ptr2, ptr2);
-    TEST_FUNC_PTR(InterlockedCompareExchangePointer(&ptr, NULL, ptr2), ptr, NULL, ptr2);
+    TEST_FUNC_PTR(InterlockedCompareExchangePointer(&ptr, NULL, ptr2), ptr, (void*)NULL, ptr2);
     TEST_FUNC(InterlockedExchangeAdd64(&value64, 0x10000000000), value64, 0x10000000005, 5);
     TEST_FUNC(InterlockedExchange64(&value64, 0x10000000000), value64, 0x10000000000, 0x10000000005);
     TEST_FUNC(InterlockedCompareExchange64(&value64, 7, 1), value64, 0x10000000000, 0x10000000000);
@@ -2080,10 +2098,10 @@ void test_win32_intrinsics() {
     TEST_FUNC(_InterlockedExchange(&value, 2), value, 2, 1);
     TEST_FUNC(_InterlockedCompareExchange(&value, 7, 1), value, 2, 2);
     TEST_FUNC(_InterlockedCompareExchange(&value, 0, 2), value, 0, 2);
-    TEST_FUNC_PTR(_InterlockedExchangePointer(&ptr, ptr1), ptr, ptr1, NULL);
+    TEST_FUNC_PTR(_InterlockedExchangePointer(&ptr, ptr1), ptr, ptr1, (void*)NULL);
     TEST_FUNC_PTR(_InterlockedExchangePointer(&ptr, ptr2), ptr, ptr2, ptr1);
     TEST_FUNC_PTR(_InterlockedCompareExchangePointer(&ptr, NULL, ptr1), ptr, ptr2, ptr2);
-    TEST_FUNC_PTR(_InterlockedCompareExchangePointer(&ptr, NULL, ptr2), ptr, NULL, ptr2);
+    TEST_FUNC_PTR(_InterlockedCompareExchangePointer(&ptr, NULL, ptr2), ptr, (void*)NULL, ptr2);
 #ifdef _WIN64
     TEST_FUNC(_InterlockedExchangeAdd64(&value64, 0x20000000000), value64, 0x20000000000, 0);
     TEST_FUNC(_InterlockedExchange64(&value64, 0x10000000000), value64, 0x10000000000, 0x20000000000);
