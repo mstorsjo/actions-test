@@ -65,7 +65,6 @@ jobs:
           docker images
 
   docker-build:
-    needs: [prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
