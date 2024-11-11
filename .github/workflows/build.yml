@@ -377,7 +377,7 @@ jobs:
     # testing with the latest compiler instead of an older release).
     # Therefore, keep the test disabled by default; it's easy to enable
     # temporarily on a branch for testing.
-    if: false
+    if: true
     needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
@@ -436,7 +436,7 @@ jobs:
   # This also forces testing the bundled python executables.
   test-openmp:
     # Only running these tests in scheduled builds.
-    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
+    if: true
     needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
@@ -500,7 +500,7 @@ jobs:
   # above. This also forces testing the bundled python executables.
   test-compiler-rt:
     # Only running these tests in scheduled builds.
-    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
+    if: true
     needs: [linux-cross-windows, prepare]
     runs-on: windows-latest
     strategy:
