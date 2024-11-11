@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-19.1.1}
+: ${LLVM_VERSION:=llvmorg-19.1.3}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -240,17 +240,6 @@ fi
 if [ -n "$COMPILER_LAUNCHER" ]; then
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
-fi
-
-if [ -n "$TARGET_WINDOWS" ]; then
-    # Custom, llvm-mingw specific defaults. We normally set these in
-    # the frontend wrappers, but this makes sure they are enabled by
-    # default if that wrapper is bypassed as well.
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_RTLIB=compiler-rt"
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_UNWINDLIB=libunwind"
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_CXX_STDLIB=libc++"
-    CMAKEFLAGS="$CMAKEFLAGS -DCLANG_DEFAULT_LINKER=lld"
-    CMAKEFLAGS="$CMAKEFLAGS -DLLD_DEFAULT_LD_LLD_IS_MINGW=ON"
 fi
 
 if [ -n "$LTO" ]; then
