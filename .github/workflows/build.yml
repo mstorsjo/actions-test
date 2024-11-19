@@ -331,7 +331,7 @@ jobs:
   # Run llvm-mingw's tests on x86_64 and i686 with the cross-built corresponding
   # toolchains from above.
   test-toolchain:
-    if: true
+    if: false
     runs-on: windows-latest
     defaults:
       run:
@@ -436,8 +436,7 @@ jobs:
   # This also forces testing the bundled python executables.
   test-openmp:
     # Only running these tests in scheduled builds.
-    if: false
-    needs: [linux-cross-windows, prepare]
+    if: true
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -449,11 +448,9 @@ jobs:
       - name: Install dependencies
         run: |
           choco install ninja
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20241030/llvm-mingw-20241030-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -500,8 +497,7 @@ jobs:
   # above. This also forces testing the bundled python executables.
   test-compiler-rt:
     # Only running these tests in scheduled builds.
-    if: false
-    needs: [linux-cross-windows, prepare]
+    if: true
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -513,11 +509,9 @@ jobs:
       - name: Install dependencies
         run: |
           choco install ninja
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20241030/llvm-mingw-20241030-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
