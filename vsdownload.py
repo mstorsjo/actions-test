@@ -21,7 +21,6 @@ import hashlib
 import os
 import multiprocessing.pool
 import json
-import platform
 import shutil
 import socket
 import subprocess
@@ -56,20 +55,15 @@ def getArgsParser():
     parser.add_argument("--msvc-version", metavar="version", help="Install a specific MSVC toolchain version")
     parser.add_argument("--sdk-version", metavar="version", help="Install a specific Windows SDK version")
     parser.add_argument("--with-wdk-installers", metavar="dir", help="Install Windows Driver Kit using the provided MSI installers")
-    parser.add_argument("--host-arch", metavar="arch", choices=["x86", "x64", "arm64"], help="Specify the host architecture of packages to install")
-    parser.add_argument("--only-host", default=True, const=True, action="store_const", help="Only download packages that match host arch")
     return parser
 
 def setPackageSelectionMSVC16(args, packages, userversion, sdk, toolversion, defaultPackages):
-    if findPackage(packages, "Microsoft.VisualStudio.Component.VC." + toolversion + ".x86.x64", warn=False):
+    if findPackage(packages, "Microsoft.VisualStudio.Component.VC." + toolversion + ".x86.x64", None, warn=False):
         if sdk.startswith("10.0.") and int(sdk[5:]) >= 22000:
             sdkpkg = "Win11SDK_" + sdk
         else:
             sdkpkg = "Win10SDK_" + sdk
-        extraarchs = ["ARM", "ARM64"]
-        args.package.extend([sdkpkg, "Microsoft.VisualStudio.Component.VC." + toolversion + ".x86.x64", "Microsoft.VisualStudio.Component.VC." + toolversion + ".ATL"])
-        for arch in extraarchs:
-            args.package.extend(["Microsoft.VisualStudio.Component.VC." + toolversion + "." + arch, "Microsoft.VisualStudio.Component.VC." + toolversion + ".ATL." + arch])
+        args.package.extend([sdkpkg, "Microsoft.VisualStudio.Component.VC." + toolversion + ".x86.x64", "Microsoft.VisualStudio.Component.VC." + toolversion + ".ARM", "Microsoft.VisualStudio.Component.VC." + toolversion + ".ARM64"])
     else:
         # Options for toolchains for specific versions. The latest version in
         # each manifest isn't available as a pinned version though, so if that
@@ -78,7 +72,7 @@ def setPackageSelectionMSVC16(args, packages, userversion, sdk, toolversion, def
         args.package.extend(defaultPackages)
 
 def setPackageSelectionMSVC15(args, packages, userversion, sdk, toolversion, defaultPackages):
-    if findPackage(packages, "Microsoft.VisualStudio.Component.VC.Tools." + toolversion, warn=False):
+    if findPackage(packages, "Microsoft.VisualStudio.Component.VC.Tools." + toolversion, None, warn=False):
         args.package.extend(["Win10SDK_" + sdk, "Microsoft.VisualStudio.Component.VC.Tools." + toolversion])
     else:
         # Options for toolchains for specific versions. The latest version in
@@ -90,10 +84,7 @@ def setPackageSelectionMSVC15(args, packages, userversion, sdk, toolversion, def
 def setPackageSelection(args, packages):
     # If no packages are selected, install these versionless packages, which
     # gives the latest/recommended version for the current manifest.
-    extraarchs = ["ARM", "ARM64"]
-    defaultPackages = ["Microsoft.VisualStudio.Workload.VCTools", "Microsoft.VisualStudio.Component.VC.ATL"]
-    for arch in extraarchs:
-        defaultPackages.extend(["Microsoft.VisualStudio.Component.VC.Tools." + arch, "Microsoft.VisualStudio.Component.VC.ATL." + arch])
+    defaultPackages = ["Microsoft.VisualStudio.Workload.VCTools", "Microsoft.VisualStudio.Component.VC.Tools.ARM", "Microsoft.VisualStudio.Component.VC.Tools.ARM64"]
 
     # Note, that in the manifest for MSVC version X.Y, only version X.Y-1
     # exists with a package name like "Microsoft.VisualStudio.Component.VC."
@@ -220,22 +211,14 @@ def getManifest(args):
 
     return manifest
 
-def prioritizePackage(arch, a, b):
-    def archOrd(k, x):
-        if arch is None:
-            return 0
-        c = x.get(k, "neutral").lower()
-        if c == "neutral":
-            return 0
-        if c == arch:
+def prioritizePackage(a, b):
+    if "chip" in a and "chip" in b:
+        ax64 = a["chip"].lower() == "x64"
+        bx64 = b["chip"].lower() == "x64"
+        if ax64 and not bx64:
             return -1
-        return 1
-    
-    for k in ["chip", "machineArch", "productArch"]:
-        r = archOrd(k, a) - archOrd(k, b)
-        if r != 0:
-            return r
-
+        elif bx64 and not ax64:
+            return 1
     if "language" in a and "language" in b:
         aeng = a["language"].lower().startswith("en-")
         beng = b["language"].lower().startswith("en-")
@@ -245,7 +228,7 @@ def prioritizePackage(arch, a, b):
             return 1
     return 0
 
-def getPackages(manifest, arch):
+def getPackages(manifest):
     packages = {}
     for p in manifest["packages"]:
         id = p["id"].lower()
@@ -253,7 +236,7 @@ def getPackages(manifest, arch):
             packages[id] = []
         packages[id].append(p)
     for key in packages:
-        packages[key] = sorted(packages[key], key=functools.cmp_to_key(functools.partial(prioritizePackage, arch)))
+        packages[key] = sorted(packages[key], key=functools.cmp_to_key(prioritizePackage))
     return packages
 
 def listPackageType(packages, type):
@@ -269,7 +252,7 @@ def listPackageType(packages, type):
     for id in sorted(ids):
         print(id)
 
-def findPackage(packages, id, constraints={}, warn=True):
+def findPackage(packages, id, chip, warn=True):
     origid = id
     id = id.lower()
     candidates = None
@@ -278,48 +261,18 @@ def findPackage(packages, id, constraints={}, warn=True):
             print("WARNING: %s not found" % (origid))
         return None
     candidates = packages[id]
-    for a in candidates:
-        matched = True
-        for k, v in constraints.items():
-            if k in ["chip", "machineArch"]:
-                matched = a.get(k, "").lower() == v.lower()
-                if not matched:
-                    break
-        if matched:
-            return a
+    if chip != None:
+        chip = chip.lower()
+        for a in candidates:
+            if "chip" in a and a["chip"].lower() == chip:
+                return a
     return candidates[0]
 
-def matchPackageHostArch(p, host):
-    if host is None:
-        return True
-
-    known_archs = ["x86", "x64", "arm64"]
-
-    # Some packages have host arch in their ids, e.g.
-    # - Microsoft.VisualCpp.Tools.HostARM64.TargetX64
-    # - Microsoft.VisualCpp.Tools.HostX64.TargetX64
-    id = p["id"].lower()
-    for a in known_archs:
-        if "host" + a in id:
-            return a == host
-
-    for k in ["chip", "machineArch", "productArch"]:
-        a = p.get(k, "neutral").lower()
-        if a == "neutral":
-            continue
-        if a != host:
-            return False
-
-    return True
-
-def printDepends(packages, target, constraints, indent, args):
+def printDepends(packages, target, deptype, chip, indent, args):
     chipstr = ""
-    for k in ["chip", "machineArch"]:
-        v = constraints.get(k)
-        if v is not None:
-            chipstr = chipstr + " (" + k + "." + v + ")"
+    if chip != None:
+        chipstr = " (" + chip + ")"
     deptypestr = ""
-    deptype = constraints.get("type", "")
     if deptype != "":
         deptypestr = " (" + deptype + ")"
     ignorestr = ""
@@ -327,25 +280,27 @@ def printDepends(packages, target, constraints, indent, args):
     if target.lower() in args.ignore:
         ignorestr = " (Ignored)"
         ignore = True
-    if deptype == "Optional" and not args.include_optional:
-        ignore = True
-    if deptype == "Recommended" and args.skip_recommended:
-        ignore = True
-    if not ignore:
-        p = findPackage(packages, target, constraints, warn=False)
-        if p == None:
-            ignorestr = " (NotFound)"
-            ignore = True
-        elif args.only_host and not matchPackageHostArch(p, args.host_arch):
-            ignorestr = " (HostArchMismatch)"
-            ignore = True
     print(indent + target + chipstr + deptypestr + ignorestr)
+    if deptype == "Optional" and not args.include_optional:
+        return
+    if deptype == "Recommended" and args.skip_recommended:
+        return
     if ignore:
         return
-    for target, constraints in p.get("dependencies", {}).items():
-        if not isinstance(constraints, dict):
-            constraints = { "version": constraints }
-        printDepends(packages, target, constraints, indent + "  ", args)
+    p = findPackage(packages, target, chip)
+    if p == None:
+        return
+    if "dependencies" in p:
+        deps = p["dependencies"]
+        for key in deps:
+            dep = deps[key]
+            type = ""
+            if "type" in dep:
+                type = dep["type"]
+            chip = None
+            if "chip" in dep:
+                chip = dep["chip"]
+            printDepends(packages, key, type, chip, indent + "  ", args)
 
 def printReverseDepends(packages, target, deptype, indent, args):
     deptypestr = ""
@@ -374,41 +329,42 @@ def getPackageKey(p):
     packagekey = p["id"]
     if "version" in p:
         packagekey = packagekey + "-" + p["version"]
-    for k in ["chip", "machineArch", "productArch"]:
-        v = p.get(k)
-        if v is not None:
-           packagekey = packagekey + "-" + k + "." + v
+    if "chip" in p:
+        packagekey = packagekey + "-" + p["chip"]
     return packagekey
 
-def aggregateDepends(packages, included, target, constraints, args):
+def aggregateDepends(packages, included, target, chip, args):
     if target.lower() in args.ignore:
         return []
-    p = findPackage(packages, target, constraints)
+    p = findPackage(packages, target, chip)
     if p == None:
-        return []
-    if args.only_host and not matchPackageHostArch(p, args.host_arch):
         return []
     packagekey = getPackageKey(p)
     if packagekey in included:
         return []
     ret = [p]
     included[packagekey] = True
-    for target, constraints in p.get("dependencies", {}).items():
-        if not isinstance(constraints, dict):
-            constraints = { "version": constraints }
-        deptype = constraints.get("type")
-        if deptype == "Optional" and not args.include_optional:
-            continue
-        if deptype == "Recommended" and args.skip_recommended:
-            continue
-        ret.extend(aggregateDepends(packages, included, target, constraints, args))
+    if "dependencies" in p:
+        deps = p["dependencies"]
+        for key in deps:
+            dep = deps[key]
+            if "type" in dep:
+                deptype = dep["type"]
+                if deptype == "Optional" and not args.include_optional:
+                    continue
+                if deptype == "Recommended" and args.skip_recommended:
+                    continue
+            chip = None
+            if "chip" in dep:
+                chip = dep["chip"]
+            ret.extend(aggregateDepends(packages, included, key, chip, args))
     return ret
 
 def getSelectedPackages(packages, args):
     ret = []
     included = {}
     for i in args.package:
-        ret.extend(aggregateDepends(packages, included, i, {}, args))
+        ret.extend(aggregateDepends(packages, included, i, None, args))
     return ret
 
 def sumInstalledSize(l):
@@ -443,10 +399,8 @@ def printPackageList(l):
         s = p["id"]
         if "type" in p:
             s = s + " (" + p["type"] + ")"
-        for k in ["chip", "machineArch", "productArch"]:
-            v = p.get(k)
-            if v is not None:
-                s = s + " (" + k + "." + v + ")"
+        if "chip" in p:
+            s = s + " (" + p["chip"] + ")"
         if "language" in p:
             s = s + " (" + p["language"] + ")"
         s = s + " " + formatSize(sumInstalledSize([p]))
@@ -680,32 +634,13 @@ if __name__ == "__main__":
 
     socket.setdefaulttimeout(15)
 
-    if args.host_arch is None:
-        args.host_arch = platform.machine().lower()
-        if platform.system() == "Darwin":
-            # There is no prebuilt arm64 Wine on macOS.
-            args.host_arch = "x64"
-        elif args.host_arch in ["x86", "i386", "i686"]:
-            args.host_arch = "x86"
-        elif args.host_arch in ["x64", "x86_64", "amd64"]:
-            args.host_arch = "x64"
-        elif args.host_arch in ["arm64", "aarch64"]:
-            args.host_arch = "arm64"
-        else:
-            args.host_arch = None
-
-    if args.host_arch is None:
-        print("WARNING: Unable to detect host architecture")
-    else:
-        print("Install packages for %s host architecture" % args.host_arch)
-
-    packages = getPackages(getManifest(args), args.host_arch)
+    packages = getPackages(getManifest(args))
 
     if args.print_version:
         sys.exit(0)
 
     if not args.accept_license:
-        response = input("Do you accept the license at " + findPackage(packages, "Microsoft.VisualStudio.Product.BuildTools")["localizedResources"][0]["license"] + " (yes/no)? ")
+        response = input("Do you accept the license at " + findPackage(packages, "Microsoft.VisualStudio.Product.BuildTools", None)["localizedResources"][0]["license"] + " (yes/no)? ")
         while response != "yes" and response != "no":
             response = input("Do you accept the license? Answer \"yes\" or \"no\": ")
         if response == "no":
@@ -724,7 +659,7 @@ if __name__ == "__main__":
 
     if args.print_deps_tree:
         for i in args.package:
-            printDepends(packages, i, {}, "", args)
+            printDepends(packages, i, "", None, "", args)
         sys.exit(0)
 
     if args.print_reverse_deps:
