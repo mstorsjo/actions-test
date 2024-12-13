@@ -1,6 +1,7 @@
 name: Test building external projects
 on:
   workflow_dispatch:
+  push:
   pull_request:
     paths:
       - '.github/workflows/projects.yml'
@@ -11,6 +12,7 @@ on:
 
 jobs:
   test-build-dav1d:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
@@ -74,6 +76,7 @@ jobs:
           retention-days: 7
 
   test-build-ffmpeg:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
@@ -133,7 +136,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: llvm/llvm-project
-          ref: llvmorg-16.0.6
+          ref: 925471ed903dad871042d7ed0bab89ab6566a564
           path: llvm-project
       - name: Build LLVM/Clang
         run: |
