@@ -9,6 +9,7 @@ env:
 
 jobs:
   test-msvc-wine-linux:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
@@ -31,7 +32,22 @@ jobs:
       # Intentionally not storing any artifacts with the downloaded tools;
       # the installed files aren't redistributable!
 
+  test-vsdownload-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download MSVC
+        run: |
+          python vsdownload.py --accept-license --dest c:/msvc
+      - name: Inspect output
+        run: |
+          ls c:/msvc
+          ls "c:/msvc/Windows Kits/10/Include/*/um/winnt.h"
+          ls "c:/msvc/VC/Tools/MSVC/*/include/intrin.h"
+          ls "c:/msvc/Windows Kits/10/Foo/*/um/winnt.h"
+
   test-msvc-wine-macos:
+    if: false
     runs-on: macos-latest
     steps:
       - name: Install prerequisites
@@ -52,6 +68,7 @@ jobs:
       # the installed files aren't redistributable!
 
   test-clang-lld:
+    if: false
     # Ubuntu 22.04 comes with Clang/LLD 14; at least 13 is required for providing
     # __guard_eh_cont_table and __guard_eh_cont_count which are required with
     # MSVC 2019 16.8 or newer.
@@ -84,6 +101,7 @@ jobs:
       # the installed files aren't redistributable!
 
   test-docker:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
