@@ -680,11 +680,12 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
-      - name: Rearrange files
+        with:
+          merge-multiple: true
+      - name: Remove unnecessary artifacts
         run: |
           rm -rf linux-asserts*
           rm -rf msys2*
-          mv *-toolchain/*.zip *-toolchain/*.tar.xz .
       - name: Inspect files
         run: |
           ls -l *.tar.xz *.zip
