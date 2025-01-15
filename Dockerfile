@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 RUN apt-get update -qq && \
     DEBIAN_FRONTEND="noninteractive" apt-get install -qqy --no-install-recommends \
     git wget bzip2 file unzip libtool pkg-config cmake build-essential \
-    automake yasm gettext autopoint vim-tiny python3 python3-distutils \
+    automake nasm gettext autopoint vim-tiny python3 \
     ninja-build ca-certificates curl less zip && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
@@ -24,7 +24,7 @@ ARG CFGUARD_ARGS=--enable-cfguard
 
 # Build everything that uses the llvm monorepo. We need to build the mingw runtime before the compiler-rt/libunwind/libcxxabi/libcxx runtimes.
 COPY build-llvm.sh build-lldb-mi.sh strip-llvm.sh install-wrappers.sh build-mingw-w64.sh build-mingw-w64-tools.sh build-compiler-rt.sh build-libcxx.sh build-mingw-w64-libraries.sh build-openmp.sh ./
-COPY wrappers/*.sh wrappers/*.c wrappers/*.h ./wrappers/
+COPY wrappers/*.sh wrappers/*.c wrappers/*.h wrappers/*.cfg ./wrappers/
 RUN ./build-llvm.sh $TOOLCHAIN_PREFIX && \
     ./build-lldb-mi.sh $TOOLCHAIN_PREFIX && \
     ./strip-llvm.sh $TOOLCHAIN_PREFIX && \

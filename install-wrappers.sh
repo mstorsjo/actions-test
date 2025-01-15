@@ -84,7 +84,7 @@ if [ -n "${HOST_CLANG}" ]; then
 
     # Note: clang will detect the "InstalledDir" based on the path that was used to invoke the tools
     # This might still have some hidden effects
-    printf '#!/bin/sh\nsr=$(dirname "$(dirname "$(readlink -f "$0")")")\nexec %s -resource-dir="$sr"%s --sysroot="$sr" "$@"\n' "$HOST_CLANG_EXE" "$clangres" > $PREFIX/bin/clang
+    printf '#!/bin/sh\nsr=$(dirname "$(dirname "$(readlink -f "$0")")")\nexec %s -resource-dir="$sr"%s --sysroot="$sr" --config-system-dir="$sr"/bin "$@"\n' "$HOST_CLANG_EXE" "$clangres" > $PREFIX/bin/clang
     # printf '#!/bin/sh\nsr=$(dirname "$(dirname "$(readlink -f "$0")")")\nexec %s -resource-dir="$sr"%s --sysroot="$sr" "$@"\n' "$(readlink -f "$HOST_CLANG_EXE")" "$clangres" > $PREFIX/bin/clang
     chmod 755 $PREFIX/bin/clang
     ln -sf clang $PREFIX/bin/clang++
@@ -104,7 +104,7 @@ fi
 
 if [ -n "$MACOS_REDIST" ]; then
     : ${MACOS_REDIST_ARCHS:=arm64 x86_64}
-    : ${MACOS_REDIST_VERSION:=10.9}
+    : ${MACOS_REDIST_VERSION:=10.12}
     for arch in $MACOS_REDIST_ARCHS; do
         WRAPPER_FLAGS="$WRAPPER_FLAGS -arch $arch"
     done
@@ -123,6 +123,10 @@ fi
 
 mkdir -p "$PREFIX/bin"
 cp wrappers/*-wrapper.sh "$PREFIX/bin"
+cp wrappers/mingw32-common.cfg $PREFIX/bin
+for arch in $ARCHS; do
+    cp wrappers/$arch-w64-windows-gnu.cfg $PREFIX/bin
+done
 if [ -n "$HOST" ] && [ -n "$EXEEXT" ]; then
     # TODO: If building natively on msys, pick up the default HOST value from there.
     WRAPPER_FLAGS="$WRAPPER_FLAGS -DDEFAULT_TARGET=\"$HOST\""
@@ -138,8 +142,10 @@ if [ -n "$EXEEXT" ]; then
     # when invoked from outside of MSYS.
     CTW_SUFFIX=$EXEEXT
     CTW_LINK_SUFFIX=$EXEEXT
+    CSDW=clang-scan-deps-wrapper$EXEEXT
 else
     CTW_SUFFIX=.sh
+    CSDW=clang-scan-deps
 fi
 cd "$PREFIX/bin"
 for arch in $ARCHS; do
@@ -147,7 +153,7 @@ for arch in $ARCHS; do
         for exec in clang clang++ gcc g++ c++ as; do
             ln -sf clang-target-wrapper$CTW_SUFFIX $arch-w64-$target_os-$exec$CTW_LINK_SUFFIX
         done
-        ln -sf clang-scan-deps-wrapper$CTW_SUFFIX $arch-w64-$target_os-clang-scan-deps$CTW_LINK_SUFFIX
+        ln -sf $CSDW $arch-w64-$target_os-clang-scan-deps$CTW_LINK_SUFFIX
         for exec in addr2line ar ranlib nm objcopy readelf size strings strip llvm-ar llvm-ranlib; do
             if [ -n "$EXEEXT" ]; then
                 link_target=llvm-wrapper
