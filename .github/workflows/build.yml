@@ -14,6 +14,13 @@ jobs:
           - ubuntu-24.04-arm
     runs-on: ${{matrix.image}}
     steps:
-      - name: Inspect
+      - name: Install wine
         run: |
-          uname -a
+          sudo apt-get update && sudo apt-get install wine64
+      - name: Initialize wine
+        run: |
+          wine wineboot
+      - name: Run an executable
+        run: |
+          curl -LO https://martin.st/temp/hello-aarch64.exe
+          wine hello-aarch64.exe
