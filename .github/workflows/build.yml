@@ -16,4 +16,13 @@ jobs:
     steps:
       - name: Inspect
         run: |
-          uname -a
+          ls /usr
+      - name: Install 32 bit userspace
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update && sudo apt-get install libc6:armhf libstdc++6:armhf
+      - name: Run a 32 bit executable
+        run: |
+          curl -LO https://martin.st/temp/hello-armhf
+          chmod a+x hello-armhf
+          ./hello-armhf
