@@ -10,11 +10,10 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - ubuntu-20.04
-          - ubuntu-22.04
-          - ubuntu-24.04
+          - ubuntu-22.04-arm
+          - ubuntu-24.04-arm
     runs-on: ${{matrix.image}}
     steps:
-      - name: Inspect available packages
+      - name: Inspect
         run: |
-          dpkg -l
+          uname -a
