@@ -6,13 +6,7 @@ on:
 
 jobs:
   inspect:
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - ubuntu-22.04-arm
-          - ubuntu-24.04-arm
-    runs-on: ${{matrix.image}}
+    runs-on: ubuntu-22.04-arm
     steps:
       - name: Install wine
         run: |
@@ -20,7 +14,13 @@ jobs:
       - name: Initialize wine
         run: |
           wine wineboot
+      - name: Install 32 bit wine
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update && sudo apt-get install wine32
       - name: Run an executable
         run: |
           curl -LO https://martin.st/temp/hello-aarch64.exe
           wine hello-aarch64.exe
+          curl -LO https://martin.st/temp/hello-armv7.exe
+          wine hello-armv7.exe
