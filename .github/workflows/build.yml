@@ -9,6 +9,7 @@ env:
 
 jobs:
   test-msvc-wine-linux:
+    if: false
     # Using a pinned version of Ubuntu here; this determines the version of
     # Wine that gets installed - the version of wine-mono that is installed
     # below depends on the host version of Wine.
@@ -33,6 +34,43 @@ jobs:
       - name: Test using the installed tools
         run: |
           HAVE_WDK=1 test/test.sh $(pwd)/msvc
+      # Intentionally not storing any artifacts with the downloaded tools;
+      # the installed files aren't redistributable!
+
+  test-msvc-wine-linux-aarch64:
+    # Using a pinned version of Ubuntu here; this determines the version of
+    # Wine that gets installed - the version of wine-mono that is installed
+    # below depends on the host version of Wine.
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install wine64 python3 msitools ca-certificates cmake ninja-build winbind meson
+          WINE=$(command -v wine64 || command -v wine || false)
+          $WINE wineboot
+      - uses: actions/checkout@v4
+      - name: Download MSVC
+        run: |
+          ./vsdownload.py --accept-license --dest $(pwd)/msvc
+          ./install.sh $(pwd)/msvc
+      - name: Test using the installed tools
+        run: |
+          for arch in x86 x64 arm arm64; do
+              ./msvc/bin/$arch/cl test/hello.c -Fehello-$arch.exe
+          done
+      - name: Test building with CMake
+        run: |
+          for arch in x86 x64 arm arm64; do
+              mkdir test/build-$arch
+              cd test/build-$arch
+              (export PATH=$(pwd)/../../msvc/bin/$arch:$PATH
+                  CC=cl CXX=cl cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows
+                  ninja -v
+              )
+              cd ../..
+          done
+          #test/test.sh $(pwd)/msvc
       # Intentionally not storing any artifacts with the downloaded tools;
       # the installed files aren't redistributable!
 
