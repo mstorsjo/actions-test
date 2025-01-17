@@ -10,20 +10,13 @@ jobs:
       fail-fast: false
       matrix:
         image:
+          - ubuntu-22.04
+          - ubuntu-24.04
           - ubuntu-22.04-arm
           - ubuntu-24.04-arm
     runs-on: ${{matrix.image}}
     steps:
       - name: Inspect
         run: |
-          ls /usr
-          cat /proc/cpuinfo
-      - name: Install 32 bit userspace
-        run: |
-          sudo dpkg --add-architecture armhf
-          sudo apt-get update && sudo apt-get install libc6:armhf libstdc++6:armhf
-      - name: Run a 32 bit executable
-        run: |
-          curl -LO https://martin.st/temp/hello-armhf
-          chmod a+x hello-armhf
-          ./hello-armhf
+            uname -m
+            df -h
