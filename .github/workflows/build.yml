@@ -7,20 +7,9 @@ on:
 jobs:
   inspect:
     runs-on: ubuntu-22.04-arm
+    container: linaro/wine-arm64
     steps:
-      - name: Install wine
-        run: |
-          sudo apt-get update && sudo apt-get install wine64
-      - name: Initialize wine
-        run: |
-          wine wineboot
-      - name: Install 32 bit wine
-        run: |
-          sudo dpkg --add-architecture armhf
-          sudo apt-get update && sudo apt-get install wine32
       - name: Run an executable
         run: |
           curl -LO https://martin.st/temp/hello-aarch64.exe
-          wine hello-aarch64.exe
-          curl -LO https://martin.st/temp/hello-armv7.exe
-          wine hello-armv7.exe
+          wine-arm64 hello-aarch64.exe
