@@ -42,11 +42,12 @@ jobs:
     # Wine that gets installed - the version of wine-mono that is installed
     # below depends on the host version of Wine.
     runs-on: ubuntu-22.04-arm
+    container: ghcr.io/mstorsjo/wine
     steps:
       - name: Install prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install wine64 python3 msitools ca-certificates cmake ninja-build winbind meson
+          sudo apt-get install python3 msitools ca-certificates cmake ninja-build winbind meson
           WINE=$(command -v wine64 || command -v wine || false)
           $WINE wineboot
       - uses: actions/checkout@v4
