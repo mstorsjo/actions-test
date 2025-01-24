@@ -20,3 +20,5 @@ jobs:
         run: |
             uname -m
             df -h
+            ls /etc/apt/apt.conf.d/
+            cat /etc/apt/apt.conf.d/90assumeyes
