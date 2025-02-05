@@ -512,7 +512,7 @@ jobs:
           choco install ninja
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20241015/llvm-mingw-20241015-ucrt-${{matrix.arch}}.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -527,7 +527,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: llvm/llvm-project
-          ref: cd938bf3279b6d2f1c0a8c82b6371a384d744378
+          ref: llvmorg-19.1.7
           path: llvm-project
       - name: Build test executables
         run: |
