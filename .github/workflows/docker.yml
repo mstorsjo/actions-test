@@ -9,6 +9,7 @@ on:
         description: 'Branch to extract from'
         type: string
         default: 'master'
+        required: false
       login:
         description: 'Log in to Docker Hub'
         type: boolean
