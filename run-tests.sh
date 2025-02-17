@@ -47,12 +47,14 @@ cd test
 HAVE_UWP=1
 cat<<EOF > is-ucrt.c
 #include <corecrt.h>
-#if __MSVCRT_VERSION__ < 0x1400 && !defined(_UCRT)
+#if !defined(_UCRT)
 #error not ucrt
 #endif
 EOF
 ANY_ARCH=$(echo $ARCHS | awk '{print $1}')
-if ! $ANY_ARCH-w64-mingw32-gcc$TOOLEXT -E is-ucrt.c > /dev/null 2>&1; then
+if $ANY_ARCH-w64-mingw32-gcc$TOOLEXT -E is-ucrt.c > /dev/null 2>&1; then
+    IS_UCRT=1
+else
     # If the default CRT isn't UCRT, we can't build for mingw32uwp.
     unset HAVE_UWP
 fi
@@ -94,30 +96,33 @@ fi
 
 
 for arch in $ARCHS; do
+    unset HAVE_ASAN
     case $arch in
     i686)
         RUN="$RUN_I686"
         COPY="$COPY_I686"
         NATIVE="$NATIVE_X86"
-        HAVE_SANITIZERS=1
+        if [ -n "$IS_UCRT" ]; then
+            HAVE_ASAN=1
+        fi
         ;;
     x86_64)
         RUN="$RUN_X86_64"
         COPY="$COPY_X86_64"
         NATIVE="$NATIVE_X86"
-        HAVE_SANITIZERS=1
+        if [ -n "$IS_UCRT" ]; then
+            HAVE_ASAN=1
+        fi
         ;;
     armv7)
         RUN="$RUN_ARMV7"
         COPY="$COPY_ARMV7"
         NATIVE="$NATIVE_ARMV7"
-        unset HAVE_SANITIZERS
         ;;
     aarch64)
         RUN="$RUN_AARCH64"
         COPY="$COPY_AARCH64"
         NATIVE="$NATIVE_AARCH64"
-        unset HAVE_SANITIZERS
         ;;
     esac
 
@@ -137,8 +142,8 @@ for arch in $ARCHS; do
     [ -z "$CLEAN" ] || rm -rf $TEST_DIR
     mkdir -p $TEST_DIR
     cd $TEST_DIR
-    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_SANITIZERS=$HAVE_SANITIZERS NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin clean
-    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_SANITIZERS=$HAVE_SANITIZERS NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin RUN="$RUN" $COPYARG $MAKEOPTS -j$CORES $TARGET
+    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_ASAN=$HAVE_ASAN NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin clean
+    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_ASAN=$HAVE_ASAN NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin RUN="$RUN" $COPYARG $MAKEOPTS -j$CORES $TARGET
     cd ..
 done
 echo All tests succeeded
