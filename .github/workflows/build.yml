@@ -5,11 +5,31 @@ on:
       - '**'
 
 jobs:
-  inspect:
-    runs-on: ubuntu-22.04-arm
-    container: linaro/wine-arm64
+  inspect-linaro:
+    runs-on: ubuntu-latest
     steps:
-      - name: Run an executable
+      - name: Inspect
         run: |
-          curl -LO https://martin.st/temp/hello-aarch64.exe
-          wine-arm64 hello-aarch64.exe
+          curl -LO https://martin.st/temp/winpf2.exe
+          docker run --rm -v $(pwd):/host linaro/wine-arm64 wine-arm64 /host/winpf2.exe
+          docker run --rm -v $(pwd):/host linaro/wine-arm64 cat /proc/cpuinfo
+
+  inspect-nocontainer:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Inspect
+        run: |
+          cat /proc/cpuinfo
+          curl -LO https://martin.st/temp/winpf2.exe
+          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine wine /host/winpf2.exe
+          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine cat /proc/cpuinfo
+
+  inspect-container:
+    runs-on: ubuntu-24.04-arm
+    container: ghcr.io/mstorsjo/wine
+    steps:
+      - name: Inspect
+        run: |
+          cat /proc/cpuinfo
+          curl -LO https://martin.st/temp/winpf2.exe
+          wine winpf2.exe
