@@ -5,31 +5,9 @@ on:
       - '**'
 
 jobs:
-  inspect-linaro:
-    runs-on: ubuntu-latest
+  inspect:
+    runs-on: ubuntu-24.04
     steps:
-      - name: Inspect
-        run: |
-          curl -LO https://martin.st/temp/winpf2.exe
-          docker run --rm -v $(pwd):/host linaro/wine-arm64 wine-arm64 /host/winpf2.exe
-          docker run --rm -v $(pwd):/host linaro/wine-arm64 cat /proc/cpuinfo
-
-  inspect-nocontainer:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Inspect
+      - name: Inspect cpuinfo
         run: |
           cat /proc/cpuinfo
-          curl -LO https://martin.st/temp/winpf2.exe
-          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine wine /host/winpf2.exe
-          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine cat /proc/cpuinfo
-
-  inspect-container:
-    runs-on: ubuntu-24.04-arm
-    container: ghcr.io/mstorsjo/wine
-    steps:
-      - name: Inspect
-        run: |
-          cat /proc/cpuinfo
-          curl -LO https://martin.st/temp/winpf2.exe
-          wine winpf2.exe
