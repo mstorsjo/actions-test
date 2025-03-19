@@ -70,6 +70,9 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-22.04-arm
     steps:
+      - name: Inspect
+        run: |
+          cat /proc/cpuinfo
       - uses: actions/checkout@v4
       - name: Build
         env:
