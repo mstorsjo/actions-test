@@ -10,17 +10,17 @@ jobs:
       matrix:
         crt:
           - ucrt
+          - ucrtbase
           - msvcrt
     steps:
       - name: Check out llvm-mingw build scripts
         uses: actions/checkout@v4
         with:
           repository: mstorsjo/llvm-mingw
-          ref: 20240619
+          ref: 20241001
       - name: Check out the mingw-w64 version to be tested
         uses: actions/checkout@v4
         with:
-          repository: mingw-w64/mingw-w64
           path: mingw-w64
       - name: Regenerate mingw-w64 files
         run: |
@@ -37,7 +37,11 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install ninja-build
           DISTRO=ubuntu-20.04-x86_64
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-$DISTRO.tar.xz
+          src_crt=${{matrix.crt}}
+          if [ "$src_crt" = "ucrtbase" ]; then
+              src_crt=ucrt
+          fi
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20241001/llvm-mingw-20241001-$src_crt-$DISTRO.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           mkdir install
@@ -65,7 +69,11 @@ jobs:
           cd cross
 
           for arch in i686 x86_64; do
-            curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-${{matrix.crt}}-$arch.zip
+            src_crt=${{matrix.crt}}
+            if [ "$src_crt" = "ucrtbase" ]; then
+                src_crt=ucrt
+            fi
+            curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20241001/llvm-mingw-20241001-$src_crt-$arch.zip
             unzip -q llvm-mingw-*.zip
             rm llvm-mingw-*.zip
             mv llvm-mingw-* llvm-mingw
@@ -104,6 +112,7 @@ jobs:
           - i686
         crt:
           - ucrt
+          - ucrtbase
           - msvcrt
     steps:
       - uses: msys2/setup-msys2@v2
@@ -112,6 +121,7 @@ jobs:
           install: >-
             unzip
             make
+            git
       - uses: actions/download-artifact@v4
         with:
           name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
@@ -125,7 +135,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mstorsjo/llvm-mingw
-          ref: 20240619
+          ref: 20250305
+      - name: Check out the mingw-w64 repo with patches
+        uses: actions/checkout@v4
+        with:
+          path: mingw-w64
+      - name: Patch llvm-mingw
+        run: |
+          git config --global user.name "LLVM MinGW"
+          git config --global user.email root@localhost
+          git am -3 mingw-w64/patches/llvm-mingw/*.patch
       - name: Run tests
         run: |
           ./run-tests.sh /llvm-mingw
@@ -133,10 +152,14 @@ jobs:
         run: |
           export PATH=/llvm-mingw/bin:$PATH
           for arch in i686 x86_64 armv7 aarch64; do
-            for crt in msvcrt ucrt ucrtbase; do
+            for crt in msvcrt-ansi msvcrt-noansi ucrt ucrtbase; do
               case $crt in
-              msvcrt) defs="-D__MSVCRT_VERSION__=0x700"; lib=msvcrt-os ;;
+              msvcrt*) defs="-D__MSVCRT_VERSION__=0x700"; lib=msvcrt-os ;;
               ucrt*) defs="-D_UCRT"; lib=$crt ;;
+              esac
+              case $crt in
+              *-noansi) defs="$defs -D__USE_MINGW_ANSI_STDIO=0" ;;
+              *-ansi) defs="$defs -D__USE_MINGW_ANSI_STDIO=1" ;;
               esac
               name=crt-test-$arch-$crt
               $arch-w64-mingw32-clang $defs -fno-builtin test/crt-test.c -o $name-regular.exe -lmingwex -l$lib -O2
@@ -176,7 +199,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mstorsjo/llvm-mingw
-          ref: 20240619
+          ref: 20241001
       - name: Checkout llvm-project
         run: |
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
@@ -230,7 +253,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ffmpeg/ffmpeg
-          ref: n6.0
+          ref: n6.1.2
           path: ffmpeg
       - name: Build ffmpeg
         run: |
@@ -280,7 +303,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ffmpeg/ffmpeg
-          ref: n6.0
+          ref: n6.1.2
           path: ffmpeg
       - name: Build & test ffmpeg
         run: |
@@ -300,6 +323,9 @@ jobs:
         crt:
           - ucrt
           - msvcrt
+        arch:
+          - i686
+          - x86_64
     steps:
       - name: Download dependencies
         run: |
@@ -312,7 +338,7 @@ jobs:
           cd binutils-*
           mkdir build
           cd build
-          ../configure --prefix=$(pwd)/../../prefix --target=x86_64-w64-mingw32 --disable-werror --disable-multilib
+          ../configure --prefix=$(pwd)/../../prefix --target=${{matrix.arch}}-w64-mingw32 --disable-werror --disable-multilib
           make -j$(nproc)
           make install-strip
           echo $(pwd)/../../prefix/bin >> $GITHUB_PATH
@@ -324,35 +350,34 @@ jobs:
           cd gcc-*
           mkdir build
           cd build
-          ../configure --prefix=$(pwd)/../../prefix --target=x86_64-w64-mingw32 --enable-languages=c,c++ --disable-multilib --enable-threads=posix
+          ../configure --prefix=$(pwd)/../../prefix --target=${{matrix.arch}}-w64-mingw32 --enable-languages=c,c++ --disable-multilib --enable-threads=posix
           make -j$(nproc) all-gcc
           make install-strip-gcc
       - name: Check out the mingw-w64 version to be tested
         uses: actions/checkout@v4
         with:
-          repository: mingw-w64/mingw-w64
           path: mingw-w64
       - name: Build the mingw-w64 runtime
         run: |
-          PREFIX=$(pwd)/prefix/x86_64-w64-mingw32
+          PREFIX=$(pwd)/prefix/${{matrix.arch}}-w64-mingw32
           cd mingw-w64/mingw-w64-headers
           autoreconf
           mkdir build
           cd build
-          ../configure --prefix=$PREFIX --host=x86_64-w64-mingw32 --with-default-msvcrt=${{matrix.crt}}
+          ../configure --prefix=$PREFIX --host=${{matrix.arch}}-w64-mingw32 --with-default-msvcrt=${{matrix.crt}}
           make install
           cd ../../mingw-w64-crt
           autoreconf
           mkdir build
           cd build
-          ../configure --prefix=$PREFIX --host=x86_64-w64-mingw32 --with-default-msvcrt=${{matrix.crt}} --disable-lib32 --enable-lib64
+          ../configure --prefix=$PREFIX --host=${{matrix.arch}}-w64-mingw32 --with-default-msvcrt=${{matrix.crt}} ${{ matrix.arch == 'i686' && '--enable-lib32 --disable-lib64' || '--disable-lib32 --enable-lib64' }}
           make -j$(nproc)
           make install
           cd ../../mingw-w64-libraries/winpthreads
           autoreconf
           mkdir build
           cd build
-          ../configure --prefix=$PREFIX --host=x86_64-w64-mingw32 --with-default-msvcrt=${{matrix.crt}} --disable-lib32 --enable-lib64
+          ../configure --prefix=$PREFIX --host=${{matrix.arch}}-w64-mingw32
           make -j$(nproc)
           make install
       - name: Build the GCC runtimes
@@ -363,12 +388,12 @@ jobs:
           make install-strip
       - name: Package the toolchain
         run: |
-          NAME=gcc-mingw-${{matrix.crt}}-x86_64
+          NAME=gcc-mingw-${{matrix.crt}}-${{matrix.arch}}
           mv prefix $NAME
           tar -Jcf $NAME.tar.xz --format=ustar --numeric-owner --owner=0 --group=0 --sort=name $NAME
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-${{matrix.crt}}-x86_64-gcc-toolchain
+          name: linux-${{matrix.crt}}-${{matrix.arch}}-gcc-toolchain
           path: |
             gcc-mingw-*.tar.xz
           retention-days: 7
@@ -382,10 +407,13 @@ jobs:
         crt:
           - ucrt
           - msvcrt
+        arch:
+          - i686
+          - x86_64
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: linux-${{matrix.crt}}-x86_64-gcc-toolchain
+          name: linux-${{matrix.crt}}-${{matrix.arch}}-gcc-toolchain
       - name: Unpack cross toolchain
         run: |
           tar -Jxf gcc-mingw-*.tar.xz
@@ -402,7 +430,7 @@ jobs:
           cd gmp-*
           mkdir build
           cd build
-          ../configure --prefix=$PREFIX --host=x86_64-w64-mingw32 --disable-shared
+          ../configure --prefix=$PREFIX --host=${{matrix.arch}}-w64-mingw32 --disable-shared
           make -j$(nproc)
           make install
           cd ../..
@@ -413,7 +441,7 @@ jobs:
           cd mpfr-*
           mkdir build
           cd build
-          ../configure --prefix=$PREFIX --host=x86_64-w64-mingw32 --disable-shared --with-gmp=$PREFIX
+          ../configure --prefix=$PREFIX --host=${{matrix.arch}}-w64-mingw32 --disable-shared --with-gmp=$PREFIX
           make -j$(nproc)
           make install
           cd ../..
@@ -424,7 +452,7 @@ jobs:
           cd mpc-*
           mkdir build
           cd build
-          ../configure --prefix=$PREFIX --host=x86_64-w64-mingw32 --disable-shared --with-gmp=$PREFIX
+          ../configure --prefix=$PREFIX --host=${{matrix.arch}}-w64-mingw32 --disable-shared --with-gmp=$PREFIX
           make -j$(nproc)
           make install
           cd ../..
@@ -437,7 +465,7 @@ jobs:
           cd binutils-*
           mkdir build
           cd build
-          ../configure --prefix=$(pwd)/../../prefix --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-werror --disable-multilib
+          ../configure --prefix=$(pwd)/../../prefix --host=${{matrix.arch}}-w64-mingw32 --target=${{matrix.arch}}-w64-mingw32 --disable-werror --disable-multilib
           make -j$(nproc)
           make install-strip
           echo $(pwd)/../../prefix/bin >> $GITHUB_PATH
@@ -449,30 +477,30 @@ jobs:
           cd gcc-*
           mkdir build
           cd build
-          ../configure --prefix=$(pwd)/../../prefix --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --enable-languages=c,c++ --disable-multilib --enable-threads=posix --with-gmp=$(pwd)/../../prefix --with-native-system-header-dir=/opt/gcc-mingw/x86_64-w64-mingw32/include --disable-bootstrap
+          ../configure --prefix=$(pwd)/../../prefix --host=${{matrix.arch}}-w64-mingw32 --target=${{matrix.arch}}-w64-mingw32 --enable-languages=c,c++ --disable-multilib --enable-threads=posix --with-gmp=$(pwd)/../../prefix --with-native-system-header-dir=/opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/include --disable-bootstrap
           make -j$(nproc) all-gcc
           make install-strip-gcc
       - name: Transplant the mingw-w64 installation from the cross compiler to the native one
         run: |
-          rm -rf prefix/x86_64-w64-mingw32/include
-          rm -rf prefix/x86_64-w64-mingw32/lib
-          mkdir -p prefix/x86_64-w64-mingw32/bin
-          cp -a /opt/gcc-mingw/x86_64-w64-mingw32/bin/*.dll prefix/x86_64-w64-mingw32/bin
-          cp -a /opt/gcc-mingw/x86_64-w64-mingw32/include prefix/x86_64-w64-mingw32
-          cp -a /opt/gcc-mingw/x86_64-w64-mingw32/lib prefix/x86_64-w64-mingw32/lib
-          cp -a /opt/gcc-mingw/x86_64-w64-mingw32/include/c++ prefix/include
-          cp -a /opt/gcc-mingw/x86_64-w64-mingw32/bin/*.dll prefix/bin
-          cp -a /opt/gcc-mingw/x86_64-w64-mingw32/lib/*.dll prefix/bin
+          rm -rf prefix/${{matrix.arch}}-w64-mingw32/include
+          rm -rf prefix/${{matrix.arch}}-w64-mingw32/lib
+          mkdir -p prefix/${{matrix.arch}}-w64-mingw32/bin
+          cp -a /opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/bin/*.dll prefix/${{matrix.arch}}-w64-mingw32/bin
+          cp -a /opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/include prefix/${{matrix.arch}}-w64-mingw32
+          cp -a /opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/lib prefix/${{matrix.arch}}-w64-mingw32/lib
+          cp -a /opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/include/c++ prefix/include
+          cp -a /opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/bin/*.dll prefix/bin
+          cp -a /opt/gcc-mingw/${{matrix.arch}}-w64-mingw32/lib/*.dll prefix/bin
           rm -rf prefix/lib/gcc
           cp -a /opt/gcc-mingw/lib/gcc prefix/lib
       - name: Package the toolchain
         run: |
-          NAME=gcc-mingw-${{matrix.crt}}-x86_64
+          NAME=gcc-mingw-${{matrix.crt}}-${{matrix.arch}}
           mv prefix $NAME
           zip -9rq $NAME.zip $NAME
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-${{matrix.crt}}-x86_64-gcc-toolchain
+          name: windows-${{matrix.crt}}-${{matrix.arch}}-gcc-toolchain
           path: |
             gcc-mingw-*.zip
           retention-days: 7
@@ -486,10 +514,13 @@ jobs:
         crt:
           - ucrt
           - msvcrt
+        arch:
+          - i686
+          - x86_64
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: windows-${{matrix.crt}}-x86_64-gcc-toolchain
+          name: windows-${{matrix.crt}}-${{matrix.arch}}-gcc-toolchain
       - name: Unpack toolchain
         run: |
           Expand-Archive gcc-mingw-*.zip -DestinationPath .
@@ -500,7 +531,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mstorsjo/llvm-mingw
-          ref: 20240619
+          ref: 20241001
       - name: Run tests
         run: |
           g++ test/hello.c -o hello.exe
