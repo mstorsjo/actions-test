@@ -1,0 +1,113 @@
+From 45784c81dc4c235cdc00acb1ceef379f5cedd35d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Thu, 13 Feb 2025 15:17:07 +0200
+Subject: [PATCH] test: Add tests for tchar.h routines
+
+---
+ test/Makefile | 12 ++++++++++++
+ test/tchar.c  | 49 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 61 insertions(+)
+ create mode 100644 test/tchar.c
+
+diff --git a/test/Makefile b/test/Makefile
+index 8b39ab4..a23c81a 100644
+--- a/test/Makefile
++++ b/test/Makefile
+@@ -74,6 +74,7 @@ TESTS_CPP_EXCEPTIONS = hello-exception exception-locale exception-reduced
+ TESTS_CPP_STATIC = hello-exception
+ TESTS_CPP_DLL = tlstest-lib throwcatch-lib
+ TESTS_CPP_LINK_DLL = throwcatch-main
++TESTS_TCHAR = tchar
+ TESTS_SSP = stacksmash
+ TESTS_FORTIFY = bufferoverflow crt-test
+ ifneq ($(HAVE_ASAN),)
+@@ -108,6 +109,8 @@ TARGETS_CPP_EXCEPTIONS_OPT = $(addsuffix -opt$(EXEEXT), $(TESTS_CPP_EXCEPTIONS))
+ TARGETS_CPP_STATIC = $(addsuffix -static$(EXEEXT), $(TESTS_CPP_STATIC))
+ TARGETS_CPP_DLL = $(addsuffix $(DLLEXT), $(TESTS_CPP_DLL))
+ TARGETS_CPP_LINK_DLL = $(addsuffix $(EXEEXT), $(TESTS_CPP_LINK_DLL))
++TARGETS_TCHAR_NARROW = $(addsuffix -narrow$(EXEEXT), $(TESTS_TCHAR))
++TARGETS_TCHAR_UNICODE = $(addsuffix -unicode$(EXEEXT), $(TESTS_TCHAR))
+ TARGETS_SSP = $(addsuffix $(EXEEXT), $(TESTS_SSP))
+ TARGETS_CFGUARD = $(addsuffix $(EXEEXT), $(TESTS_CFGUARD))
+ TARGETS_FORTIFY = $(addsuffix -fortify$(EXEEXT), $(TESTS_FORTIFY))
+@@ -129,6 +132,7 @@ TARGETS_ATOMIC = $(addsuffix $(EXEEXT), $(TESTS_ATOMIC))
+ TARGETS = \
+     $(TARGETS_C) $(TARGETS_C_DLL) $(TARGETS_C_LINK_DLL) $(TARGETS_C_NO_BUILTIN) $(TARGETS_C_ANSI_STDIO) $(TARGETS_C_NOANSI_STDIO) $(TARGETS_C_AS_CPP) \
+     $(TARGETS_CPP) $(TARGETS_CPP_EXCEPTIONS) $(TARGETS_CPP_EXCEPTIONS_OPT) $(TARGETS_CPP_STATIC) $(TARGETS_CPP_DLL) $(TARGETS_CPP_LINK_DLL) \
++    $(TARGETS_TCHAR_NARROW) $(TARGETS_TCHAR_UNICODE) \
+     $(TARGETS_SSP) $(TARGETS_CFGUARD) $(TARGETS_FORTIFY) \
+     $(TARGETS_IDL) $(TARGETS_RES) \
+     $(TARGETS_OTHER_TARGETS) $(TARGETS_UWP) $(TARGETS_UWP_FAIL) \
+@@ -184,6 +188,14 @@ $(TARGETS_CPP) $(TARGETS_CPP_EXCEPTIONS): %$(EXEEXT): %.cpp
+ $(TARGETS_CPP_STATIC): %-static$(EXEEXT): %.cpp
+ 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -static $< -o $@
+ 
++# Build these tests with -D__USE_MINGW_ANSI_STDIO=1 to make sure that tchar
++# routines behave as expected even when normally using mingw stdio functions.
++$(TARGETS_TCHAR_NARROW): %-narrow$(EXEEXT): %.c
++	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -D__USE_MINGW_ANSI_STDIO=1
++
++$(TARGETS_TCHAR_UNICODE): %-unicode$(EXEEXT): %.c
++	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -D__USE_MINGW_ANSI_STDIO=1 -municode
++
+ $(TARGETS_SSP): %$(EXEEXT): %.c
+ 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -o $@ -fstack-protector-strong
+ 
+diff --git a/test/tchar.c b/test/tchar.c
+new file mode 100644
+index 0000000..f86996d
+--- /dev/null
++++ b/test/tchar.c
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (c) 2025 Martin Storsjo
++ *
++ * This file is part of llvm-mingw.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifdef UNICODE
++#define _UNICODE
++#endif
++
++#include <stdio.h>
++#include <tchar.h>
++
++int _tmain(int argc, TCHAR* argv[]) {
++    _tprintf(_T("_tprintf\n"));
++    _ftprintf(stdout, _T("_ftprintf\n"));
++
++    TCHAR buffer[100];
++    _stprintf(buffer, _T("foo %d"), 123);
++    if (_tcscmp(buffer, _T("foo 123"))) {
++        _tprintf(_T("incorrect _stprintf output\n"));
++        return 1;
++    }
++    _stprintf(buffer, _T("str %s"), _T("arg"));
++    if (_tcscmp(buffer, _T("str arg"))) {
++        _tprintf(_T("incorrect _stprintf output for %%s\n"));
++        return 1;
++    }
++
++    int val;
++    if (_stscanf(_T("123"), _T("%d"), &val) != 1 || val != 123) {
++        _tprintf(_T("incorrect _stscanf output\n"));
++        return 1;
++    }
++
++    return 0;
++}
+-- 
+2.43.0
+
