@@ -122,6 +122,10 @@ jobs:
             unzip
             make
             git
+      - name: Avoid git checking out files with CRLF
+        shell: cmd
+        run: |
+          git config --global core.autocrlf false
       - name: Check out llvm-mingw tests
         uses: actions/checkout@v4
         with:
