@@ -6,8 +6,9 @@ on:
 
 jobs:
   inspect:
-    runs-on: ubuntu-24.04
+    runs-on: windows-11-arm
     steps:
-      - name: Inspect cpuinfo
+      - name: Inspect cpu features
         run: |
-          cat /proc/cpuinfo
+          curl -LO https://martin.st/temp/winpf2.exe
+          ./winpf2.exe
