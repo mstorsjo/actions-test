@@ -669,7 +669,7 @@ jobs:
           export PATH=/llvm-mingw/bin:$PATH
           mkdir ffmpeg-build
           cd ffmpeg-build
-          ../ffmpeg/configure --samples=../fate-samples --enable-gpl
+          ../ffmpeg/configure --arch=${{matrix.arch}} --samples=../fate-samples --enable-gpl
           make -j$(nproc)
           make fate-rsync
           make -j$(nproc) fate
