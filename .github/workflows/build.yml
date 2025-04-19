@@ -717,7 +717,14 @@ jobs:
   test-ffmpeg:
     if: github.event_name == 'schedule'
     needs: [linux-cross-windows]
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - aarch64
+    runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
       - name: Install prerequisites
         run: |
@@ -729,7 +736,7 @@ jobs:
           git config --global core.autocrlf false
       - uses: actions/download-artifact@v4
         with:
-          name: windows-ucrt-x86_64-toolchain
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
