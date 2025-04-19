@@ -350,18 +350,12 @@ jobs:
           install: >-
             unzip
             make
-      - name: Unpack toolchain
+      - name: Inspect uname
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250417/llvm-mingw-20250417-ucrt-${{matrix.arch}}.zip
-          unzip -q llvm-mingw-*.zip
-          rm llvm-mingw-*.zip
-          mv llvm-mingw-* /llvm-mingw
-      - uses: actions/checkout@v4
-      - name: Run tests
-        run: |
-          ./test-libcxx-module.sh /llvm-mingw
-          ./run-tests.sh /llvm-mingw
-          ./run-lldb-tests.sh /llvm-mingw
+          set -x
+          uname
+          uname -m
+          uname -a
 
   # Run libcxx's tests with the cross-built i686/x86_64 toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
