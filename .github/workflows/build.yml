@@ -743,7 +743,14 @@ jobs:
   # compiler itself, but that only show up at runtime. This is only done
   # for scheduled builds.
   test-ffmpeg:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - aarch64
+    runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     defaults:
       run:
         shell: msys2 {0}
@@ -764,7 +771,7 @@ jobs:
             nasm:p
       - name: Unpack toolchain
         run: |
-          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20251202/llvm-mingw-20251202-ucrt-x86_64.zip
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20251202/llvm-mingw-20251202-ucrt-${{matrix.arch}}.zip
           unzip -q llvm-mingw-*.zip
           rm llvm-mingw-*.zip
           mv llvm-mingw-* /llvm-mingw
@@ -780,7 +787,7 @@ jobs:
           export PATH=/llvm-mingw/bin:$PATH
           mkdir ffmpeg-build
           cd ffmpeg-build
-          ../ffmpeg/configure --samples=../fate-samples --enable-gpl
+          ../ffmpeg/configure --arch=${{matrix.arch}} --samples=../fate-samples --enable-gpl
       - name: Build
         if: false
         run: |
