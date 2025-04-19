@@ -346,7 +346,7 @@ jobs:
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: clang64
+          msystem: clangarm64
           install: >-
             unzip
             make
