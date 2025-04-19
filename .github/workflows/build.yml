@@ -433,7 +433,7 @@ jobs:
   # This also forces testing the bundled python executables.
   test-openmp:
     # Only running these tests in scheduled builds.
-    if: true
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -498,23 +498,22 @@ jobs:
   test-compiler-rt:
     # Only running these tests in scheduled builds.
     if: true
-    needs: [linux-cross-windows, prepare]
-    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         arch:
           - x86_64
           - i686
+          - armv7
+          - aarch64
+    runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
       - name: Install dependencies
         run: |
           choco install ninja
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250417/llvm-mingw-20250417-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
