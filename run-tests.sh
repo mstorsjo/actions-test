@@ -76,33 +76,6 @@ fi
 
 : ${TARGET_OSES:=${TOOLCHAIN_TARGET_OSES-$DEFAULT_OSES}}
 
-if [ -n "$NATIVE_ARCH" ]; then
-    case $NATIVE_ARCH in
-    i686)
-        NATIVE_X86=1
-        RUN_I686=true
-        ;;
-    x86_64)
-        NATIVE_X86=1
-        RUN_I686=true
-        RUN_X86_64=true
-        ;;
-    armv7)
-        NATIVE_ARMV7=1
-        RUN_ARMV7=true
-        ;;
-    aarch64)
-        # Not setting NATIVE_X86 - the asan tests don't run correctly on ARM64.
-        NATIVE_ARMV7=1
-        NATIVE_AARCH64=1
-        RUN_I686=true
-        RUN_X86_64=true
-        RUN_ARMV7=true
-        RUN_AARCH64=true
-        ;;
-    esac
-fi
-
 if [ -z "$RUN_X86_64" ] && [ -z "$RUN_I686" ]; then
     case $(uname) in
     MINGW*|MSYS*)

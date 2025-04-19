@@ -360,7 +360,7 @@ jobs:
       - name: Run tests
         run: |
           ./test-libcxx-module.sh /llvm-mingw
-          NATIVE_ARCH=${{startsWith(matrix.arch, 'a') && 'aarch64' || 'x86_64'}} ./run-tests.sh /llvm-mingw
+          ./run-tests.sh /llvm-mingw
           ./run-lldb-tests.sh /llvm-mingw
 
   # Run libcxx's tests with the cross-built i686/x86_64 toolchains from above.
