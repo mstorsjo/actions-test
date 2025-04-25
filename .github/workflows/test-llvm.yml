@@ -42,7 +42,7 @@ jobs:
 
   test-llvm:
     needs: [prepare]
-    runs-on: windows-latest
+    runs-on: windows-11-arm
     steps:
       - name: Install dependencies
         run: |
@@ -55,7 +55,7 @@ jobs:
           workflow_conclusion: success
           branch: master
           event: push
-          name: windows-ucrt-x86_64-toolchain
+          name: windows-ucrt-aarch64-toolchain
       - name: Unpack toolchain
         run: |
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
@@ -81,7 +81,8 @@ jobs:
           cmake ../llvm `
             -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DLLVM_TARGETS_TO_BUILD=X86 `
+            -DLLVM_HOST_TRIPLE=aarch64-w64-mingw32 `
+            -DLLVM_TARGETS_TO_BUILD="X86;AArch64" `
             -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" `
             -DLLVM_WINDOWS_PREFER_FORWARD_SLASH=OFF `
             -DCMAKE_C_COMPILER=clang `
