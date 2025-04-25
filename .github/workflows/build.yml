@@ -11,4 +11,6 @@ jobs:
       - name: Inspect cpu features
         run: |
           curl -LO https://martin.st/temp/winpf2.exe
+          curl -LO https://martin.st/temp/cpuname-aarch64.exe
           ./winpf2.exe
+          ./cpuname-aarch64.exe
