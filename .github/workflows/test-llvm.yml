@@ -1,5 +1,6 @@
 name: Run LLVM tests
 on:
+  push:
   workflow_dispatch:
     inputs:
       commit:
@@ -27,11 +28,11 @@ jobs:
       - name: Download build parameters
         uses: dawidd6/action-download-artifact@v6
         with:
+          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
-          commit: ${{inputs.commit}}
-          branch: ${{inputs.branch}}
-          event: ${{inputs.pipeline_type}}
+          branch: master
+          event: push
           name: parameters
       - name: Get build parameters
         id: get-parameters
@@ -49,11 +50,11 @@ jobs:
       - name: Download toolchain
         uses: dawidd6/action-download-artifact@v6
         with:
+          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
-          commit: ${{inputs.commit}}
-          branch: ${{inputs.branch}}
-          event: ${{inputs.pipeline_type}}
+          branch: master
+          event: push
           name: windows-ucrt-x86_64-toolchain
       - name: Unpack toolchain
         run: |
