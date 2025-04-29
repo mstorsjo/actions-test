@@ -5,12 +5,21 @@ on:
       - '**'
 
 jobs:
-  inspect:
-    runs-on: windows-11-arm
+  test-cache:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - windows-latest
+          - windows-11-arm
+        variant:
+          - ccache
+          - sccache
+    runs-on: ${{matrix.runner}}
     steps:
-      - name: Inspect cpu features
-        run: |
-          curl -LO https://martin.st/temp/winpf2.exe
-          curl -LO https://martin.st/temp/cpuname-aarch64.exe
-          ./winpf2.exe
-          ./cpuname-aarch64.exe
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 50M
+          key: test-cache-${{matrix.runner}}-${{matrix.variant}}
+          variant: ${{matrix.variant}}
