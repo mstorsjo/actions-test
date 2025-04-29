@@ -1,0 +1,254 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CCACHE_ACTION_CI: true
+
+jobs:
+  build:
+    # Run npm build and check that the dist/ folder is up to date.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          npm install
+          git diff --exit-code
+
+  unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit tests
+        run: |
+          npm install
+          npm test
+
+  test_ccache:
+    # Test that ccache/sccache are installed and configured correctly.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        shell: [bash]
+        variant: [sccache, ccache]
+        include:
+          - { os: windows-latest, shell: powershell, variant: sccache }
+          - { os: windows-latest, shell: powershell, variant: ccache, xfail: true }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ccache-action
+        id: ccache
+        uses: ./
+        with:
+          verbose: 2
+          variant: ${{ matrix.variant }}
+          max-size: 10M
+          job-summary: 'ccache statistics'
+          key: parent
+      - name: Test ccache 1/2
+        run: |
+          [[ ${{ steps.ccache.outputs.test-cache-hit }} = true ]] || [[ ${{ steps.ccache.outputs.test-cache-hit }} = false ]]
+          if [ ${{ matrix.variant }} = sccache ]; then
+            which sccache
+            sccache -V
+            sccache -s
+            # sccache -s | grep -E 'Max cache size.+10 MiB'
+            sccache -s | grep -E "Cache location.+${SCCACHE_DIR:-ccache-action[\\/]+\.sccache}"
+          else
+            which ccache
+            ccache -V
+            # Some versions of ccache don't have -v or -s
+            ccache -sv || ccache -s || true
+          fi
+          # Example program
+          echo "int x = $RANDOM;" > test.c
+          ${{ matrix.variant }} gcc test.c -c -o test.o
+      - name: Re-compile test program in Bash
+        run: ${{ matrix.variant }} gcc test.c -c -o test.o
+      - name: Re-compile test program in Bash
+        run: ${{ matrix.variant }} gcc test.c -c -o test.o
+        if: ${{ matrix.shell == 'bash' }}
+      - name: Re-compile test program in PowerShell
+        run: |
+          ${{ matrix.variant }} gcc test.c -c -o test.o
+        shell: powershell
+        if: ${{ matrix.shell == 'powershell' }}
+      - name: Test ccache 2/2
+        run: |
+          ${{ matrix.variant }} -sv || ${{ matrix.variant }} -s || true
+          ${{ matrix.variant }} -s | grep -E '(Hits:.+2.+/.+3)|cache hit.+2$|Cache hits.+2$'
+        if: ${{ !matrix.xfail }}
+
+  test_cache_hit:
+    # Test that loading from the cache works.
+    needs: [test_ccache]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        shell: [bash]
+        variant: [sccache, ccache]
+        include:
+          - { os: windows-latest, shell: powershell, variant: sccache }
+          - { os: windows-latest, shell: powershell, variant: ccache }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ccache action
+        uses: ./
+        id: output
+        with:
+          variant: ${{ matrix.variant }}
+          key: parent
+      - name: Test output true
+        run: |
+          [[ ${{ steps.output.outputs.test-cache-hit }} = true ]]
+
+  test_cache_miss:
+    # Test that cache misses do not break anything.
+    needs: [test_ccache]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        shell: [bash]
+        variant: [sccache, ccache]
+        include:
+          - { os: windows-latest, shell: powershell, variant: sccache }
+          - { os: windows-latest, shell: powershell, variant: ccache }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "RAND=$RANDOM" >> $GITHUB_ENV
+      - name: Run ccache action
+        uses: ./
+        id: output
+        with:
+          variant: ${{ matrix.variant }}
+          key: random-key-${{ env.RAND }}
+      - name: Test output false
+        run: |
+          [[ ${{ steps.output.outputs.test-cache-hit }} = false ]]
+
+  test_restore_keys:
+    # Test the "restore-keys" option.
+    needs: [test_ccache]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        shell: [bash]
+        variant: [sccache, ccache]
+        include:
+          - { os: windows-latest, shell: powershell, variant: sccache }
+          - { os: windows-latest, shell: powershell, variant: ccache }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "RAND=$RANDOM" >> $GITHUB_ENV
+      - name: Run ccache action
+        uses: ./
+        id: restore-keys
+        with:
+          variant: ${{ matrix.variant }}
+          key: child-${{ env.RAND }}
+          restore-keys: |
+            parent
+      - name: Test restore-keys
+        run: |
+          [[ ${{ steps.restore-keys.outputs.test-cache-hit }} = true ]]
+
+  test_docker_ubuntu:
+    # Test that it works in a Docker container without sudo.
+    runs-on: ubuntu-latest
+    container: ubuntu:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt update
+        shell: bash
+      - name: Run ccache-action
+        uses: ./
+
+  test_docker_alpine:
+    # Test that it works in Alpine Docker container with apk package manager.
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: apk update
+        shell: sh
+      - name: Run ccache-action
+        uses: ./
+
+  test_option_save:
+    # Test that the 'save' option is available.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        save: [true, false]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ccache-action
+        uses: ./
+        with:
+          save: ${{ matrix.save }}
+
+  test_option_append_timestamp:
+    # Test that the 'append-timestamp' option is available.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        append-timestamp: [true, false]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ccache-action
+        uses: ./
+        with:
+          append-timestamp: ${{ matrix.append-timestamp }}
+
+  test_option_create_symlink:
+    # Test that the 'create-symlink' option is available.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        create-symlink: [true, false]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ccache-action
+        uses: ./
+        with:
+          create-symlink: ${{ matrix.create-symlink }}
+      - name: Test symlink
+        run: |
+          if [ ${{ matrix.create-symlink }} = true ]; then
+            ls -l $(which gcc) | grep $(which ccache)
+          else
+            ls -l $(which gcc) | grep -v $(which ccache)
+          fi
+
+  test_option_evict:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        evict: ['job', '30s', '']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ccache-action
+        uses: ./
+        with:
+          evict-old-files: ${{ matrix.evict }}

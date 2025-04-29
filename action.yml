@@ -1,0 +1,50 @@
+name: "Ccache for gh actions"
+description: "A GitHub Action that speeds up compiling for C/C++ projects using ccache."
+author: "Hendrik Muhs<hendrik.muhs@gmail.com>"
+inputs:
+  key:
+    description: "An additional key for the cache"
+    required: false
+  restore-keys:
+    description: "An ordered list of keys to use for restoring the cache if no cache hit occurred for key"
+    required: false
+  restore:
+    description: "Flag for if you should restore cache or not, useful for generating clean cache."
+    default: true
+    required: false
+  max-size:
+    description: "Max size of the cache"
+    default: "500M"
+  verbose:
+    description: "Verbosity level: 0 (default), 1 or 2. Ignore for sccache."
+    default: 0
+  variant:
+    description: 'Ccache variant to use. Either "ccache" (the default) or "sccache" (see https://github.com/mozilla/sccache)'
+    default: ccache
+  save:
+    description: "If 'false', do not save the cache, only restore."
+    default: true
+  append-timestamp:
+    description: "Append a timestamp to the cache key (default: true)"
+    default: true
+    required: false
+  create-symlink:
+    description: "If set to 'true', create symlinks for ccache in /usr/local/bin to override default toolchains"
+    default: false
+    required: false
+  job-summary:
+    description: "Publish stats as part of the job summary. Set to the title of the job summary section, or to the 
+     empty string to disable this feature. Requires CCache 4.10+"
+    default: 'CCache Statistics'
+  evict-old-files:
+    description: "Corresponds to the ccache --evict-older-than AGE option, where AGE is the number of seconds or days
+      followed by the 's' or 'd' suffix respectively. Also supports the special value 'job' which represents the time
+      since the job started, which evicts all cache files that were not touched during the job run."
+    default: ''
+runs:
+  using: "node20"
+  main: "dist/restore/index.js"
+  post: "dist/save/index.js"
+branding:
+  icon: "archive"
+  color: "gray-dark"
