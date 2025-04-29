@@ -176,8 +176,17 @@ async function installSccacheFromGitHub(version : string, artifactName : string,
 
 async function downloadAndExtract (url : string, srcFile : string, dstFile : string) {
   const dstDir = path.dirname(dstFile);
+  core.info(`dstFile ${dstFile} dstDir ${dstDir}`);
   if (!fs.existsSync(dstDir)) {
+    core.info("dstDir didn't exist");
     fs.mkdirSync(dstDir, { recursive: true });
+    if (!fs.existsSync(dstDir)) {
+      core.info("dstDir still doesn't exist");
+    } else {
+      core.info("dstDir now does exist");
+    }
+  } else {
+    core.info("dstDir did exist");
   }
   if (url.endsWith(".zip")) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), ""));
@@ -222,7 +231,9 @@ async function runInner() : Promise<void> {
       throw Error(`Unsupported platform: ${process.platform}`)
     }
     await installer();
+    core.info("install done, calling io.which");
     core.info(await io.which(ccacheVariant + ".exe"));
+    core.info("install done, calling io.which done");
     ccachePath = await io.which(ccacheVariant, true);
     core.endGroup();
   }
