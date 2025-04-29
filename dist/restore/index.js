@@ -7161,6 +7161,7 @@ function mkdirP(fsPath) {
     });
 }
 exports.mkdirP = mkdirP;
+var lib_core = __nccwpck_require__(7484);
 /**
  * Returns path of a tool had the tool actually been invoked.  Resolves via paths.
  * If you check and the tool does not exist, it will throw.
@@ -7188,6 +7189,7 @@ function which(tool, check) {
             return result;
         }
         const matches = yield findInPath(tool);
+        lib_core.info(`findInPath returned ${matches}`);
         if (matches && matches.length > 0) {
             return matches[0];
         }
@@ -7205,6 +7207,7 @@ function findInPath(tool) {
         if (!tool) {
             throw new Error("parameter 'tool' is required");
         }
+        lib_core.info(`findInPath ${tool}`);
         // build the list of extensions to try
         const extensions = [];
         if (ioUtil.IS_WINDOWS && process.env['PATHEXT']) {
@@ -7214,9 +7217,12 @@ function findInPath(tool) {
                 }
             }
         }
+        lib_core.info(`findInPath extensions ${extensions}`);
         // if it's rooted, return it if exists. otherwise return empty.
         if (ioUtil.isRooted(tool)) {
+            lib_core.info("isRooted");
             const filePath = yield ioUtil.tryGetExecutablePath(tool, extensions);
+            lib_core.info(`filePath ${filePath}`);
             if (filePath) {
                 return [filePath];
             }
@@ -7224,6 +7230,7 @@ function findInPath(tool) {
         }
         // if any path separators, return empty
         if (tool.includes(path.sep)) {
+            lib_core.info("tool includes path.sep");
             return [];
         }
         // build the list of directories
@@ -7236,15 +7243,18 @@ function findInPath(tool) {
         if (process.env.PATH) {
             for (const p of process.env.PATH.split(path.delimiter)) {
                 if (p) {
+                    lib_core.info(`p ${p}`);
                     directories.push(p);
                 }
             }
         }
+        lib_core.info(`directories ${directories}`);
         // find all matches
         const matches = [];
         for (const directory of directories) {
             const filePath = yield ioUtil.tryGetExecutablePath(path.join(directory, tool), extensions);
             if (filePath) {
+                lib_core.info(`match ${filePath}`);
                 matches.push(filePath);
             }
         }
