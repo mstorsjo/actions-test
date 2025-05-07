@@ -42,6 +42,12 @@ Darwin)
     MAKEOPTS="-O"
 esac
 
+if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+    # Detect running in WSL
+    export WSL=1
+    export TOOLEXT=.exe
+fi
+
 cd test
 
 HAVE_UWP=1
@@ -76,20 +82,91 @@ fi
 
 : ${TARGET_OSES:=${TOOLCHAIN_TARGET_OSES-$DEFAULT_OSES}}
 
-if [ -z "$RUN_X86_64" ] && [ -z "$RUN_I686" ]; then
-    case $(uname) in
-    MINGW*|MSYS*)
+set_native() {
+    arch="$1"
+    winbuild="$2"
+    case $arch in
+    i686)
         NATIVE_X86=1
-        RUN_X86_64=true
         RUN_I686=true
         ;;
-    *)
-        case $(uname -m) in
-        x86_64)
-            : ${RUN_X86_64:=wine}
-            : ${RUN_I686:=wine}
-            ;;
-        esac
+    x86_64)
+        NATIVE_X86=1
+        RUN_I686=true
+        RUN_X86_64=true
+        ;;
+    armv7)
+        ;;
+    aarch64)
+        # Windows/ARM64 can run i686 binaries. Not setting NATIVE_X86 - the
+        # asan tests don't run correctly when emulated on ARM64.
+        NATIVE_AARCH64=1
+        RUN_I686=true
+        RUN_AARCH64=true
+
+        if [ -n "$winbuild" ] && [ "$winbuild" -ge 22000 ]; then
+            # Since Windows 11, x86_64 binaries can also be emulated.
+            RUN_X86_64=true
+        fi
+        if [ -n "$winbuild" ] && [ "$winbuild" -lt 26100 ]; then
+            # Since Windows 11 24H2 armv7 binaries can no longer be
+            # executed. (It is also possible to be unable to run armv7
+            # binaries on older OS versions, if the hardware is incapable
+            # of it, like on Apple Silicon macs.)
+            NATIVE_ARMV7=1
+            RUN_ARMV7=true
+        fi
+        ;;
+    esac
+}
+
+# This script can be run in a number of configurations:
+# - On Linux, where one possibly can run tests on the local machine with wine
+#   (if available), and possibly also remotely running tests on a different
+#   machine with suitable COPY_*/RUN_* variables (wrapping scp/ssh).
+# - In WSL, running a native Windows toolchain.
+# - In an msys2 shell.
+
+if [ -z "$RUN_X86_64" ] && [ -z "$RUN_I686" ] && [ -z "$RUN_ARMV7" ] && [ -z "$RUN_AARCH64" ]; then
+    case $(uname) in
+    MINGW*|MSYS*|CYGWIN*)
+        # On Windows/arm64, we may be running x86_64 msys2 emulated, so we
+        # can't rely on "uname -m" here. But the msys2 "uname" output indicates
+        # the real host architecture, and the Windows build version.
+        if [ "$(uname | cut -d - -f 4)" = "ARM64" ]; then
+            winbuild="$(uname | cut -d - -f 3)"
+            set_native aarch64 $winbuild
+        elif [ "$(uname -m)" = "i686" ] && [ "$(uname | cut -d - -f 4)" != "WOW64" ]; then
+            set_native i686
+        else
+            set_native x86_64
+        fi
+        ;;
+    Linux)
+        if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+            # On WSL, inspect the architecture.
+            winbuild="$(PATH=$PATH:/mnt/c/Windows/System32 cmd.exe /c ver 2>/dev/null | cut -s -d . -f 3)"
+            set_native "$(uname -m)" "$winbuild"
+        elif command -v wine >/dev/null; then
+            # On Linux, use Wine if available. (On macOS, it's less clear
+            # what Wine can execute; it's most likely an x86_64 version
+            # emulated with Rosetta. Thus don't automatically use Wine on
+            # macOS.)
+            case $(uname -m) in
+            x86_64)
+                # Assume that Wine, if installed, supports both 32 and 64 bit
+                # binaries.
+                : ${RUN_X86_64:=wine}
+                : ${RUN_I686:=wine}
+                ;;
+            aarch64)
+                # Don't assume that the installed Wine can run armv7 binaries
+                # too. (Versions since Wine 10.2 can, if both an armv7 and
+                # aarch64 version is installed together.)
+                : ${RUN_AARCH64:=wine}
+                ;;
+            esac
+        fi
         ;;
     esac
 fi

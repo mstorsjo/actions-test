@@ -18,7 +18,7 @@ set -e
 
 : ${DEFAULT_WIN32_WINNT:=0x601}
 : ${DEFAULT_MSVCRT:=ucrt}
-: ${MINGW_W64_VERSION:=c67e9a7ab6d4551c65f7d81dccbd8826e4b5ad78}
+: ${MINGW_W64_VERSION:=dcbe86832f5c161ab70098ffb11b1e4955577140}
 
 CFGUARD_FLAGS="--enable-cfguard"
 
@@ -75,7 +75,7 @@ if command -v gmake >/dev/null; then
 fi
 
 case $(uname) in
-MINGW*|MSYS*)
+MINGW*|MSYS*|CYGWIN*)
     CRT_CONFIG_FLAGS="--disable-dependency-tracking"
     ;;
 esac
