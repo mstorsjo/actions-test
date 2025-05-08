@@ -221,7 +221,8 @@ if [ -n "$HOST" ]; then
         CMAKEFLAGS="$CMAKEFLAGS -DPython3_LIBRARIES=$PYTHON_LIB"
     fi
 elif [ -n "$STAGE2" ]; then
-    # Build using an earlier built and installed clang in the target directory
+    # Build using an earlier built and installed clang; potentially in the
+    # target directory.
     export PATH="$PREFIX/bin:$PATH"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=clang"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=clang++"
