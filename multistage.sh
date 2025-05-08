@@ -20,3 +20,6 @@ time docker build -f Dockerfile.stage1 . -t llvm-mingw:stage1
 
 docker run --rm llvm-mingw:stage1 sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm" > llvm-stage1.tar.xz
 
+time docker build -f Dockerfile.stage2 . -t llvm-mingw:stage2
+
+docker run --rm llvm-mingw:stage2 sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-stage2.tar.xz
