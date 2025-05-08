@@ -144,10 +144,19 @@ jobs:
   # libraries that were built in the 'linux' step above.
   linux-cross-aarch64:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [linux, prepare]
+    needs: [linux, linux-stage1, prepare]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-llvm-x86_64
+      - name: Unpack stage1 Clang
+        run: |
+          tar -Jxf llvm-*.tar.xz
+          rm llvm-*.tar.xz
+          sudo mv llvm* /opt/llvm
+          echo /opt/llvm/bin >> $GITHUB_PATH
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -155,7 +164,7 @@ jobs:
           SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
         run: |
           sudo apt-get update && sudo apt-get install ninja-build g++-aarch64-linux-gnu
-          ./build-all.sh $(pwd)/install/llvm-mingw --no-runtimes --host=aarch64-linux-gnu
+          ./build-all.sh $(pwd)/install/llvm-mingw --no-runtimes --host=aarch64-linux-gnu --stage2
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
       - uses: actions/download-artifact@v4
         with:
