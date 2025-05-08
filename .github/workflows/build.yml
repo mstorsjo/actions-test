@@ -237,7 +237,7 @@ jobs:
 
   # Build a cross compiler for macOS, targeting Windows.
   macos:
-    if: false
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     needs: [prepare]
     runs-on: macos-14
     steps:
