@@ -512,8 +512,6 @@ jobs:
         arch:
           - x86_64
           - i686
-          - armv7
-          - aarch64
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
       - name: Install dependencies
