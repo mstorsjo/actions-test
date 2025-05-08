@@ -11,5 +11,4 @@ python-native
 **/*.lib
 **/*.pdb
 **/*.a
-*.tar.xz
 *.zip
