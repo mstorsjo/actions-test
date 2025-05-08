@@ -34,10 +34,17 @@ RUN mkdir -p /opt && \
     cd /opt && \
     mv llvm-mingw* llvm-mingw-native
 
+COPY llvm-stage1.tar.xz ./
+RUN mkdir -p /opt && \
+    tar -Jxvf llvm-stage1.tar.xz -C /opt && \
+    rm llvm-stage1.tar.xz
+
+ENV PATH=/opt/llvm/bin:$PATH
+
 # Build everything that uses the llvm monorepo. We need to build the mingw runtime before the compiler-rt/libunwind/libcxxabi/libcxx runtimes.
 # TODO: Skip unused scripts here.
 COPY build-all.sh build-llvm.sh build-lldb-mi.sh strip-llvm.sh install-wrappers.sh build-mingw-w64.sh build-mingw-w64-tools.sh build-compiler-rt.sh build-libcxx.sh build-mingw-w64-libraries.sh build-openmp.sh prepare-cross-toolchain-unix.sh ./
 COPY wrappers/*.sh wrappers/*.c wrappers/*.h wrappers/*.cfg ./wrappers/
-RUN ./build-all.sh $TOOLCHAIN_PREFIX --no-runtimes --host=aarch64-linux-gnu && \
+RUN ./build-all.sh $TOOLCHAIN_PREFIX --no-runtimes --host=aarch64-linux-gnu --stage2 && \
     ./prepare-cross-toolchain-unix.sh /opt/llvm-mingw-native $TOOLCHAIN_PREFIX && \
     rm -rf /build/*
