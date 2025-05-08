@@ -8,8 +8,26 @@
 # platform, but just copies over the runtime libraries from the existing
 # toolchain in the base docker image.
 
-ARG BASE=mstorsjo/llvm-mingw:dev
-FROM $BASE
+FROM ubuntu:24.04
+
+RUN apt-get update -qq && \
+    DEBIAN_FRONTEND="noninteractive" apt-get install -qqy --no-install-recommends \
+    git wget bzip2 file unzip libtool pkg-config cmake build-essential \
+    automake nasm gettext autopoint vim-tiny python3 \
+    ninja-build ca-certificates curl less zip && \
+    apt-get clean -y && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt && \
+    cd /opt && \
+    curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250430/llvm-mingw-20250430-ucrt-ubuntu-22.04-x86_64.tar.xz && \
+    tar -Jxvf llvm-mingw-*.tar.xz && \
+    rm llvm-mingw-*.tar.xz && \
+    mv llvm-mingw* llvm-mingw
+
+ENV TOOLCHAIN_PREFIX=/opt/llvm-mingw
+
+ENV PATH=/opt/llvm-mingw/bin:$PATH
 
 RUN apt-get update -qq && \
     apt-get install -qqy libltdl-dev swig autoconf-archive && \
@@ -41,7 +59,7 @@ ARG FULL_LLVM
 
 COPY build-llvm.sh .
 RUN if [ -n "$WITH_PYTHON" ]; then ARG="--with-python"; fi && \
-    ./build-llvm.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST $ARG
+    ./build-llvm.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST $ARG --thinlto
 
 COPY build-lldb-mi.sh .
 RUN ./build-lldb-mi.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST
