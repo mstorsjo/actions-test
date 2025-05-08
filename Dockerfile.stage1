@@ -1,0 +1,27 @@
+FROM ubuntu:24.04
+
+RUN apt-get update -qq && \
+    DEBIAN_FRONTEND="noninteractive" apt-get install -qqy --no-install-recommends \
+    git wget bzip2 file unzip libtool pkg-config cmake build-essential \
+    automake nasm gettext autopoint vim-tiny python3 \
+    ninja-build ca-certificates curl less zip && \
+    apt-get clean -y && \
+    rm -rf /var/lib/apt/lists/*
+
+
+RUN git config --global user.name "LLVM MinGW" && \
+    git config --global user.email root@localhost
+
+WORKDIR /build
+
+ENV TOOLCHAIN_PREFIX=/opt/llvm
+
+# TODO: This could use a --native-only option for only building the host
+# target. But being able to cross compile from x86_64 linux to aarch64 linux
+# may also be useful.
+COPY build-llvm.sh strip-llvm.sh ./
+RUN ./build-llvm.sh $TOOLCHAIN_PREFIX --disable-lldb --disable-clang-tools-extra && \
+    ./strip-llvm.sh $TOOLCHAIN_PREFIX && \
+    rm -rf /build/*
+
+ENV PATH=$TOOLCHAIN_PREFIX/bin:$PATH
