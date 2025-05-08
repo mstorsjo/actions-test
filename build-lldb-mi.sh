@@ -75,7 +75,7 @@ export LLVM_DIR="$PREFIX"
 LLVM_SRC="$(pwd)/llvm-project/llvm"
 if [ -d "$LLVM_SRC" ]; then
     SUFFIX=${HOST+-}$HOST
-    for base in build build-asserts; do
+    for base in build build-asserts build-pgo build-thinlto build-thinlto-pgo build-withclang build-withclang-pgo build-withclang-thinlto build-withclang-thinlto-pgo; do
         if [ -d "$LLVM_SRC/$base$SUFFIX" ]; then
             export LLVM_DIR="$LLVM_SRC/$base$SUFFIX"
             break
