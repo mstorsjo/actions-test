@@ -35,7 +35,7 @@ RUN ./build-compiler-rt.sh --native /opt/llvm
 # Build everything that uses the llvm monorepo. We need to build the mingw runtime before the compiler-rt/libunwind/libcxxabi/libcxx runtimes.
 COPY build-llvm.sh build-lldb-mi.sh strip-llvm.sh install-wrappers.sh build-mingw-w64.sh build-mingw-w64-tools.sh build-compiler-rt.sh build-libcxx.sh build-mingw-w64-libraries.sh build-openmp.sh ./
 COPY wrappers/*.sh wrappers/*.c wrappers/*.h wrappers/*.cfg ./wrappers/
-RUN LLVM_PROFILE_DATA_DIR=/tmp/llvm-profiles ./build-llvm.sh $TOOLCHAIN_PREFIX --stage2 --thinlto --instrumented=IR && \
+RUN LLVM_PROFILE_DATA_DIR=/tmp/llvm-profiles ./build-llvm.sh $TOOLCHAIN_PREFIX --stage2 --thinlto --instrumented=Frontend && \
     ./build-lldb-mi.sh $TOOLCHAIN_PREFIX && \
     ./strip-llvm.sh $TOOLCHAIN_PREFIX && \
     ./install-wrappers.sh $TOOLCHAIN_PREFIX && \
