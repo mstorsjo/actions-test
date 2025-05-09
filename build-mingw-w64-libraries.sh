@@ -68,7 +68,7 @@ for lib in winpthreads winstorecompat; do
             CFLAGS="$USE_CFLAGS" \
             CXXFLAGS="$USE_CFLAGS"
         $MAKE -j$CORES
-        $MAKE install
+        $MAKE install-strip
         cd ..
         mkdir -p "$arch_prefix/share/mingw32"
         install -m644 COPYING "$arch_prefix/share/mingw32/COPYING.${lib}.txt"
