@@ -292,6 +292,17 @@ if [ -z "$HOST" ] && [ "$(uname)" = "Darwin" ]; then
         # This silences a cmake warning.
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_USE_SYSTEM_DEBUGSERVER=ON"
     fi
+    if [ -n "$STAGE2" ] && [ -n "$LTO" ]; then
+        # If doing LTO, we need to make sure other related tools are used.
+        # CMAKE_LIBTOOL is not a standard cmake tool, but an LLVM specific thing.
+        # It defaults to looking up the tool with xcrun rather than looking in
+        # paths first.
+        # We also need to provide a tool named "lipo" in the PATH (this is invoked
+        # by Clang directly, so we can't specify it here unless we pass in the
+        # option "-fuse-lipo="). We could also need to specify LLVM_AR and LLVM_RANLIB
+        # if LLVM wasn't using libtool instead.
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_LIBTOOL=$(command -v llvm-libtool-darwin)"
+    fi
 fi
 
 TOOLCHAIN_ONLY=ON
