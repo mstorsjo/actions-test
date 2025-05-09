@@ -24,6 +24,7 @@ LINK_DYLIB=ON
 ASSERTSSUFFIX=""
 LLDB=ON
 CLANG_TOOLS_EXTRA=ON
+INSTRUMENTED=OFF
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -68,6 +69,16 @@ while [ $# -gt 0 ]; do
     --no-llvm-tool-reuse)
         NO_LLVM_TOOL_REUSE=1
         ;;
+    --instrumented=*)
+        INSTRUMENTED="${1#*=}"
+        BUILDDIR="$BUILDDIR-instrumented"
+        : ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
+        ;;
+    --profile=*)
+        LLVM_PROFDATA_FILE="${1#*=}"
+        LLVM_PROFDATA_FILE="$(cd "$(dirname "$LLVM_PROFDATA_FILE")" && pwd)/$(basename "$LLVM_PROFDATA_FILE")"
+        BUILDDIR="$BUILDDIR-pgo"
+        ;;
     *)
         PREFIX="$1"
         ;;
@@ -77,7 +88,7 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
+        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented=type] [--profile=profile] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
         exit 1
     fi
 
@@ -336,10 +347,20 @@ cmake \
     -DLLVM_LINK_LLVM_DYLIB=$LINK_DYLIB \
     -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf;llvm-size;llvm-cxxfilt;llvm-lib" \
     ${HOST+-DLLVM_HOST_TRIPLE=$HOST} \
+    -DLLVM_BUILD_INSTRUMENTED=$INSTRUMENTED \
+    ${LLVM_PROFILE_DATA_DIR+-DLLVM_PROFILE_DATA_DIR=$LLVM_PROFILE_DATA_DIR} \
+    ${LLVM_PROFDATA_FILE+-DLLVM_PROFDATA_FILE=$LLVM_PROFDATA_FILE} \
     $CMAKEFLAGS \
     ..
 
-cmake --build . ${CORES:+-j${CORES}}
-cmake --install . --strip
+if [ "$INSTRUMENTED" != "OFF" ]; then
+    if [ "$LINK_DYLIB" = "ON" ]; then
+        EXTRATARGETS="install-clang-cpp install-LLVM"
+    fi
+    ninja install-clang install-lld install-llvm-ar install-llvm-ranlib $EXTRATARGETS
+else
+    cmake --build . ${CORES:+-j${CORES}}
+    cmake --install . --strip
+fi
 
 cp ../LICENSE.TXT $PREFIX
