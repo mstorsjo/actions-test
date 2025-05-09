@@ -20,6 +20,11 @@ time docker build -f Dockerfile.stage1 . -t llvm-mingw:stage1
 
 docker run --rm llvm-mingw:stage1 sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm" > llvm-stage1.tar.xz
 
-time docker build -f Dockerfile.stage2 . -t llvm-mingw:stage2
+#time docker build -f Dockerfile.stage2 . -t llvm-mingw:stage2
 
-docker run --rm llvm-mingw:stage2 sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-stage2.tar.xz
+#docker run --rm llvm-mingw:stage2 sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-stage2.tar.xz
+
+time docker build -f Dockerfile.profile . -t llvm-mingw:profile
+
+docker run --rm llvm-mingw:profile sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-profile.tar.xz
+./extract-docker.sh llvm-mingw:profile profile.profdata
