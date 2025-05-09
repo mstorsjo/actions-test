@@ -17,4 +17,5 @@ jobs:
     steps:
       - name: Inspect the SDK
         run: |
+          uname -a
           echo MAC_OS_X_VERSION_MAX_ALLOWED | clang -E -P -include AvailabilityMacros.h -
