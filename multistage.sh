@@ -31,3 +31,6 @@ docker run --rm llvm-mingw:profile sh -c "cd /opt && tar -Jcvf - --format=ustar 
 
 time docker build -f Dockerfile.pgo . -t llvm-mingw:pgo
 docker run --rm llvm-mingw:pgo sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-pgo.tar.xz
+
+time docker build -f Dockerfile.cross . -t llvm-mingw:cross
+./extract-docker.sh llvm-mingw:cross /llvm-mingw-x86_64.zip
