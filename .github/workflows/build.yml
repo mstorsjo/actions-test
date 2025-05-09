@@ -271,15 +271,13 @@ jobs:
   # Build a cross compiler for macOS, targeting Windows.
   macos:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
-    needs: [prepare, macos-stage1]
+    needs: [prepare]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-llvm
       - name: Unpack stage1 Clang
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250430/llvm-mingw-20250430-ucrt-macos-universal.tar.xz
           tar -Jxf llvm-*.tar.xz
           rm llvm-*.tar.xz
           mv llvm* $HOME/llvm
