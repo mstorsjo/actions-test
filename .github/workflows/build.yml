@@ -226,7 +226,7 @@ jobs:
   # environments). The binaries built here rely on the runtime libraries from
   # the host environment (libstdc++ or libc++).
   msys2:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     needs: [prepare]
     runs-on: windows-latest
     defaults:
