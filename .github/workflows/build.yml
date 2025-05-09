@@ -623,7 +623,7 @@ jobs:
   # compiler itself, but that only show up at runtime. This is only done
   # for scheduled builds.
   test-ffmpeg:
-    if: (github.event_name == 'schedule') && (github.repository == 'mstorsjo/llvm-mingw')
+    if: true
     needs: [linux-cross-windows]
     runs-on: windows-latest
     defaults:
