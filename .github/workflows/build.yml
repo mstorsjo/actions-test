@@ -664,7 +664,7 @@ jobs:
           export PATH=/llvm-mingw/bin:$PATH
           mkdir ffmpeg-build
           cd ffmpeg-build
-          ../ffmpeg/configure --samples=../fate-samples --enable-gpl
+          ../ffmpeg/configure --samples=../fate-samples --enable-gpl --disable-w32threads --enable-pthreads --extra-cflags=-mguard=cf
           make -j$(nproc)
           make fate-rsync
           make -j$(nproc) fate
