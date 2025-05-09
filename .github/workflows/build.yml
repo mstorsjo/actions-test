@@ -282,6 +282,8 @@ jobs:
           rm llvm-*.tar.xz
           mv llvm* $HOME/llvm
           echo $HOME/llvm/bin >> $GITHUB_PATH
+          cd $HOME/llvm/bin
+          ln -sf lld ld64.lld
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
