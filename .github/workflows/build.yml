@@ -284,6 +284,8 @@ jobs:
           rm llvm-*.tar.xz
           mv llvm* $HOME/llvm
           echo $HOME/llvm/bin >> $GITHUB_PATH
+          cd $HOME/llvm/bin
+          ln -sf llvm-lipo lipo
       - name: Build compiler-rt for the stage1 toolchain
         run: |
           ./build-compiler-rt.sh --native $HOME/llvm
