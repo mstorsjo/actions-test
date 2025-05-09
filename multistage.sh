@@ -28,3 +28,6 @@ time docker build -f Dockerfile.profile . -t llvm-mingw:profile
 
 docker run --rm llvm-mingw:profile sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-profile.tar.xz
 ./extract-docker.sh llvm-mingw:profile profile.profdata
+
+time docker build -f Dockerfile.pgo . -t llvm-mingw:pgo
+docker run --rm llvm-mingw:pgo sh -c "cd /opt && tar -Jcvf - --format=ustar --numeric-owner --owner=0 --group=0 llvm-mingw" > llvm-mingw-pgo.tar.xz
