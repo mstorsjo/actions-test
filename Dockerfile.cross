@@ -18,12 +18,10 @@ RUN apt-get update -qq && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
+COPY llvm-mingw-pgo.tar.xz ./
 RUN mkdir -p /opt && \
-    cd /opt && \
-    curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250430/llvm-mingw-20250430-ucrt-ubuntu-22.04-x86_64.tar.xz && \
-    tar -Jxvf llvm-mingw-*.tar.xz && \
-    rm llvm-mingw-*.tar.xz && \
-    mv llvm-mingw* llvm-mingw
+    tar -Jxvf llvm-mingw-pgo.tar.xz -C /opt && \
+    rm llvm-mingw-pgo.tar.xz
 
 ENV TOOLCHAIN_PREFIX=/opt/llvm-mingw
 
@@ -57,9 +55,11 @@ RUN if [ -n "$WITH_PYTHON" ]; then \
 
 ARG FULL_LLVM
 
+COPY profile.profdata ./
+
 COPY build-llvm.sh .
 RUN if [ -n "$WITH_PYTHON" ]; then ARG="--with-python"; fi && \
-    ./build-llvm.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST $ARG --thinlto
+    LLVM_PROFDATA_FILE=$(pwd)/profile.profdata ./build-llvm.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST $ARG --thinlto
 
 COPY build-lldb-mi.sh .
 RUN ./build-lldb-mi.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST
