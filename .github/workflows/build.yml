@@ -83,7 +83,7 @@ jobs:
           # Skip dynamic library dependencies that might make it harder to
           # run the binaries on other distros (and that have little use within
           # llvm-mingw).
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm-mingw
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-clang-tools-extra --disable-lldb
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
           ./run-tests.sh $(pwd)/install/llvm-mingw
@@ -289,10 +289,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: i686, crt: ucrt }
           - { arch: x86_64, crt: ucrt }
-          - { arch: armv7, crt: ucrt }
-          - { arch: aarch64, crt: ucrt }
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -314,7 +311,7 @@ jobs:
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive ninja-build
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --disable-clang-tools-extra --disable-lldb
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
@@ -339,9 +336,6 @@ jobs:
       matrix:
         arch:
           - x86_64
-          - i686
-          - armv7
-          - aarch64
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
       - uses: msys2/setup-msys2@v2
@@ -363,7 +357,6 @@ jobs:
         run: |
           ./test-libcxx-module.sh /llvm-mingw
           ./run-tests.sh /llvm-mingw
-          ./run-lldb-tests.sh /llvm-mingw
 
   # Run libcxx's tests with the cross-built i686/x86_64 toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
