@@ -284,6 +284,9 @@ jobs:
           echo $HOME/llvm/bin >> $GITHUB_PATH
           cd $HOME/llvm/bin
           ln -sf lld ld64.lld
+      - name: Build compiler-rt for the stage1 toolchain
+        run: |
+          ./build-compiler-rt.sh --native $HOME/llvm
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
