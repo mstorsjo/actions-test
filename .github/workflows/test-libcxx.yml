@@ -55,17 +55,9 @@ jobs:
       - name: Install dependencies
         run: |
           choco install ninja
-      - name: Download toolchain
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: build.yml
-          workflow_conclusion: success
-          commit:
-          branch: master
-          event: schedule
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-pgo-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
