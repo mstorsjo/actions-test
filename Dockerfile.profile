@@ -57,10 +57,5 @@ RUN curl -LO https://sqlite.org/2025/sqlite-amalgamation-3480000.zip && \
     rm sqlite-*.zip && \
     mv sqlite-* sqlite
 
-RUN rm -rf /tmp/llvm-profiles && \
-    for arch in i686 x86_64 armv7 aarch64; do \
-        $arch-w64-mingw32-clang -O3 sqlite/sqlite3.c sqlite/shell.c -o sqlite3-$arch.exe && \
-        $arch-w64-mingw32-clang++ -O3 test/hello-exception.cpp -o hello-exception-$arch.exe; \
-    done && \
-    llvm-profdata merge -output profile.profdata /tmp/llvm-profiles/*.profraw && \
-    ls -lh profile.profdata
+COPY train-profile.sh ./
+RUN LLVM_PROFILE_DATA_DIR="/tmp/llvm-profiles" ./train-profile.sh $TOOLCHAIN_PREFIX
