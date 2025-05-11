@@ -1,8 +1,7 @@
 #1/bin/sh
 set -ex
-#./build-llvm-local.sh $HOME/clang-stage1
 rm -rf $HOME/clang-stage1
-./build-all.sh $HOME/clang-stage1 --disable-lldb --disable-clang-tools-extra
+COMPILER_LAUNCHER=ccache LLVM_CMAKEFLAGS="-DLLVM_USE_RELATIVE_PATHS_IN_FILES=ON" ./build-all.sh $HOME/clang-stage1 --disable-lldb --disable-clang-tools-extra
 time ./build-compiler-rt.sh --native $HOME/clang-stage1
 rm -rf $HOME/clang-profile
 time cp -a $HOME/clang-stage1 $HOME/clang-profile
