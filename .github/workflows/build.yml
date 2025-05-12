@@ -5,9 +5,40 @@ on:
       - '**'
 
 jobs:
-  inspect:
-    runs-on: ubuntu-24.04-arm
+  inspect-unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - ubuntu-latest
+          - ubuntu-22.04-arm
+          - ubuntu-24.04-arm
+          - macos-13
+          - macos-14
+          - macos-15
+          - macos-latest
+    runs-on: ${{matrix.runner}}
     steps:
-      - name: Inspect cpuinfo
+      - name: Inspect ninja
         run: |
-          cat /proc/cpuinfo
+          ninja --version
+          which ninja
+
+  inspect-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - windows-2019
+          - windows-2022
+          - windows-2025
+          - windows-11-arm
+    runs-on: ${{matrix.runner}}
+    steps:
+      - name: Inspect ninja
+        shell: cmd
+        run: |
+          ninja --version
+          where ninja
