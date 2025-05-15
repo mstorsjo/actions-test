@@ -23,6 +23,7 @@ jobs:
     steps:
       - name: Inspect ninja
         run: |
+          pwd
           ninja --version
           which ninja
 
@@ -40,5 +41,6 @@ jobs:
       - name: Inspect ninja
         shell: cmd
         run: |
+          cd
           ninja --version
           where ninja
