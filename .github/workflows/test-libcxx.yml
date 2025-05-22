@@ -57,7 +57,7 @@ jobs:
           choco install ninja
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-pgo-ucrt-${{matrix.arch}}.zip
+          curl -LO https://martin.st/temp/llvm-mingw-pgo2-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
