@@ -350,6 +350,8 @@ jobs:
       - name: Run tests
         shell: cmd
         run: |
+          arm64ec-w64-mingw32-gcc test/crt-test.c -o crt-test.exe
+          crt-test.exe
           arm64ec-w64-mingw32-gcc test/crt-test.c -o crt-test-no-builtin.exe -fno-builtin
           crt-test-no-builtin.exe
 
