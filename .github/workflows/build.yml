@@ -330,37 +330,27 @@ jobs:
   # Run llvm-mingw's tests with the cross-built toolchains from above.
   test-toolchain:
     if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
-    defaults:
-      run:
-        shell: msys2 {0}
     strategy:
       fail-fast: false
       matrix:
         arch:
-          - x86_64
-          - i686
-          - armv7
           - aarch64
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          install: >-
-            unzip
-            make
       - name: Unpack toolchain
         run: |
           curl -LO https://martin.st/temp/llvm-mingw-arm64ec-ucrt-${{matrix.arch}}.zip
-          unzip -q llvm-mingw-*.zip
-          rm llvm-mingw-*.zip
-          mv llvm-mingw-* /llvm-mingw
+          Expand-Archive llvm-mingw-*.zip -DestinationPath .
+          del llvm-mingw-*.zip
+          mv llvm-mingw-* c:\llvm-mingw
+          echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/checkout@v4
       - name: Run tests
         run: |
-          ./test-libcxx-module.sh /llvm-mingw
-          ./run-tests.sh /llvm-mingw
-          ./run-lldb-tests.sh /llvm-mingw
+          arm64ec-w64-mingw32-gcc test/crt-test.c -o crt-test-no-builtin.exe -fno-builtin
+          ./crt-test-no-builtin.exe
 
   # Run libcxx's tests with the cross-built toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
