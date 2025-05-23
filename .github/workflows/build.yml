@@ -348,9 +348,10 @@ jobs:
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/checkout@v4
       - name: Run tests
+        shell: cmd
         run: |
           arm64ec-w64-mingw32-gcc test/crt-test.c -o crt-test-no-builtin.exe -fno-builtin
-          ./crt-test-no-builtin.exe
+          crt-test-no-builtin.exe
 
   # Run libcxx's tests with the cross-built toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
