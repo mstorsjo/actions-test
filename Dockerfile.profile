@@ -57,5 +57,5 @@ RUN curl -LO https://sqlite.org/2025/sqlite-amalgamation-3480000.zip && \
     rm sqlite-*.zip && \
     mv sqlite-* sqlite
 
-COPY train-profile.sh ./
-RUN LLVM_PROFILE_DATA_DIR="/tmp/llvm-profiles" ./train-profile.sh $TOOLCHAIN_PREFIX
+COPY pgo-training.sh ./
+RUN LLVM_PROFILE_DATA_DIR="/tmp/llvm-profiles" ./pgo-training.sh $TOOLCHAIN_PREFIX
