@@ -374,7 +374,7 @@ jobs:
     # testing with the latest compiler instead of an older release).
     # Therefore, keep the test disabled by default; it's easy to enable
     # temporarily on a branch for testing.
-    if: true
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -504,7 +504,7 @@ jobs:
   # also forces testing the bundled python executables.
   test-compiler-rt:
     # Only running these tests in scheduled builds.
-    if: true
+    if: false
     strategy:
       fail-fast: false
       matrix:
