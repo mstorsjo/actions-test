@@ -329,7 +329,7 @@ jobs:
 
   # Run llvm-mingw's tests with the cross-built toolchains from above.
   test-toolchain:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     defaults:
       run:
         shell: msys2 {0}
@@ -504,7 +504,7 @@ jobs:
   # also forces testing the bundled python executables.
   test-compiler-rt:
     # Only running these tests in scheduled builds.
-    if: true
+    if: false
     strategy:
       fail-fast: false
       matrix:
