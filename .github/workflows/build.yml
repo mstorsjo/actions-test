@@ -1,8 +1,6 @@
 name: Builds
 on:
   pull_request:
-  schedule:
-    - cron: '0 0 * * *'
 
 permissions:
   contents: read
