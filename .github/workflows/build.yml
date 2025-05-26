@@ -361,7 +361,7 @@ jobs:
           uname -m
           uname -a
           echo $MSYSTEM_CARCH
-          env
+          ls $MINGW_PREFIX/bin
 
   # Run libcxx's tests with the cross-built i686/x86_64 toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
