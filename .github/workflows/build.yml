@@ -353,6 +353,8 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{matrix.msystem}}
+          pacboy: >-
+            toolchain:p
       - name: Inspect uname
         run: |
           set -x
@@ -362,6 +364,8 @@ jobs:
           uname -a
           echo $MSYSTEM_CARCH
           ls $MINGW_PREFIX/bin
+          which cc
+          cc --version
 
   # Run libcxx's tests with the cross-built i686/x86_64 toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
