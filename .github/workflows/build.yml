@@ -337,25 +337,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - x86_64
-          - i686
-          - armv7
-          - aarch64
-    runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
+        include:
+          - { runner: 'windows-latest', msystem: mingw32 }
+          - { runner: 'windows-latest', msystem: mingw64 }
+          - { runner: 'windows-latest', msystem: ucrt64 }
+          - { runner: 'windows-latest', msystem: clang64 }
+          - { runner: 'windows-latest', msystem: clangarm64 }
+          - { runner: 'windows-latest', msystem: msys }
+          - { runner: 'windows-11-arm', msystem: mingw32 }
+          - { runner: 'windows-11-arm', msystem: mingw64 }
+          - { runner: 'windows-11-arm', msystem: clangarm64 }
+          - { runner: 'windows-11-arm', msystem: msys }
+    runs-on: ${{matrix.runner}}
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: clangarm64
-          install: >-
-            unzip
-            make
+          msystem: ${{matrix.msystem}}
       - name: Inspect uname
         run: |
           set -x
           uname
+          uname -s
           uname -m
           uname -a
+          echo $MSYSTEM_CARCH
+          env
 
   # Run libcxx's tests with the cross-built i686/x86_64 toolchains from above.
   # (This builds its own copy of libcxx, but it should be pretty much
