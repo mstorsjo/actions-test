@@ -14,25 +14,29 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+CFLAGS = --sysroot=$(STAGE1) -resource-dir=$(shell $(STAGE1)/bin/clang --print-resource-dir) --config-user-dir=$(STAGE1)/bin
+CC = $(PREFIX)/bin/clang
+CXX = $(PREFIX)/bin/clang++
+
 hello-exception-%.exe: test/hello-exception.cpp
-	$*-w64-mingw32-clang++ $+ -o $@
+	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@
 
 hello-exception-opt-%.exe: test/hello-exception.cpp
-	$*-w64-mingw32-clang++ $+ -o $@ -O3
+	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -O3
 
 sqlite-%.exe: $(SQLITE)/sqlite3.c $(SQLITE)/shell.c
-	$*-w64-mingw32-clang $+ -o $@
+	$(CC) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@
 
 sqlite-opt-%.exe: $(SQLITE)/sqlite3.c $(SQLITE)/shell.c
-	$*-w64-mingw32-clang $+ -o $@ -O3
+	$(CC) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -O3
 
 LIBCXXTEST = llvm-project/libcxx/test/std/algorithms/alg.sorting/alg.sort/sort/sort.pass.cpp
 
 libcxxtest-%.exe: $(LIBCXXTEST)
-	$*-w64-mingw32-clang++ $+ -o $@ -Illvm-project/libcxx/test/support
+	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -Illvm-project/libcxx/test/support
 
 libcxxtest-opt-%.exe: $(LIBCXXTEST)
-	$*-w64-mingw32-clang++ $+ -o $@ -Illvm-project/libcxx/test/support -O3
+	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -Illvm-project/libcxx/test/support -O3
 
 ARCHS ?= i686 x86_64 armv7 aarch64
 

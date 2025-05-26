@@ -21,13 +21,13 @@ set -ex
 
 : ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
 
-if [ $# -lt 1 ]; then
-    echo $0 dest
+if [ $# -lt 2 ]; then
+    echo $0 build stage1
     exit 1
 fi
 PREFIX="$1"
+STAGE1="$2"
 PREFIX="$(cd "$PREFIX" && pwd)"
-export PATH=$PREFIX/bin:$PATH
 
 MAKE=make
 if command -v gmake >/dev/null; then
@@ -54,8 +54,8 @@ if [ ! -d $SQLITE ]; then
 fi
 
 rm -rf "$LLVM_PROFILE_DATA_DIR"
-$MAKE -f pgo-training.make SQLITE=$SQLITE clean
-$MAKE -f pgo-training.make SQLITE=$SQLITE -j$CORES
+$MAKE -f pgo-training.make PREFIX=$PREFIX STAGE1=$STAGE1 SQLITE=$SQLITE clean
+$MAKE -f pgo-training.make PREFIX=$PREFIX STAGE1=$STAGE1 SQLITE=$SQLITE -j$CORES
 
 rm -f profile.profdata
-llvm-profdata merge -output profile.profdata $LLVM_PROFILE_DATA_DIR/*.profraw
+$STAGE1/bin/llvm-profdata merge -output profile.profdata $LLVM_PROFILE_DATA_DIR/*.profraw
