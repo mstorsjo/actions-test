@@ -36,6 +36,26 @@ jobs:
       # Intentionally not storing any artifacts with the downloaded tools;
       # the installed files aren't redistributable!
 
+  test-msvc-wine-linux-arm:
+    runs-on: ubuntu-24.04-arm
+    container: ghcr.io/mstorsjo/wine
+    steps:
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update && sudo apt-get install python3 msitools ca-certificates cmake ninja-build winbind meson
+          WINE=$(command -v wine64 || command -v wine || false)
+          $WINE wineboot
+      - uses: actions/checkout@v4
+      - name: Download MSVC
+        run: |
+          ./vsdownload.py --accept-license --dest $(pwd)/msvc
+          ./install.sh $(pwd)/msvc
+      - name: Test using the installed tools
+        run: |
+          test/test.sh $(pwd)/msvc
+      # Intentionally not storing any artifacts with the downloaded tools;
+      # the installed files aren't redistributable!
+
   test-msvc-wine-macos:
     runs-on: macos-latest
     steps:
