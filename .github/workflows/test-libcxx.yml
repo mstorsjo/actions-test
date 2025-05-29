@@ -22,7 +22,7 @@ on:
 
 jobs:
   prepare:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     runs-on: ubuntu-latest
     outputs:
       LLVM_VERSION: ${{steps.get-parameters.outputs.LLVM_VERSION}}
@@ -44,7 +44,7 @@ jobs:
           cat $GITHUB_OUTPUT
 
   test-libcxx:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     needs: [prepare]
     strategy:
       fail-fast: false
