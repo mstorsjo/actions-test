@@ -30,6 +30,7 @@ jobs:
       - name: Download build parameters
         uses: dawidd6/action-download-artifact@v6
         with:
+          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
           commit: ${{github.event_name != 'schedule' && inputs.commit || ''}}
@@ -61,6 +62,7 @@ jobs:
       - name: Download toolchain
         uses: dawidd6/action-download-artifact@v6
         with:
+          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
           commit: ${{github.event_name != 'schedule' && inputs.commit || ''}}
