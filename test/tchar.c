@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Martin Storsjo
+ * Copyright (c) 2025 Martin Storsjo
  *
  * This file is part of llvm-mingw.
  *
@@ -16,28 +16,34 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-// Test that clang-scan-deps can locate c++ standard library headers
-#include <version>
+#ifdef UNICODE
+#define _UNICODE
+#endif
 
-// Test that we have set the expected architecture defines.
-#if defined(__x86_64__) && !defined(__arm64ec__)
-#ifndef EXPECT_x86_64
-#include <intentionally-missing-header>
-#endif
-#elif defined(__i386__)
-#ifndef EXPECT_i686
-#include <intentionally-missing-header>
-#endif
-#elif defined(__aarch64__)
-#ifndef EXPECT_aarch64
-#include <intentionally-missing-header>
-#endif
-#elif defined(__arm__)
-#ifndef EXPECT_armv7
-#include <intentionally-missing-header>
-#endif
-#elif defined(__arm64ec__)
-#ifndef EXPECT_arm64ec
-#include <intentionally-missing-header>
-#endif
-#endif
+#include <stdio.h>
+#include <tchar.h>
+
+int _tmain(int argc, TCHAR* argv[]) {
+    _tprintf(_T("_tprintf\n"));
+    _ftprintf(stdout, _T("_ftprintf\n"));
+
+    TCHAR buffer[100];
+    _stprintf(buffer, _T("foo %d"), 123);
+    if (_tcscmp(buffer, _T("foo 123"))) {
+        _tprintf(_T("incorrect _stprintf output\n"));
+        return 1;
+    }
+    _stprintf(buffer, _T("str %s"), _T("arg"));
+    if (_tcscmp(buffer, _T("str arg"))) {
+        _tprintf(_T("incorrect _stprintf output for %%s\n"));
+        return 1;
+    }
+
+    int val;
+    if (_stscanf(_T("123"), _T("%d"), &val) != 1 || val != 123) {
+        _tprintf(_T("incorrect _stscanf output\n"));
+        return 1;
+    }
+
+    return 0;
+}
