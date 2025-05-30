@@ -122,13 +122,12 @@ jobs:
           SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
-          # Skip dynamic library dependencies that might make it harder to
-          # run the binaries on other distros (and that have little use within
-          # llvm-mingw).
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-llvm.sh $(pwd)/install/llvm-mingw --with-clang --disable-dylib --instrumented=Frontend --disable-lldb --disable-clang-tools-extra
+          # Build LLVM in mostly the same way as it is going to be built in the
+          # final form.
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-llvm.sh /tmp/clang-profile-dummy --with-clang --disable-dylib --instrumented=Frontend --disable-lldb --disable-clang-tools-extra
       - name: Train the compiler
         run: |
-          ./pgo-training.sh $(pwd)/install/llvm-mingw /opt/llvm-mingw
+          ./pgo-training.sh llvm-project/llvm/build-instrumented /opt/llvm-mingw
       - uses: actions/upload-artifact@v4
         with:
           name: profile
