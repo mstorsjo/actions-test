@@ -31,5 +31,7 @@ time (export PATH=$HOME/clang-stage1/bin:$PATH; CLEAN=1 ./build-llvm.sh $HOME/cl
 # CLEAN=1 for later stages
 # unset COMPILER_LAUNCHER after first step
 
+# TODO: stage1 for macos?
+
 # fold -DLLVM_USE_RELATIVE_PATHS_IN_FILES into build-llvm.sh
 
