@@ -317,6 +317,12 @@ if [ -z "$HOST" ] && [ "$(uname)" = "Darwin" ]; then
     fi
 fi
 
+if [ "$INSTRUMENTED" != "OFF" ]; then
+    # For instrumented build, use a hardcoded builddir that we can
+    # locate, and don't install the built files.
+    BUILDDIR="build-instrumented"
+fi
+
 TOOLCHAIN_ONLY=ON
 if [ -n "$FULL_LLVM" ]; then
     TOOLCHAIN_ONLY=OFF
@@ -354,10 +360,9 @@ cmake \
     ..
 
 if [ "$INSTRUMENTED" != "OFF" ]; then
-    if [ "$LINK_DYLIB" = "ON" ]; then
-        EXTRATARGETS="install-clang-cpp install-LLVM"
-    fi
-    ninja install-clang install-lld install-llvm-ar install-llvm-ranlib $EXTRATARGETS
+    # For instrumented builds, don't install the built files (so $PREFIX
+    # is entirely unused).
+    cmake --build . ${CORES:+-j${CORES}} --target clang --target lld
 else
     cmake --build . ${CORES:+-j${CORES}}
     cmake --install . --strip
