@@ -81,7 +81,7 @@ jobs:
           # Skip dynamic library dependencies that might make it harder to
           # run the binaries on other distros (and that have little use within
           # llvm-mingw).
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --disable-lldb --disable-clang-tools-extra
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --stage1
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
           ./run-tests.sh $(pwd)/install/llvm-mingw
@@ -110,11 +110,7 @@ jobs:
         run: |
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Build compiler-rt for the stage1 toolchain
-        run: |
-          ./build-compiler-rt.sh --native /opt/llvm-mingw
+          mv llvm-mingw* llvm-mingw-stage1
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -124,10 +120,7 @@ jobs:
         run: |
           # Build LLVM in mostly the same way as it is going to be built in the
           # final form.
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-llvm.sh /tmp/clang-profile-dummy --with-clang --disable-dylib --instrumented=Frontend --disable-lldb --disable-clang-tools-extra
-      - name: Train the compiler
-        run: |
-          ./pgo-training.sh llvm-project/llvm/build-instrumented /opt/llvm-mingw
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh --profile $(pwd)/llvm-mingw-stage1
       - uses: actions/upload-artifact@v4
         with:
           name: profile
@@ -149,8 +142,7 @@ jobs:
         run: |
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+          mv llvm-mingw* llvm-mingw-stage1
       - uses: actions/download-artifact@v4
         with:
           name: profile
@@ -161,14 +153,10 @@ jobs:
           SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
-          mkdir -p install
-          cp -a /opt/llvm-mingw install
           # Skip dynamic library dependencies that might make it harder to
           # run the binaries on other distros (and that have little use within
           # llvm-mingw).
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-llvm.sh $(pwd)/install/llvm-mingw --with-clang --thinlto --profile=profile.profdata
-          ./build-lldb-mi.sh $(pwd)/install/llvm-mingw
-          ./strip-llvm.sh $(pwd)/install/llvm-mingw
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_LIBXML2=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/llvm-mingw-stage1 $(pwd)/install/llvm-mingw --thinlto --pgo --llvm-only
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
           ./run-tests.sh $(pwd)/install/llvm-mingw
@@ -289,17 +277,7 @@ jobs:
           # Disable zstd and python. Both are available on the runners, but
           # installed with homebrew, and only available in the native (arm64)
           # form.
-          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-llvm.sh $(pwd)/install/llvm --disable-lldb --disable-clang-tools-extra
-          ./strip-llvm.sh $(pwd)/install/llvm
-          # Build tools needed for targeting macOS with LTO.
-          # The install-<tool>(-stripped) targets are unavailable for
-          # tools that are excluded due to LLVM_INSTALL_TOOLCHAIN_ONLY=ON and
-          # LLVM_TOOLCHAIN_TOOLS, so install them manually.
-          ninja -C llvm-project/llvm/build install-lld-stripped llvm-lipo llvm-libtool-darwin
-          cp llvm-project/llvm/build/bin/{llvm-lipo,llvm-libtool-darwin} install/llvm/bin
-          strip install/llvm/bin/{llvm-lipo,llvm-libtool-darwin}
-          # Build runtimes, required for __isPlatformVersionAtLeast
-          ./build-compiler-rt.sh --native $(pwd)/install/llvm
+          LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm --stage1 --llvm-only
           .github/workflows/store-version.sh install/llvm/versions.txt
           cd install
           NAME=llvm-$TAG-macos-$(uname -m)
@@ -347,7 +325,7 @@ jobs:
           # universal binaries fails as those libraries are unavailable in the
           # other (x86_64) architecture form.
           export SDKROOT=$(xcrun --show-sdk-path)
-          MACOS_REDIST=1 LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --with-clang --thinlto --profile=profile.profdata
+          MACOS_REDIST=1 LLVM_CMAKEFLAGS="-DLLVM_ENABLE_ZSTD=OFF -DLLDB_ENABLE_PYTHON=OFF" ./build-all.sh $(pwd)/install/llvm-mingw --thinlto --pgo
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           ./test-libcxx-module.sh $(pwd)/install/llvm-mingw
           ./run-tests.sh $(pwd)/install/llvm-mingw
@@ -458,7 +436,7 @@ jobs:
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --thinlto --profile=profile.profdata
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --thinlto --pgo
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
