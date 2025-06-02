@@ -69,6 +69,9 @@ while [ $# -gt 0 ]; do
     --no-llvm-tool-reuse)
         NO_LLVM_TOOL_REUSE=1
         ;;
+    --macos-native-tools)
+        MACOS_NATIVE_TOOLS=1
+        ;;
     --instrumented|--instrumented=*)
         INSTRUMENTED="${1#--instrumented}"
         INSTRUMENTED="${INSTRUMENTED#=}"
@@ -96,7 +99,7 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented[=type]] [--pgo[=profile]] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
+        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented[=type]] [--pgo[=profile]] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] [--macos-native-tools] dest
         exit 1
     fi
 
@@ -356,6 +359,19 @@ fi
 [ -z "$CLEAN" ] || rm -rf $BUILDDIR
 mkdir -p $BUILDDIR
 cd $BUILDDIR
+
+if [ -n "$MACOS_NATIVE_TOOLS" ]; then
+    # Build tools needed for targeting macOS with LTO.
+    # The install-<tool>(-stripped) targets are unavailable for
+    # tools that are excluded due to LLVM_INSTALL_TOOLCHAIN_ONLY=ON and
+    # LLVM_TOOLCHAIN_TOOLS, so install them manually.
+    cmake --build . --target llvm-lipo --target llvm-libtool-darwin
+    cmake --install . --strip --component lld
+    cp bin/llvm-lipo bin/llvm-libtool-darwin $PREFIX/bin
+    strip $PREFIX/bin/llvm-lipo $PREFIX/bin/llvm-libtool-darwin
+    exit 0
+fi
+
 [ -n "$NO_RECONF" ] || rm -rf CMake*
 cmake \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
