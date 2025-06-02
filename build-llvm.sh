@@ -69,13 +69,17 @@ while [ $# -gt 0 ]; do
     --no-llvm-tool-reuse)
         NO_LLVM_TOOL_REUSE=1
         ;;
-    --instrumented=*)
-        INSTRUMENTED="${1#*=}"
-        BUILDDIR="$BUILDDIR-instrumented"
+    --instrumented|--instrumented=*)
+        INSTRUMENTED="${1#--instrumented}"
+        INSTRUMENTED="${INSTRUMENTED#=}"
+        INSTRUMENTED="${INSTRUMENTED:-Frontend}"
         : ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
+        # A fixed BUILDDIR is set at the end for this case.
         ;;
-    --profile=*)
-        LLVM_PROFDATA_FILE="${1#*=}"
+    --profile|--profile=*)
+        LLVM_PROFDATA_FILE="${1#--profile}"
+        LLVM_PROFDATA_FILE="${LLVM_PROFDATA_FILE#=}"
+        LLVM_PROFDATA_FILE="${LLVM_PROFDATA_FILE:-profile.profdata}"
         LLVM_PROFDATA_FILE="$(cd "$(dirname "$LLVM_PROFDATA_FILE")" && pwd)/$(basename "$LLVM_PROFDATA_FILE")"
         BUILDDIR="$BUILDDIR-pgo"
         ;;
@@ -88,7 +92,7 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented=type] [--profile=profile] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
+        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented[=type]] [--profile[=profile]] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
         exit 1
     fi
 
