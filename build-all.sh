@@ -76,18 +76,45 @@ while [ $# -gt 0 ]; do
     --llvm-only)
         LLVM_ONLY=1
         ;;
+    --stage1)
+        STAGE1=1
+        LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra"
+        NO_LLDB=1
+        ;;
+    --profile)
+        PROFILE=1
+        LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra --with-clang --disable-dylib --instrumented"
+        NO_LLDB=1
+        LLVM_ONLY=1
+        ;;
+    --pgo)
+        PGO=1
+        LLVM_ARGS="$LLVM_ARGS --with-clang --pgo"
+        ;;
+    --full-pgo)
+        PGO=1
+        FULL_PGO=1
+        ;;
     *)
         if [ -n "$PREFIX" ]; then
-            echo Unrecognized parameter $1
-            exit 1
+            if [ -n "$PREFIX_PGO" ]; then
+                echo Unrecognized parameter $1
+                exit 1
+            fi
+            PREFIX_PGO="$1"
+        else
+            PREFIX="$1"
         fi
-        PREFIX="$1"
         ;;
     esac
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo "$0 [--host-clang[=clang]] [--enable-asserts] [--disable-dylib] [--with-clang] [--thinlto] [--profile=*] [--full-llvm] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] [--llvm-only] [--no-tools] [--wipe-runtimes] [--clean-runtimes] dest"
+    echo "$0 [--host-clang[=clang]] [--enable-asserts] [--disable-dylib] [--with-clang] [--thinlto] [--profile=*] [--full-llvm] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] [--llvm-only] [--no-tools] [--wipe-runtimes] [--clean-runtimes] [--stage1] [--profile] [--pgo] [--full-pgo] dest [pgo-dest]"
+    exit 1
+fi
+if [ -n "$PREFIX_PGO" ] && [ -z "$PGO" ] && [ -z "$FULL_PGO" ]; then
+    echo Unrecognized parameter $1
     exit 1
 fi
 
@@ -102,14 +129,60 @@ if [ -n "${HOST_CLANG}" ] && [ "${CFGUARD_ARGS}" = "--enable-cfguard"  ]; then
     "${HOST_CLANG}" -c -x c -o - - -Werror -mguard=cf </dev/null >/dev/null 2>/dev/null || CFGUARD_ARGS="--disable-cfguard"
 fi
 
+if [ -n "$FULL_PGO" ]; then
+    if [ -z "$PREFIX_PGO" ]; then
+        echo Must provide a second destination for a PGO build
+        exit 1
+    fi
+    ./build-all.sh "$PREFIX" --stage1
+    unset COMPILER_LAUNCHER
+    ./build-all.sh "$PREFIX" --profile
+    ./build-all.sh "$PREFIX" "$PREFIX_PGO" --thinlto --pgo --llvm-only
+    # If one already has a usable profile, one could also do the following
+    # two steps only:
+    # ./build-all.sh "$PREFIX" --stage1 --llvm-only
+    # ./build-all.sh "$PREFIX" "$PREFIX_PGO" --pgo
+    exit 0
+fi
+
+if [ -n "$PROFILE" ]; then
+    export PATH=$PREFIX/bin:$PATH
+    STAGE1_PREFIX=$PREFIX
+    PREFIX=/tmp/dummy-prefix
+elif [ -n "$PGO" ]; then
+    if [ -z "$PREFIX_PGO" ]; then
+        echo Must provide a second destination for a PGO build
+        exit 1
+    fi
+    export PATH=$PREFIX/bin:$PATH
+    STAGE1_PREFIX=$PREFIX
+    PREFIX=$PREFIX_PGO
+
+    if [ -n "$LLVM_ONLY" ]; then
+        rm -rf $PREFIX
+        mkdir -p "$(dirname "$PREFIX")"
+        cp -a "$STAGE1_PREFIX" "$PREFIX"
+    fi
+fi
+
 if [ -z "$NO_TOOLS" ]; then
     if [ -z "${HOST_CLANG}" ]; then
         ./build-llvm.sh $PREFIX $LLVM_ARGS $HOST_ARGS
+        if [ -n "$PROFILE" ]; then
+            ./pgo-training.sh llvm-project/llvm/build-instrumented $STAGE1_PREFIX
+            exit 0
+        fi
         if [ -z "$NO_LLDB" ] && [ -z "$NO_LLDB_MI" ]; then
             ./build-lldb-mi.sh $PREFIX $HOST_ARGS
         fi
         if [ -z "$FULL_LLVM" ]; then
             ./strip-llvm.sh $PREFIX $HOST_ARGS
+        fi
+        if [ -n "$STAGE1" ]; then
+            if [ "$(uname)" = "Darwin" ]; then
+                ./build-llvm.sh $PREFIX --macos-native-tools
+            fi
+            ./build-compiler-rt.sh --native $PREFIX
         fi
     fi
     if [ -n "$LLVM_ONLY" ]; then
