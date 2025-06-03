@@ -165,6 +165,12 @@ elif [ -n "$PGO" ]; then
     fi
 fi
 
+if [ "$(uname)" = "Darwin" ]; then
+    if [ -n "$PROFILE" ] || [ -n "$PGO" ]; then
+        export SDKROOT=$(xcrun --show-sdk-path)
+    fi
+fi
+
 if [ -z "$NO_TOOLS" ]; then
     if [ -z "${HOST_CLANG}" ]; then
         ./build-llvm.sh $PREFIX $LLVM_ARGS $HOST_ARGS
