@@ -369,6 +369,7 @@ if [ -n "$MACOS_NATIVE_TOOLS" ]; then
     cmake --install . --strip --component lld
     cp bin/llvm-lipo bin/llvm-libtool-darwin $PREFIX/bin
     strip $PREFIX/bin/llvm-lipo $PREFIX/bin/llvm-libtool-darwin
+    ln -sf llvm-lipo $PREFIX/bin/lipo
     exit 0
 fi
 
