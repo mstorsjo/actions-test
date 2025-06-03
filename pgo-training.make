@@ -18,25 +18,25 @@ CFLAGS = --sysroot=$(STAGE1) -resource-dir=$(shell $(STAGE1)/bin/clang --print-r
 CC = $(PREFIX)/bin/clang
 CXX = $(PREFIX)/bin/clang++
 
-hello-exception-%.exe: test/hello-exception.cpp
-	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@
-
 hello-exception-opt-%.exe: test/hello-exception.cpp
 	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -O3
 
-sqlite-%.exe: $(SQLITE)/sqlite3.c $(SQLITE)/shell.c
-	$(CC) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@
+hello-exception-%.exe: test/hello-exception.cpp
+	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@
 
 sqlite-opt-%.exe: $(SQLITE)/sqlite3.c $(SQLITE)/shell.c
 	$(CC) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -O3
 
-LIBCXXTEST = llvm-project/libcxx/test/std/algorithms/alg.sorting/alg.sort/sort/sort.pass.cpp
+sqlite-%.exe: $(SQLITE)/sqlite3.c $(SQLITE)/shell.c
+	$(CC) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@
 
-libcxxtest-%.exe: $(LIBCXXTEST)
-	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -Illvm-project/libcxx/test/support
+LIBCXXTEST = llvm-project/libcxx/test/std/algorithms/alg.sorting/alg.sort/sort/sort.pass.cpp
 
 libcxxtest-opt-%.exe: $(LIBCXXTEST)
 	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -Illvm-project/libcxx/test/support -O3
+
+libcxxtest-%.exe: $(LIBCXXTEST)
+	$(CXX) -target $*-w64-mingw32 $(CFLAGS) $+ -o $@ -Illvm-project/libcxx/test/support
 
 ARCHS ?= i686 x86_64 armv7 aarch64
 
