@@ -162,6 +162,8 @@ elif [ -n "$PGO" ]; then
         rm -rf $PREFIX
         mkdir -p "$(dirname "$PREFIX")"
         cp -a "$STAGE1_PREFIX" "$PREFIX"
+        rm -rf "$PREFIX"/lib/clang/*/lib/darwin
+        rm -rf "$PREFIX"/lib/clang/*/lib/linux
     fi
 fi
 
