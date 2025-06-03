@@ -14,8 +14,6 @@ on:
         options:
         - push
         - schedule
-  schedule:
-    - cron: '59 10 * * *'
 
 jobs:
   prepare:
