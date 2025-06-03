@@ -202,7 +202,7 @@ jobs:
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
       - name: Assemble the cross-built toolchain
         run: |
-          ./prepare-cross-toolchain-unix.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw
+          ./prepare-cross-toolchain-unix.sh llvm-mingw-stage1 $(pwd)/install/llvm-mingw
       - name: Test using the cross-built assembled toolchain
         run: |
           sudo apt-get update && sudo apt-get install qemu-user-static libc6-arm64-cross libstdc++6-arm64-cross
