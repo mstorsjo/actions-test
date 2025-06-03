@@ -75,12 +75,28 @@ export LLVM_DIR="$PREFIX"
 LLVM_SRC="$(pwd)/llvm-project/llvm"
 if [ -d "$LLVM_SRC" ]; then
     SUFFIX=${HOST+-}$HOST
-    for base in build build-asserts build-pgo build-thinlto build-thinlto-pgo build-withclang build-withclang-pgo build-withclang-thinlto build-withclang-thinlto-pgo; do
-        if [ -d "$LLVM_SRC/$base$SUFFIX" ]; then
-            export LLVM_DIR="$LLVM_SRC/$base$SUFFIX"
-            break
+    DIRS=""
+    cd llvm-project/llvm
+    for dir in build*$SUFFIX; do
+        if [ -z "$SUFFIX" ]; then
+            case $dir in
+            *linux*|*mingw32*)
+                continue
+                ;;
+            esac
+        fi
+        if [ -d "$dir" ]; then
+            DIRS="$DIRS $dir"
         fi
     done
+    if [ -n "$DIRS" ]; then
+        dir="$(ls -td $DIRS | head -1)"
+        export LLVM_DIR="$LLVM_SRC/$dir"
+        break
+    else
+        echo Warning, did not find a suitable LLVM build dir
+    fi
+    cd ../..
 fi
 
 if [ -n "$HOST" ]; then
