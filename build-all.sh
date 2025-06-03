@@ -83,13 +83,13 @@ while [ $# -gt 0 ]; do
         ;;
     --profile)
         PROFILE=1
-        LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra --with-clang --disable-dylib --instrumented"
+        LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra --disable-dylib --instrumented"
         NO_LLDB=1
         LLVM_ONLY=1
         ;;
     --pgo)
         PGO=1
-        LLVM_ARGS="$LLVM_ARGS --with-clang --pgo"
+        LLVM_ARGS="$LLVM_ARGS --pgo"
         ;;
     --full-pgo)
         PGO=1
