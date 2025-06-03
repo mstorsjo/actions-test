@@ -187,8 +187,7 @@ jobs:
         run: |
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw* /opt/llvm-mingw
-          echo /opt/llvm-mingw/bin >> $GITHUB_PATH
+          mv llvm-mingw* llvm-mingw-stage1
       - uses: actions/download-artifact@v4
         with:
           name: profile
@@ -199,7 +198,7 @@ jobs:
           SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
         run: |
           sudo apt-get update && sudo apt-get install g++-aarch64-linux-gnu
-          ./build-all.sh $(pwd)/install/llvm-mingw --no-runtimes --host=aarch64-linux-gnu --with-clang --thinlto --profile=profile.profdata
+          ./build-all.sh $(pwd)/llvm-mingw-stage1 $(pwd)/install/llvm-mingw --no-runtimes --host=aarch64-linux-gnu --thinlto --pgo=profile.profdata
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
       - name: Assemble the cross-built toolchain
         run: |
