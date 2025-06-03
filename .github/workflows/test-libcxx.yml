@@ -58,6 +58,7 @@ jobs:
       - name: Download toolchain
         uses: dawidd6/action-download-artifact@v10
         with:
+          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
           ref: ${{github.event_name == 'schedule' && 'master' || inputs.ref}}
