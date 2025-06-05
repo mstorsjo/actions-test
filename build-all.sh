@@ -134,10 +134,10 @@ if [ -n "$FULL_PGO" ]; then
         echo Must provide a second destination for a PGO build
         exit 1
     fi
-    ./build-all.sh "$PREFIX" --stage1
+    ./build-all.sh "$PREFIX" --stage1 $LLVM_ARGS $MINGW_ARGS $CFGUARD_ARGS
     unset COMPILER_LAUNCHER
-    ./build-all.sh "$PREFIX" --profile
-    ./build-all.sh "$PREFIX" "$PREFIX_PGO" --thinlto --pgo --llvm-only
+    ./build-all.sh "$PREFIX" --profile $LLVM_ARGS
+    ./build-all.sh "$PREFIX" "$PREFIX_PGO" --thinlto --pgo --llvm-only $LLVM_ARGS
     # If one already has a usable profile, one could also do the following
     # two steps only:
     # ./build-all.sh "$PREFIX" --stage1 --llvm-only
