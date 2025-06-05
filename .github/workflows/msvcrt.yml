@@ -122,7 +122,7 @@ jobs:
           TAG: ${{needs.prepare.outputs.TAG}}
         run: |
           sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --thinlto --pgo=profile.profdata
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --thinlto --pgo
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
           cd install
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
