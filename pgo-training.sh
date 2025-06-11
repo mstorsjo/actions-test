@@ -20,6 +20,7 @@ set -e
 : ${SQLITE_YEAR:=2025}
 
 : ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
+: ${LLVM_PROFDATA_FILE:=profile.profdata}
 
 if [ $# -lt 2 ]; then
     echo $0 build stage1
@@ -57,6 +58,6 @@ rm -rf "$LLVM_PROFILE_DATA_DIR"
 $MAKE -f pgo-training.make PREFIX=$PREFIX STAGE1=$STAGE1 SQLITE=$SQLITE clean
 $MAKE -f pgo-training.make PREFIX=$PREFIX STAGE1=$STAGE1 SQLITE=$SQLITE -j$CORES
 
-rm -f profile.profdata
-$STAGE1/bin/llvm-profdata merge -output profile.profdata $LLVM_PROFILE_DATA_DIR/*.profraw
+rm -f "$LLVM_PROFDATA_FILE"
+$STAGE1/bin/llvm-profdata merge -output "$LLVM_PROFDATA_FILE" $LLVM_PROFILE_DATA_DIR/*.profraw
 rm -rf "$LLVM_PROFILE_DATA_DIR"
