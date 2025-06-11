@@ -95,10 +95,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{inputs.push}}
           file: ./Dockerfile.toolchain
-          load: ${{!inputs.push}}
           tags: |
             mstorsjo/llvm-mingw:latest
             mstorsjo/llvm-mingw:${{needs.prepare.outputs.TAG}}
-      - name: Inspect Docker images
-        run: |
-          docker images
