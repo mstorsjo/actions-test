@@ -81,17 +81,27 @@ while [ $# -gt 0 ]; do
         LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra"
         NO_LLDB=1
         ;;
-    --profile)
+    --profile|--profile=*)
+        case "$1" in
+        --profile=*)
+            INSTRUMENTATION="=${1#*=}"
+            ;;
+        esac
         PROFILE=1
-        LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra --with-clang --disable-dylib --instrumented"
+        LLVM_ARGS="$LLVM_ARGS --disable-lldb --disable-clang-tools-extra --with-clang --disable-dylib --instrumented$INSTRUMENTATION"
         NO_LLDB=1
         LLVM_ONLY=1
         ;;
-    --pgo)
+    --pgo|--pgo=*)
         PGO=1
-        LLVM_ARGS="$LLVM_ARGS --with-clang --pgo"
+        LLVM_ARGS="$LLVM_ARGS --with-clang $1"
         ;;
-    --full-pgo)
+    --full-pgo|--full-pgo=*)
+        case "$1" in
+        --full-pgo=*)
+            INSTRUMENTATION="=${1#*=}"
+            ;;
+        esac
         PGO=1
         FULL_PGO=1
         ;;
@@ -110,7 +120,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo "$0 [--host-clang[=clang]] [--enable-asserts] [--disable-dylib] [--with-clang] [--thinlto] [--full-llvm] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] [--llvm-only] [--no-tools] [--wipe-runtimes] [--clean-runtimes] [--stage1] [--profile] [--pgo] [--full-pgo] dest [pgo-dest]"
+    echo "$0 [--host-clang[=clang]] [--enable-asserts] [--disable-dylib] [--with-clang] [--thinlto] [--full-llvm] [--disable-lldb] [--disable-lldb-mi] [--disable-clang-tools-extra] [--host=triple] [--with-default-win32-winnt=0x601] [--with-default-msvcrt=ucrt] [--enable-cfguard|--disable-cfguard] [--no-runtimes] [--llvm-only] [--no-tools] [--wipe-runtimes] [--clean-runtimes] [--stage1] [--profile[=type]] [--pgo[=profile]] [--full-pgo[=type]] dest [pgo-dest]"
     exit 1
 fi
 if [ -n "$PREFIX_PGO" ] && [ -z "$PGO" ] && [ -z "$FULL_PGO" ]; then
@@ -136,7 +146,7 @@ if [ -n "$FULL_PGO" ]; then
     fi
     ./build-all.sh "$PREFIX" --stage1 $LLVM_ARGS $MINGW_ARGS $CFGUARD_ARGS
     unset COMPILER_LAUNCHER
-    ./build-all.sh "$PREFIX" --profile $LLVM_ARGS
+    ./build-all.sh "$PREFIX" --profile$INSTRUMENTATION $LLVM_ARGS
     ./build-all.sh "$PREFIX" "$PREFIX_PGO" --thinlto --pgo --llvm-only $LLVM_ARGS
     # If one already has a usable profile, one could also do the following
     # two steps only:
