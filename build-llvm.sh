@@ -75,7 +75,7 @@ while [ $# -gt 0 ]; do
     --instrumented|--instrumented=*)
         INSTRUMENTED="${1#--instrumented}"
         INSTRUMENTED="${INSTRUMENTED#=}"
-        INSTRUMENTED="${INSTRUMENTED:-Frontend}"
+        INSTRUMENTED="${INSTRUMENTED:-IR}"
         : ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
         # A fixed BUILDDIR is set at the end for this case.
         ;;
