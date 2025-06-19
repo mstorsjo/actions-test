@@ -1,0 +1,24 @@
+name: Build gmp
+on:
+  push:
+
+jobs:
+  gmp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build dependencies
+        run: |
+          PREFIX=$(pwd)/prefix
+
+          curl -LO https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+          tar -Jxf gmp-*.tar.xz
+          rm gmp-*.tar.xz
+          cd gmp-*
+          curl -LO https://github.com/gmp-mirror/gmp/commit/14837bacbbd80804a11fee2016f660d132bf8aec.patch
+          patch -p1 < 14837bacbbd80804a11fee2016f660d132bf8aec.patch || true
+          autoreconf -fiv
+          mkdir build
+          cd build
+          ../configure --prefix=$PREFIX
+          make -j$(nproc)
+          make install
