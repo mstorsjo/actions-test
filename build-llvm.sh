@@ -406,6 +406,10 @@ if [ "$INSTRUMENTED" != "OFF" ]; then
     # is entirely unused).
     cmake --build . ${CORES:+-j${CORES}} --target clang --target lld
 else
+    grep CMAKE_STRIP CMakeCache.txt
+    ninja install-llvm-rc-stripped
+    exit 0
+
     cmake --build . ${CORES:+-j${CORES}}
     cmake --install . --strip
 
