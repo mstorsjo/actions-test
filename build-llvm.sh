@@ -367,19 +367,6 @@ mkdir -p $BUILDDIR
 cd $BUILDDIR
 
 if [ -n "$MACOS_NATIVE_TOOLS" ]; then
-    # Build tools needed for targeting macOS with LTO.
-    #
-    # The install-<tool>(-stripped) targets are unavailable for
-    # tools that are excluded due to LLVM_INSTALL_TOOLCHAIN_ONLY=ON and
-    # LLVM_TOOLCHAIN_TOOLS, so install those manually.
-    cmake --build . --target llvm-lipo --target llvm-libtool-darwin
-    # Install ld64.lld, required for -fuse-ld=lld
-    cmake --install . --strip --component lld
-    # Install llvm-libtool-darwin and lipo, needed for building with LTO.
-    # See the comment further above for more details about this.
-    cp bin/llvm-lipo bin/llvm-libtool-darwin $PREFIX/bin
-    strip $PREFIX/bin/llvm-lipo $PREFIX/bin/llvm-libtool-darwin
-    ln -sf llvm-lipo $PREFIX/bin/lipo
     exit 0
 fi
 
@@ -408,6 +395,7 @@ if [ "$INSTRUMENTED" != "OFF" ]; then
 else
     cmake --build . ${CORES:+-j${CORES}}
     cmake --install . --strip
+    ln -sf llvm-lipo $PREFIX/bin/lipo
 
     cp ../LICENSE.TXT $PREFIX
 fi
