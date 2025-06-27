@@ -407,7 +407,8 @@ if [ "$INSTRUMENTED" != "OFF" ]; then
     cmake --build . ${CORES:+-j${CORES}} --target clang --target lld
 else
     grep CMAKE_STRIP CMakeCache.txt
-    ninja install-llvm-rc-stripped
+    cmake --version
+#    ninja install-llvm-rc-stripped
     exit 0
 
     cmake --build . ${CORES:+-j${CORES}}
