@@ -205,9 +205,6 @@ if [ -z "$NO_TOOLS" ]; then
             ./strip-llvm.sh $PREFIX $HOST_ARGS
         fi
         if [ -n "$STAGE1" ]; then
-            if [ "$(uname)" = "Darwin" ]; then
-                ./build-llvm.sh $PREFIX --macos-native-tools
-            fi
             # Build runtimes. On Linux, this is needed for profiling.
             # On macOS, it is also needed for OS availability helpers like
             # __isPlatformVersionAtLeast.

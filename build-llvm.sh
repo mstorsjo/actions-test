@@ -69,9 +69,6 @@ while [ $# -gt 0 ]; do
     --no-llvm-tool-reuse)
         NO_LLVM_TOOL_REUSE=1
         ;;
-    --macos-native-tools)
-        MACOS_NATIVE_TOOLS=1
-        ;;
     --instrumented|--instrumented=*)
         INSTRUMENTED="${1#--instrumented}"
         INSTRUMENTED="${INSTRUMENTED#=}"
@@ -103,7 +100,7 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented[=type]] [--pgo[=profile]] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] [--macos-native-tools] dest
+        echo $0 [--enable-asserts] [--with-clang] [--thinlto] [--lto] [--instrumented[=type]] [--pgo[=profile]] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
         exit 1
     fi
 
