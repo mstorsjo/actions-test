@@ -425,7 +425,7 @@ jobs:
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --thinlto --pgo
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --thinlto --pgo
 
   # Run llvm-mingw's tests with the cross-built toolchains from above.
   test-toolchain:
