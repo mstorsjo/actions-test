@@ -97,6 +97,7 @@ jobs:
           retention-days: 7
 
   linux-profile:
+    if: false
     needs: [prepare, linux-stage1]
     runs-on: ubuntu-22.04
     steps:
@@ -394,7 +395,7 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
-    needs: [linux-stage1, linux-profile, prepare]
+    needs: [linux-stage1, prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -412,9 +413,6 @@ jobs:
           sudo mv llvm-mingw* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: profile
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -425,7 +423,7 @@ jobs:
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
           sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --thinlto --pgo
+          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --thinlto
 
   # Run llvm-mingw's tests with the cross-built toolchains from above.
   test-toolchain:
