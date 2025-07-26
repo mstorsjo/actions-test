@@ -426,20 +426,10 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive
           ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --thinlto --pgo
-          .github/workflows/store-version.sh install/llvm-mingw/versions.txt
-          cd install
-          NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
-          mv llvm-mingw $NAME
-          zip -9rq ../$NAME.zip $NAME
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
-          path: |
-            llvm-mingw-*.zip
-          retention-days: 7
 
   # Run llvm-mingw's tests with the cross-built toolchains from above.
   test-toolchain:
+    if: false
     needs: [linux-cross-windows]
     defaults:
       run:

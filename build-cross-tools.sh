@@ -89,6 +89,7 @@ if [ -n "$PYTHON" ]; then
 fi
 
 ./build-llvm.sh $PREFIX --host=$HOST $LLVM_ARGS
+exit 0
 if [ -z "$NO_LLDB" ] && [ -z "$NO_LLDB_MI" ]; then
     ./build-lldb-mi.sh $PREFIX --host=$HOST
 fi

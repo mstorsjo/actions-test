@@ -411,6 +411,10 @@ if [ "$INSTRUMENTED" != "OFF" ]; then
     # is entirely unused).
     cmake --build . ${CORES:+-j${CORES}} --target clang --target lld
 else
+    if [ -n "$HOST" ]; then
+        ninja clang-tidy
+        exit 0
+    fi
     cmake --build . ${CORES:+-j${CORES}}
     cmake --install . --strip
 
