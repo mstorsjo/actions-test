@@ -128,6 +128,7 @@ jobs:
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
+    if: false
     needs: [prepare, linux-stage1, linux-profile]
     runs-on: ubuntu-22.04
     steps:
@@ -172,6 +173,7 @@ jobs:
   # Crosscompile the toolchain for running on Linux on a different architecture, bundle the runtime
   # libraries that were built in the 'linux-stage1' step above.
   linux-cross-aarch64:
+    if: false
     needs: [linux-stage1, linux-profile, prepare]
     runs-on: ubuntu-22.04
     steps:
@@ -257,6 +259,7 @@ jobs:
           retention-days: 7
 
   macos-stage1:
+    if: false
     needs: [prepare]
     runs-on: macos-latest
     steps:
@@ -286,6 +289,7 @@ jobs:
 
   # Build a cross compiler for macOS, targeting Windows.
   macos:
+    if: false
     needs: [prepare, macos-stage1, linux-profile]
     runs-on: macos-latest
     steps:
@@ -333,6 +337,7 @@ jobs:
   # environments). The binaries built here rely on the runtime libraries from
   # the host environment (libstdc++ or libc++).
   msys2:
+    if: false
     needs: [prepare]
     runs-on: windows-latest
     defaults:
@@ -395,10 +400,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: i686, crt: ucrt }
           - { arch: x86_64, crt: ucrt }
-          - { arch: armv7, crt: ucrt }
-          - { arch: aarch64, crt: ucrt }
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -447,8 +449,6 @@ jobs:
       matrix:
         arch:
           - x86_64
-          - i686
-          - aarch64
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
       - uses: msys2/setup-msys2@v2
