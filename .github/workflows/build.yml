@@ -40,6 +40,6 @@ jobs:
       - name: Inspect ninja
         shell: cmd
         run: |
-          cd
+          echo %PATH%
           ninja --version
           where ninja
