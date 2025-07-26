@@ -18,7 +18,10 @@ jobs:
     steps:
       - name: Inspect
         run: |
+            set -x
             uname -m
+            nproc
+            cat /proc/cpuinfo
             df -h
             ls /etc/apt/apt.conf.d/
             cat /etc/apt/apt.conf.d/90assumeyes
