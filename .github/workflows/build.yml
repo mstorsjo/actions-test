@@ -65,6 +65,7 @@ jobs:
           retention-days: 7
 
   linux-stage1:
+    if: false
     needs: [prepare]
     runs-on: ubuntu-22.04
     steps:
@@ -395,7 +396,7 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
-    needs: [linux-stage1, prepare]
+    needs: [prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -403,11 +404,9 @@ jobs:
         include:
           - { arch: x86_64, crt: ucrt }
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-stage1-${{matrix.crt}}-x86_64-toolchain
       - name: Unpack cross toolchain
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-stage1-nightly-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
