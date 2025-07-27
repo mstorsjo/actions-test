@@ -16,7 +16,7 @@
 
 set -e
 
-: ${LLVM_VERSION:=9c5f8ec561e059bdaa585e75209cb5c658953e90}
+: ${LLVM_VERSION:=04f5198e3ecb5592cec3297a782b8179f95434bf}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -149,6 +149,8 @@ if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
             ;;
         esac
     fi
+    curl -LO https://github.com/llvm/llvm-project/commit/33f4582e8d128eac6b699564ecddfef5c553288e.patch
+    patch -p1 < 33f4582e8d128eac6b699564ecddfef5c553288e.patch
     cd ..
 fi
 
