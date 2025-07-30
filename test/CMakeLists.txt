@@ -16,6 +16,8 @@
 cmake_minimum_required(VERSION 3.17)
 project(test)
 
+message("CMAKE_HOST_SYSTEM_PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+
 add_executable(hello hello.c)
 add_executable(hello-cpp hello-cpp.cpp)
 add_executable(crt-test crt-test.c)
