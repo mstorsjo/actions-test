@@ -38,7 +38,7 @@ jobs:
         run: |
              cl -arm64EC -MD -c test_dll.c -Fotest_dll.obj
              link -machine:arm64ec -dll test_dll.obj -out:test.dll -implib:test.lib
-             cl -arm64EC -MD -c test_exe.c -Fotest_exe.obj
+             clang --target=arm64ec-pc-windows-msvc @(${env:CFLAGS} -split ' ') -c test_exe.c -o test_exe.obj
              link -machine:arm64ec test_exe.obj test.lib -out:test.exe
              ./test.exe
 
