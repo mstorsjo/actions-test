@@ -37,8 +37,10 @@ jobs:
 
       - name: Build ARM64EC EXE, linking against ARM64EC DLL
         run: |
-             cl -arm64EC -MD test_dll.c -Fetest.dll -LD
-             cl -arm64EC -MD test_exe.c -Fetest.exe test.lib
+             cl -arm64EC -MD -c test_dll.c -Fotest_dll.obj
+             link -machine:arm64ec -dll test_dll.obj -out:test.dll -implib:test.lib
+             cl -arm64EC -MD -c test_exe.c -Fotest_exe.obj
+             link -machine:arm64ec test_exe.obj test.lib -out:test.exe
              ./test.exe
 
       - uses: ilammy/msvc-dev-cmd@v1
@@ -46,5 +48,6 @@ jobs:
 
       - name: Rerun ARM64EC EXE, linking against x64 DLL
         run: |
-             cl -MD test_dll.c -LD -Fetest.dll
+             cl -MD -c test_dll.c -Fotest_dll.obj
+             link -dll test_dll.obj -out:test.dll -implib:test.lib
              ./test.exe
