@@ -26,6 +26,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Download LLVM
+        if: false
         run: |
              curl.exe -LO "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/clang+llvm-20.1.8-aarch64-pc-windows-msvc.tar.xz"
              tar -xaf clang+llvm-20.1.8-aarch64-pc-windows-msvc.tar.xz
