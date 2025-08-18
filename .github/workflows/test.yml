@@ -36,8 +36,8 @@ jobs:
 
       - name: Build ARM64EC EXE, linking against ARM64EC DLL
         run: |
-             clang --target=arm64ec-pc-windows-msvc @(${env:CFLAGS} -split ' ') test_dll.c -shared -o test.dll
-             clang --target=arm64ec-pc-windows-msvc @(${env:CFLAGS} -split ' ') test_exe.c test.lib -o test.exe
+             cl -arm64EC -MD test_dll.c -LD -Fetest.dll
+             cl -arm64EC -MD test_exe.c test.lib -Fetest.exe
              ./test.exe
 
       - uses: ilammy/msvc-dev-cmd@v1
@@ -45,5 +45,5 @@ jobs:
 
       - name: Rerun ARM64EC EXE, linking against x64 DLL
         run: |
-             clang --target=x86_64-pc-windows-msvc @(${env:CFLAGS} -split ' ') test_dll.c -shared -o test.dll
+             cl -MD test_dll.c -LD -Fetest.dll
              ./test.exe
