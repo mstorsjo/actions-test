@@ -4,19 +4,6 @@
 : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
 : ${CORES:=4}
 
-if command -v ninja >/dev/null; then
-    CMAKE_GENERATOR="Ninja"
-    BUILDCMD=ninja
-else
-    case $(uname) in
-    MINGW*)
-        CMAKE_GENERATOR="MSYS Makefiles"
-        ;;
-    esac
-    BUILDCMD=make
-    BUILDCMD_CORES=$CORES
-fi
-
 if [ "$1" = "mingw" ]; then
     SUFFIX=-mingw
     TRIPLE=x86_64-w64-mingw32
@@ -45,21 +32,21 @@ cd build-check-cmake$SUFFIX
 
 rm -rf CMakeCache.txt
 cmake \
-    ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
+    -G Ninja  \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=$(pwd)/../install-cmake$SUFFIX \
     -DBUILD_SHARED_LIBS=ON \
     $CMAKE_FLAGS \
     ..
 
-$BUILDCMD ${BUILDCMD_CORES:+-j${BUILDCMD_CORES}}
+ninja
 rm -rf ../install-cmake$SUFFIX
-$BUILDCMD install
+ninja install
 
 cmake -DBUILD_SHARED_LIBS=OFF ..
 
-$BUILDCMD ${BUILDCMD_CORES:+-j${BUILDCMD_CORES}}
-$BUILDCMD install
+ninja
+ninja install
 
 cd ..
 
