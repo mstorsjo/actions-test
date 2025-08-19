@@ -254,6 +254,14 @@ jobs:
           - { runner: macos-latest }
     runs-on: ${{matrix.runner}}
     steps:
+      - name: Install Meson (Linux)
+        if: ${{ startsWith(matrix.runner, 'ubuntu') }}
+        run: |
+          sudo apt-get update && sudo apt-get install meson
+      - name: Install Meson (macOS)
+        if: ${{ startsWith(matrix.runner, 'macos') }}
+        run: |
+          brew install meson
       - name: Install cross compiler
         if: ${{ matrix.params == 'mingw' }}
         run: |
