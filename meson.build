@@ -391,7 +391,7 @@ if get_option('remove-date')
 endif
 
 fdk_aac = library(
-  'fdk_aac',
+  'fdk-aac',
   fdk_aac_src,
   dependencies: m_dep,
   include_directories: fdk_aac_inc,
@@ -399,6 +399,8 @@ fdk_aac = library(
   cpp_args: cc.get_supported_arguments('-fno-exceptions', '-fno-rtti') + extra_args,
   c_args: extra_args,
   vs_module_defs: 'fdk-aac.def',
+  soversion: '2',
+  version: '2.0.3',
 )
 
 fdk_aac_dep = declare_dependency(
