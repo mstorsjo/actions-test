@@ -264,6 +264,7 @@ EXTRA_DIST = \
     $(top_srcdir)/NOTICE \
     $(top_srcdir)/OWNERS \
     $(top_srcdir)/Android.bp \
+    $(top_srcdir)/fdk-aac/meson* \
     $(top_srcdir)/fdk-aac.def \
     $(top_srcdir)/fdk-aac.sym \
     $(top_srcdir)/fdk-aac-config.cmake.in \
@@ -297,6 +298,7 @@ EXTRA_DIST = \
     $(top_srcdir)/libFDK/include/x86/*.h \
     $(top_srcdir)/libFDK/src/arm/*.cpp \
     $(top_srcdir)/libFDK/src/mips/*.cpp \
+    $(top_srcdir)/meson* \
     $(top_srcdir)/METADATA \
     $(top_srcdir)/PREUPLOAD.cfg \
     $(top_srcdir)/sha1.h \
