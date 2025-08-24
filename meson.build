@@ -3,6 +3,7 @@ project(
   'cpp',
   'c',
   version: '2.0.3',
+  license: 'FDK-AAC',
 )
 
 fdk_aac_inc = [
@@ -399,7 +400,6 @@ fdk_aac = library(
   cpp_args: cc.get_supported_arguments('-fno-exceptions', '-fno-rtti') + extra_args,
   c_args: extra_args,
   vs_module_defs: 'fdk-aac.def',
-  soversion: '2',
   version: '2.0.3',
 )
 
