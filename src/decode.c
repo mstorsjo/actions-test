@@ -1139,6 +1139,7 @@ static int decode_b(Dav1dTaskContext *const t,
             }
         }
 
+#if 0
         if (b->y_mode == DC_PRED && !b->pal_sz[0] &&
             imax(b_dim[2], b_dim[3]) <= 3 && f->seq_hdr->filter_intra)
         {
@@ -1153,6 +1154,7 @@ static int decode_b(Dav1dTaskContext *const t,
                 printf("Post-filterintramode[%d/%d]: r=%d\n",
                        b->y_mode, b->y_angle, ts->msac.rng);
         }
+#endif
 
         if (b->pal_sz[0]) {
             uint8_t *pal_idx;
@@ -1572,6 +1574,7 @@ static int decode_b(Dav1dTaskContext *const t,
             }
 
             if (!is_segwedge) {
+#if 0
                 if (f->seq_hdr->jnt_comp) {
                     const int jnt_ctx =
                         get_jnt_comp_ctx(f->seq_hdr->order_hint_n_bits,
@@ -1588,7 +1591,9 @@ static int decode_b(Dav1dTaskContext *const t,
                                jnt_ctx, t->a->comp_type[bx4], t->a->ref[0][bx4],
                                t->l.comp_type[by4], t->l.ref[0][by4],
                                ts->msac.rng);
-                } else {
+                } else
+#endif
+                {
                     b->comp_type = COMP_INTER_AVG;
                 }
             } else {
@@ -1743,7 +1748,7 @@ static int decode_b(Dav1dTaskContext *const t,
 
             // interintra flags
             const int ii_sz_grp = dav1d_ymode_size_context[bs];
-            if (f->seq_hdr->inter_intra &&
+            if (f->seq_hdr->motion_modes & 2 && //inter_intra &&
                 interintra_allowed_mask & (1 << bs) &&
                 dav1d_msac_decode_bool_adapt(&ts->msac,
                                              ts->cdf.m.interintra[ii_sz_grp]))
@@ -1761,7 +1766,7 @@ static int decode_b(Dav1dTaskContext *const t,
             } else {
                 b->interintra_type = INTER_INTRA_NONE;
             }
-            if (DEBUG_BLOCK_INFO && f->seq_hdr->inter_intra &&
+            if (DEBUG_BLOCK_INFO && f->seq_hdr->motion_modes & 2 && //inter_intra &&
                 interintra_allowed_mask & (1 << bs))
             {
                 printf("Post-interintra[t=%d,m=%d,w=%d]: r=%d\n",
@@ -1843,6 +1848,7 @@ static int decode_b(Dav1dTaskContext *const t,
                 filter[0] = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                ts->cdf.m.filter[0][ctx1],
                                DAV1D_N_SWITCHABLE_FILTERS - 1);
+#if 0
                 if (f->seq_hdr->dual_filter) {
                     const int ctx2 = get_filter_ctx(t->a, &t->l, comp, 1,
                                                     b->ref[0], by4, bx4);
@@ -1855,7 +1861,9 @@ static int decode_b(Dav1dTaskContext *const t,
                     if (DEBUG_BLOCK_INFO)
                         printf("Post-subpel_filter2[%d,ctx=%d]: r=%d\n",
                                filter[1], ctx2, ts->msac.rng);
-                } else {
+                } else
+#endif
+                {
                     filter[1] = filter[0];
                     if (DEBUG_BLOCK_INFO)
                         printf("Post-subpel_filter[%d,ctx=%d]: r=%d\n",

@@ -33,6 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/intops.h"
+
 #include "output/muxer.h"
 
 typedef struct MuxerPriv {
@@ -67,14 +69,14 @@ static int write_header(Y4m2OutputContext *const c, const Dav1dPicture *const p)
     };
 
     static const char *const chr_names_8bpc_i420[] = {
-        [DAV1D_CHR_UNKNOWN] = "420jpeg",
-        [DAV1D_CHR_VERTICAL] = "420mpeg2",
-        [DAV1D_CHR_COLOCATED] = "420"
+        [2] = "420jpeg",
+        [DAV1D_CHR_LEFT] = "420mpeg2",
+        [DAV1D_CHR_CENTER] = "420"
     };
 
     const char *const ss_name =
         p->p.layout == DAV1D_PIXEL_LAYOUT_I420 && p->p.bpc == 8 ?
-        chr_names_8bpc_i420[p->seq_hdr->chr > 2 ? DAV1D_CHR_UNKNOWN : p->seq_hdr->chr] :
+        chr_names_8bpc_i420[imin(p->seq_hdr->chr, 2)] :
         ss_names[p->p.layout][p->seq_hdr->hbd];
 
     const unsigned fw = p->p.w;

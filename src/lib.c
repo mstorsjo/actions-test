@@ -331,7 +331,7 @@ static int output_picture_ready(Dav1dContext *const c, const int drain) {
     if (c->cached_error) return 1;
     if (!c->all_layers && c->max_spatial_id) {
         if (c->out.p.data[0] && c->cache.p.data[0]) {
-            if (c->max_spatial_id == c->cache.p.frame_hdr->spatial_id ||
+            if (//c->max_spatial_id == c->cache.p.frame_hdr->spatial_id ||
                 c->out.flags & PICTURE_FLAG_NEW_TEMPORAL_UNIT)
                 return 1;
             dav1d_thread_picture_unref(&c->cache);
