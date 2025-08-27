@@ -117,7 +117,6 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
     const uint8_t *uv_dir = uv_dirs[layout == DAV1D_PIXEL_LAYOUT_I422];
     const int have_tt = f->c->n_tc > 1;
     const int sb128 = f->seq_hdr->sb128;
-    const int resize = f->frame_hdr->width[0] != f->frame_hdr->width[1];
     const ptrdiff_t y_stride = PXSTRIDE(f->cur.stride[0]);
     const ptrdiff_t uv_stride = PXSTRIDE(f->cur.stride[1]);
 
@@ -210,24 +209,14 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
 
                 if (!have_tt) goto st_y;
                 if (sbrow_start && by == by_start) {
-                    if (resize) {
-                        offset = (sby - 1) * 4 * y_stride + bx * 4;
-                        top = &f->lf.cdef_lpf_line[0][offset];
-                    } else {
-                        offset = (sby * (4 << sb128) - 4) * y_stride + bx * 4;
-                        top = &f->lf.lr_lpf_line[0][offset];
-                    }
+                    offset = (sby * (4 << sb128) - 4) * y_stride + bx * 4;
+                    top = &f->lf.lr_lpf_line[0][offset];
                     bot = bptrs[0] + 8 * y_stride;
                 } else if (!sbrow_start && by + 2 >= by_end) {
                     top = &f->lf.cdef_line[tf][0][sby * 4 * y_stride + bx * 4];
-                    if (resize) {
-                        offset = (sby * 4 + 2) * y_stride + bx * 4;
-                        bot = &f->lf.cdef_lpf_line[0][offset];
-                    } else {
-                        const int line = sby * (4 << sb128) + 4 * sb128 + 2;
-                        offset = line * y_stride + bx * 4;
-                        bot = &f->lf.lr_lpf_line[0][offset];
-                    }
+                    const int line = sby * (4 << sb128) + 4 * sb128 + 2;
+                    offset = line * y_stride + bx * 4;
+                    bot = &f->lf.lr_lpf_line[0][offset];
                 } else {
             st_y:;
                     offset = sby * 4 * y_stride;
@@ -252,27 +241,17 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
                 for (int pl = 1; pl <= 2; pl++) {
                     if (!have_tt) goto st_uv;
                     if (sbrow_start && by == by_start) {
-                        if (resize) {
-                            offset = (sby - 1) * 4 * uv_stride + (bx * 4 >> ss_hor);
-                            top = &f->lf.cdef_lpf_line[pl][offset];
-                        } else {
-                            const int line = sby * (4 << sb128) - 4;
-                            offset = line * uv_stride + (bx * 4 >> ss_hor);
-                            top = &f->lf.lr_lpf_line[pl][offset];
-                        }
+                        const int line = sby * (4 << sb128) - 4;
+                        offset = line * uv_stride + (bx * 4 >> ss_hor);
+                        top = &f->lf.lr_lpf_line[pl][offset];
                         bot = bptrs[pl] + (8 >> ss_ver) * uv_stride;
                     } else if (!sbrow_start && by + 2 >= by_end) {
                         const ptrdiff_t top_offset = sby * 8 * uv_stride +
                                                      (bx * 4 >> ss_hor);
                         top = &f->lf.cdef_line[tf][pl][top_offset];
-                        if (resize) {
-                            offset = (sby * 4 + 2) * uv_stride + (bx * 4 >> ss_hor);
-                            bot = &f->lf.cdef_lpf_line[pl][offset];
-                        } else {
-                            const int line = sby * (4 << sb128) + 4 * sb128 + 2;
-                            offset = line * uv_stride + (bx * 4 >> ss_hor);
-                            bot = &f->lf.lr_lpf_line[pl][offset];
-                        }
+                        const int line = sby * (4 << sb128) + 4 * sb128 + 2;
+                        offset = line * uv_stride + (bx * 4 >> ss_hor);
+                        bot = &f->lf.lr_lpf_line[pl][offset];
                     } else {
                 st_uv:;
                         const ptrdiff_t offset = sby * 8 * uv_stride;

@@ -83,7 +83,6 @@ enum TaskType {
     DAV1D_TASK_TYPE_DEBLOCK_COLS,
     DAV1D_TASK_TYPE_DEBLOCK_ROWS,
     DAV1D_TASK_TYPE_CDEF,
-    DAV1D_TASK_TYPE_SUPER_RESOLUTION,
     DAV1D_TASK_TYPE_LOOP_RESTORATION,
     DAV1D_TASK_TYPE_RECONSTRUCTION_PROGRESS,
     DAV1D_TASK_TYPE_FG_PREP,
@@ -238,7 +237,6 @@ struct Dav1dFrameContext {
         int scale; // if no scaling, this is 0
         int step;
     } svc[7][2 /* x, y */];
-    int resize_step[2 /* y, uv */], resize_start[2 /* y, uv */];
 
     const Dav1dContext *c;
     Dav1dTileState *ts;
@@ -251,7 +249,6 @@ struct Dav1dFrameContext {
         filter_sbrow_fn filter_sbrow_deblock_cols;
         filter_sbrow_fn filter_sbrow_deblock_rows;
         void (*filter_sbrow_cdef)(Dav1dTaskContext *tc, int sby);
-        filter_sbrow_fn filter_sbrow_resize;
         filter_sbrow_fn filter_sbrow_lr;
         backup_ipred_edge_fn backup_ipred_edge;
         read_coef_blocks_fn read_coef_blocks;
@@ -304,11 +301,9 @@ struct Dav1dFrameContext {
         int re_sz /* h */;
         ALIGN(Av1FilterLUT lim_lut, 16);
         ALIGN(uint8_t lvl[8 /* seg_id */][4 /* dir */][8 /* ref */][2 /* is_gmv */], 16);
-        int last_sharpness;
         uint8_t *tx_lpf_right_edge[2];
         uint8_t *cdef_line_buf, *lr_line_buf;
         pixel *cdef_line[2 /* pre, post */][3 /* plane */];
-        pixel *cdef_lpf_line[3 /* plane */];
         pixel *lr_lpf_line[3 /* plane */];
 
         // in-loop filter per-frame state keeping

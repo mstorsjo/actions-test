@@ -48,6 +48,14 @@ unsigned dav1d_get_uniform(GetBits *c, unsigned max);
 unsigned dav1d_get_vlc(GetBits *c);
 int dav1d_get_bits_subexp(GetBits *c, int ref, unsigned n);
 
+static inline unsigned dav1d_get_ref_uniform(GetBits *c, const unsigned max,
+                                             const unsigned def)
+{
+    if (!dav1d_get_bit(c)) return def;
+    const unsigned res = dav1d_get_uniform(c, max - 1);
+    return res + (res >= def);
+}
+
 // Discard bits from the buffer until we're next byte-aligned.
 static inline void dav1d_bytealign_get_bits(GetBits *c) {
     // bits_left is never more than 7, because it is only incremented

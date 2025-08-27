@@ -40,7 +40,7 @@ extern "C" {
 #define DAV1D_MAX_OPERATING_POINTS 64
 #define DAV1D_MAX_TILE_COLS 64
 #define DAV1D_MAX_TILE_ROWS 64
-#define DAV1D_MAX_SEGMENTS 8
+#define DAV1D_MAX_SEGMENTS 16
 #define DAV1D_NUM_REF_FRAMES 8
 #define DAV1D_PRIMARY_REF_NONE 7
 #define DAV1D_REFS_PER_FRAME 7
@@ -286,7 +286,7 @@ typedef struct Dav1dSequenceHeader {
     uint8_t ydc_dq_enabled, uvdc_dq_enabled, uvac_dq_enabled;
     uint8_t film_grain_present;
     uint8_t refmv_bank, drl_reorder;
-    uint8_t cdef_on_skiptx;
+    enum Dav1dAdaptiveBoolean cdef_on_skiptx;
     uint8_t avg_cdf, avg_cdf_type;
     uint8_t explicit_ref_frame_map;
     uint8_t ref_frames, def_max_drl_bits, allow_frame_max_drl_bits;
@@ -297,7 +297,8 @@ typedef struct Dav1dSequenceHeader {
     uint8_t mv_traj, bawp, cwp, imp_msk_bld;
     uint8_t fsc, fsc_residual, ccso, lf_sub_pu, tip_explicit_qp;
     uint8_t orip, opfl_refine, ibp, adaptive_mvd, refine_mv, tip_refine_mv;
-    uint8_t bru, mvd_sign_derive, flex_mvres, cfl_ds_filter_index, tcq;
+    uint8_t bru, mvd_sign_derive, flex_mvres, cfl_ds_filter_index;
+    enum Dav1dAdaptiveBoolean tcq;
     uint8_t parity_hiding, ext_partitions, uneven_4way_partitions;
     uint8_t max_pb_aspect_ratio_log2;
     uint8_t global_motion, df_par_bits, short_refresh_frame_flags;
@@ -361,13 +362,12 @@ typedef struct Dav1dFrameHeader {
         uint8_t present, update;
     } film_grain; ///< film grain parameters
     enum Dav1dFrameType frame_type; ///< type of the picture
-    int width[2 /* { coded_width, superresolution_upscaled_width } */], height;
+    int width, height;
     uint8_t frame_offset; ///< frame number
     uint8_t tlayer_id, mlayer_id, xlayer_id;
 
     uint8_t show_existing_frame;
     uint8_t existing_frame_idx;
-    uint32_t frame_id;
     uint32_t frame_presentation_delay;
     uint8_t show_frame;
     uint8_t showable_frame;
@@ -383,13 +383,9 @@ typedef struct Dav1dFrameHeader {
     } operating_points[DAV1D_MAX_OPERATING_POINTS];
     uint8_t refresh_frame_flags;
     int render_width, render_height;
-    struct {
-        uint8_t width_scale_denominator;
-        uint8_t enabled;
-    } super_res;
     uint8_t have_render_size;
-    uint8_t allow_intrabc;
-    uint8_t frame_ref_short_signaling;
+    uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
+    uint8_t max_bvp_drl_bits;
     int8_t refidx[DAV1D_REFS_PER_FRAME];
     uint8_t hp;
     enum Dav1dFilterMode subpel_filter_mode;
@@ -409,7 +405,9 @@ typedef struct Dav1dFrameHeader {
         uint8_t yac;
         int8_t ydc_delta;
         int8_t udc_delta, uac_delta, vdc_delta, vac_delta;
-        uint8_t qm, qm_y, qm_u, qm_v;
+        struct {
+            uint8_t enabled, num, y[4], u[4], v[4];
+        } qm;
     } quant;
     struct {
         uint8_t enabled, update_map, temporal, update_data;
@@ -428,17 +426,21 @@ typedef struct Dav1dFrameHeader {
         } lf;
     } delta;
     uint8_t all_lossless;
+    uint8_t tcq, parity_hiding;
     struct {
         uint8_t level_y[2 /* dir */];
         uint8_t level_u, level_v;
-        uint8_t mode_ref_delta_enabled;
-        uint8_t mode_ref_delta_update;
-        Dav1dLoopfilterModeRefDeltas mode_ref_deltas;
-        uint8_t sharpness;
+        uint8_t delta_q_y[2], delta_q_u, delta_q_v;
     } loopfilter;
     struct {
+        enum Dav1dAdaptiveBoolean enabled;
+        uint8_t qp_idx, scale_idx;
+    } gdf;
+    struct {
+        uint8_t enabled;
         uint8_t damping;
-        uint8_t n_bits;
+        uint8_t n_strengths;
+        uint8_t on_skiptx;
         uint8_t y_strength[DAV1D_MAX_CDEF_STRENGTHS];
         uint8_t uv_strength[DAV1D_MAX_CDEF_STRENGTHS];
     } cdef;
@@ -446,10 +448,12 @@ typedef struct Dav1dFrameHeader {
         enum Dav1dRestorationType type[3 /* plane */];
         uint8_t unit_size[2 /* y, uv */];
     } restoration;
+    uint8_t ccso;
     enum Dav1dTxfmMode txfm_mode;
     uint8_t switchable_comp_refs;
     uint8_t skip_mode_allowed, skip_mode_enabled;
     int8_t skip_mode_refs[2];
+    uint8_t bawp;
     uint8_t warp_motion;
     uint8_t reduced_txtp_set;
     Dav1dWarpedMotionParams gmv[DAV1D_REFS_PER_FRAME];

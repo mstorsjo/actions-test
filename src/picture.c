@@ -194,7 +194,7 @@ int dav1d_thread_picture_alloc(Dav1dContext *const c, Dav1dFrameContext *const f
 {
     Dav1dThreadPicture *const p = &f->sr_cur;
 
-    const int res = picture_alloc(c, &p->p, f->frame_hdr->width[1], f->frame_hdr->height,
+    const int res = picture_alloc(c, &p->p, f->frame_hdr->width, f->frame_hdr->height,
                                   f->seq_hdr, f->seq_hdr_ref,
                                   f->frame_hdr, f->frame_hdr_ref,
                                   bpc, &f->tile[0].data.m, &c->allocator,

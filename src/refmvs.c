@@ -805,13 +805,13 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
                             const int n_tile_threads, const int n_frame_threads)
 {
-    const int rp_stride = ((frm_hdr->width[0] + 127) & ~127) >> 3;
+    const int rp_stride = ((frm_hdr->width + 127) & ~127) >> 3;
     const int n_tile_rows = n_tile_threads > 1 ? frm_hdr->tiling.rows : 1;
     const int n_blocks = rp_stride * n_tile_rows;
 
     rf->sbsz = 16 << seq_hdr->sb128;
     rf->frm_hdr = frm_hdr;
-    rf->iw8 = (frm_hdr->width[0] + 7) >> 3;
+    rf->iw8 = (frm_hdr->width + 7) >> 3;
     rf->ih8 = (frm_hdr->height + 7) >> 3;
     rf->iw4 = rf->iw8 << 1;
     rf->ih4 = rf->ih8 << 1;

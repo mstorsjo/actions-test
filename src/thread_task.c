@@ -216,7 +216,6 @@ static int create_filter_sbrow(Dav1dFrameContext *const f,
     const int has_deblock = f->frame_hdr->loopfilter.level_y[0] ||
                             f->frame_hdr->loopfilter.level_y[1];
     const int has_cdef = f->seq_hdr->cdef;
-    const int has_resize = f->frame_hdr->width[0] != f->frame_hdr->width[1];
     const int has_lr = f->lf.restore_planes;
 
     Dav1dTask *tasks = f->task_thread.tasks;
@@ -257,7 +256,6 @@ static int create_filter_sbrow(Dav1dFrameContext *const f,
     t->type = pass == 1 ? DAV1D_TASK_TYPE_ENTROPY_PROGRESS :
               has_deblock ? DAV1D_TASK_TYPE_DEBLOCK_COLS :
               has_cdef || has_lr /* i.e. LR backup */ ? DAV1D_TASK_TYPE_DEBLOCK_ROWS :
-              has_resize ? DAV1D_TASK_TYPE_SUPER_RESOLUTION :
               DAV1D_TASK_TYPE_RECONSTRUCTION_PROGRESS;
     t->frame_idx = (int)(f - f->c->fc);
 
@@ -852,11 +850,6 @@ void *dav1d_worker_task(void *data) {
                 if (!atomic_fetch_or(&ttd->cond_signaled, 1))
                     pthread_cond_signal(&ttd->cond);
             }
-            // fall-through
-        case DAV1D_TASK_TYPE_SUPER_RESOLUTION:
-            if (f->frame_hdr->width[0] != f->frame_hdr->width[1])
-                if (!atomic_load(&f->task_thread.error))
-                    f->bd_fn.filter_sbrow_resize(f, sby);
             // fall-through
         case DAV1D_TASK_TYPE_LOOP_RESTORATION:
             if (!atomic_load(&f->task_thread.error) && f->lf.restore_planes)
