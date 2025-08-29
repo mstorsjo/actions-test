@@ -408,8 +408,8 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
         hdr->sdp = dav1d_get_bit(gb);
     if (hdr->sdp)
         hdr->ext_sdp = dav1d_get_bit(gb);
-    hdr->ist = dav1d_get_bit(gb);
-    hdr->inter_ist = dav1d_get_bit(gb);
+    hdr->ist[0] = dav1d_get_bit(gb);
+    hdr->ist[1] = dav1d_get_bit(gb);
     if (!hdr->monochrome)
         hdr->chroma_dctonly = dav1d_get_bit(gb);
     hdr->tx64_resample = dav1d_get_bit(gb);
@@ -422,8 +422,8 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
     hdr->mhccp = dav1d_get_bit(gb);
 #if DEBUG_SEQ_HDR
     printf("SEQHDR: post-mhccp[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]: off=%u\n",
-           hdr->num_same_ref_comp, hdr->sdp, hdr->ext_sdp, hdr->ist,
-           hdr->inter_ist, hdr->chroma_dctonly, hdr->tx64_resample,
+           hdr->num_same_ref_comp, hdr->sdp, hdr->ext_sdp, hdr->ist[0],
+           hdr->ist[1], hdr->chroma_dctonly, hdr->tx64_resample,
            hdr->inter_ddt, hdr->reduced_tx_part_set, hdr->cctx,
            hdr->mrls, hdr->cfl, hdr->mhccp,
            dav1d_get_bits_pos(gb) - init_bit_pos);

@@ -35,8 +35,6 @@
 #include "src/levels.h"
 
 EXTERN const uint8_t dav1d_al_part_ctx[2][N_BL_LEVELS][N_PARTITIONS];
-EXTERN const uint8_t /* enum BlockSize */
-                     dav1d_block_sizes[N_BL_LEVELS][N_PARTITIONS][2];
 // width, height (in 4px blocks), log2 versions of these two
 EXTERN const uint8_t dav1d_block_dimensions[N_BS_SIZES][4];
 typedef struct TxfmInfo {
@@ -52,7 +50,6 @@ EXTERN const uint8_t /* enum TxfmType */
 EXTERN const uint8_t /* enum InterPredMode */
                      dav1d_comp_inter_pred_modes[N_COMP_INTER_PRED_MODES][2];
 
-EXTERN const uint8_t dav1d_partition_type_count[N_BL_LEVELS];
 EXTERN const uint8_t /* enum TxfmType */ dav1d_tx_types_per_set[40];
 
 EXTERN const uint8_t dav1d_filter_mode_to_y_mode[5];

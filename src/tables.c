@@ -52,75 +52,35 @@ const uint8_t dav1d_al_part_ctx[2][N_BL_LEVELS][N_PARTITIONS] = {
     }
 };
 
-const uint8_t /* enum BlockSize */
-    dav1d_block_sizes[N_BL_LEVELS][N_PARTITIONS][2] =
-{
-    [BL_128X128] = {
-        [PARTITION_NONE]           = { BS_128x128 },
-        [PARTITION_H]              = { BS_128x64 },
-        [PARTITION_V]              = { BS_64x128 },
-        [PARTITION_T_TOP_SPLIT]    = { BS_64x64, BS_128x64 },
-        [PARTITION_T_BOTTOM_SPLIT] = { BS_128x64, BS_64x64 },
-        [PARTITION_T_LEFT_SPLIT]   = { BS_64x64, BS_64x128 },
-        [PARTITION_T_RIGHT_SPLIT]  = { BS_64x128, BS_64x64 },
-    }, [BL_64X64] = {
-        [PARTITION_NONE]           = { BS_64x64 },
-        [PARTITION_H]              = { BS_64x32 },
-        [PARTITION_V]              = { BS_32x64 },
-        [PARTITION_T_TOP_SPLIT]    = { BS_32x32, BS_64x32 },
-        [PARTITION_T_BOTTOM_SPLIT] = { BS_64x32, BS_32x32 },
-        [PARTITION_T_LEFT_SPLIT]   = { BS_32x32, BS_32x64 },
-        [PARTITION_T_RIGHT_SPLIT]  = { BS_32x64, BS_32x32 },
-        [PARTITION_H4]             = { BS_64x16 },
-        [PARTITION_V4]             = { BS_16x64 },
-    }, [BL_32X32] = {
-        [PARTITION_NONE]           = { BS_32x32 },
-        [PARTITION_H]              = { BS_32x16 },
-        [PARTITION_V]              = { BS_16x32 },
-        [PARTITION_T_TOP_SPLIT]    = { BS_16x16, BS_32x16 },
-        [PARTITION_T_BOTTOM_SPLIT] = { BS_32x16, BS_16x16 },
-        [PARTITION_T_LEFT_SPLIT]   = { BS_16x16, BS_16x32 },
-        [PARTITION_T_RIGHT_SPLIT]  = { BS_16x32, BS_16x16 },
-        [PARTITION_H4]             = { BS_32x8  },
-        [PARTITION_V4]             = { BS_8x32  },
-    }, [BL_16X16] = {
-        [PARTITION_NONE]           = { BS_16x16 },
-        [PARTITION_H]              = { BS_16x8  },
-        [PARTITION_V]              = { BS_8x16  },
-        [PARTITION_T_TOP_SPLIT]    = { BS_8x8,   BS_16x8  },
-        [PARTITION_T_BOTTOM_SPLIT] = { BS_16x8,  BS_8x8   },
-        [PARTITION_T_LEFT_SPLIT]   = { BS_8x8,   BS_8x16  },
-        [PARTITION_T_RIGHT_SPLIT]  = { BS_8x16,  BS_8x8   },
-        [PARTITION_H4]             = { BS_16x4  },
-        [PARTITION_V4]             = { BS_4x16  },
-    }, [BL_8X8] = {
-        [PARTITION_NONE]           = { BS_8x8   },
-        [PARTITION_H]              = { BS_8x4   },
-        [PARTITION_V]              = { BS_4x8   },
-        [PARTITION_SPLIT]          = { BS_4x4   },
-    }
-};
-
 const uint8_t dav1d_block_dimensions[N_BS_SIZES][4] = {
+    [BS_256x256] = { 64, 64, 6, 6 },
+    [BS_256x128] = { 64, 32, 6, 5 },
+    [BS_128x256] = { 32, 64, 5, 6 },
     [BS_128x128] = { 32, 32, 5, 5 },
     [BS_128x64]  = { 32, 16, 5, 4 },
     [BS_64x128]  = { 16, 32, 4, 5 },
     [BS_64x64]   = { 16, 16, 4, 4 },
     [BS_64x32]   = { 16,  8, 4, 3 },
     [BS_64x16]   = { 16,  4, 4, 2 },
+    [BS_64x8]    = { 16,  2, 4, 1 },
+    [BS_64x4]    = { 16,  1, 4, 0 },
     [BS_32x64]   = {  8, 16, 3, 4 },
     [BS_32x32]   = {  8,  8, 3, 3 },
     [BS_32x16]   = {  8,  4, 3, 2 },
     [BS_32x8]    = {  8,  2, 3, 1 },
+    [BS_32x4]    = {  8,  1, 3, 0 },
     [BS_16x64]   = {  4, 16, 2, 4 },
     [BS_16x32]   = {  4,  8, 2, 3 },
     [BS_16x16]   = {  4,  4, 2, 2 },
     [BS_16x8]    = {  4,  2, 2, 1 },
     [BS_16x4]    = {  4,  1, 2, 0 },
+    [BS_8x64]    = {  2, 16, 1, 4 },
     [BS_8x32]    = {  2,  8, 1, 3 },
     [BS_8x16]    = {  2,  4, 1, 2 },
     [BS_8x8]     = {  2,  2, 1, 1 },
     [BS_8x4]     = {  2,  1, 1, 0 },
+    [BS_4x64]    = {  1, 16, 0, 4 },
+    [BS_4x32]    = {  1,  8, 0, 3 },
     [BS_4x16]    = {  1,  4, 0, 2 },
     [BS_4x8]     = {  1,  2, 0, 1 },
     [BS_4x4]     = {  1,  1, 0, 0 },
@@ -165,32 +125,53 @@ const TxfmInfo dav1d_txfm_dimensions[N_RECT_TX_SIZES] = {
                     .min = 2, .max = 4, .sub = RTX_16X32, .ctx = 3 },
     [RTX_64X16] = { .w = 16, .h = 4, .lw = 4, .lh = 2,
                     .min = 2, .max = 4, .sub = RTX_32X16, .ctx = 3 },
+    [RTX_4X32]  = { .w = 1, .h = 8, .lw = 0, .lh = 3,
+                    .min = 0, .max = 3, .sub = RTX_4X16, .ctx = 2 },
+    [RTX_32X4]  = { .w = 8, .h = 1, .lw = 3, .lh = 0,
+                    .min = 0, .max = 3, .sub = RTX_16X4, .ctx = 2 },
+    [RTX_8X64]  = { .w = 2, .h = 16, .lw = 1, .lh = 4,
+                    .min = 1, .max = 4, .sub = RTX_8X32, .ctx = 3 },
+    [RTX_64X8]  = { .w = 16, .h = 2, .lw = 4, .lh = 1,
+                    .min = 1, .max = 4, .sub = RTX_32X8, .ctx = 3 },
+    [RTX_4X64]  = { .w = 1, .h = 16, .lw = 0, .lh = 4,
+                    .min = 0, .max = 4, .sub = RTX_4X32, .ctx = 3 },
+    [RTX_64X4]  = { .w = 16, .h = 1, .lw = 4, .lh = 0,
+                    .min = 0, .max = 4, .sub = RTX_32X4, .ctx = 3 },
 };
 
 const uint8_t /* enum (Rect)TxfmSize */
     dav1d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */] =
 {
+    [BS_256x256] = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
+    [BS_256x128] = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
+    [BS_128x256] = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
     [BS_128x128] = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
     [BS_128x64]  = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
-    [BS_64x128]  = {  TX_64X64,  TX_32X32,       0,    TX_32X32 },
+    [BS_64x128]  = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
     [BS_64x64]   = {  TX_64X64,  TX_32X32,  TX_32X32,  TX_32X32 },
     [BS_64x32]   = { RTX_64X32, RTX_32X16,  TX_32X32,  TX_32X32 },
     [BS_64x16]   = { RTX_64X16, RTX_32X8,  RTX_32X16, RTX_32X16 },
-    [BS_32x64]   = { RTX_32X64, RTX_16X32,       0,    TX_32X32 },
+    [BS_64x8]    = { RTX_64X8,  RTX_32X4,  RTX_32X8,  RTX_32X8  },
+    [BS_64x4]    = { RTX_64X4,  RTX_32X4,  RTX_32X4,  RTX_32X4  },
+    [BS_32x64]   = { RTX_32X64, RTX_16X32, RTX_16X32,  TX_32X32 },
     [BS_32x32]   = {  TX_32X32,  TX_16X16, RTX_16X32,  TX_32X32 },
     [BS_32x16]   = { RTX_32X16, RTX_16X8,   TX_16X16, RTX_32X16 },
     [BS_32x8]    = { RTX_32X8,  RTX_16X4,  RTX_16X8,  RTX_32X8  },
-    [BS_16x64]   = { RTX_16X64, RTX_8X32,        0,   RTX_16X32 },
-    [BS_16x32]   = { RTX_16X32, RTX_8X16,        0,   RTX_16X32 },
+    [BS_32x4]    = { RTX_32X4,  RTX_16X4,  RTX_16X4,  RTX_32X4  },
+    [BS_16x64]   = { RTX_16X64, RTX_8X32,  RTX_8X32,  RTX_16X32 },
+    [BS_16x32]   = { RTX_16X32, RTX_8X16,  RTX_8X32,  RTX_16X32 },
     [BS_16x16]   = {  TX_16X16,  TX_8X8,   RTX_8X16,   TX_16X16 },
     [BS_16x8]    = { RTX_16X8,  RTX_8X4,    TX_8X8,   RTX_16X8  },
     [BS_16x4]    = { RTX_16X4,  RTX_8X4,   RTX_8X4,   RTX_16X4  },
-    [BS_8x32]    = { RTX_8X32,  RTX_4X16,       0,    RTX_8X32  },
-    [BS_8x16]    = { RTX_8X16,  RTX_4X8,        0,    RTX_8X16  },
+    [BS_8x64]    = { RTX_8X64,  RTX_4X32,  RTX_4X32,  RTX_8X32  },
+    [BS_8x32]    = { RTX_8X32,  RTX_4X16,  RTX_4X32,  RTX_8X32  },
+    [BS_8x16]    = { RTX_8X16,  RTX_4X8,   RTX_4X16,  RTX_8X16  },
     [BS_8x8]     = {  TX_8X8,    TX_4X4,   RTX_4X8,    TX_8X8   },
     [BS_8x4]     = { RTX_8X4,    TX_4X4,    TX_4X4,   RTX_8X4   },
-    [BS_4x16]    = { RTX_4X16,  RTX_4X8,        0,    RTX_4X16  },
-    [BS_4x8]     = { RTX_4X8,    TX_4X4,        0,    RTX_4X8   },
+    [BS_4x64]    = { RTX_4X64,  RTX_4X32,  RTX_4X32,  RTX_4X32  },
+    [BS_4x32]    = { RTX_4X32,  RTX_4X16,  RTX_4X32,  RTX_4X32  },
+    [BS_4x16]    = { RTX_4X16,  RTX_4X8,   RTX_4X16,  RTX_4X16  },
+    [BS_4x8]     = { RTX_4X8,    TX_4X4,   RTX_4X8,   RTX_4X8   },
     [BS_4x4]     = {  TX_4X4,    TX_4X4,    TX_4X4,    TX_4X4   },
 };
 
@@ -223,14 +204,6 @@ const uint8_t /* enum InterPredMode */
     [NEWMV_NEARMV]        = { NEWMV,     NEARMV    },
     [NEARESTMV_NEWMV]     = { NEARESTMV, NEWMV     },
     [NEARMV_NEWMV]        = { NEARMV,    NEWMV     },
-};
-
-const uint8_t dav1d_partition_type_count[N_BL_LEVELS] = {
-    [BL_128X128] = N_PARTITIONS - 3,
-    [BL_64X64]   = N_PARTITIONS - 1,
-    [BL_32X32]   = N_PARTITIONS - 1,
-    [BL_16X16]   = N_PARTITIONS - 1,
-    [BL_8X8]     = N_SUB8X8_PARTITIONS - 1,
 };
 
 const uint8_t /* enum TxfmType */ dav1d_tx_types_per_set[40] = {
@@ -294,12 +267,13 @@ const uint8_t dav1d_lo_ctx_offsets[3][5][5] = {
     },
 };
 
+// [a][b] == (a+b+3)>>1
 const uint8_t dav1d_skip_ctx[5][5] = {
-    { 1, 2, 2, 2, 3 },
-    { 2, 4, 4, 4, 5 },
-    { 2, 4, 4, 4, 5 },
-    { 2, 4, 4, 4, 5 },
-    { 3, 5, 5, 5, 6 },
+    { 1, 2, 2, 3, 3 },
+    { 2, 2, 3, 3, 4 },
+    { 2, 3, 3, 4, 4 },
+    { 3, 3, 4, 4, 5 },
+    { 3, 4, 4, 5, 5 },
 };
 
 const uint8_t /* enum TxClass */ dav1d_tx_type_class[N_TX_TYPES_PLUS_LL] = {

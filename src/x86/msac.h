@@ -30,6 +30,7 @@
 
 #include "src/cpu.h"
 
+#if 0
 unsigned dav1d_msac_decode_symbol_adapt4_sse2(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
 unsigned dav1d_msac_decode_symbol_adapt8_sse2(MsacContext *s, uint16_t *cdf,
@@ -70,6 +71,9 @@ static ALWAYS_INLINE void msac_init_x86(MsacContext *const s) {
 
 #elif defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
 #define dav1d_msac_decode_symbol_adapt16 dav1d_msac_decode_symbol_adapt16_sse2
+#endif
+#else
+#define msac_init_x86(s)
 #endif
 
 #endif /* DAV1D_SRC_X86_MSAC_H */

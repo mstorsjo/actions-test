@@ -25,6 +25,7 @@
  */
 
 #include "tests/checkasm/checkasm.h"
+#include "common/attributes.h"
 #include "src/refmvs.h"
 
 #include <stdio.h>
@@ -38,8 +39,6 @@ static inline int gen_mv(const int total_bits, int spel_bits) {
     // than far away
     return rnd() & 1 ? -bits : bits;
 }
-
-#define ARRAY_SIZE(n) (sizeof(n)/sizeof(*(n)))
 
 static inline int get_min_mv_val(const int idx) {
     if      (idx <= 9)  return idx;

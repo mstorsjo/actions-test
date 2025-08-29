@@ -37,7 +37,12 @@
 #include "src/tables.h"
 
 typedef struct BlockContext {
+    uint8_t ALIGN(fsc[32], 8);
     uint8_t ALIGN(mode[32], 8);
+    uint8_t ALIGN(midx[32], 8);
+    uint8_t ALIGN(mrl[32], 8);
+    uint8_t ALIGN(multi_mrl[32], 8);
+    uint8_t ALIGN(dip[32], 8);
     uint8_t ALIGN(lcoef[32], 8);
     uint8_t ALIGN(ccoef[2][32], 8);
     uint8_t ALIGN(seg_pred[32], 8);
@@ -51,7 +56,7 @@ typedef struct BlockContext {
     int8_t ALIGN(tx[32], 8);
     uint8_t ALIGN(tx_lpf_y[32], 8);
     uint8_t ALIGN(tx_lpf_uv[32], 8);
-    uint8_t ALIGN(partition[16], 8);
+    uint8_t ALIGN(partition[32], 8);
     uint8_t ALIGN(uvmode[32], 8);
     uint8_t ALIGN(pal_sz[32], 8);
 } BlockContext;
@@ -82,39 +87,27 @@ static inline int get_tx_ctx(const BlockContext *const a,
 
 static inline int get_partition_ctx(const BlockContext *const a,
                                     const BlockContext *const l,
-                                    const enum BlockLevel bl,
-                                    const int yb8, const int xb8)
+                                    const uint8_t *const b_dim,
+                                    const int yb4, const int xb4)
 {
-    return ((a->partition[xb8] >> (4 - bl)) & 1) +
-          (((l->partition[yb8] >> (4 - bl)) & 1) << 1);
+    return ((a->partition[xb4] >> imax(b_dim[2] - 1, 0)) & 1) +
+          (((l->partition[yb4] >> imax(b_dim[3] - 1, 0)) & 1) << 1);
 }
 
-static inline unsigned gather_left_partition_prob(const uint16_t *const in,
-                                                  const enum BlockLevel bl)
+static inline int get_partition2_ctx(const BlockContext *const a,
+                                     const BlockContext *const l,
+                                     const uint8_t *const b_dim,
+                                     const int dir, const int yb4, const int xb4)
 {
-    unsigned out = in[PARTITION_H - 1] - in[PARTITION_H];
-    // Exploit the fact that cdfs for PARTITION_SPLIT, PARTITION_T_TOP_SPLIT,
-    // PARTITION_T_BOTTOM_SPLIT and PARTITION_T_LEFT_SPLIT are neighbors.
-    out += in[PARTITION_SPLIT - 1] - in[PARTITION_T_LEFT_SPLIT];
-    if (bl != BL_128X128)
-        out += in[PARTITION_H4 - 1] - in[PARTITION_H4];
-    return out;
-}
-
-static inline unsigned gather_top_partition_prob(const uint16_t *const in,
-                                                 const enum BlockLevel bl)
-{
-    // Exploit the fact that cdfs for PARTITION_V, PARTITION_SPLIT and
-    // PARTITION_T_TOP_SPLIT are neighbors.
-    unsigned out = in[PARTITION_V - 1] - in[PARTITION_T_TOP_SPLIT];
-    // Exploit the facts that cdfs for PARTITION_T_LEFT_SPLIT and
-    // PARTITION_T_RIGHT_SPLIT are neighbors, the probability for
-    // PARTITION_V4 is always zero, and the probability for
-    // PARTITION_T_RIGHT_SPLIT is zero in 128x128 blocks.
-    out += in[PARTITION_T_LEFT_SPLIT - 1];
-    if (bl != BL_128X128)
-        out += in[PARTITION_V4 - 1] - in[PARTITION_T_RIGHT_SPLIT];
-    return out;
+    if (!dir /* horizontal */) {
+        const int hh4 = b_dim[1] >> 1;
+        return ((l->partition[yb4 + hh4] >> (b_dim[3] - 2)) & 1) +
+              (((l->partition[yb4] >> (b_dim[3] - 2)) & 1) << 1);
+    } else /* vertical */ {
+        const int hw4 = b_dim[0] >> 1;
+        return ((a->partition[xb4 + hw4] >> (b_dim[2] - 2)) & 1) +
+              (((a->partition[xb4] >> (b_dim[2] - 2)) & 1) << 1);
+    }
 }
 
 static inline enum TxfmType get_uv_inter_txtp(const TxfmInfo *const uvt_dim,

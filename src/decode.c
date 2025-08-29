@@ -51,10 +51,23 @@
 #include "src/thread_task.h"
 #include "src/warpmv.h"
 
+static inline int dq_lookup(const int hbd, int qidx) {
+    if (!qidx) return 64;
+    qidx--;
+    const int shift = qidx / 24;
+    qidx %= 24;
+    static const uint8_t dq_lookup_tbl[] = {
+        40, 41, 43, 44, 45, 47, 48, 49, 51, 52, 54, 55,
+        57, 59, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78,
+    };
+    return dq_lookup_tbl[qidx] << shift;
+}
+
 static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
                               const Dav1dFrameHeader *const frame_hdr,
                               const int qidx, uint16_t (*dq)[3][2])
 {
+    // and then ac == dc
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
         const int yac = frame_hdr->segmentation.enabled ?
             iclip_u8(qidx + frame_hdr->segmentation.seg_data.d[i].delta_q) : qidx;
@@ -64,12 +77,12 @@ static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
         const int vac = iclip_u8(yac + frame_hdr->quant.vac_delta);
         const int vdc = iclip_u8(yac + frame_hdr->quant.vdc_delta);
 
-        dq[i][0][0] = dav1d_dq_tbl[seq_hdr->hbd][ydc][0];
-        dq[i][0][1] = dav1d_dq_tbl[seq_hdr->hbd][yac][1];
-        dq[i][1][0] = dav1d_dq_tbl[seq_hdr->hbd][udc][0];
-        dq[i][1][1] = dav1d_dq_tbl[seq_hdr->hbd][uac][1];
-        dq[i][2][0] = dav1d_dq_tbl[seq_hdr->hbd][vdc][0];
-        dq[i][2][1] = dav1d_dq_tbl[seq_hdr->hbd][vac][1];
+        dq[i][0][0] = dq_lookup(seq_hdr->hbd, ydc);
+        dq[i][0][1] = dq_lookup(seq_hdr->hbd, yac);
+        dq[i][1][0] = dq_lookup(seq_hdr->hbd, udc);
+        dq[i][1][1] = dq_lookup(seq_hdr->hbd, uac);
+        dq[i][2][0] = dq_lookup(seq_hdr->hbd, vdc);
+        dq[i][2][1] = dq_lookup(seq_hdr->hbd, vac);
     }
 }
 
@@ -680,11 +693,8 @@ static void obmc_lowest_px(Dav1dTaskContext *const t,
         }
 }
 
-static int decode_b(Dav1dTaskContext *const t,
-                    const enum BlockLevel bl,
-                    const enum BlockSize bs,
-                    const enum BlockPartition bp,
-                    const enum EdgeFlags intra_edge_flags) {
+static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
+    assert(bs != BS_INVALID);
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     Av1Block b_mem, *const b = t->frame_thread.pass ?
@@ -699,13 +709,16 @@ static int decode_b(Dav1dTaskContext *const t,
     const int cbw4 = (bw4 + ss_hor) >> ss_hor, cbh4 = (bh4 + ss_ver) >> ss_ver;
     const int have_left = t->bx > ts->tiling.col_start;
     const int have_top = t->by > ts->tiling.row_start;
-    const int has_chroma = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 &&
+    const int has_chroma = 0 && f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 &&
                            (bw4 > ss_hor || t->bx & 1) &&
                            (bh4 > ss_ver || t->by & 1);
 
+    DEBUG_BLOCK_printf("decode_b[y=%d,x=%d,bs=%dx%d]: r=%d\n",
+                       t->by, t->bx, bw4 * 4, bh4 * 4, ts->msac.rng);
+
     if (t->frame_thread.pass == 2) {
         if (b->intra) {
-            f->bd_fn.recon_b_intra(t, bs, intra_edge_flags, b);
+            f->bd_fn.recon_b_intra(t, bs, 0, b);
 
             const enum IntraPredMode y_mode_nofilt =
                 b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
@@ -806,8 +819,6 @@ static int decode_b(Dav1dTaskContext *const t,
 
     const int cw4 = (w4 + ss_hor) >> ss_hor, ch4 = (h4 + ss_ver) >> ss_ver;
 
-    b->bl = bl;
-    b->bp = bp;
     b->bs = bs;
 
     const Dav1dSegmentationData *seg = NULL;
@@ -882,9 +893,32 @@ static int decode_b(Dav1dTaskContext *const t,
         b->skip_mode = 0;
     }
 
+    if (b->skip_mode) {
+        b->intra = 0;
+    } else if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
+        if (seg && (seg->ref >= 0 || seg->globalmv)) {
+            b->intra = !seg->ref;
+        } else {
+            const int ictx = get_intra_ctx(t->a, &t->l, by4, bx4,
+                                           have_top, have_left);
+            b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac,
+                            ts->cdf.m.intra[ictx]);
+            if (DEBUG_BLOCK_INFO)
+                printf("Post-intra[%d]: r=%d\n", b->intra, ts->msac.rng);
+        }
+    } else if (f->frame_hdr->allow_intrabc) {
+        b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.intrabc);
+        if (DEBUG_BLOCK_INFO)
+            printf("Post-intrabcflag[%d]: r=%d\n", b->intra, ts->msac.rng);
+    } else {
+        b->intra = 1;
+    }
+
     // skip
     if (b->skip_mode || (seg && seg->skip)) {
         b->skip = 1;
+    } else if (b->intra) {
+        b->skip = 0;
     } else {
         const int sctx = t->a->skip[bx4] + t->l.skip[by4];
         b->skip = dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.skip[sctx]);
@@ -944,16 +978,19 @@ static int decode_b(Dav1dTaskContext *const t,
         const int idx = f->seq_hdr->sb128 ? ((t->bx & 16) >> 4) +
                                            ((t->by & 16) >> 3) : 0;
         if (t->cur_sb_cdef_idx_ptr[idx] == -1) {
-            const int v = dav1d_msac_decode_bools(&ts->msac,
+            const int v = dav1d_msac_decode_bools_bypass(&ts->msac,
                               ulog2(f->frame_hdr->cdef.n_strengths));
             t->cur_sb_cdef_idx_ptr[idx] = v;
             if (bw4 > 16) t->cur_sb_cdef_idx_ptr[idx + 1] = v;
             if (bh4 > 16) t->cur_sb_cdef_idx_ptr[idx + 2] = v;
             if (bw4 == 32 && bh4 == 32) t->cur_sb_cdef_idx_ptr[idx + 3] = v;
 
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-cdef_idx[%d]: r=%d\n",
-                        *t->cur_sb_cdef_idx_ptr, ts->msac.rng);
+#if DEBUG_BLOCK_INFO
+            if (f->frame_hdr->cdef.n_strengths > 1)
+                DEBUG_BLOCK_printf("Post-cdef_idx[%d]: r=%d\n",
+                                   t->cur_sb_cdef_idx_ptr[idx],
+                                   ts->msac.rng);
+#endif
         }
     }
 
@@ -969,12 +1006,12 @@ static int decode_b(Dav1dTaskContext *const t,
             int delta_q = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                                           ts->cdf.m.delta_q, 3);
             if (delta_q == 3) {
-                const int n_bits = 1 + dav1d_msac_decode_bools(&ts->msac, 3);
-                delta_q = dav1d_msac_decode_bools(&ts->msac, n_bits) +
+                const int n_bits = 1 + dav1d_msac_decode_bools_bypass(&ts->msac, 3);
+                delta_q = dav1d_msac_decode_bools_bypass(&ts->msac, n_bits) +
                           1 + (1 << n_bits);
             }
             if (delta_q) {
-                if (dav1d_msac_decode_bool_equi(&ts->msac)) delta_q = -delta_q;
+                if (dav1d_msac_decode_bool_bypass(&ts->msac)) delta_q = -delta_q;
                 delta_q *= 1 << f->frame_hdr->delta.q.res_log2;
             }
             ts->last_qidx = iclip(ts->last_qidx + delta_q, 1, 255);
@@ -990,12 +1027,12 @@ static int decode_b(Dav1dTaskContext *const t,
                     int delta_lf = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                         ts->cdf.m.delta_lf[i + f->frame_hdr->delta.lf.multi], 3);
                     if (delta_lf == 3) {
-                        const int n_bits = 1 + dav1d_msac_decode_bools(&ts->msac, 3);
-                        delta_lf = dav1d_msac_decode_bools(&ts->msac, n_bits) +
+                        const int n_bits = 1 + dav1d_msac_decode_bools_bypass(&ts->msac, 3);
+                        delta_lf = dav1d_msac_decode_bools_bypass(&ts->msac, n_bits) +
                                    1 + (1 << n_bits);
                     }
                     if (delta_lf) {
-                        if (dav1d_msac_decode_bool_equi(&ts->msac))
+                        if (dav1d_msac_decode_bool_bypass(&ts->msac))
                             delta_lf = -delta_lf;
                         delta_lf *= 1 << f->frame_hdr->delta.lf.res_log2;
                     }
@@ -1025,48 +1062,110 @@ static int decode_b(Dav1dTaskContext *const t,
         }
     }
 
-    if (b->skip_mode) {
-        b->intra = 0;
-    } else if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
-        if (seg && (seg->ref >= 0 || seg->globalmv)) {
-            b->intra = !seg->ref;
-        } else {
-            const int ictx = get_intra_ctx(t->a, &t->l, by4, bx4,
-                                           have_top, have_left);
-            b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac,
-                            ts->cdf.m.intra[ictx]);
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-intra[%d]: r=%d\n", b->intra, ts->msac.rng);
-        }
-    } else if (f->frame_hdr->allow_intrabc) {
-        b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.intrabc);
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-intrabcflag[%d]: r=%d\n", b->intra, ts->msac.rng);
-    } else {
-        b->intra = 1;
-    }
-
     // intra/inter-specific stuff
     if (b->intra) {
-        uint16_t *const ymode_cdf = IS_INTER_OR_SWITCH(f->frame_hdr) ?
-            ts->cdf.m.y_mode[dav1d_ymode_size_context[bs]] :
-            ts->cdf.kfym[dav1d_intra_mode_context[t->a->mode[bx4]]]
-                        [dav1d_intra_mode_context[t->l.mode[by4]]];
-        b->y_mode = dav1d_msac_decode_symbol_adapt16(&ts->msac, ymode_cdf,
-                                                     N_INTRA_PRED_MODES - 1);
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-ymode[%d]: r=%d\n", b->y_mode, ts->msac.rng);
-
-        // angle delta
-        if (b_dim[2] + b_dim[3] >= 2 && b->y_mode >= VERT_PRED &&
-            b->y_mode <= VERT_LEFT_PRED)
-        {
-            uint16_t *const acdf = ts->cdf.m.angle_delta[b->y_mode - VERT_PRED];
-            const int angle = dav1d_msac_decode_symbol_adapt8(&ts->msac, acdf, 6);
-            b->y_angle = angle - 3;
+#define IS_DIR_MODE(m) ((m) - 1 <= (unsigned) VERT_LEFT_PRED - 1)
+        const int y_set = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                              ts->cdf.m.intra_y_set, 3);
+        int y_mode_idx, ctx;
+        if (!y_set) {
+            ctx = IS_DIR_MODE(t->a->mode[bx4 + bw4 - 1]) +
+                  IS_DIR_MODE(t->l.mode[by4 + bh4 - 1]);
+            y_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                             ts->cdf.m.intra_y_idx0[ctx], 7);
+            if (y_mode_idx == 7)
+                y_mode_idx += dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                  ts->cdf.m.intra_y_idx1[ctx], 5);
         } else {
-            b->y_angle = 0;
+#if DEBUG_BLOCK_INFO
+            ctx = -1;
+#endif
+            y_mode_idx = y_set * 16 - 3 +
+                         dav1d_msac_decode_bools_bypass(&ts->msac, 4);
         }
+        int midx = 0xff;
+        if (y_mode_idx < 5) {
+            static const uint8_t reordered_nondir_y_mode[] = {
+                DC_PRED, SMOOTH_PRED, SMOOTH_V_PRED, SMOOTH_H_PRED, PAETH_PRED,
+            };
+            b->y_mode = reordered_nondir_y_mode[y_mode_idx];
+            b->y_angle = 0;
+        } else {
+            const int dir_y_mode_idx = y_mode_idx - 5;
+            static const uint8_t default_mode_list_y[] = {
+                17, 45, 3, 10, 24, 31, 38, 52,
+                //  (-2, +2)
+                15, 19, 43, 47, 1, 5, 8, 12, 22, 26, 29, 33, 36, 40, 50, 54,
+                //  (-1, +1)
+                16, 18, 44, 46, 2, 4, 9, 11, 23, 25, 30, 32, 37, 39, 51, 53,
+                //  (-3, +3)
+                14, 20, 42, 48, 0, 6, 7, 13, 21, 27, 28, 34, 35, 41, 49, 55
+            };
+            uint8_t custom_mode_list_y[56];
+            const uint8_t *reorder = default_mode_list_y;
+            if (bw4 * bh4 > 2) {
+                // modes are reordered if neighbour (above/left) modes used
+                // directional intra prediction modes
+                uint64_t mask = 0;
+                uint8_t *ptr = custom_mode_list_y;
+                *ptr = -1;
+                if (IS_DIR_MODE(t->l.mode[by4 + bh4 - 1])) {
+                    const int lmidx = t->l.midx[by4 + bh4 - 1];
+                    *ptr++ = lmidx;
+                    mask |= 1ULL << lmidx;
+                }
+                if (IS_DIR_MODE(t->a->mode[bx4 + bw4 - 1])) {
+                    const int amidx = t->a->midx[bx4 + bw4 - 1];
+                    if (amidx != custom_mode_list_y[0]) {
+                        *ptr++ = amidx;
+                        mask |= 1ULL << amidx;
+                    }
+                }
+                long n_dirs = ptr - custom_mode_list_y;
+                if (n_dirs > 0) {
+                    reorder = custom_mode_list_y;
+                    if (bw4 * bh4 > 4 && dir_y_mode_idx >= n_dirs) {
+                        // add surrounding [-3..+3] angles
+                        for (int i = 1; i < 4; i++) {
+                            for (int n = 0; n < n_dirs; n++) {
+                                const int cmidx = custom_mode_list_y[n];
+                                for (int delta = -i, j = 0; j < 2; delta = +i, j++) {
+                                    // FIXME replace modulo with fastdiv
+                                    const int dmidx = (cmidx + delta) % 56;
+                                    if (!(mask & (1 << dmidx))) {
+                                        *ptr++ = dmidx;
+                                        mask |= 1ULL << dmidx;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    n_dirs = ptr - custom_mode_list_y;
+                    if (dir_y_mode_idx >= n_dirs) {
+                        // remainder of modes in default order
+                        for (unsigned long n = 0;
+                             n < ARRAY_SIZE(default_mode_list_y); n++)
+                        {
+                            const int fmidx = default_mode_list_y[n];
+                            const uint64_t bit = 1ULL << fmidx;
+                            if (!(mask & bit)) *ptr++ = fmidx;
+                        }
+                    }
+                }
+            }
+            static const uint8_t reordered_dir_y_mode[] = {
+                DIAG_DOWN_LEFT_PRED,  VERT_LEFT_PRED, VERT_PRED, VERT_RIGHT_PRED,
+                DIAG_DOWN_RIGHT_PRED, HOR_DOWN_PRED,  HOR_PRED,  HOR_UP_PRED,
+            };
+            const int dir_y_mode_reord = midx = reorder[dir_y_mode_idx];
+            // FIXME division/modulo can be replaced with fastdiv
+            b->y_mode = reordered_dir_y_mode[dir_y_mode_reord / 7];
+            b->y_angle = dir_y_mode_reord % 7 - 3;
+        }
+        DEBUG_BLOCK_printf("Post-intra_y_mode[set=%d,idx=%d,ctx=%d,mode=%d,angle=%d]: r=%d\n",
+                           y_set, y_mode_idx, ctx,
+                           b->y_mode, b->y_angle, ts->msac.rng);
 
         if (has_chroma) {
             const int cfl_allowed = f->frame_hdr->segmentation.lossless[b->seg_id] ?
@@ -1139,23 +1238,6 @@ static int decode_b(Dav1dTaskContext *const t,
             }
         }
 
-#if 0
-        if (b->y_mode == DC_PRED && !b->pal_sz[0] &&
-            imax(b_dim[2], b_dim[3]) <= 3 && f->seq_hdr->filter_intra)
-        {
-            const int is_filter = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                      ts->cdf.m.use_filter_intra[bs]);
-            if (is_filter) {
-                b->y_mode = FILTER_PRED;
-                b->y_angle = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                 ts->cdf.m.filter_intra, 4);
-            }
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-filterintramode[%d/%d]: r=%d\n",
-                       b->y_mode, b->y_angle, ts->msac.rng);
-        }
-#endif
-
         if (b->pal_sz[0]) {
             uint8_t *pal_idx;
             if (t->frame_thread.pass) {
@@ -1184,34 +1266,226 @@ static int decode_b(Dav1dTaskContext *const t,
                 printf("Post-uv-pal-indices: r=%d\n", ts->msac.rng);
         }
 
+        // get "spatial neighbours", depending on edge availability;
+        // do not cross SB boundaries vertically
+        const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
+        const BlockContext *nb0, *nb1;
+        int boff0 = -1, boff1;
+
+        if (have_top_in_sb) {
+            if (have_left) {
+                nb0 = t->a;  boff0 = bx4 + bw4 - 1;
+                nb1 = &t->l; boff1 = by4 + bh4 - 1;
+            } else {
+                nb0 = nb1 = t->a; boff0 = bx4; boff1 = bx4 + bw4 - 1;
+            }
+        } else if (have_left) {
+            // we use left by default, which is initialized to zero
+            nb0 = nb1 = &t->l; boff0 = by4; boff1 = by4 + bh4 - 1;
+        }
+
+        // =min(5,floor(log2(bw4+bh4)*1.99-1.62)) or
+        // =      floor(log2(bw4+bh4)*1.55-0.555) - or anything in between
+        b->fsc = 0;
+        if (imax(bw4, bh4) <= 8 && f->seq_hdr->fsc) {
+            static const uint8_t fsc_bsize_groups[N_BS_SIZES] = {
+                [BS_32x32] = 5,
+                [BS_32x16] = 5,
+                [BS_32x8] = 4,
+                [BS_32x4] = 4,
+                [BS_16x32] = 5,
+                [BS_16x16] = 4,
+                [BS_16x8] = 3,
+                [BS_16x4] = 3,
+                [BS_8x32] = 4,
+                [BS_8x16] = 3,
+                [BS_8x8] = 2,
+                [BS_8x4] = 1,
+                [BS_4x32] = 4,
+                [BS_4x16] = 3,
+                [BS_4x8] = 1,
+                [BS_4x4] = 0,
+            };
+            const int sz_ctx = fsc_bsize_groups[bs];
+            const int ctx = !b->intra ? 3 : boff0 == -1 ? 0 :
+                            nb0->fsc[boff0] + nb1->fsc[boff1];
+            b->fsc = dav1d_msac_decode_bool_adapt(&ts->msac,
+                         ts->cdf.m.fsc[ctx][sz_ctx]);
+            DEBUG_BLOCK_printf("Post-fsc[ctx=%d|%d,%d]: r=%d\n",
+                               ctx, sz_ctx, b->fsc, ts->msac.rng);
+        }
+
+        b->mrl_index = b->multi_mrl = 0;
+        if (IS_DIR_MODE(b->y_mode)) {
+            const int ctx = boff0 == -1 ? 0 : nb0->mrl[boff0] + nb1->mrl[boff1];
+            b->mrl_index = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                               ts->cdf.m.mrl_index[ctx], 3);
+            DEBUG_BLOCK_printf("Post-mrl_index[ctx=%d,%d]: r=%d\n",
+                               ctx, b->mrl_index, ts->msac.rng);
+            if (b->mrl_index > 0) {
+                const int ctx2 = boff0 == -1 ? 0 :
+                                 nb0->multi_mrl[boff0] + nb1->multi_mrl[boff1];
+                b->multi_mrl = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                   ts->cdf.m.multi_mrl[ctx2]);
+                DEBUG_BLOCK_printf("Post-multi_line_mrl[ctx=%d,%d]: r=%d\n",
+                                   ctx2, b->multi_mrl, ts->msac.rng);
+            }
+        }
+
+        b->dip = 0;
+        if (b->y_mode == DC_PRED && f->seq_hdr->intra_dip &&
+            !b->mrl_index && imin(bw4, bh4) >= 2 && bw4 * bh4 >= 8)
+        {
+            const int ctx = boff0 == -1 ? 0 : nb0->dip[boff0] + nb1->dip[boff1];
+            b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                  ts->cdf.coef.dip[ctx]);
+            if (b->dip) {
+                b->dip = 1 |
+                    (dav1d_msac_decode_bool_bypass(&ts->msac) << 1) |
+                    (dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                                     ts->cdf.m.dip_mode, 5) << 2);
+            }
+            DEBUG_BLOCK_printf("Post-dip[ctx=%d,%d]: r=%d\n",
+                               ctx, !!b->dip, ts->msac.rng);
+        }
+
         const TxfmInfo *t_dim;
         if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
+            // FIXME this can be idtx & larger
             b->tx = b->uvtx = (int) TX_4X4;
             t_dim = &dav1d_txfm_dimensions[TX_4X4];
         } else {
             b->tx = dav1d_max_txfm_size_for_bs[bs][0];
             b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
             t_dim = &dav1d_txfm_dimensions[b->tx];
-            if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE && t_dim->max > TX_4X4) {
-                const int tctx = get_tx_ctx(t->a, &t->l, t_dim, by4, bx4);
-                uint16_t *const tx_cdf = ts->cdf.m.txsz[t_dim->max - 1][tctx];
-                int depth = dav1d_msac_decode_symbol_adapt4(&ts->msac, tx_cdf,
-                                imin(t_dim->max, 2));
 
-                while (depth--) {
-                    b->tx = t_dim->sub;
+            if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
+                t_dim->max > TX_4X4 && imax(bw4, bh4) <= 16)
+            {
+                static const uint8_t size_to_tx_part_group_lookup[] = {
+                    [BS_64x64] = 7,
+                    [BS_64x32] = 6,
+                    [BS_64x16] = 8,
+                    [BS_64x8] = 8,
+                    [BS_64x4] = 8,
+                    [BS_32x64] = 6,
+                    [BS_32x32] = 5,
+                    [BS_32x16] = 4,
+                    [BS_32x8] = 8,
+                    [BS_32x4] = 8,
+                    [BS_16x64] = 8,
+                    [BS_16x32] = 4,
+                    [BS_16x16] = 3,
+                    [BS_16x8] = 2,
+                    [BS_16x4] = 8,
+                    [BS_8x64] = 8,
+                    [BS_8x32] = 8,
+                    [BS_8x16] = 2,
+                    [BS_8x8] = 1,
+                    [BS_8x4] = 0,
+                    [BS_4x64] = 8,
+                    [BS_4x32] = 8,
+                    [BS_4x16] = 8,
+                    [BS_4x8] = 0,
+                    [BS_4x4] = 0,
+                };
+                const int szctx = size_to_tx_part_group_lookup[bs];
+                int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                   ts->cdf.m.tx_split[b->fsc][0][szctx]);
+                if (is_split) {
+                    static int8_t tx_part_tbl[][7] = {
+                        [ TX_4X4]   = { -1, -1, -1, -1, -1, -1, -1 },
+                        [RTX_4X8]   = { -1, TX_4X4, -1, -1, -1, -1, -1 },
+                        [RTX_4X16]  = { -1, RTX_4X8, -1, TX_4X4, -1, -1, -1 },
+                        [RTX_4X32]  = { -1, RTX_4X16, -1, RTX_4X8, -1, -1, -1 },
+                        [RTX_4X64]  = { -1, RTX_4X32, -1, RTX_4X16, -1, -1, -1 },
+                        [RTX_8X4]   = { -1, -1, TX_4X4, -1, -1, -1, -1 },
+                        [ TX_8X8]   = { TX_4X4, RTX_8X4, RTX_4X8, -1, -1, -1, -1 },
+                        [RTX_8X16]  = { RTX_4X8, TX_8X8, RTX_4X16,
+                                        RTX_8X4, -1, -1, -1 },
+                        [RTX_8X32]  = { RTX_4X16, RTX_8X16, RTX_4X32,
+                                        TX_8X8, -1, -1, -1 },
+                        [RTX_8X64]  = { RTX_4X32, RTX_8X32, RTX_4X64,
+                                        RTX_8X16, -1, -1, -1 },
+                        [RTX_16X4]  = { -1, -1, RTX_8X4, -1, TX_4X4, -1, -1 },
+                        [RTX_16X8]  = { RTX_8X4, RTX_16X4, TX_8X8,
+                                        -1, TX_8X8, -1, -1 },
+                        [ TX_16X16] = { TX_8X8, RTX_16X8, RTX_8X16,
+                                        RTX_16X4, RTX_4X16, -1, -1 },
+                        [RTX_16X32] = { RTX_8X16, TX_16X16, RTX_8X32,
+                                        RTX_16X8, RTX_4X32, -1, -1 },
+                        [RTX_16X64] = { RTX_8X32, RTX_16X32, RTX_8X64,
+                                        TX_16X16, RTX_4X64, -1, -1 },
+                        [RTX_32X4]  = { -1, -1, RTX_16X4, -1, RTX_8X4, -1, -1 },
+                        [RTX_32X8]  = { RTX_16X4, RTX_32X4, RTX_16X8,
+                                        -1, TX_8X8, -1, -1 },
+                        [RTX_32X16] = { RTX_16X8, RTX_32X8, TX_16X16,
+                                        RTX_32X4, RTX_8X16, -1, -1 },
+                        [ TX_32X32] = { TX_16X16, RTX_32X16, RTX_16X32,
+                                        RTX_32X8, RTX_8X32, -1, -1 },
+                        [RTX_32X64] = { RTX_16X32, TX_32X32, RTX_16X64,
+                                        RTX_32X16, RTX_8X64, -1, -1 },
+                        [RTX_64X4]  = { -1, -1, RTX_32X4, -1, RTX_16X4, -1, -1 },
+                        [RTX_64X8]  = { RTX_32X4, RTX_64X4, RTX_32X8,
+                                        -1, RTX_16X8, -1, -1 },
+                        [RTX_64X16] = { RTX_32X8, RTX_64X8, RTX_32X16,
+                                        RTX_64X4, TX_16X16, -1, -1 },
+                        [RTX_64X32] = { RTX_32X16, RTX_64X16, TX_32X32,
+                                        RTX_64X8, RTX_16X32, -1, -1 },
+                        [ TX_64X64] = { TX_32X32, RTX_64X32, RTX_32X64,
+                                        RTX_64X16, RTX_16X64, -1, -1 },
+                    };
+                    if (t_dim->min >= TX_8X8) {
+                        static const uint8_t size_to_tx_type_group_vh_lookup[] = {
+                            [BS_64x64] = 9,
+                            [BS_64x32] = 8,
+                            [BS_64x16] = 13,
+                            [BS_64x8] = 11,
+                            [BS_32x64] = 7,
+                            [BS_32x32] = 6,
+                            [BS_32x16] = 5,
+                            [BS_32x8] = 11,
+                            [BS_16x64] = 12,
+                            [BS_16x32] = 4,
+                            [BS_16x16] = 3,
+                            [BS_16x8] = 2,
+                            [BS_8x64] = 10,
+                            [BS_8x32] = 10,
+                            [BS_8x16] = 1,
+                            [BS_8x8] = 0,
+                        };
+                        const int ctx = size_to_tx_type_group_vh_lookup[bs];
+                        const int tx_part =
+                            dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                ts->cdf.m.tx_part_2d[b->fsc][0][ctx], 6);
+                        b->tx = tx_part_tbl[b->tx][tx_part];
+                        if (b->tx == (uint8_t) -1) {
+                            printf("part=%d not yet handled for tx=%dx%d\n",
+                                   tx_part + 1, t_dim->w * 4, t_dim->h * 4);
+                            abort();
+                        }
+                    } else if (t_dim->max >= TX_16X16) {
+                        const int ctx = !!t_dim->lw;
+                        const int tx_part_4way =
+                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.m.tx_part_1d[b->fsc][0][ctx]);
+                        b->tx = tx_part_tbl[b->tx][1 + ctx + tx_part_4way * 2];
+                        assert(b->tx != (uint8_t) -1);
+                    } else {
+                        assert(t_dim->min == TX_4X4 && t_dim->max == TX_8X8);
+                        b->tx = (int) TX_4X4;
+                    }
                     t_dim = &dav1d_txfm_dimensions[b->tx];
                 }
             }
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-tx[%d]: r=%d\n", b->tx, ts->msac.rng);
+            DEBUG_BLOCK_printf("Post-tx: r=%d\n", ts->msac.rng);
         }
 
         // reconstruction
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            f->bd_fn.recon_b_intra(t, bs, intra_edge_flags, b);
+            f->bd_fn.recon_b_intra(t, bs, 0, b);
         }
 
         if (f->frame_hdr->loopfilter.level_y[0] ||
@@ -1235,7 +1509,12 @@ static int decode_b(Dav1dTaskContext *const t,
 #define set_ctx(rep_macro) \
             rep_macro(edge->tx_intra, off, t_lsz); \
             rep_macro(edge->tx, off, t_lsz); \
+            rep_macro(edge->fsc, off, b->fsc); \
             rep_macro(edge->mode, off, y_mode_nofilt); \
+            rep_macro(edge->midx, off, midx); \
+            rep_macro(edge->mrl, off, !!b->mrl_index); \
+            rep_macro(edge->multi_mrl, off, b->multi_mrl); \
+            rep_macro(edge->dip, off, !!b->dip); \
             rep_macro(edge->pal_sz, off, b->pal_sz[0]); \
             rep_macro(edge->seg_pred, off, seg_pred); \
             rep_macro(edge->skip_mode, off, 0); \
@@ -1270,7 +1549,7 @@ static int decode_b(Dav1dTaskContext *const t,
         int n_mvs, ctx;
         dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
                           (union refmvs_refpair) { .ref = { 0, -1 }},
-                          bs, intra_edge_flags, t->by, t->bx);
+                          bs, 0, t->by, t->bx);
 
         if (mvstack[0].mv.mv[0].n)
             b->mv[0] = mvstack[0].mv.mv[0];
@@ -1364,7 +1643,11 @@ static int decode_b(Dav1dTaskContext *const t,
         for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
             rep_macro(edge->tx_intra, off, b_dim[2 + i]); \
+            rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->mode, off, DC_PRED); \
+            rep_macro(edge->mrl, off, 0); \
+            rep_macro(edge->multi_mrl, off, 0); \
+            rep_macro(edge->dip, off, 0); \
             rep_macro(edge->pal_sz, off, 0); \
             /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
             rep_macro(t->pal_sz_uv[i], off, 0); \
@@ -1411,7 +1694,7 @@ static int decode_b(Dav1dTaskContext *const t,
             dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
-                              bs, intra_edge_flags, t->by, t->bx);
+                              bs, 0, t->by, t->bx);
 
             b->mv[0] = mvstack[0].mv.mv[0];
             b->mv[1] = mvstack[0].mv.mv[1];
@@ -1489,7 +1772,7 @@ static int decode_b(Dav1dTaskContext *const t,
             dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
-                              bs, intra_edge_flags, t->by, t->bx);
+                              bs, 0, t->by, t->bx);
 
             b->inter_mode = dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.comp_inter_mode[ctx],
@@ -1608,7 +1891,7 @@ static int decode_b(Dav1dTaskContext *const t,
                 } else {
                     b->comp_type = COMP_INTER_SEG;
                 }
-                b->mask_sign = dav1d_msac_decode_bool_equi(&ts->msac);
+                b->mask_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
                 if (DEBUG_BLOCK_INFO)
                     printf("Post-seg/wedge[%d,wedge_idx=%d,sign=%d]: r=%d\n",
                            b->comp_type == COMP_INTER_WEDGE,
@@ -1666,7 +1949,7 @@ static int decode_b(Dav1dTaskContext *const t,
             int n_mvs, ctx;
             dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
                               (union refmvs_refpair) { .ref = { b->ref[0] + 1, -1 }},
-                              bs, intra_edge_flags, t->by, t->bx);
+                              bs, 0, t->by, t->bx);
 
             // mode parsing and mv derivation from ref_mvs
             if ((seg && (seg->skip || seg->globalmv)) ||
@@ -1787,7 +2070,7 @@ static int decode_b(Dav1dTaskContext *const t,
                 // reaching here means the block allows obmc - check warp by
                 // finding matching-ref blocks in top/left edges
                 uint64_t mask[2] = { 0, 0 };
-                find_matching_ref(t, intra_edge_flags, bw4, bh4, w4, h4,
+                find_matching_ref(t, 0, bw4, bh4, w4, h4,
                                   have_left, have_top, b->ref[0], mask);
                 const int allow_warp = !f->svc[b->ref[0]][0].scale &&
                     !f->frame_hdr->force_integer_mv &&
@@ -1918,6 +2201,7 @@ static int decode_b(Dav1dTaskContext *const t,
             rep_macro(edge->seg_pred, off, seg_pred); \
             rep_macro(edge->skip_mode, off, b->skip_mode); \
             rep_macro(edge->intra, off, 0); \
+            rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->skip, off, b->skip); \
             rep_macro(edge->pal_sz, off, 0); \
             /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
@@ -1927,6 +2211,9 @@ static int decode_b(Dav1dTaskContext *const t,
             rep_macro(edge->filter[0], off, filter[0]); \
             rep_macro(edge->filter[1], off, filter[1]); \
             rep_macro(edge->mode, off, b->inter_mode); \
+            rep_macro(edge->mrl, off, 0); \
+            rep_macro(edge->multi_mrl, off, 0); \
+            rep_macro(edge->dip, off, 0); \
             rep_macro(edge->ref[0], off, b->ref[0]); \
             rep_macro(edge->ref[1], off, ((uint8_t) b->ref[1]))
             case_set(b_dim[2 + i]);
@@ -2073,14 +2360,9 @@ static int decode_b(Dav1dTaskContext *const t,
 
 #include <sanitizer/msan_interface.h>
 
-static int checked_decode_b(Dav1dTaskContext *const t,
-                            const enum BlockLevel bl,
-                            const enum BlockSize bs,
-                            const enum BlockPartition bp,
-                            const enum EdgeFlags intra_edge_flags)
-{
+static int checked_decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
     const Dav1dFrameContext *const f = t->f;
-    const int err = decode_b(t, bl, bs, bp, intra_edge_flags);
+    const int err = decode_b(t, bs);
 
     if (err == 0 && !(t->frame_thread.pass & 1)) {
         const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
@@ -2122,274 +2404,331 @@ static int checked_decode_b(Dav1dTaskContext *const t,
 
 #endif /* defined(__has_feature) */
 
-static int decode_sb(Dav1dTaskContext *const t, const enum BlockLevel bl,
-                     const EdgeNode *const node)
-{
+static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
+    assert(bs != BS_INVALID);
     const Dav1dFrameContext *const f = t->f;
     Dav1dTileState *const ts = t->ts;
-    const int hsz = 16 >> bl;
-    const int have_h_split = f->bw > t->bx + hsz;
-    const int have_v_split = f->bh > t->by + hsz;
+    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const int bw4 = b_dim[0], bh4 = b_dim[1];
+    const int hw4 = bw4 >> 1, hh4 = bh4 >> 1;
+    const int qw4 = hw4 >> 1, qh4 = hh4 >> 1;
+    const int have_h_split = f->bw > t->bx + hw4;
+    const int have_v_split = f->bh > t->by + hh4;
 
-    if (!have_h_split && !have_v_split) {
-        assert(bl < BL_8X8);
-        return decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 0));
-    }
+    DEBUG_BLOCK_printf("decode_sb[y=%d,x=%d,bs=%dx%d]: r=%d\n",
+                       t->by, t->bx, bw4 * 4, bh4 * 4, ts->msac.rng);
 
-    uint16_t *pc;
-    enum BlockPartition bp;
-    int ctx, bx8, by8;
+    static const struct PartitionConstants {
+        int8_t part[2 /* h, v */][4 /* half, quarter, eighth, split */];
+        int8_t ctx[2 /* _, direction */];
+    } subb[] = {
+        [BS_256x256] = {
+            { { BS_256x128, -1, -1, BS_128x128 },
+              { BS_128x256, -1, -1, BS_128x128 } },
+            { 9, 12 },
+        }, [BS_256x128] = {
+            { { -1, -1, -1, -1 },
+              { BS_128x128, -1, -1, -1 } },
+            { 8, -1 /* 11 */ },
+        }, [BS_128x256] = {
+            { { BS_128x128, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 7, -1 /* 10 */ },
+        }, [BS_128x128] = {
+            { { BS_128x64, -1, -1, BS_64x64 },
+              { BS_64x128, -1, -1, BS_64x64 } },
+            { 6, 9 },
+        }, [BS_128x64] = {
+            { { -1, -1, -1, -1 },
+              { BS_64x64, -1, -1, -1 } },
+            { 5, -1 /* 8 */ },
+        }, [BS_64x128] = {
+            { { BS_64x64, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 4, -1 /* 7 */ },
+        }, [BS_64x64] = {
+            { { BS_64x32, BS_64x16, BS_64x8, BS_32x32 },
+              { BS_32x64, BS_16x64, BS_8x64, BS_32x32 } },
+            { 3, 6 },
+        }, [BS_64x32] = {
+            { { BS_64x16, BS_64x8, BS_64x4, BS_32x16 },
+              { BS_32x32, BS_16x32, BS_8x32, BS_32x16 } },
+            { 3, 5 },
+        }, [BS_64x16] = {
+            { { BS_64x8, BS_64x4, -1, BS_32x8 },
+              { BS_32x16, BS_16x16, BS_8x16, BS_32x8 } },
+            { 15, 14 },
+        }, [BS_64x8] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 0, 0 },
+        }, [BS_64x4] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 0, -1 },
+        }, [BS_32x64] = {
+            { { BS_32x32, BS_32x16, BS_32x8, BS_16x32 },
+              { BS_16x64, BS_8x64, BS_4x64, BS_16x32 } },
+            { 3, 4 },
+        }, [BS_32x32] = {
+            { { BS_32x16, BS_32x8, BS_32x4, BS_16x16 },
+              { BS_16x32, BS_8x32, BS_4x32, BS_16x16 } },
+            { 2, 3 },
+        }, [BS_32x16] = {
+            { { BS_32x8, BS_32x4, -1, BS_16x8 },
+              { BS_16x16, BS_8x16, BS_4x16, BS_16x8 } },
+            { 2, 2 },
+        }, [BS_32x8] = {
+            { { BS_32x4, -1, -1, -1 },
+              { BS_16x8, BS_8x8, BS_4x8, BS_16x4 } },
+            { 13, 14 },
+        }, [BS_32x4] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 0, -1 },
+        }, [BS_16x64] = {
+            { { BS_16x32, BS_16x16, BS_16x8, BS_8x32 },
+              { BS_8x64, BS_4x64, -1, BS_8x32 } },
+            { 14, 13 },
+        }, [BS_16x32] = {
+            { { BS_16x16, BS_16x8, BS_16x4, BS_8x16 },
+              { BS_8x32, BS_4x32, -1, BS_8x16 } },
+            { 2, 1 },
+        }, [BS_16x16] = {
+            { { BS_16x8, BS_16x4, -1, BS_8x8 },
+              { BS_8x16, BS_4x16, -1, BS_8x8 } },
+            { 1, 0 },
+        }, [BS_16x8] = {
+            { { BS_16x4, -1, -1, -1 },
+              { BS_8x8, BS_4x8, -1, BS_8x4 } },
+            { 1, 2 },
+        }, [BS_16x4] = {
+            { { -1, -1, -1, -1 },
+              { BS_8x4, -1, -1, -1 } },
+            { 11, 14 },
+        }, [BS_8x64] = {
+            { { BS_8x32, BS_8x16, BS_8x8, BS_4x32 },
+              { BS_4x32, -1, -1, -1 } },
+            { 0, 0 },
+        }, [BS_8x32] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 12, 13 },
+        }, [BS_8x16] = {
+            { { BS_8x8, BS_8x4, -1, BS_4x8 },
+              { BS_4x16, -1, -1, -1 } },
+            { 1, 1 },
+        }, [BS_8x8] = {
+            { { BS_8x4, -1, -1, -1 },
+              { BS_4x8, -1, -1, -1 } },
+            { 0, 0 },
+        }, [BS_8x4] = {
+            { { -1, -1, -1, -1 },
+              { BS_4x4, -1, -1, -1 } },
+            { 0, -1 },
+        }, [BS_4x64] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 0, -1 },
+        }, [BS_4x32] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 0, -1 },
+        }, [BS_4x16] = {
+            { { BS_4x8, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 10, -1 },
+        }, [BS_4x8] = {
+            { { BS_4x4, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { 0, -1 },
+        }, [BS_4x4] = {
+            { { -1, -1, -1, -1 },
+              { -1, -1, -1, -1 } },
+            { -1, -1 },
+        },
+    };
+    const struct PartitionConstants *const pcc = &subb[bs];
+    enum BlockPartition bp = PARTITION_INVALID;
+    int bx4, by4;
     if (t->frame_thread.pass != 2) {
-        if (0 && bl == BL_64X64)
-            printf("poc=%d,y=%d,x=%d,bl=%d,r=%d\n",
-                   f->frame_hdr->frame_offset, t->by, t->bx, bl, ts->msac.rng);
-        bx8 = (t->bx & 31) >> 1;
-        by8 = (t->by & 31) >> 1;
-        ctx = get_partition_ctx(t->a, &t->l, bl, by8, bx8);
-        pc = ts->cdf.m.partition[bl][ctx];
-    }
-
-    if (have_h_split && have_v_split) {
-        if (t->frame_thread.pass == 2) {
-            const Av1Block *const b = &f->frame_thread.b[t->by * f->b4_stride + t->bx];
-            bp = b->bl == bl ? b->bp : PARTITION_SPLIT;
-        } else {
-            bp = dav1d_msac_decode_symbol_adapt16(&ts->msac, pc,
-                                                  dav1d_partition_type_count[bl]);
-            if (f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I422 &&
-                (bp == PARTITION_V || bp == PARTITION_V4 ||
-                 bp == PARTITION_T_LEFT_SPLIT || bp == PARTITION_T_RIGHT_SPLIT))
-            {
-                return 1;
+        bx4 = t->bx & 31;
+        by4 = t->by & 31;
+        if ((pcc->part[0][0] & pcc->part[1][0]) == -1) {
+            bp = PARTITION_NONE;
+        } else if (!have_h_split || !have_v_split) {
+            if (bw4 == bh4) {
+                bp = !have_v_split ? PARTITION_H : PARTITION_V;
+            } else if (bw4 > bh4) {
+                if (!have_h_split || f->bh <= t->by + qh4)
+                    bp = PARTITION_V;
+            } else if (bh4 > bw4) {
+                if (!have_v_split || f->bw <= t->bx + qw4)
+                    bp = PARTITION_H;
             }
-            if (DEBUG_BLOCK_INFO)
-                printf("poc=%d,y=%d,x=%d,bl=%d,ctx=%d,bp=%d: r=%d\n",
-                       f->frame_hdr->frame_offset, t->by, t->bx, bl, ctx, bp,
-                       ts->msac.rng);
         }
-        const uint8_t *const b = dav1d_block_sizes[bl][bp];
-
-        switch (bp) {
-        case PARTITION_NONE:
-            if (decode_b(t, bl, b[0], PARTITION_NONE, node->o))
-                return -1;
-            break;
-        case PARTITION_H:
-            if (decode_b(t, bl, b[0], PARTITION_H, node->h[0]))
-                return -1;
-            t->by += hsz;
-            if (decode_b(t, bl, b[0], PARTITION_H, node->h[1]))
-                return -1;
-            t->by -= hsz;
-            break;
-        case PARTITION_V:
-            if (decode_b(t, bl, b[0], PARTITION_V, node->v[0]))
-                return -1;
-            t->bx += hsz;
-            if (decode_b(t, bl, b[0], PARTITION_V, node->v[1]))
-                return -1;
-            t->bx -= hsz;
-            break;
-        case PARTITION_SPLIT:
-            if (bl == BL_8X8) {
-                const EdgeTip *const tip = (const EdgeTip *) node;
-                assert(hsz == 1);
-                if (decode_b(t, bl, BS_4x4, PARTITION_SPLIT, EDGE_ALL_TR_AND_BL))
-                    return -1;
-                const enum Filter2d tl_filter = t->tl_4x4_filter;
-                t->bx++;
-                if (decode_b(t, bl, BS_4x4, PARTITION_SPLIT, tip->split[0]))
-                    return -1;
-                t->bx--;
-                t->by++;
-                if (decode_b(t, bl, BS_4x4, PARTITION_SPLIT, tip->split[1]))
-                    return -1;
-                t->bx++;
-                t->tl_4x4_filter = tl_filter;
-                if (decode_b(t, bl, BS_4x4, PARTITION_SPLIT, tip->split[2]))
-                    return -1;
-                t->bx--;
-                t->by--;
-#if ARCH_X86_64
-                if (t->frame_thread.pass) {
-                    /* In 8-bit mode with 2-pass decoding the coefficient buffer
-                     * can end up misaligned due to skips here. Work around
-                     * the issue by explicitly realigning the buffer. */
-                    const int p = t->frame_thread.pass & 1;
-                    ts->frame_thread[p].cf =
-                        (void*)(((uintptr_t)ts->frame_thread[p].cf + 63) & ~63);
-                }
+        if (bp == PARTITION_INVALID) {
+#if DEBUG_BLOCK_INFO
+            if (0 && bs == (f->seq_hdr->sb128 == 2 ? BS_256x256 :
+                            f->seq_hdr->sb128 == 1 ? BS_128x128 : BS_64x64))
+                printf("poc=%d,y=%d,x=%d,bs=%d,r=%d\n",
+                       f->frame_hdr->frame_offset, t->by, t->bx, bs, ts->msac.rng);
 #endif
+            const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, by4, bx4);
+            const int ctx2 = ctx1 + pcc->ctx[0] * 4;
+            const int is_split =
+                dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.part_split[ctx2]);
+            if (!is_split) {
+                bp = PARTITION_NONE;
             } else {
-                if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 0)))
-                    return 1;
-                t->bx += hsz;
-                if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 1)))
-                    return 1;
-                t->bx -= hsz;
-                t->by += hsz;
-                if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 2)))
-                    return 1;
-                t->bx += hsz;
-                if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 3)))
-                    return 1;
-                t->bx -= hsz;
-                t->by -= hsz;
+                if (bs == BS_128x128 || bs == BS_256x256) {
+                    const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
+                    const int is_square =
+                        dav1d_msac_decode_bool_adapt(&ts->msac,
+                            ts->cdf.m.part_square[ctx3]);
+                    if (is_square)
+                        bp = PARTITION_SPLIT;
+                }
+                if (bp == PARTITION_INVALID) {
+                    // split - find direction
+                    int dir;
+                    if (pcc->part[0][0] == -1 || pcc->part[1][0] == -1) {
+                        dir = pcc->part[0][0] == -1;
+                    } else {
+                        const int ctx4 = ctx1 + pcc->ctx[1] * 4;
+                        dir = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                  ts->cdf.m.part_dir[ctx4]);
+                    }
+                    assert(pcc->part[dir][0] != -1);
+                    bp = dir ? PARTITION_V : PARTITION_H;
+
+                    // v3/h3 [ext-partition]
+                    if (f->seq_hdr->ext_partitions && pcc->part[dir][1] != -1) {
+                        const int ctx5 = get_partition2_ctx(t->a, &t->l, b_dim,
+                                                            dir, by4, bx4);
+                        const int ctx6 = ctx5 + pcc->ctx[0] * 4;
+                        const int is_hv3 =
+                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.m.part_hv3[ctx6]);
+                        if (is_hv3) {
+                            bp = dir ? PARTITION_V3 : PARTITION_H3;
+                            if (f->seq_hdr->uneven_4way_partitions &&
+                                pcc->part[dir][2] != -1)
+                            {
+                                const int is_hv4 =
+                                    dav1d_msac_decode_bool_adapt(&ts->msac,
+                                        ts->cdf.m.part_hv4[ctx6]);
+                                if (is_hv4) {
+                                    // FIXME this is wrong, need a bypass variant
+                                    const int is_hv4ab =
+                                        dav1d_msac_decode_bool_bypass(&ts->msac);
+                                    bp = PARTITION_H4A + dir * 2 + is_hv4ab;
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            break;
-        case PARTITION_T_TOP_SPLIT: {
-            if (decode_b(t, bl, b[0], PARTITION_T_TOP_SPLIT, EDGE_ALL_TR_AND_BL))
-                return -1;
-            t->bx += hsz;
-            if (decode_b(t, bl, b[0], PARTITION_T_TOP_SPLIT, node->v[1]))
-                return -1;
-            t->bx -= hsz;
-            t->by += hsz;
-            if (decode_b(t, bl, b[1], PARTITION_T_TOP_SPLIT, node->h[1]))
-                return -1;
-            t->by -= hsz;
-            break;
         }
-        case PARTITION_T_BOTTOM_SPLIT: {
-            if (decode_b(t, bl, b[0], PARTITION_T_BOTTOM_SPLIT, node->h[0]))
-                return -1;
-            t->by += hsz;
-            if (decode_b(t, bl, b[1], PARTITION_T_BOTTOM_SPLIT, node->v[0]))
-                return -1;
-            t->bx += hsz;
-            if (decode_b(t, bl, b[1], PARTITION_T_BOTTOM_SPLIT, 0))
-                return -1;
-            t->bx -= hsz;
-            t->by -= hsz;
-            break;
-        }
-        case PARTITION_T_LEFT_SPLIT: {
-            if (decode_b(t, bl, b[0], PARTITION_T_LEFT_SPLIT, EDGE_ALL_TR_AND_BL))
-                return -1;
-            t->by += hsz;
-            if (decode_b(t, bl, b[0], PARTITION_T_LEFT_SPLIT, node->h[1]))
-                return -1;
-            t->by -= hsz;
-            t->bx += hsz;
-            if (decode_b(t, bl, b[1], PARTITION_T_LEFT_SPLIT, node->v[1]))
-                return -1;
-            t->bx -= hsz;
-            break;
-        }
-        case PARTITION_T_RIGHT_SPLIT: {
-            if (decode_b(t, bl, b[0], PARTITION_T_RIGHT_SPLIT, node->v[0]))
-                return -1;
-            t->bx += hsz;
-            if (decode_b(t, bl, b[1], PARTITION_T_RIGHT_SPLIT, node->h[0]))
-                return -1;
-            t->by += hsz;
-            if (decode_b(t, bl, b[1], PARTITION_T_RIGHT_SPLIT, 0))
-                return -1;
-            t->by -= hsz;
-            t->bx -= hsz;
-            break;
-        }
-        case PARTITION_H4: {
-            const EdgeBranch *const branch = (const EdgeBranch *) node;
-            if (decode_b(t, bl, b[0], PARTITION_H4, node->h[0]))
-                return -1;
-            t->by += hsz >> 1;
-            if (decode_b(t, bl, b[0], PARTITION_H4, branch->h4))
-                return -1;
-            t->by += hsz >> 1;
-            if (decode_b(t, bl, b[0], PARTITION_H4, EDGE_ALL_LEFT_HAS_BOTTOM))
-                return -1;
-            t->by += hsz >> 1;
-            if (t->by < f->bh)
-                if (decode_b(t, bl, b[0], PARTITION_H4, node->h[1]))
-                    return -1;
-            t->by -= hsz * 3 >> 1;
-            break;
-        }
-        case PARTITION_V4: {
-            const EdgeBranch *const branch = (const EdgeBranch *) node;
-            if (decode_b(t, bl, b[0], PARTITION_V4, node->v[0]))
-                return -1;
-            t->bx += hsz >> 1;
-            if (decode_b(t, bl, b[0], PARTITION_V4, branch->v4))
-                return -1;
-            t->bx += hsz >> 1;
-            if (decode_b(t, bl, b[0], PARTITION_V4, EDGE_ALL_TOP_HAS_RIGHT))
-                return -1;
-            t->bx += hsz >> 1;
-            if (t->bx < f->bw)
-                if (decode_b(t, bl, b[0], PARTITION_V4, node->v[1]))
-                    return -1;
-            t->bx -= hsz * 3 >> 1;
-            break;
-        }
-        default: assert(0);
-        }
-    } else if (have_h_split) {
-        unsigned is_split;
-        if (t->frame_thread.pass == 2) {
-            const Av1Block *const b = &f->frame_thread.b[t->by * f->b4_stride + t->bx];
-            is_split = b->bl != bl;
-        } else {
-            is_split = dav1d_msac_decode_bool(&ts->msac,
-                           gather_top_partition_prob(pc, bl));
-            if (DEBUG_BLOCK_INFO)
-                printf("poc=%d,y=%d,x=%d,bl=%d,ctx=%d,bp=%d: r=%d\n",
-                       f->frame_hdr->frame_offset, t->by, t->bx, bl, ctx,
-                       is_split ? PARTITION_SPLIT : PARTITION_H, ts->msac.rng);
-        }
-
-        assert(bl < BL_8X8);
-        if (is_split) {
-            bp = PARTITION_SPLIT;
-            if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 0))) return 1;
-            t->bx += hsz;
-            if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 1))) return 1;
-            t->bx -= hsz;
-        } else {
-            bp = PARTITION_H;
-            if (decode_b(t, bl, dav1d_block_sizes[bl][PARTITION_H][0],
-                         PARTITION_H, node->h[0]))
-                return -1;
-        }
+#if DEBUG_BLOCK_INFO
+        static const char *const names[] = {
+            [PARTITION_NONE]="none",
+            [PARTITION_H4A]="h4a",
+            [PARTITION_H4B]="h4b",
+            [PARTITION_V4A]="v4a",
+            [PARTITION_V4B]="v4b",
+            [PARTITION_SPLIT]="s",
+            [PARTITION_H]="h",
+            [PARTITION_V]="v",
+            [PARTITION_H3]="h3",
+            [PARTITION_V3]="v3",
+        };
+        DEBUG_BLOCK_printf("read_partition[y=%d,x=%d,bs=%dx%d,bp=%d|%s]: r=%d\n",
+                           t->by, t->bx, 4 * bw4, 4 * bh4, bp, names[bp],
+                           ts->msac.rng);
+#endif
     } else {
-        assert(have_v_split);
-        unsigned is_split;
-        if (t->frame_thread.pass == 2) {
-            const Av1Block *const b = &f->frame_thread.b[t->by * f->b4_stride + t->bx];
-            is_split = b->bl != bl;
-        } else {
-            is_split = dav1d_msac_decode_bool(&ts->msac,
-                           gather_left_partition_prob(pc, bl));
-            if (f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I422 && !is_split)
-                return 1;
-            if (DEBUG_BLOCK_INFO)
-                printf("poc=%d,y=%d,x=%d,bl=%d,ctx=%d,bp=%d: r=%d\n",
-                       f->frame_hdr->frame_offset, t->by, t->bx, bl, ctx,
-                       is_split ? PARTITION_SPLIT : PARTITION_V, ts->msac.rng);
-        }
-
-        assert(bl < BL_8X8);
-        if (is_split) {
-            bp = PARTITION_SPLIT;
-            if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 0))) return 1;
-            t->by += hsz;
-            if (decode_sb(t, bl + 1, INTRA_EDGE_SPLIT(node, 2))) return 1;
-            t->by -= hsz;
-        } else {
-            bp = PARTITION_V;
-            if (decode_b(t, bl, dav1d_block_sizes[bl][PARTITION_V][0],
-                         PARTITION_V, node->v[0]))
-                return -1;
-        }
+        //.. FIXME 2-pass decoding
+        abort();
     }
 
-    if (t->frame_thread.pass != 2 && (bp != PARTITION_SPLIT || bl == BL_8X8)) {
+    switch (bp) {
+    case PARTITION_NONE:
+        if (decode_b(t, bs)) return -1;
+        if (t->frame_thread.pass != 2) {
 #define set_ctx(rep_macro) \
-        rep_macro(t->a->partition, bx8, dav1d_al_part_ctx[0][bl][bp]); \
-        rep_macro(t->l.partition, by8, dav1d_al_part_ctx[1][bl][bp])
-        case_set_upto16(ulog2(hsz));
+            rep_macro(edge->partition, off, (uint8_t) ~(b_dim[i] - 1))
+            BlockContext *edge = t->a;
+            for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
+                case_set(b_dim[2 + i]);
+            }
 #undef set_ctx
+        }
+        break;
+    case PARTITION_V:
+        if (decode_sb(t, pcc->part[1][0])) return -1;
+        t->bx += hw4;
+        if (decode_sb(t, pcc->part[1][0])) return -1;
+        t->bx -= hw4;
+        break;
+    case PARTITION_H:
+        if (decode_sb(t, pcc->part[0][0])) return -1;
+        t->by += hh4;
+        if (decode_sb(t, pcc->part[0][0])) return -1;
+        t->by -= hh4;
+        break;
+    case PARTITION_V3:
+        if (decode_sb(t, pcc->part[1][1])) return -1;
+        t->bx += qw4;
+        if (decode_sb(t, pcc->part[1][3])) return -1;
+        t->by += hh4;
+        if (decode_sb(t, pcc->part[1][3])) return -1;
+        t->by -= hh4;
+        t->bx += hw4;
+        if (decode_sb(t, pcc->part[1][1])) return -1;
+        t->bx -= 3 * qw4;
+        break;
+    case PARTITION_H3:
+        if (decode_sb(t, pcc->part[0][1])) return -1;
+        t->by += qh4;
+        if (decode_sb(t, pcc->part[0][3])) return -1;
+        t->bx += hw4;
+        if (decode_sb(t, pcc->part[0][3])) return -1;
+        t->bx -= hw4;
+        t->by += hh4;
+        if (decode_sb(t, pcc->part[0][1])) return -1;
+        t->by -= 3 * qh4;
+        break;
+    case PARTITION_V4A:
+    case PARTITION_V4B: {
+        const int ew4 = qw4 >> 1;
+        if (decode_sb(t, pcc->part[1][2])) return -1;
+        t->bx += ew4;
+        const int var = bp - PARTITION_V4A; // v4b: 1, v4a: 0
+        if (decode_sb(t, pcc->part[1][!var])) return -1;
+        t->bx += qw4 << var;
+        if (decode_sb(t, pcc->part[1][var])) return -1;
+        t->bx += hw4 >> var;
+        if (decode_sb(t, pcc->part[1][2])) return -1;
+        t->bx -= 7 * ew4;
+        break;
+    }
+    case PARTITION_H4A:
+    case PARTITION_H4B: {
+        const int eh4 = qh4 >> 1;
+        if (decode_sb(t, pcc->part[0][2])) return -1;
+        t->by += eh4;
+        const int var = bp - PARTITION_H4A; // h4b: 1, h4a: 0
+        if (decode_sb(t, pcc->part[0][!var])) return -1;
+        t->by += qh4 << var;
+        if (decode_sb(t, pcc->part[0][var])) return -1;
+        t->by += hh4 >> var;
+        if (decode_sb(t, pcc->part[0][2])) return -1;
+        t->by -= 7 * eh4;
+        break;
+    }
+    default:
+        assert(0);
     }
 
     return 0;
@@ -2415,6 +2754,7 @@ static void reset_context(BlockContext *const ctx, const int keyframe, const int
         memset(ctx->comp_type, 0, sizeof(ctx->comp_type));
         memset(ctx->mode, NEARESTMV, sizeof(ctx->mode));
     }
+    memset(ctx->mrl, 0, sizeof(ctx->mrl));
     memset(ctx->lcoef, 0x40, sizeof(ctx->lcoef));
     memset(ctx->ccoef, 0x40, sizeof(ctx->ccoef));
     memset(ctx->filter, DAV1D_N_SWITCHABLE_FILTERS, sizeof(ctx->filter));
@@ -2462,6 +2802,18 @@ static void setup_tile(Dav1dTileState *const ts,
     ts->last_delta_lf.u32 = 0;
 
     dav1d_msac_init(&ts->msac, data, sz, f->frame_hdr->disable_cdf_update);
+#if DEBUG_BLOCK_INFO
+    struct { int by, bx; } tmem = {
+        .by = row_sb_start << sb_shift, .bx = col_sb_start << sb_shift,
+    }, *const t = &tmem;
+    DEBUG_BLOCK_printf("decode_tile[tilerow=%d/col=%d,y=%d-%d,x=%d-%d,size=%td]: r=%d\n",
+                       tile_row, tile_col,
+                       row_sb_start << sb_shift,
+                       imin(row_sb_end << sb_shift, f->bh),
+                       col_sb_start << sb_shift,
+                       imin(col_sb_end << sb_shift, f->bw),
+                       sz, ts->msac.rng);
+#endif
 
     ts->tiling.row = tile_row;
     ts->tiling.col = tile_col;
@@ -2543,7 +2895,7 @@ static void read_restoration_info(Dav1dTaskContext *const t,
                    lr->filter_v[2], lr->filter_h[0],
                    lr->filter_h[1], lr->filter_h[2], ts->msac.rng);
     } else if (lr->type == DAV1D_RESTORATION_SGRPROJ) {
-        const unsigned idx = dav1d_msac_decode_bools(&ts->msac, 4);
+        const unsigned idx = dav1d_msac_decode_bools_bypass(&ts->msac, 4);
         const uint16_t *const sgr_params = dav1d_sgr_params[idx];
         lr->type += idx;
         lr->sgr_weights[0] = sgr_params[0] ? dav1d_msac_decode_subexp(&ts->msac,
@@ -2581,7 +2933,8 @@ static int check_trailing_bits_after_symbol_coder(const MsacContext *const msac)
 
 int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     const Dav1dFrameContext *const f = t->f;
-    const enum BlockLevel root_bl = f->seq_hdr->sb128 ? BL_128X128 : BL_64X64;
+    const enum BlockSize root_bs =
+        (const uint8_t[]) { BS_64x64, BS_128x128, BS_256x256 }[f->seq_hdr->sb128];
     Dav1dTileState *const ts = t->ts;
     const Dav1dContext *const c = f->c;
     const int sb_step = f->sb_step;
@@ -2613,7 +2966,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         {
             if (atomic_load_explicit(c->flush, memory_order_acquire))
                 return 1;
-            if (decode_sb(t, root_bl, dav1d_intra_edge_tree[root_bl]))
+            if (decode_sb(t, root_bs))
                 return 1;
             if (t->bx & 16 || f->seq_hdr->sb128)
                 t->a++;
@@ -2635,7 +2988,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     {
         if (atomic_load_explicit(c->flush, memory_order_acquire))
             return 1;
-        if (root_bl == BL_128X128) {
+        if (root_bs == BS_128x128) {
             t->cur_sb_cdef_idx_ptr = t->lf_mask->cdef_idx;
             t->cur_sb_cdef_idx_ptr[0] = -1;
             t->cur_sb_cdef_idx_ptr[1] = -1;
@@ -2680,7 +3033,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
 
             read_restoration_info(t, lr, p, frame_type);
         }
-        if (decode_sb(t, root_bl, dav1d_intra_edge_tree[root_bl]))
+        if (decode_sb(t, root_bs))
             return 1;
         if (t->bx & 16 || f->seq_hdr->sb128) {
             t->a++;

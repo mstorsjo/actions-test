@@ -37,8 +37,29 @@
 /* Buffers padded to [4]/[8]/[16] for SIMD where needed. */
 
 typedef struct CdfModeContext {
+    uint16_t part_split[64][3];
+    uint16_t part_square[8][3];
+    uint16_t part_dir[64][3];
+    uint16_t part_hv3[64][3];
+    uint16_t part_hv4[64][3];
+    uint16_t intra_y_set[5];
+    uint16_t intra_y_idx0[3][9];
+    uint16_t intra_y_idx1[3][7];
+    uint16_t fsc[4][6][3];
+    uint16_t mrl_index[3][5];
+    uint16_t multi_mrl[3][3];
+    uint16_t dip_mode[7];
+    uint16_t tx_split[2][2][9][3];
+    uint16_t tx_part_2d[2][2][14][8];
+    uint16_t tx_part_1d[2][2][2][3];
+    uint16_t txtp_long32_dct[2][3];
+    uint16_t txtp_short_1d[4][5];
+    uint16_t txtp_ext[4][8];
+    uint16_t txtp_ext_reduced[4][3];
+    uint16_t stx[2][5][5];
+    uint16_t stx_set_adst[5];
+    uint16_t stx_set[8];
     ALIGN(uint16_t uv_mode[2][N_INTRA_PRED_MODES][N_UV_INTRA_PRED_MODES + 2], 32);
-    ALIGN(uint16_t partition[N_BL_LEVELS][4][N_PARTITIONS + 6], 32);
     ALIGN(uint16_t cfl_alpha[6][16], 32);
     ALIGN(uint16_t txtp_inter1[2][16], 32);
     ALIGN(uint16_t txtp_inter2[12 + 4], 32);
@@ -95,19 +116,27 @@ typedef struct CdfModeContext {
 } CdfModeContext;
 
 typedef struct CdfCoefContext {
-    ALIGN(uint16_t eob_bin_16[2][2][5 + 3], 16);
-    ALIGN(uint16_t eob_bin_32[2][2][6 + 2], 16);
-    ALIGN(uint16_t eob_bin_64[2][2][7 + 1], 16);
-    ALIGN(uint16_t eob_bin_128[2][2][8 + 0], 16);
-    ALIGN(uint16_t eob_bin_256[2][2][9 + 7], 32);
-    ALIGN(uint16_t eob_bin_512[2][10 + 6], 32);
-    ALIGN(uint16_t eob_bin_1024[2][11 + 5], 32);
-    ALIGN(uint16_t eob_base_tok[N_TX_SIZES][2][4][4], 8);
-    ALIGN(uint16_t base_tok[N_TX_SIZES][2][41][4], 8);
-    ALIGN(uint16_t br_tok[4 /*5*/][2][21][4], 8);
-    ALIGN(uint16_t eob_hi_bit[N_TX_SIZES][2][9][2], 4);
-    ALIGN(uint16_t skip[N_TX_SIZES][13][2], 4);
-    ALIGN(uint16_t dc_sign[2][3][2], 4);
+    uint16_t skip[2][5][20][3];
+    uint16_t eob_bin_16[3][6];
+    uint16_t eob_bin_32[3][7];
+    uint16_t eob_bin_64[3][8];
+    uint16_t eob_bin_128[3][9];
+    uint16_t eob_bin_256[3][9];
+    uint16_t eob_bin_512[3][9];
+    uint16_t eob_bin_1024[3][9];
+    uint16_t eob_hi_bit[3];
+    uint16_t eob_base_y_tok_hf[5][4][4];
+    uint16_t base_y_tok_hf[5][20][2][5];
+    uint16_t br_y_tok_hf[7][5];
+    uint16_t eob_base_y_tok_lf[5][4][6];
+    uint16_t base_y_tok_lf[5][33][2][7];
+    uint16_t br_y_tok_lf[14][5];
+    uint16_t dc_sign[2][2][3][3];
+    uint16_t bob_base_y_tok[3][3][4];
+    uint16_t br_y_tok_idtx[3][7][5];
+    uint16_t base_y_tok_idtx[3][7][5];
+    uint16_t sign_idtx[3][9][3];
+    uint16_t dip[3][3];
 } CdfCoefContext;
 
 typedef struct CdfMvComponent {

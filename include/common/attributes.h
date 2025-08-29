@@ -99,6 +99,8 @@
 #define ALIGN_STK_16(type, var, sz1d, sznd) \
     ALIGN(type var[sz1d]sznd, ALIGN_16_VAL)
 
+#define ARRAY_SIZE(n) (sizeof(n)/sizeof(*(n)))
+
 /*
  * Forbid inlining of a function:
  * static NOINLINE void func() {}

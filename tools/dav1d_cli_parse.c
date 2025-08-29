@@ -40,6 +40,7 @@
 #endif
 
 #include "dav1d_cli_parse.h"
+#include "common/attributes.h"
 #include "src/cpu.h"
 
 static const char short_opts[] = "i:o:vql:s:";
@@ -281,8 +282,6 @@ static const EnumParseTable decode_frame_type_tbl[] = {
     { "intra",         DAV1D_DECODEFRAMETYPE_INTRA },
     { "key",           DAV1D_DECODEFRAMETYPE_KEY },
 };
-
-#define ARRAY_SIZE(n) (sizeof(n)/sizeof(*(n)))
 
 static unsigned parse_enum(char *optarg, const EnumParseTable *const tbl,
                            const int tbl_sz, const int option, const char *app)

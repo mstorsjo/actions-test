@@ -63,9 +63,8 @@ void dav1d_msac_init(MsacContext *s, const uint8_t *data, size_t sz,
 unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *s, uint16_t *cdf,
                                           size_t n_symbols);
 unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *s, uint16_t *cdf);
-unsigned dav1d_msac_decode_bool_equi_c(MsacContext *s);
-unsigned dav1d_msac_decode_bool_c(MsacContext *s, unsigned f);
-unsigned dav1d_msac_decode_hi_tok_c(MsacContext *s, uint16_t *cdf);
+unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *s, unsigned n);
+unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, int max_bits);
 int dav1d_msac_decode_subexp(MsacContext *s, int ref, int n, unsigned k);
 
 /* Supported n_symbols ranges: adapt4: 1-3, adapt8: 1-7, adapt16: 3-15 */
@@ -81,21 +80,18 @@ int dav1d_msac_decode_subexp(MsacContext *s, int ref, int n, unsigned k);
 #ifndef dav1d_msac_decode_bool_adapt
 #define dav1d_msac_decode_bool_adapt     dav1d_msac_decode_bool_adapt_c
 #endif
-#ifndef dav1d_msac_decode_bool_equi
-#define dav1d_msac_decode_bool_equi      dav1d_msac_decode_bool_equi_c
+#ifndef dav1d_msac_decode_bool_bypass
+#define dav1d_msac_decode_bool_bypass    dav1d_msac_decode_bool_bypass_c
 #endif
-#ifndef dav1d_msac_decode_bool
-#define dav1d_msac_decode_bool           dav1d_msac_decode_bool_c
+#ifndef dav1d_msac_decode_bools_bypass
+#define dav1d_msac_decode_bools_bypass   dav1d_msac_decode_bools_bypass_c
 #endif
-#ifndef dav1d_msac_decode_hi_tok
-#define dav1d_msac_decode_hi_tok         dav1d_msac_decode_hi_tok_c
+#ifndef dav1d_msac_decode_unary_bypass
+#define dav1d_msac_decode_unary_bypass   dav1d_msac_decode_unary_bypass_c
 #endif
 
-static inline unsigned dav1d_msac_decode_bools(MsacContext *const s, unsigned n) {
-    unsigned v = 0;
-    while (n--)
-        v = (v << 1) | dav1d_msac_decode_bool_equi(s);
-    return v;
+static inline unsigned dav1d_msac_decode_bool_bypass_c(MsacContext *const s) {
+    return dav1d_msac_decode_bools_bypass_c(s, 1);
 }
 
 static inline int dav1d_msac_decode_uniform(MsacContext *const s, const unsigned n) {
@@ -103,8 +99,8 @@ static inline int dav1d_msac_decode_uniform(MsacContext *const s, const unsigned
     const int l = ulog2(n) + 1;
     assert(l > 1);
     const unsigned m = (1 << l) - n;
-    const unsigned v = dav1d_msac_decode_bools(s, l - 1);
-    return v < m ? v : (v << 1) - m + dav1d_msac_decode_bool_equi(s);
+    const unsigned v = dav1d_msac_decode_bools_bypass(s, l - 1);
+    return v < m ? v : (v << 1) - m + dav1d_msac_decode_bool_bypass(s);
 }
 
 #endif /* DAV1D_SRC_MSAC_H */

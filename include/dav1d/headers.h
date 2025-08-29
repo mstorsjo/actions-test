@@ -291,7 +291,7 @@ typedef struct Dav1dSequenceHeader {
     uint8_t explicit_ref_frame_map;
     uint8_t ref_frames, def_max_drl_bits, allow_frame_max_drl_bits;
     uint8_t def_max_bvp_drl_bits, allow_max_bvp_drl_bits;
-    uint8_t num_same_ref_comp, sdp, ext_sdp, ist, inter_ist;
+    uint8_t num_same_ref_comp, sdp, ext_sdp, ist[2 /* intra, inter */];
     uint8_t chroma_dctonly, tx64_resample, inter_ddt, reduced_tx_part_set;
     uint8_t cctx, mrls, cfl, mhccp, tip, tip_hole_fill;
     uint8_t mv_traj, bawp, cwp, imp_msk_bld;

@@ -74,6 +74,12 @@ enum RectTxfmSize {
     RTX_32X8,
     RTX_16X64,
     RTX_64X16,
+    RTX_4X32,
+    RTX_32X4,
+    RTX_8X64,
+    RTX_64X8,
+    RTX_4X64,
+    RTX_64X4,
     N_RECT_TX_SIZES
 };
 
@@ -141,40 +147,50 @@ enum InterIntraPredMode {
 };
 
 enum BlockPartition {
-    PARTITION_NONE,     // [ ] <-.
-    PARTITION_H,        // [-]   |
-    PARTITION_V,        // [|]   |
-    PARTITION_SPLIT,    // [+] --'
-    PARTITION_T_TOP_SPLIT,    // [⊥] i.e. split top, H bottom
-    PARTITION_T_BOTTOM_SPLIT, // [т] i.e. H top, split bottom
-    PARTITION_T_LEFT_SPLIT,   // [-|] i.e. split left, V right
-    PARTITION_T_RIGHT_SPLIT,  // [|-] i.e. V left, split right
-    PARTITION_H4,       // [Ⲷ]
-    PARTITION_V4,       // [Ⲽ]
+    PARTITION_INVALID = -1,
+    PARTITION_NONE,     // [ ]
+    PARTITION_H,        // [-]
+    PARTITION_V,        // [|]
+    PARTITION_H3,       // 4x4 -> 4x1[top], 2x2 [left], 2x2 [right], 4x1[bottom]
+    PARTITION_V3,       // transpose of H3
+    PARTITION_H4A,      // Nx8 -> Nx1,Nx2,Nx4,Nx1
+    PARTITION_H4B,      // Nx8 -> Nx1,Nx4,Nx2,Nx1
+    PARTITION_V4A,      // transpose of H4A
+    PARTITION_V4B,      // transpose of H4B
+    PARTITION_SPLIT,    // [+]
     N_PARTITIONS,
-    N_SUB8X8_PARTITIONS = PARTITION_T_TOP_SPLIT,
 };
 
 enum BlockSize {
+    BS_INVALID = -1,
+    BS_256x256,
+    BS_256x128,
+    BS_128x256,
     BS_128x128,
     BS_128x64,
     BS_64x128,
     BS_64x64,
     BS_64x32,
     BS_64x16,
+    BS_64x8,
+    BS_64x4,
     BS_32x64,
     BS_32x32,
     BS_32x16,
     BS_32x8,
+    BS_32x4,
     BS_16x64,
     BS_16x32,
     BS_16x16,
     BS_16x8,
     BS_16x4,
+    BS_8x64,
     BS_8x32,
     BS_8x16,
     BS_8x8,
     BS_8x4,
+    BS_4x64,
+    BS_4x32,
     BS_4x16,
     BS_4x8,
     BS_4x4,
@@ -264,7 +280,8 @@ typedef struct Av1Block {
     uint8_t intra, seg_id, skip_mode, skip, uvtx;
     union {
         struct {
-            uint8_t y_mode, uv_mode, tx, pal_sz[2];
+            uint8_t y_mode, fsc, mrl_index, multi_mrl, dip;
+            uint8_t uv_mode, tx, pal_sz[2];
             int8_t y_angle, uv_angle, cfl_alpha[2];
         }; // intra
         struct {

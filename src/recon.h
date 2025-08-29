@@ -31,9 +31,19 @@
 #include "src/internal.h"
 #include "src/levels.h"
 
-#define DEBUG_BLOCK_INFO 0 && \
-        f->frame_hdr->frame_offset == 2 && t->by >= 0 && t->by < 4 && \
-        t->bx >= 8 && t->bx < 12
+#define DEBUG_BLOCK_INFO 0
+#if DEBUG_BLOCK_INFO
+#define BLOCK_TO_DEBUG \
+    f->frame_hdr->frame_offset == 0 && t->by >= 0 && t->by < 16 && \
+    t->bx >= 0 && t->bx < 16
+#define DEBUG_BLOCK_printf(fmt...) \
+    if (BLOCK_TO_DEBUG) { \
+        printf(fmt); \
+    }
+#else
+#define BLOCK_TO_DEBUG 0
+#define DEBUG_BLOCK_printf(fmt...)
+#endif
 #define DEBUG_B_PIXELS 0
 
 #define decl_recon_b_intra_fn(name) \

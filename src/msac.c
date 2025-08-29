@@ -33,8 +33,7 @@
 
 #include "src/msac.h"
 
-#define EC_PROB_SHIFT 6
-#define EC_MIN_PROB 4  // must be <= (1<<EC_PROB_SHIFT)/16
+#define EC_PROB_SHIFT 7
 
 #define EC_WIN_SIZE (sizeof(ec_win) << 3)
 
@@ -63,12 +62,12 @@ int dav1d_msac_decode_subexp(MsacContext *const s, const int ref,
     assert(n >> k == 8);
 
     unsigned a = 0;
-    if (dav1d_msac_decode_bool_equi(s)) {
-        if (dav1d_msac_decode_bool_equi(s))
-            k += dav1d_msac_decode_bool_equi(s) + 1;
+    if (dav1d_msac_decode_bool_bypass(s)) {
+        if (dav1d_msac_decode_bool_bypass(s))
+            k += dav1d_msac_decode_bool_bypass(s) + 1;
         a = 1 << k;
     }
-    const unsigned v = dav1d_msac_decode_bools(s, k) + a;
+    const unsigned v = dav1d_msac_decode_bools_bypass(s, k) + a;
     return ref * 2 <= n ? inv_recenter(ref, v) :
                           n - 1 - inv_recenter(n - 1 - ref, v);
 }
@@ -77,6 +76,59 @@ int dav1d_msac_decode_subexp(MsacContext *const s, const int ref,
   ARCH_AARCH64 || \
   (ARCH_ARM && (defined(__ARM_NEON) || defined(__APPLE__) || defined(_WIN32))) \
 ))
+static inline void ctx_norm_bypass(MsacContext *const s, ec_win dif,
+                                   const unsigned n_bits)
+{
+    s->cnt -= n_bits;
+    s->dif = dif << n_bits;
+    if (s->cnt < 0) ctx_refill(s);
+}
+
+unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
+                                          const unsigned n_bits)
+{
+    const unsigned r = s->rng;
+    ec_win dif = s->dif;
+    assert((dif >> (EC_WIN_SIZE - 16)) < r);
+    ec_win vw = (ec_win) r << (EC_WIN_SIZE - 16);
+    unsigned ret = 0;
+    for (unsigned n = 0; n < n_bits; n++) {
+        vw >>= 1;
+        ret <<= 1;
+        if (dif >= vw) {
+            dif -= vw;
+        } else {
+            ret |= 1;
+        }
+    }
+    ctx_norm_bypass(s, dif, n_bits);
+    return ret;
+}
+
+unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
+                                          const int max_bits)
+{
+    assert(max_bits > 0 && max_bits <= 32);
+    if (s->cnt < max_bits - 1) ctx_refill(s);
+    const unsigned r = s->rng;
+    ec_win dif = s->dif;
+    assert((dif >> (EC_WIN_SIZE - 16)) < r);
+    ec_win vw = (ec_win) r << (EC_WIN_SIZE - 16);
+    int ret = 0, bit;
+    for (bit = 0; bit < max_bits; bit++) {
+        vw >>= 1;
+        if (dif >= vw) {
+            dif -= vw;
+            ret++;
+        } else {
+            bit++;
+            break;
+        }
+    }
+    ctx_norm_bypass(s, dif, bit);
+    return ret;
+}
+
 /* Takes updated dif and range values, renormalizes them so that
  * 32768 <= rng < 65536 (reading more bytes from the stream into dif if
  * necessary), and stores them back in the decoder context.
@@ -96,13 +148,15 @@ static inline void ctx_norm(MsacContext *const s, const ec_win dif,
         ctx_refill(s);
 }
 
-unsigned dav1d_msac_decode_bool_equi_c(MsacContext *const s) {
+/* Decode a single binary value.
+ * f: The probability that the bit is one
+ * Return: The value decoded (0 or 1). */
+static unsigned dav1d_msac_decode_bool_c(MsacContext *const s, const unsigned f) {
     const unsigned r = s->rng;
     ec_win dif = s->dif;
     assert((dif >> (EC_WIN_SIZE - 16)) < r);
-    // When the probability is 1/2, f = 16384 >> EC_PROB_SHIFT = 256 and we can
-    // replace the multiply with a simple shift.
-    unsigned v = ((r >> 8) << 7) + EC_MIN_PROB;
+    const int p = ((f >> EC_PROB_SHIFT) << 4) + 8;
+    unsigned v = ((r >> 8) * p >> (14 - EC_PROB_SHIFT)) << 3;
     const ec_win vw = (ec_win)v << (EC_WIN_SIZE - 16);
     const unsigned ret = dif >= vw;
     dif -= ret * vw;
@@ -111,21 +165,58 @@ unsigned dav1d_msac_decode_bool_equi_c(MsacContext *const s) {
     return !ret;
 }
 
-/* Decode a single binary value.
- * f: The probability that the bit is one
- * Return: The value decoded (0 or 1). */
-unsigned dav1d_msac_decode_bool_c(MsacContext *const s, const unsigned f) {
-    const unsigned r = s->rng;
-    ec_win dif = s->dif;
-    assert((dif >> (EC_WIN_SIZE - 16)) < r);
-    unsigned v = ((r >> 8) * (f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB;
-    const ec_win vw = (ec_win)v << (EC_WIN_SIZE - 16);
-    const unsigned ret = dif >= vw;
-    dif -= ret * vw;
-    v += ret * (r - 2 * v);
-    ctx_norm(s, dif, v);
-    return !ret;
-}
+static const int8_t para_adjustment_list[][3] = {
+    { 0, 0, 0 },    { 0, 0, -1 },   { 0, 0, -2 },   { 0, 0, 1 },
+    { 0, 0, 1 },    { 0, -1, 0 },   { 0, -1, -1 },  { 0, -1, -2 },
+    { 0, -1, 1 },   { 0, -1, 1 },   { 0, -2, 0 },   { 0, -2, -1 },
+    { 0, -2, -2 },  { 0, -2, 1 },   { 0, -2, 1 },   { 0, 1, 0 },
+    { 0, 1, -1 },   { 0, 1, -2 },   { 0, 1, 1 },    { 0, 1, 1 },
+    { 0, 1, 0 },    { 0, 1, -1 },   { 0, 1, -2 },   { 0, 1, 1 },
+    { 0, 1, 1 },    { -1, 0, 0 },   { -1, 0, -1 },  { -1, 0, -2 },
+    { -1, 0, 1 },   { -1, 0, 1 },   { -1, -1, 0 },  { -1, -1, -1 },
+    { -1, -1, -2 }, { -1, -1, 1 },  { -1, -1, 1 },  { -1, -2, 0 },
+    { -1, -2, -1 }, { -1, -2, -2 }, { -1, -2, 1 },  { -1, -2, 1 },
+    { -1, 1, 0 },   { -1, 1, -1 },  { -1, 1, -2 },  { -1, 1, 1 },
+    { -1, 1, 1 },   { -1, 1, 0 },   { -1, 1, -1 },  { -1, 1, -2 },
+    { -1, 1, 1 },   { -1, 1, 1 },   { -2, 0, 0 },   { -2, 0, -1 },
+    { -2, 0, -2 },  { -2, 0, 1 },   { -2, 0, 1 },   { -2, -1, 0 },
+    { -2, -1, -1 }, { -2, -1, -2 }, { -2, -1, 1 },  { -2, -1, 1 },
+    { -2, -2, 0 },  { -2, -2, -1 }, { -2, -2, -2 }, { -2, -2, 1 },
+    { -2, -2, 1 },  { -2, 1, 0 },   { -2, 1, -1 },  { -2, 1, -2 },
+    { -2, 1, 1 },   { -2, 1, 1 },   { -2, 1, 0 },   { -2, 1, -1 },
+    { -2, 1, -2 },  { -2, 1, 1 },   { -2, 1, 1 },   { 1, 0, 0 },
+    { 1, 0, -1 },   { 1, 0, -2 },   { 1, 0, 1 },    { 1, 0, 1 },
+    { 1, -1, 0 },   { 1, -1, -1 },  { 1, -1, -2 },  { 1, -1, 1 },
+    { 1, -1, 1 },   { 1, -2, 0 },   { 1, -2, -1 },  { 1, -2, -2 },
+    { 1, -2, 1 },   { 1, -2, 1 },   { 1, 1, 0 },    { 1, 1, -1 },
+    { 1, 1, -2 },   { 1, 1, 1 },    { 1, 1, 1 },    { 1, 1, 0 },
+    { 1, 1, -1 },   { 1, 1, -2 },   { 1, 1, 1 },    { 1, 1, 1 },
+    { 1, 0, 0 },    { 1, 0, -1 },   { 1, 0, -2 },   { 1, 0, 1 },
+    { 1, 0, 1 },    { 1, -1, 0 },   { 1, -1, -1 },  { 1, -1, -2 },
+    { 1, -1, 1 },   { 1, -1, 1 },   { 1, -2, 0 },   { 1, -2, -1 },
+    { 1, -2, -2 },  { 1, -2, 1 },   { 1, -2, 1 },   { 1, 1, 0 },
+    { 1, 1, -1 },   { 1, 1, -2 },   { 1, 1, 1 },    { 1, 1, 1 },
+    { 1, 1, 0 },    { 1, 1, -1 },   { 1, 1, -2 },   { 1, 1, 1 },
+    { 1, 1, 1 },
+};
+
+static const int8_t av1_prob_inc_tbl[15][16] = {
+    { 8, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 10, 5, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 12, 8, 4, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 12, 9, 6, 3, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 13, 10, 8, 5, 2, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 13, 11, 9, 6, 4, 2, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 14, 12, 10, 8, 6, 4, 2, 0, -1, -1, -1, -1, -1, -1, -1, -1 },
+    { 14, 12, 10, 8, 7, 5, 3, 1, 0, -1, -1, -1, -1, -1, -1, -1 },
+    { 14, 12, 11, 9, 8, 6, 4, 3, 1, 0, -1, -1, -1, -1, -1, -1 },
+    { 14, 13, 11, 10, 8, 7, 5, 4, 2, 1, 0, -1, -1, -1, -1, -1 },
+    { 14, 13, 12, 10, 9, 8, 6, 5, 4, 2, 1, 0, -1, -1, -1, -1 },
+    { 14, 13, 12, 11, 9, 8, 7, 6, 4, 3, 2, 1, 0, -1, -1, -1 },
+    { 14, 13, 12, 11, 10, 9, 8, 6, 5, 4, 3, 2, 1, 0, -1, -1 },
+    { 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1 },
+    { 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 }
+};
 
 /* Decodes a symbol given an inverse cumulative distribution function (CDF)
  * table in Q15. */
@@ -135,6 +226,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
 {
     const unsigned c = s->dif >> (EC_WIN_SIZE - 16), r = s->rng >> 8;
     unsigned u, v = s->rng, val = -1;
+    const int8_t *const inc_tbl = av1_prob_inc_tbl[n_symbols - 1];
 
     assert(n_symbols <= 15);
     assert(cdf[n_symbols] <= 32);
@@ -142,9 +234,8 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
     do {
         val++;
         u = v;
-        v = r * (cdf[val] >> EC_PROB_SHIFT);
-        v >>= 7 - EC_PROB_SHIFT;
-        v += EC_MIN_PROB * ((unsigned)n_symbols - val);
+        const int p = ((cdf[val] >> EC_PROB_SHIFT) << 4) + inc_tbl[val];
+        v = (r * p >> (14 - EC_PROB_SHIFT)) << 3;
     } while (c < v);
 
     assert(u <= s->rng);
@@ -153,7 +244,9 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
 
     if (s->allow_update_cdf) {
         const unsigned count = cdf[n_symbols];
-        const unsigned rate = 4 + (count >> 4) + (n_symbols > 2);
+        const unsigned time_int = count >> 4;
+        const unsigned rate = 4 + time_int + (n_symbols > 2) +
+                              para_adjustment_list[cdf[n_symbols + 1]][time_int];
         unsigned i;
         for (i = 0; i < val; i++)
             cdf[i] += (32768 - cdf[i]) >> rate;
@@ -168,12 +261,14 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
 unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
                                         uint16_t *const cdf)
 {
-    const unsigned bit = dav1d_msac_decode_bool(s, *cdf);
+    const unsigned bit = dav1d_msac_decode_bool_c(s, *cdf);
 
     if (s->allow_update_cdf) {
         // update_cdf() specialized for boolean CDFs
         const unsigned count = cdf[1];
-        const int rate = 4 + (count >> 4);
+        const unsigned time_int = count >> 4;
+        const unsigned rate = 4 + time_int +
+                              para_adjustment_list[cdf[2]][time_int];
         if (bit)
             cdf[0] += (32768 - cdf[0]) >> rate;
         else
@@ -182,22 +277,6 @@ unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
     }
 
     return bit;
-}
-
-unsigned dav1d_msac_decode_hi_tok_c(MsacContext *const s, uint16_t *const cdf) {
-    unsigned tok_br = dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
-    unsigned tok = 3 + tok_br;
-    if (tok_br == 3) {
-        tok_br = dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
-        tok = 6 + tok_br;
-        if (tok_br == 3) {
-            tok_br = dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
-            tok = 9 + tok_br;
-            if (tok_br == 3)
-                tok = 12 + dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
-        }
-    }
-    return tok;
 }
 #endif
 
