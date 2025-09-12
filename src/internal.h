@@ -262,6 +262,7 @@ struct Dav1dFrameContext {
     pixel *ipred_edge[3];
     ptrdiff_t b4_stride;
     int w4, h4, bw, bh, sb128w, sb128h, sbh, sb_shift, sb_step, sr_sb128w;
+    int ss_ver, ss_hor;
     uint16_t dq[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];
     BlockContext *a;
@@ -385,7 +386,7 @@ struct Dav1dTaskContext {
     const Dav1dContext *c;
     const Dav1dFrameContext *f;
     Dav1dTileState *ts;
-    int bx, by;
+    int bx, by, cbx, cby;
     BlockContext l, *a;
     refmvs_tile rt;
     ALIGN(union, 64) {
@@ -396,6 +397,7 @@ struct Dav1dTaskContext {
         uint8_t  al_pal_8bpc [2 /* a/l */][32 /* bx/y4 */][3 /* plane */][8 /* palette_idx */];
         uint16_t al_pal_16bpc[2 /* a/l */][32 /* bx/y4 */][3 /* plane */][8 /* palette_idx */];
     };
+    uint8_t luma_intra_dir_mode_map[32 * 32];
     uint8_t pal_sz_uv[2 /* a/l */][32 /* bx4/by4 */];
     ALIGN(union, 64) {
         struct {
@@ -415,7 +417,7 @@ struct Dav1dTaskContext {
         };
         struct {
             union {
-                uint8_t levels[32 * 34];
+                int8_t levels[32 * 34];
                 struct {
                     uint8_t pal_order[64][8];
                     uint8_t pal_ctx[64];

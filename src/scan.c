@@ -341,6 +341,12 @@ const uint16_t *const dav1d_scans[N_RECT_TX_SIZES] = {
     [RTX_32X8 ] = scan_32x8,
     [RTX_16X64] = scan_16x32,
     [RTX_64X16] = scan_32x16,
+    [RTX_4X32 ] = scan_4x32,
+    [RTX_32X4 ] = scan_32x4,
+    [RTX_8X64 ] = scan_8x32,
+    [RTX_64X8 ] = scan_32x8,
+    [RTX_4X64 ] = scan_4x32,
+    [RTX_64X4 ] = scan_32x4,
 };
 
 static uint8_t last_nonzero_col_from_eob_4x4[16];

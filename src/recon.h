@@ -33,6 +33,7 @@
 
 #define DEBUG_BLOCK_INFO 0
 #if DEBUG_BLOCK_INFO
+#define DB_ONLY(x) x,
 #define BLOCK_TO_DEBUG \
     f->frame_hdr->frame_offset == 0 && t->by >= 0 && t->by < 16 && \
     t->bx >= 0 && t->bx < 16
@@ -41,13 +42,15 @@
         printf(fmt); \
     }
 #else
+#define DB_ONLY(x)
 #define BLOCK_TO_DEBUG 0
 #define DEBUG_BLOCK_printf(fmt...)
 #endif
 #define DEBUG_B_PIXELS 0
 
 #define decl_recon_b_intra_fn(name) \
-void (name)(Dav1dTaskContext *t, enum BlockSize bs, \
+void (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
+            enum BlockSize bs, enum BlockSize cbs, \
             enum EdgeFlags intra_edge_flags, const Av1Block *b)
 typedef decl_recon_b_intra_fn(*recon_b_intra_fn);
 

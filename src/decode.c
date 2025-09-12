@@ -693,7 +693,10 @@ static void obmc_lowest_px(Dav1dTaskContext *const t,
         }
 }
 
-static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
+static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+                    const enum BlockSize lbs, const enum BlockSize cbs)
+{
+    const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
@@ -701,24 +704,34 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
         &f->frame_thread.b[t->by * f->b4_stride + t->bx] : &b_mem;
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
     const int bx4 = t->bx & 31, by4 = t->by & 31;
-    const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
-    const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
     const int bw4 = b_dim[0], bh4 = b_dim[1];
     const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
-    const int cbw4 = (bw4 + ss_hor) >> ss_hor, cbh4 = (bh4 + ss_ver) >> ss_ver;
     const int have_left = t->bx > ts->tiling.col_start;
     const int have_top = t->by > ts->tiling.row_start;
-    const int has_chroma = 0 && f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 &&
-                           (bw4 > ss_hor || t->bx & 1) &&
-                           (bh4 > ss_ver || t->by & 1);
+    const int has_luma = lbs != BS_INVALID, has_chroma = cbs != BS_INVALID;
+    int ss_hor, ss_ver, cbx4, cby4, cbw4, cbh4, cw4, ch4;
+    if (has_chroma) {
+        ss_ver = f->ss_ver;
+        ss_hor = f->ss_hor;
+        cbx4 = (t->cbx & 31) >> ss_hor;
+        cby4 = (t->cby & 31) >> ss_ver;
+        const uint8_t *const cb_dim = dav1d_block_dimensions[cbs];
+        cbw4 = cb_dim[0] >> ss_hor;
+        cbh4 = cb_dim[1] >> ss_ver;
+        assert(cbw4 >= 1 && cbh4 >= 1);
+        cw4 = imin(cbw4, (f->bw - t->cbx) >> ss_hor);
+        ch4 = imin(cbh4, (f->bh - t->cby) >> ss_ver);
+        assert(cw4 >= 1 && ch4 >= 1);
+    }
 
-    DEBUG_BLOCK_printf("decode_b[y=%d,x=%d,bs=%dx%d]: r=%d\n",
-                       t->by, t->bx, bw4 * 4, bh4 * 4, ts->msac.rng);
+    DEBUG_BLOCK_printf("%*sdecode_b[y=%d,x=%d,bs=%dx%d,plane=%s]: r=%d\n",
+                       depth - 1, "", t->by, t->bx, bw4 * 4, bh4 * 4,
+                       !has_chroma ? "y" : !has_luma ? "uv" : "yuv",
+                       ts->msac.rng);
 
     if (t->frame_thread.pass == 2) {
         if (b->intra) {
-            f->bd_fn.recon_b_intra(t, bs, 0, b);
+            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
 
             const enum IntraPredMode y_mode_nofilt =
                 b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
@@ -816,8 +829,6 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
         }
         return 0;
     }
-
-    const int cw4 = (w4 + ss_hor) >> ss_hor, ch4 = (h4 + ss_ver) >> ss_ver;
 
     b->bs = bs;
 
@@ -987,8 +998,8 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
 
 #if DEBUG_BLOCK_INFO
             if (f->frame_hdr->cdef.n_strengths > 1)
-                DEBUG_BLOCK_printf("Post-cdef_idx[%d]: r=%d\n",
-                                   t->cur_sb_cdef_idx_ptr[idx],
+                DEBUG_BLOCK_printf("%*sPost-cdef_idx[%d]: r=%d\n",
+                                   depth, "", t->cur_sb_cdef_idx_ptr[idx],
                                    ts->msac.rng);
 #endif
         }
@@ -1063,152 +1074,300 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
     }
 
     // intra/inter-specific stuff
+    int midx = 0xff; // intra/luma directional intra prediction index, if set
     if (b->intra) {
-#define IS_DIR_MODE(m) ((m) - 1 <= (unsigned) VERT_LEFT_PRED - 1)
-        const int y_set = dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                              ts->cdf.m.intra_y_set, 3);
-        int y_mode_idx, ctx;
-        if (!y_set) {
-            ctx = IS_DIR_MODE(t->a->mode[bx4 + bw4 - 1]) +
-                  IS_DIR_MODE(t->l.mode[by4 + bh4 - 1]);
-            y_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                             ts->cdf.m.intra_y_idx0[ctx], 7);
-            if (y_mode_idx == 7)
-                y_mode_idx += dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                  ts->cdf.m.intra_y_idx1[ctx], 5);
-        } else {
-#if DEBUG_BLOCK_INFO
-            ctx = -1;
-#endif
-            y_mode_idx = y_set * 16 - 3 +
-                         dav1d_msac_decode_bools_bypass(&ts->msac, 4);
-        }
-        int midx = 0xff;
-        if (y_mode_idx < 5) {
-            static const uint8_t reordered_nondir_y_mode[] = {
-                DC_PRED, SMOOTH_PRED, SMOOTH_V_PRED, SMOOTH_H_PRED, PAETH_PRED,
-            };
-            b->y_mode = reordered_nondir_y_mode[y_mode_idx];
-            b->y_angle = 0;
-        } else {
-            const int dir_y_mode_idx = y_mode_idx - 5;
-            static const uint8_t default_mode_list_y[] = {
-                17, 45, 3, 10, 24, 31, 38, 52,
-                //  (-2, +2)
-                15, 19, 43, 47, 1, 5, 8, 12, 22, 26, 29, 33, 36, 40, 50, 54,
-                //  (-1, +1)
-                16, 18, 44, 46, 2, 4, 9, 11, 23, 25, 30, 32, 37, 39, 51, 53,
-                //  (-3, +3)
-                14, 20, 42, 48, 0, 6, 7, 13, 21, 27, 28, 34, 35, 41, 49, 55
-            };
-            uint8_t custom_mode_list_y[56];
-            const uint8_t *reorder = default_mode_list_y;
-            if (bw4 * bh4 > 2) {
-                // modes are reordered if neighbour (above/left) modes used
-                // directional intra prediction modes
-                uint64_t mask = 0;
-                uint8_t *ptr = custom_mode_list_y;
-                *ptr = -1;
-                if (IS_DIR_MODE(t->l.mode[by4 + bh4 - 1])) {
-                    const int lmidx = t->l.midx[by4 + bh4 - 1];
-                    *ptr++ = lmidx;
-                    mask |= 1ULL << lmidx;
-                }
-                if (IS_DIR_MODE(t->a->mode[bx4 + bw4 - 1])) {
-                    const int amidx = t->a->midx[bx4 + bw4 - 1];
-                    if (amidx != custom_mode_list_y[0]) {
-                        *ptr++ = amidx;
-                        mask |= 1ULL << amidx;
+        const BlockContext *nb0, *nb1;
+        int boff0, boff1;
+
+        static const uint8_t reordered_nondir_y_mode[] = {
+            DC_PRED, SMOOTH_PRED, SMOOTH_V_PRED, SMOOTH_H_PRED, PAETH_PRED,
+        };
+        static const uint8_t reordered_dir_y_mode[] = {
+            DIAG_DOWN_LEFT_PRED,  VERT_LEFT_PRED, VERT_PRED, VERT_RIGHT_PRED,
+            DIAG_DOWN_RIGHT_PRED, HOR_DOWN_PRED,  HOR_PRED,  HOR_UP_PRED,
+        };
+
+        b->fsc = 0;
+        if (has_luma) {
+            const int y_set = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                                  ts->cdf.m.intra_y_set, 3);
+            int y_mode_idx, y_mode_ctx;
+            if (!y_set) {
+                y_mode_ctx = (t->a->midx[bx4 + bw4 - 1] != 0xff) +
+                             (t->l.midx[by4 + bh4 - 1] != 0xff);
+                y_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                 ts->cdf.m.intra_y_idx0[y_mode_ctx], 7);
+                if (y_mode_idx == 7)
+                    y_mode_idx += dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                      ts->cdf.m.intra_y_idx1[y_mode_ctx], 5);
+            } else {
+                y_mode_idx = y_set * 16 - 3 +
+                             dav1d_msac_decode_bools_bypass(&ts->msac, 4);
+            }
+            if (y_mode_idx < 5) {
+                b->y_mode = reordered_nondir_y_mode[y_mode_idx];
+                b->y_angle = 0;
+            } else {
+                const int dir_y_mode_idx = y_mode_idx - 5;
+                static const uint8_t default_mode_list_y[] = {
+                    17, 45, 3, 10, 24, 31, 38, 52,
+                    //  (-2, +2)
+                    15, 19, 43, 47, 1, 5, 8, 12, 22, 26, 29, 33, 36, 40, 50, 54,
+                    //  (-1, +1)
+                    16, 18, 44, 46, 2, 4, 9, 11, 23, 25, 30, 32, 37, 39, 51, 53,
+                    //  (-3, +3)
+                    14, 20, 42, 48, 0, 6, 7, 13, 21, 27, 28, 34, 35, 41, 49, 55
+                };
+                uint8_t custom_mode_list_y[56];
+                const uint8_t *reorder = default_mode_list_y;
+                if (bw4 * bh4 > 2) {
+                    // modes are reordered if neighbour (above/left) modes used
+                    // directional intra prediction modes
+                    uint64_t mask = 0;
+                    uint8_t *ptr = custom_mode_list_y;
+                    *ptr = -1;
+                    if (t->l.midx[by4 + bh4 - 1] != 0xff) {
+                        const int lmidx = t->l.midx[by4 + bh4 - 1];
+                        *ptr++ = lmidx;
+                        mask |= 1ULL << lmidx;
                     }
-                }
-                long n_dirs = ptr - custom_mode_list_y;
-                if (n_dirs > 0) {
-                    reorder = custom_mode_list_y;
-                    if (bw4 * bh4 > 4 && dir_y_mode_idx >= n_dirs) {
-                        // add surrounding [-3..+3] angles
-                        for (int i = 1; i < 4; i++) {
-                            for (int n = 0; n < n_dirs; n++) {
-                                const int cmidx = custom_mode_list_y[n];
-                                for (int delta = -i, j = 0; j < 2; delta = +i, j++) {
-                                    // FIXME replace modulo with fastdiv
-                                    const int dmidx = (cmidx + delta) % 56;
-                                    if (!(mask & (1 << dmidx))) {
-                                        *ptr++ = dmidx;
-                                        mask |= 1ULL << dmidx;
+                    if (t->a->midx[bx4 + bw4 - 1] != 0xff) {
+                        const int amidx = t->a->midx[bx4 + bw4 - 1];
+                        if (amidx != custom_mode_list_y[0]) {
+                            *ptr++ = amidx;
+                            mask |= 1ULL << amidx;
+                        }
+                    }
+                    long n_dirs = ptr - custom_mode_list_y;
+                    if (n_dirs > 0) {
+                        reorder = custom_mode_list_y;
+                        if (bw4 * bh4 > 4 && dir_y_mode_idx >= n_dirs) {
+                            // add surrounding [-3..+3] angles
+                            for (int i = 1; i < 5; i++) {
+                                for (int n = 0; n < n_dirs; n++) {
+                                    const int cmidx = custom_mode_list_y[n];
+                                    for (int delta = -i, j = 0; j < 2; delta = +i, j++) {
+                                        // FIXME replace modulo with fastdiv
+                                        const int dmidx = (cmidx + delta) % 56;
+                                        if (!(mask & (1ULL << dmidx))) {
+                                            *ptr++ = dmidx;
+                                            mask |= 1ULL << dmidx;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    n_dirs = ptr - custom_mode_list_y;
-                    if (dir_y_mode_idx >= n_dirs) {
-                        // remainder of modes in default order
-                        for (unsigned long n = 0;
-                             n < ARRAY_SIZE(default_mode_list_y); n++)
-                        {
-                            const int fmidx = default_mode_list_y[n];
-                            const uint64_t bit = 1ULL << fmidx;
-                            if (!(mask & bit)) *ptr++ = fmidx;
+                        n_dirs = ptr - custom_mode_list_y;
+                        if (dir_y_mode_idx >= n_dirs) {
+                            // remainder of modes in default order
+                            for (unsigned long n = 0;
+                                 n < ARRAY_SIZE(default_mode_list_y); n++)
+                            {
+                                const int fmidx = default_mode_list_y[n];
+                                const uint64_t bit = 1ULL << fmidx;
+                                if (!(mask & bit)) *ptr++ = fmidx;
+                            }
                         }
                     }
                 }
+                const int dir_y_mode_reord = midx = reorder[dir_y_mode_idx];
+                // FIXME division/modulo can be replaced with fastdiv
+                b->y_mode = reordered_dir_y_mode[dir_y_mode_reord / 7];
+                b->y_angle = dir_y_mode_reord % 7 - 3;
             }
-            static const uint8_t reordered_dir_y_mode[] = {
-                DIAG_DOWN_LEFT_PRED,  VERT_LEFT_PRED, VERT_PRED, VERT_RIGHT_PRED,
-                DIAG_DOWN_RIGHT_PRED, HOR_DOWN_PRED,  HOR_PRED,  HOR_UP_PRED,
-            };
-            const int dir_y_mode_reord = midx = reorder[dir_y_mode_idx];
-            // FIXME division/modulo can be replaced with fastdiv
-            b->y_mode = reordered_dir_y_mode[dir_y_mode_reord / 7];
-            b->y_angle = dir_y_mode_reord % 7 - 3;
+            DEBUG_BLOCK_printf("%*sPost-intra_y_mode[set=%d,idx=%d,ctx=%d,mode=%d,angle=%d]: r=%d\n",
+                               depth, "", y_set, y_mode_idx,
+                               y_set > 0 ? -1 : y_mode_ctx,
+                               b->y_mode, b->y_angle, ts->msac.rng);
+
+            // get "spatial neighbours", depending on edge availability;
+            // do not cross SB boundaries vertically
+            const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
+            boff0 = -1;
+
+            if (have_top_in_sb) {
+                if (have_left) {
+                    nb0 = t->a;  boff0 = bx4 + bw4 - 1;
+                    nb1 = &t->l; boff1 = by4 + bh4 - 1;
+                } else {
+                    nb0 = nb1 = t->a; boff0 = bx4; boff1 = bx4 + bw4 - 1;
+                }
+            } else if (have_left) {
+                // we use left by default, which is initialized to zero
+                nb0 = nb1 = &t->l; boff0 = by4; boff1 = by4 + bh4 - 1;
+            }
+
+            // =min(5,floor(log2(bw4+bh4)*1.99-1.62)) or
+            // =      floor(log2(bw4+bh4)*1.55-0.555) - or anything in between
+            if (imax(bw4, bh4) <= 8 && f->seq_hdr->fsc) {
+                static const uint8_t fsc_bsize_groups[N_BS_SIZES] = {
+                    [BS_32x32] = 5,
+                    [BS_32x16] = 5,
+                    [BS_32x8] = 4,
+                    [BS_32x4] = 4,
+                    [BS_16x32] = 5,
+                    [BS_16x16] = 4,
+                    [BS_16x8] = 3,
+                    [BS_16x4] = 3,
+                    [BS_8x32] = 4,
+                    [BS_8x16] = 3,
+                    [BS_8x8] = 2,
+                    [BS_8x4] = 1,
+                    [BS_4x32] = 4,
+                    [BS_4x16] = 3,
+                    [BS_4x8] = 1,
+                    [BS_4x4] = 0,
+                };
+                const int sz_ctx = fsc_bsize_groups[bs];
+                const int ctx = !b->intra ? 3 : boff0 == -1 ? 0 :
+                                nb0->fsc[boff0] + nb1->fsc[boff1];
+                b->fsc = dav1d_msac_decode_bool_adapt(&ts->msac,
+                             ts->cdf.m.fsc[ctx][sz_ctx]);
+                DEBUG_BLOCK_printf("%*sPost-fsc[ctx=%d|%d,%d]: r=%d\n",
+                                   depth, "", ctx, sz_ctx, b->fsc, ts->msac.rng);
+            }
+
+            b->mrl_index = b->multi_mrl = 0;
+            if (midx != 0xff /* directional mode */) {
+                const int ctx = boff0 == -1 ? 0 : nb0->mrl[boff0] + nb1->mrl[boff1];
+                b->mrl_index = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                                   ts->cdf.m.mrl_index[ctx], 3);
+                DEBUG_BLOCK_printf("%*sPost-mrl_index[ctx=%d,%d]: r=%d\n",
+                                   depth, "", ctx, b->mrl_index, ts->msac.rng);
+                if (b->mrl_index > 0) {
+                    const int ctx2 = boff0 == -1 ? 0 :
+                                     nb0->multi_mrl[boff0] + nb1->multi_mrl[boff1];
+                    b->multi_mrl = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                       ts->cdf.m.multi_mrl[ctx2]);
+                    DEBUG_BLOCK_printf("%*sPost-multi_line_mrl[ctx=%d,%d]: r=%d\n",
+                                       depth, "", ctx2, b->multi_mrl, ts->msac.rng);
+                }
+            }
         }
-        DEBUG_BLOCK_printf("Post-intra_y_mode[set=%d,idx=%d,ctx=%d,mode=%d,angle=%d]: r=%d\n",
-                           y_set, y_mode_idx, ctx,
-                           b->y_mode, b->y_angle, ts->msac.rng);
 
         if (has_chroma) {
-            const int cfl_allowed = f->frame_hdr->segmentation.lossless[b->seg_id] ?
-                cbw4 == 1 && cbh4 == 1 : !!(cfl_allowed_mask & (1 << bs));
-            uint16_t *const uvmode_cdf = ts->cdf.m.uv_mode[cfl_allowed][b->y_mode];
-            b->uv_mode = dav1d_msac_decode_symbol_adapt16(&ts->msac, uvmode_cdf,
-                             N_UV_INTRA_PRED_MODES - 1 - !cfl_allowed);
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-uvmode[%d]: r=%d\n", b->uv_mode, ts->msac.rng);
-
-            b->uv_angle = 0;
+            const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
+            const int cfl_allowed = f->seq_hdr->cfl &&
+                                    imax(cbw4, cbh4) <= (ll ? 1 : 16);
+            int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
+            if (cfl_allowed) {
+                cfl_ctx = (t->a->uvmode[cbx4] == CFL_PRED) +
+                          (t->l.uvmode[cby4] == CFL_PRED);
+                is_cfl = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                      ts->cdf.m.cfl[cfl_ctx]);
+            }
+            if (is_cfl) {
+                b->uv_mode = CFL_PRED;
+                b->uv_angle = 0;
+            } else {
+                if (lbs == BS_INVALID)
+                    midx = t->luma_intra_dir_mode_map[by4 * 32 + bx4];
+                uv_mode_ctx = midx != 0xff;
+                uv_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                  ts->cdf.m.intra_uv_mode[uv_mode_ctx], 7);
+                if (uv_mode_idx == 7)
+                    uv_mode_idx += dav1d_msac_decode_bools_bypass(&ts->msac, 3);
+                // FIXME set error bit to shortcut decoding
+                if (uv_mode_idx > 12) return -1;
+                if (uv_mode_idx < uv_mode_ctx) {
+                    b->uv_mode = reordered_dir_y_mode[midx / 7];
+                    b->uv_angle = (midx % 7) - 3;
+                } else {
+                    if (uv_mode_idx - uv_mode_ctx < 5) {
+                        b->uv_mode = reordered_nondir_y_mode[uv_mode_idx -
+                                                             uv_mode_ctx];
+                        b->uv_angle = 0;
+                    } else {
+                        static const uint8_t default_mode_list_uv[] = {
+                            VERT_PRED, HOR_PRED, DIAG_DOWN_LEFT_PRED,
+                            DIAG_DOWN_RIGHT_PRED, VERT_LEFT_PRED,
+                            VERT_RIGHT_PRED, HOR_DOWN_PRED, HOR_UP_PRED,
+                        };
+                        int idx = uv_mode_idx - 5 - uv_mode_ctx;
+                        idx += idx >= midx / 7;
+                        b->uv_mode = default_mode_list_uv[idx];
+                        b->uv_angle = 0;
+                    }
+                }
+            }
+            DEBUG_BLOCK_printf("%*sPost-intra_uv_mode[cfl=%d,idx=%d,ctx=%d|%d,mode=%d,angle=%d]: r=%d\n",
+                               depth, "", is_cfl, is_cfl ? -1 : uv_mode_idx,
+                               cfl_allowed ? cfl_ctx : -1,
+                               is_cfl ? -1 : uv_mode_ctx, b->uv_mode,
+                               b->uv_angle, ts->msac.rng);
             if (b->uv_mode == CFL_PRED) {
-#define SIGN(a) (!!(a) + ((a) > 0))
-                const int sign = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                     ts->cdf.m.cfl_sign, 7) + 1;
-                const int sign_u = sign * 0x56 >> 8, sign_v = sign - sign_u * 3;
-                assert(sign_u == sign / 3);
-                if (sign_u) {
-                    const int ctx = (sign_u == 2) * 3 + sign_v;
-                    b->cfl_alpha[0] = dav1d_msac_decode_symbol_adapt16(&ts->msac,
-                                          ts->cdf.m.cfl_alpha[ctx], 15) + 1;
-                    if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
+                memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
+                if (f->seq_hdr->mhccp &&
+                    dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp))
+                {
+                    static const uint8_t size_group_lookup[] = {
+                        [BS_4x4] = 0,
+                        [BS_4x8] = 0,
+                        [BS_8x4] = 0,
+                        [BS_8x8] = 1,
+                        [BS_8x16] = 1,
+                        [BS_16x8] = 1,
+                        [BS_16x16] = 2,
+                        [BS_16x32] = 2,
+                        [BS_32x16] = 2,
+                        [BS_32x32] = 3,
+                        [BS_32x64] = 3,
+                        [BS_64x32] = 3,
+                        [BS_64x64] = 3,
+                        [BS_64x128] = 3,
+                        [BS_128x64] = 3,
+                        [BS_128x128] = 3,
+                        [BS_128x256] = 3,
+                        [BS_256x128] = 3,
+                        [BS_256x256] = 3,
+                        [BS_4x16] = 0,
+                        [BS_16x4] = 0,
+                        [BS_8x32] = 1,
+                        [BS_32x8] = 1,
+                        [BS_16x64] = 2,
+                        [BS_64x16] = 2,
+                        [BS_4x32] = 1,
+                        [BS_32x4]= 1,
+                        [BS_8x64] = 2,
+                        [BS_64x8] = 2,
+                        [BS_4x64] = 2,
+                        [BS_64x4] = 2,
+                    };
+                    const int sz_ctx = size_group_lookup[bs];
+                    b->cfl_type = CFL_MHCCP;
+                    b->mh_dir =
+                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                            ts->cdf.m.mhccp_filter_dir[sz_ctx], 2);
                 } else {
-                    b->cfl_alpha[0] = 0;
+                    b->cfl_type = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                      ts->cdf.m.cfl_type);
+                    if (b->cfl_type == CFL_EXPLICIT) {
+                        const int sign = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                             ts->cdf.m.cfl_sign, 7) + 1;
+                        const int sign_u = sign * 0x56 >> 8;
+                        const int sign_v = sign - sign_u * 3;
+                        assert(sign_u == sign / 3);
+                        if (sign_u) {
+                            const int ctx = (sign_u == 2) * 3 + sign_v;
+                            b->cfl_alpha[0] = dav1d_msac_decode_symbol_adapt16(&ts->msac,
+                                    ts->cdf.m.cfl_alpha[ctx], 7) + 1;
+                            if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
+                        }
+                        if (sign_v) {
+                            const int ctx = (sign_v == 2) * 3 + sign_u;
+                            b->cfl_alpha[1] = dav1d_msac_decode_symbol_adapt16(&ts->msac,
+                                    ts->cdf.m.cfl_alpha[ctx], 7) + 1;
+                            if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
+                        }
+                    }
                 }
-                if (sign_v) {
-                    const int ctx = (sign_v == 2) * 3 + sign_u;
-                    b->cfl_alpha[1] = dav1d_msac_decode_symbol_adapt16(&ts->msac,
-                                          ts->cdf.m.cfl_alpha[ctx], 15) + 1;
-                    if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
-                } else {
-                    b->cfl_alpha[1] = 0;
-                }
-#undef SIGN
-                if (DEBUG_BLOCK_INFO)
-                    printf("Post-uvalphas[%d/%d]: r=%d\n",
-                           b->cfl_alpha[0], b->cfl_alpha[1], ts->msac.rng);
-            } else if (b_dim[2] + b_dim[3] >= 2 && b->uv_mode >= VERT_PRED &&
-                       b->uv_mode <= VERT_LEFT_PRED)
-            {
-                uint16_t *const acdf = ts->cdf.m.angle_delta[b->uv_mode - VERT_PRED];
-                const int angle = dav1d_msac_decode_symbol_adapt8(&ts->msac, acdf, 6);
-                b->uv_angle = angle - 3;
+                DEBUG_BLOCK_printf("%*sPost-cfl[type=%d,%s=%d|%d]: r=%d\n",
+                                   depth, "", b->cfl_type,
+                                   b->cfl_type == CFL_MHCCP ? "mhdir" : "alpha",
+                                   b->cfl_type == CFL_MHCCP ? b->mh_dir :
+                                                              b->cfl_alpha[0],
+                                   b->cfl_alpha[1], ts->msac.rng);
             }
         }
 
@@ -1217,14 +1376,16 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
             imax(bw4, bh4) <= 16 && bw4 + bh4 >= 4)
         {
             const int sz_ctx = b_dim[2] + b_dim[3] - 2;
-            if (b->y_mode == DC_PRED) {
-                const int pal_ctx = (t->a->pal_sz[bx4] > 0) + (t->l.pal_sz[by4] > 0);
-                const int use_y_pal = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                          ts->cdf.m.pal_y[sz_ctx][pal_ctx]);
-                if (DEBUG_BLOCK_INFO)
-                    printf("Post-y_pal[%d]: r=%d\n", use_y_pal, ts->msac.rng);
-                if (use_y_pal)
-                    f->bd_fn.read_pal_plane(t, b, 0, sz_ctx, bx4, by4);
+            if (has_luma) {
+                if (b->y_mode == DC_PRED) {
+                    const int pal_ctx = (t->a->pal_sz[bx4] > 0) + (t->l.pal_sz[by4] > 0);
+                    const int use_y_pal = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                              ts->cdf.m.pal_y[sz_ctx][pal_ctx]);
+                    if (DEBUG_BLOCK_INFO)
+                        printf("Post-y_pal[%d]: r=%d\n", use_y_pal, ts->msac.rng);
+                    if (use_y_pal)
+                        f->bd_fn.read_pal_plane(t, b, 0, sz_ctx, bx4, by4);
+                }
             }
 
             if (has_chroma && b->uv_mode == DC_PRED) {
@@ -1238,7 +1399,7 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
             }
         }
 
-        if (b->pal_sz[0]) {
+        if (has_luma && b->pal_sz[0]) {
             uint8_t *pal_idx;
             if (t->frame_thread.pass) {
                 const int p = t->frame_thread.pass & 1;
@@ -1266,173 +1427,110 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
                 printf("Post-uv-pal-indices: r=%d\n", ts->msac.rng);
         }
 
-        // get "spatial neighbours", depending on edge availability;
-        // do not cross SB boundaries vertically
-        const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
-        const BlockContext *nb0, *nb1;
-        int boff0 = -1, boff1;
-
-        if (have_top_in_sb) {
-            if (have_left) {
-                nb0 = t->a;  boff0 = bx4 + bw4 - 1;
-                nb1 = &t->l; boff1 = by4 + bh4 - 1;
-            } else {
-                nb0 = nb1 = t->a; boff0 = bx4; boff1 = bx4 + bw4 - 1;
-            }
-        } else if (have_left) {
-            // we use left by default, which is initialized to zero
-            nb0 = nb1 = &t->l; boff0 = by4; boff1 = by4 + bh4 - 1;
-        }
-
-        // =min(5,floor(log2(bw4+bh4)*1.99-1.62)) or
-        // =      floor(log2(bw4+bh4)*1.55-0.555) - or anything in between
-        b->fsc = 0;
-        if (imax(bw4, bh4) <= 8 && f->seq_hdr->fsc) {
-            static const uint8_t fsc_bsize_groups[N_BS_SIZES] = {
-                [BS_32x32] = 5,
-                [BS_32x16] = 5,
-                [BS_32x8] = 4,
-                [BS_32x4] = 4,
-                [BS_16x32] = 5,
-                [BS_16x16] = 4,
-                [BS_16x8] = 3,
-                [BS_16x4] = 3,
-                [BS_8x32] = 4,
-                [BS_8x16] = 3,
-                [BS_8x8] = 2,
-                [BS_8x4] = 1,
-                [BS_4x32] = 4,
-                [BS_4x16] = 3,
-                [BS_4x8] = 1,
-                [BS_4x4] = 0,
-            };
-            const int sz_ctx = fsc_bsize_groups[bs];
-            const int ctx = !b->intra ? 3 : boff0 == -1 ? 0 :
-                            nb0->fsc[boff0] + nb1->fsc[boff1];
-            b->fsc = dav1d_msac_decode_bool_adapt(&ts->msac,
-                         ts->cdf.m.fsc[ctx][sz_ctx]);
-            DEBUG_BLOCK_printf("Post-fsc[ctx=%d|%d,%d]: r=%d\n",
-                               ctx, sz_ctx, b->fsc, ts->msac.rng);
-        }
-
-        b->mrl_index = b->multi_mrl = 0;
-        if (IS_DIR_MODE(b->y_mode)) {
-            const int ctx = boff0 == -1 ? 0 : nb0->mrl[boff0] + nb1->mrl[boff1];
-            b->mrl_index = dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                               ts->cdf.m.mrl_index[ctx], 3);
-            DEBUG_BLOCK_printf("Post-mrl_index[ctx=%d,%d]: r=%d\n",
-                               ctx, b->mrl_index, ts->msac.rng);
-            if (b->mrl_index > 0) {
-                const int ctx2 = boff0 == -1 ? 0 :
-                                 nb0->multi_mrl[boff0] + nb1->multi_mrl[boff1];
-                b->multi_mrl = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                   ts->cdf.m.multi_mrl[ctx2]);
-                DEBUG_BLOCK_printf("Post-multi_line_mrl[ctx=%d,%d]: r=%d\n",
-                                   ctx2, b->multi_mrl, ts->msac.rng);
-            }
-        }
-
-        b->dip = 0;
-        if (b->y_mode == DC_PRED && f->seq_hdr->intra_dip &&
-            !b->mrl_index && imin(bw4, bh4) >= 2 && bw4 * bh4 >= 8)
-        {
-            const int ctx = boff0 == -1 ? 0 : nb0->dip[boff0] + nb1->dip[boff1];
-            b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                                  ts->cdf.coef.dip[ctx]);
-            if (b->dip) {
-                b->dip = 1 |
-                    (dav1d_msac_decode_bool_bypass(&ts->msac) << 1) |
-                    (dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                                     ts->cdf.m.dip_mode, 5) << 2);
-            }
-            DEBUG_BLOCK_printf("Post-dip[ctx=%d,%d]: r=%d\n",
-                               ctx, !!b->dip, ts->msac.rng);
-        }
-
-        b->tx_part = TX_PARTITION_NONE;
-        if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
-            // FIXME I believe this can be wht as well as idtx?
-        } else {
-            b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
-
-            if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
-                bs != BS_4x4 && imax(bw4, bh4) <= 16)
+        if (has_luma) {
+            b->dip = 0;
+            if (b->y_mode == DC_PRED && f->seq_hdr->intra_dip &&
+                !b->mrl_index && imin(bw4, bh4) >= 2 && bw4 * bh4 >= 8)
             {
-                static const uint8_t size_to_tx_part_group_lookup[] = {
-                    [BS_64x64] = 7,
-                    [BS_64x32] = 6,
-                    [BS_64x16] = 8,
-                    [BS_64x8] = 8,
-                    [BS_64x4] = 8,
-                    [BS_32x64] = 6,
-                    [BS_32x32] = 5,
-                    [BS_32x16] = 4,
-                    [BS_32x8] = 8,
-                    [BS_32x4] = 8,
-                    [BS_16x64] = 8,
-                    [BS_16x32] = 4,
-                    [BS_16x16] = 3,
-                    [BS_16x8] = 2,
-                    [BS_16x4] = 8,
-                    [BS_8x64] = 8,
-                    [BS_8x32] = 8,
-                    [BS_8x16] = 2,
-                    [BS_8x8] = 1,
-                    [BS_8x4] = 0,
-                    [BS_4x64] = 8,
-                    [BS_4x32] = 8,
-                    [BS_4x16] = 8,
-                    [BS_4x8] = 0,
-                    [BS_4x4] = 0,
-                };
-                const int szctx = size_to_tx_part_group_lookup[bs];
-                int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                   ts->cdf.m.tx_split[b->fsc][0][szctx]);
-                if (is_split) {
-                    if (imin(bw4, bh4) >= 2) {
-                        static const uint8_t size_to_tx_type_group_vh_lookup[] = {
-                            [BS_64x64] = 9,
-                            [BS_64x32] = 8,
-                            [BS_64x16] = 13,
-                            [BS_64x8] = 11,
-                            [BS_32x64] = 7,
-                            [BS_32x32] = 6,
-                            [BS_32x16] = 5,
-                            [BS_32x8] = 11,
-                            [BS_16x64] = 12,
-                            [BS_16x32] = 4,
-                            [BS_16x16] = 3,
-                            [BS_16x8] = 2,
-                            [BS_8x64] = 10,
-                            [BS_8x32] = 10,
-                            [BS_8x16] = 1,
-                            [BS_8x8] = 0,
-                        };
-                        const int ctx = size_to_tx_type_group_vh_lookup[bs];
-                        b->tx_part = 1 +
-                            dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                ts->cdf.m.tx_part_2d[b->fsc][0][ctx], 6);
-                    } else if (imax(bw4, bh4) >= 4) {
-                        const int ctx = bw4 >= 4;
-                        const int tx_part_4way =
-                            dav1d_msac_decode_bool_adapt(&ts->msac,
-                                ts->cdf.m.tx_part_1d[b->fsc][0][ctx]);
-                        b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
-                    } else {
-                        assert(bs == BS_4x8 || bs == BS_8x4);
-                        b->tx_part = bs == BS_4x8 ? TX_PARTITION_H :
-                                                    TX_PARTITION_V;
+                const int ctx = boff0 == -1 ? 0 : nb0->dip[boff0] + nb1->dip[boff1];
+                b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                      ts->cdf.coef.dip[ctx]);
+                if (b->dip) {
+                    b->dip = 1 |
+                        (dav1d_msac_decode_bool_bypass(&ts->msac) << 1) |
+                        (dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                                         ts->cdf.m.dip_mode, 5) << 2);
+                }
+                DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d,%d]: r=%d\n",
+                                   depth, "", ctx, !!b->dip, ts->msac.rng);
+            }
+
+            b->tx_part = TX_PARTITION_NONE;
+            if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
+                // FIXME I believe this can be wht as well as idtx?
+            } else {
+                b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
+
+                if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
+                    bs != BS_4x4 && imax(bw4, bh4) <= 16)
+                {
+                    static const uint8_t size_to_tx_part_group_lookup[] = {
+                        [BS_64x64] = 7,
+                        [BS_64x32] = 6,
+                        [BS_64x16] = 8,
+                        [BS_64x8] = 8,
+                        [BS_64x4] = 8,
+                        [BS_32x64] = 6,
+                        [BS_32x32] = 5,
+                        [BS_32x16] = 4,
+                        [BS_32x8] = 8,
+                        [BS_32x4] = 8,
+                        [BS_16x64] = 8,
+                        [BS_16x32] = 4,
+                        [BS_16x16] = 3,
+                        [BS_16x8] = 2,
+                        [BS_16x4] = 8,
+                        [BS_8x64] = 8,
+                        [BS_8x32] = 8,
+                        [BS_8x16] = 2,
+                        [BS_8x8] = 1,
+                        [BS_8x4] = 0,
+                        [BS_4x64] = 8,
+                        [BS_4x32] = 8,
+                        [BS_4x16] = 8,
+                        [BS_4x8] = 0,
+                        [BS_4x4] = 0,
+                    };
+                    const int szctx = size_to_tx_part_group_lookup[bs];
+                    int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                       ts->cdf.m.tx_split[b->fsc][0][szctx]);
+                    if (is_split) {
+                        if (imin(bw4, bh4) >= 2) {
+                            static const uint8_t size_to_tx_type_group_vh_lookup[] = {
+                                [BS_64x64] = 9,
+                                [BS_64x32] = 8,
+                                [BS_64x16] = 13,
+                                [BS_64x8] = 11,
+                                [BS_32x64] = 7,
+                                [BS_32x32] = 6,
+                                [BS_32x16] = 5,
+                                [BS_32x8] = 11,
+                                [BS_16x64] = 12,
+                                [BS_16x32] = 4,
+                                [BS_16x16] = 3,
+                                [BS_16x8] = 2,
+                                [BS_8x64] = 10,
+                                [BS_8x32] = 10,
+                                [BS_8x16] = 1,
+                                [BS_8x8] = 0,
+                            };
+                            const int ctx = size_to_tx_type_group_vh_lookup[bs];
+                            b->tx_part = 1 +
+                                dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                    ts->cdf.m.tx_part_2d[b->fsc][0][ctx], 6);
+                        } else if (imax(bw4, bh4) >= 4) {
+                            const int ctx = bw4 >= 4;
+                            const int tx_part_4way =
+                                dav1d_msac_decode_bool_adapt(&ts->msac,
+                                    ts->cdf.m.tx_part_1d[b->fsc][0][ctx]);
+                            b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
+                        } else {
+                            assert(bs == BS_4x8 || bs == BS_8x4);
+                            b->tx_part = bs == BS_4x8 ? TX_PARTITION_H :
+                                                        TX_PARTITION_V;
+                        }
                     }
                 }
+                DEBUG_BLOCK_printf("%*sPost-tx[%d]: r=%d\n",
+                                   depth, "", b->tx_part, ts->msac.rng);
             }
-            DEBUG_BLOCK_printf("Post-tx: r=%d\n", ts->msac.rng);
         }
 
         // reconstruction
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            f->bd_fn.recon_b_intra(t, bs, 0, b);
+            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
         }
 
         if (f->frame_hdr->loopfilter.level_y[0] ||
@@ -2191,6 +2289,18 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
                 (*noskip_mask)[1] |= mask;
         }
     }
+    if (f->seq_hdr->sdp && f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 &&
+        cbs == BS_INVALID)
+    {
+        uint8_t *dirmap = &t->luma_intra_dir_mode_map[by4 * 32 + bx4];
+#define set_ctx(rep_macro) \
+        for (int y = 0; y < bh4; y++) { \
+            rep_macro(dirmap, 0, midx); \
+            dirmap += 32; \
+        }
+        case_set(b_dim[2]);
+#undef set_ctx
+    }
 
     if (t->frame_thread.pass == 1 && !b->intra && IS_INTER_OR_SWITCH(f->frame_hdr)) {
         const int sby = (t->by - ts->tiling.row_start) >> f->sb_shift;
@@ -2347,7 +2457,10 @@ static int checked_decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) 
 
 #endif /* defined(__has_feature) */
 
-static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
+static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+                     const enum BlockSize lbs, const enum BlockSize cbs)
+{
+    const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
     const Dav1dFrameContext *const f = t->f;
     Dav1dTileState *const ts = t->ts;
@@ -2358,10 +2471,22 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
     const int have_h_split = f->bw > t->bx + hw4;
     const int have_v_split = f->bh > t->by + hh4;
 
-    DEBUG_BLOCK_printf("decode_sb[y=%d,x=%d,bs=%dx%d]: r=%d\n",
-                       t->by, t->bx, bw4 * 4, bh4 * 4, ts->msac.rng);
+    // key/intraonly frames always apply SDP at the 64x64 boundary
+    if (lbs == BS_64x64 && cbs == BS_64x64 &&
+        f->seq_hdr->sdp && !(f->frame_hdr->frame_type & 1))
+    {
+        if (decode_sb(t, DB_ONLY(depth) lbs, BS_INVALID)) return -1;
+        return decode_sb(t, DB_ONLY(depth) BS_INVALID, cbs);
+    }
+
+    DEBUG_BLOCK_printf("%*sdecode_sb[y=%d,x=%d,bs=%dx%d,plane=%s]: r=%d\n",
+                       depth - 1, "", t->by, t->bx, bw4 * 4, bh4 * 4,
+                       cbs == BS_INVALID ? "y" : lbs == BS_INVALID ? "uv" : "yuv",
+                       ts->msac.rng);
 
     static const struct PartitionConstants {
+        // FIXME part[0][split] and part[1][split] are identical, maybe
+        // we can save a byte by merging these together
         int8_t part[2 /* h, v */][4 /* half, quarter, eighth, split */];
         int8_t ctx[2 /* _, direction */];
     } subb[] = {
@@ -2450,12 +2575,12 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
               { BS_8x4, -1, -1, -1 } },
             { 11, 14 },
         }, [BS_8x64] = {
-            { { BS_8x32, BS_8x16, BS_8x8, BS_4x32 },
-              { BS_4x32, -1, -1, -1 } },
-            { 0, 0 },
-        }, [BS_8x32] = {
             { { -1, -1, -1, -1 },
               { -1, -1, -1, -1 } },
+            { 0, 0 },
+        }, [BS_8x32] = {
+            { { BS_8x16, BS_8x8, BS_8x4, BS_4x16 },
+              { BS_4x32, -1, -1, -1 } },
             { 12, 13 },
         }, [BS_8x16] = {
             { { BS_8x8, BS_8x4, -1, BS_4x8 },
@@ -2491,13 +2616,22 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
             { -1, -1 },
         },
     };
+    const int pl = lbs == BS_INVALID;
     const struct PartitionConstants *const pcc = &subb[bs];
     enum BlockPartition bp = PARTITION_INVALID;
     int bx4, by4;
     if (t->frame_thread.pass != 2) {
         bx4 = t->bx & 31;
         by4 = t->by & 31;
-        if ((pcc->part[0][0] & pcc->part[1][0]) == -1) {
+        // FIXME some of the code below needs to be tested for 4:2:2 w/ SDP=1
+        const int eff_ss_ver = f->ss_ver & (lbs == BS_INVALID);
+        const int eff_ss_hor = f->ss_hor & (lbs == BS_INVALID);
+        const int bwh4ss[2] = { bw4 >> eff_ss_hor, bh4 >> eff_ss_ver };
+        assert(bwh4ss[0] >= 1 && bwh4ss[1] >= 1);
+        if (imax(bwh4ss[0], bwh4ss[1]) == 1 ||
+            // 1:8/1:16 partitions don't recursive (normatively)
+            (pcc->part[0][0] & pcc->part[1][0]) == -1)
+        {
             bp = PARTITION_NONE;
         } else if (!have_h_split || !have_v_split) {
             if (bw4 == bh4) {
@@ -2517,55 +2651,64 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
                 printf("poc=%d,y=%d,x=%d,bs=%d,r=%d\n",
                        f->frame_hdr->frame_offset, t->by, t->bx, bs, ts->msac.rng);
 #endif
-            const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, by4, bx4);
+            const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, pl, by4, bx4);
             const int ctx2 = ctx1 + pcc->ctx[0] * 4;
             const int is_split =
-                dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.part_split[ctx2]);
+                dav1d_msac_decode_bool_adapt(&ts->msac,
+                                             ts->cdf.m.part_split[pl][ctx2]);
             if (!is_split) {
                 bp = PARTITION_NONE;
             } else {
                 if (bs == BS_128x128 || bs == BS_256x256) {
+                    assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
                     const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
                     const int is_square =
                         dav1d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.part_square[ctx3]);
                     if (is_square)
                         bp = PARTITION_SPLIT;
+                } else if (imax(bw4, bh4) >= 32) {
+                    assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
+                    assert(bw4 != bh4);
+                    bp = bw4 > bh4 ? PARTITION_V : PARTITION_H;
                 }
                 if (bp == PARTITION_INVALID) {
                     // split - find direction
                     int dir;
-                    if (pcc->part[0][0] == -1 || pcc->part[1][0] == -1) {
-                        dir = pcc->part[0][0] == -1;
+                    if (imin(bwh4ss[0], bwh4ss[1]) == 1) {
+                        dir = bwh4ss[0] > bwh4ss[1];
                     } else {
                         const int ctx4 = ctx1 + pcc->ctx[1] * 4;
                         dir = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                  ts->cdf.m.part_dir[ctx4]);
+                                  ts->cdf.m.part_dir[pl][ctx4]);
                     }
                     assert(pcc->part[dir][0] != -1);
                     bp = dir ? PARTITION_V : PARTITION_H;
 
                     // v3/h3 [ext-partition]
-                    if (f->seq_hdr->ext_partitions && pcc->part[dir][1] != -1) {
+                    const int has_hv3 = f->seq_hdr->ext_partitions &&
+                                        bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2;
+                    const int has_hv4ab = f->seq_hdr->uneven_4way_partitions &&
+                                          bwh4ss[!dir] >= 8;
+                    if (has_hv3 || has_hv4ab) {
+                        assert(pcc->part[dir][1] != -1);
                         const int ctx5 = get_partition2_ctx(t->a, &t->l, b_dim,
-                                                            dir, by4, bx4);
+                                                            pl, dir, by4, bx4);
                         const int ctx6 = ctx5 + pcc->ctx[0] * 4;
-                        const int is_hv3 =
+                        const int is_ext =
                             dav1d_msac_decode_bool_adapt(&ts->msac,
-                                ts->cdf.m.part_hv3[ctx6]);
-                        if (is_hv3) {
+                                ts->cdf.m.part_ext[pl][ctx6]);
+                        if (is_ext) {
                             bp = dir ? PARTITION_V3 : PARTITION_H3;
-                            if (f->seq_hdr->uneven_4way_partitions &&
-                                pcc->part[dir][2] != -1)
-                            {
-                                const int is_hv4 =
+                            if (has_hv4ab) {
+                                assert(pcc->part[dir][2] != -1);
+                                const int is_4way = !has_hv3 ||
                                     dav1d_msac_decode_bool_adapt(&ts->msac,
-                                        ts->cdf.m.part_hv4[ctx6]);
-                                if (is_hv4) {
-                                    // FIXME this is wrong, need a bypass variant
-                                    const int is_hv4ab =
+                                        ts->cdf.m.part_4way[pl][ctx6]);
+                                if (is_4way) {
+                                    const int is_a_or_b =
                                         dav1d_msac_decode_bool_bypass(&ts->msac);
-                                    bp = PARTITION_H4A + dir * 2 + is_hv4ab;
+                                    bp = PARTITION_H4A + dir * 2 + is_a_or_b;
                                 }
                             }
                         }
@@ -2586,21 +2729,25 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
             [PARTITION_H3]="h3",
             [PARTITION_V3]="v3",
         };
-        DEBUG_BLOCK_printf("read_partition[y=%d,x=%d,bs=%dx%d,bp=%d|%s]: r=%d\n",
-                           t->by, t->bx, 4 * bw4, 4 * bh4, bp, names[bp],
-                           ts->msac.rng);
+        DEBUG_BLOCK_printf("%*sread_partition[y=%d,x=%d,bs=%dx%d,bp=%d|%s]: r=%d\n",
+                           depth, "", t->by, t->bx, 4 * bw4, 4 * bh4, bp,
+                           names[bp], ts->msac.rng);
 #endif
     } else {
         //.. FIXME 2-pass decoding
         abort();
     }
 
+    if (bs == cbs) {
+        t->cbx = t->bx;
+        t->cby = t->by;
+    }
     switch (bp) {
     case PARTITION_NONE:
-        if (decode_b(t, bs)) return -1;
+        if (decode_b(t, DB_ONLY(depth + 1) lbs, cbs)) return -1;
         if (t->frame_thread.pass != 2) {
 #define set_ctx(rep_macro) \
-            rep_macro(edge->partition, off, (uint8_t) ~(b_dim[i] - 1))
+            rep_macro(edge->partition[pl], off, (uint8_t) ~(b_dim[i] - 1))
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
                 case_set(b_dim[2 + i]);
@@ -2608,83 +2755,212 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
 #undef set_ctx
         }
         break;
-    case PARTITION_V:
-        if (decode_sb(t, pcc->part[1][0])) return -1;
+    case PARTITION_V: {
+        assert(hw4 > 0);
+        const int sub4 = bs == cbs && (hw4 >> f->ss_hor) > 0;
+        assert(sub4 || !pl);
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][0],
+                      sub4 ? pcc->part[1][0] : BS_INVALID))
+        {
+            return -1;
+        }
         if (t->bx + hw4 >= f->bw) break;
         t->bx += hw4;
-        if (decode_sb(t, pcc->part[1][0])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][0],
+                      sub4 ? pcc->part[1][0] : cbs))
+        {
+            return -1;
+        }
         t->bx -= hw4;
         break;
-    case PARTITION_H:
-        if (decode_sb(t, pcc->part[0][0])) return -1;
+    }
+    case PARTITION_H: {
+        assert(hh4 > 0);
+        const int sub4 = bs == cbs && (hh4 >> f->ss_ver) > 0;
+        assert(sub4 || !pl);
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][0],
+                      sub4 ? pcc->part[0][0] : BS_INVALID))
+        {
+            return -1;
+        }
         if (t->by + hh4 >= f->bh) break;
         t->by += hh4;
-        if (decode_sb(t, pcc->part[0][0])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][0],
+                      sub4 ? pcc->part[0][0] : cbs))
+        {
+            return -1;
+        }
         t->by -= hh4;
         break;
-    case PARTITION_V3:
-        if (decode_sb(t, pcc->part[1][1])) return -1;
+    }
+    case PARTITION_V3: {
+        assert(qw4 > 0 && hh4 > 0);
+        const int sub4 = bs == cbs && (qw4 >> f->ss_hor) > 0 &&
+                                      (hh4 >> f->ss_ver) > 0;
+        assert(sub4 || !pl);
+        const int i_3only = !sub4 && bs != BS_32x8;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][1],
+                      i_3only ? BS_INVALID : pcc->part[1][1]))
+        {
+            return -1;
+        }
         if (t->bx + qw4 >= f->bw) break;
         t->bx += qw4;
-        if (decode_sb(t, pcc->part[1][3])) return -1;
+        if (bs == cbs) t->cbx = t->bx;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][3],
+                      sub4 ? pcc->part[1][3] : BS_INVALID))
+        {
+            return -1;
+        }
         if (t->by + hh4 < f->bh) {
             t->by += hh4;
-            if (decode_sb(t, pcc->part[1][3])) return -1;
+            if (decode_sb(t, DB_ONLY(depth + 1)
+                          pl ? BS_INVALID : pcc->part[1][3],
+                          i_3only ? BS_INVALID : pcc->part[1][sub4 * 3]))
+            {
+                return -1;
+            }
             t->by -= hh4;
         }
         if (t->bx + hw4 >= f->bw) { t->bx -= qw4; break; }
         t->bx += hw4;
-        if (decode_sb(t, pcc->part[1][1])) return -1;
+        if (bs == cbs) t->cbx = t->bx;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][1],
+                      i_3only ? cbs : pcc->part[1][1]))
+        {
+            return -1;
+        }
         t->bx -= 3 * qw4;
         break;
-    case PARTITION_H3:
-        if (decode_sb(t, pcc->part[0][1])) return -1;
+    }
+    case PARTITION_H3: {
+        assert(qh4 > 0 && hw4 > 0);
+        const int sub4 = bs == cbs && (qh4 >> f->ss_ver) > 0 &&
+                                      (hw4 >> f->ss_hor) > 0;
+        assert(sub4 || !pl);
+        const int i_3only = !sub4 && bs != BS_8x32;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][1],
+                      i_3only ? BS_INVALID : pcc->part[0][1]))
+        {
+            return -1;
+        }
         if (t->by + qh4 >= f->bh) break;
         t->by += qh4;
-        if (decode_sb(t, pcc->part[0][3])) return -1;
+        if (bs == cbs) t->cby = t->by;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][3],
+                      sub4 ? pcc->part[0][3] : BS_INVALID))
+        {
+            return -1;
+        }
         if (t->bx + hw4 < f->bw) {
             t->bx += hw4;
-            if (decode_sb(t, pcc->part[0][3])) return -1;
+            if (decode_sb(t, DB_ONLY(depth + 1)
+                          pl ? BS_INVALID : pcc->part[0][3],
+                          i_3only ? BS_INVALID : pcc->part[0][sub4 * 3]))
+            {
+                return -1;
+            }
             t->bx -= hw4;
         }
         if (t->by + hh4 >= f->bh) { t->by -= qh4; break; }
         t->by += hh4;
-        if (decode_sb(t, pcc->part[0][1])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][1],
+                      i_3only ? cbs : pcc->part[0][1]))
+        {
+            return -1;
+        }
         t->by -= 3 * qh4;
         break;
+    }
     case PARTITION_V4A:
     case PARTITION_V4B: {
         const int ew4 = qw4 >> 1;
-        if (decode_sb(t, pcc->part[1][2])) return -1;
+        assert(ew4 > 0);
+        const int sub4 = bs == cbs && (ew4 >> f->ss_hor) > 0;
+        assert(sub4 || !pl);
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][2],
+                      sub4 ? pcc->part[1][2] : BS_INVALID))
+        {
+            return -1;
+        }
         if (t->bx + ew4 >= f->bw) break;
         t->bx += ew4;
         const int var = bp - PARTITION_V4A; // v4b: 1, v4a: 0
-        if (decode_sb(t, pcc->part[1][!var])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][!var],
+                      sub4 ? pcc->part[1][!var] : -1))
+        {
+            return -1;
+        }
         const int w4a = qw4 << var, w4b = hw4 >> var;
         if (t->bx + w4a >= f->bw) { t->bx -= ew4; break; }
         t->bx += w4a;
-        if (decode_sb(t, pcc->part[1][var])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][var],
+                      sub4 ? pcc->part[1][var] : -1))
+        {
+            return -1;
+        }
         if (t->bx + w4b >= f->bw) { t->bx -= ew4 + w4a; break; }
         t->bx += w4b;
-        if (decode_sb(t, pcc->part[1][2])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[1][2],
+                      sub4 ? pcc->part[1][2] : cbs))
+        {
+            return -1;
+        }
         t->bx -= 7 * ew4;
         break;
     }
     case PARTITION_H4A:
     case PARTITION_H4B: {
-        const int eh4 = qh4 >> 1;
-        if (decode_sb(t, pcc->part[0][2])) return -1;
+        const int eh4 = bs == cbs && qh4 >> 1;
+        assert(eh4 > 0);
+        const int sub4 = (eh4 >> f->ss_ver) > 0;
+        assert(sub4 || !pl);
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][2],
+                      sub4 ? pcc->part[0][2] : BS_INVALID))
+        {
+            return -1;
+        }
         if (t->by + eh4 >= f->bh) break;
         t->by += eh4;
         const int var = bp - PARTITION_H4A; // h4b: 1, h4a: 0
-        if (decode_sb(t, pcc->part[0][!var])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][!var],
+                      sub4 ? pcc->part[0][!var] : -1))
+        {
+            return -1;
+        }
         const int h4a = qh4 << var, h4b = hh4 >> var;
         if (t->by + h4a >= f->bh) { t->by -= eh4; break; }
         t->by += h4a;
-        if (decode_sb(t, pcc->part[0][var])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][var],
+                      sub4 ? pcc->part[0][var] : -1))
+        {
+            return -1;
+        }
         if (t->by + h4b >= f->bh) { t->by -= eh4 + h4a; break; }
         t->by += h4b;
-        if (decode_sb(t, pcc->part[0][2])) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1)
+                      pl ? BS_INVALID : pcc->part[0][2],
+                      sub4 ? pcc->part[0][2] : cbs))
+        {
+            return -1;
+        }
         t->by -= 7 * eh4;
         break;
     }
@@ -2696,6 +2972,7 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
 }
 
 static void reset_context(BlockContext *const ctx, const int keyframe, const int pass) {
+    memset(ctx->midx, 0xff, sizeof(ctx->midx));
     memset(ctx->intra, keyframe, sizeof(ctx->intra));
     memset(ctx->uvmode, DC_PRED, sizeof(ctx->uvmode));
     if (keyframe)
@@ -2895,6 +3172,8 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     const Dav1dFrameContext *const f = t->f;
     const enum BlockSize root_bs =
         (const uint8_t[]) { BS_64x64, BS_128x128, BS_256x256 }[f->seq_hdr->sb128];
+    const enum BlockSize c_root_bs =
+        f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400 ? BS_INVALID : root_bs;
     Dav1dTileState *const ts = t->ts;
     const Dav1dContext *const c = f->c;
     const int sb_step = f->sb_step;
@@ -2926,7 +3205,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         {
             if (atomic_load_explicit(c->flush, memory_order_acquire))
                 return 1;
-            if (decode_sb(t, root_bs))
+            if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs))
                 return 1;
             if (t->bx & 16 || f->seq_hdr->sb128)
                 t->a++;
@@ -2993,7 +3272,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
 
             read_restoration_info(t, lr, p, frame_type);
         }
-        if (decode_sb(t, root_bs))
+        if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs))
             return 1;
         if (t->bx & 16 || f->seq_hdr->sb128) {
             t->a++;
@@ -3783,6 +4062,9 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         dav1d_thread_picture_ref(out_delayed, &f->sr_cur);
     }
 
+    // ss_ver is set for 4:2:0, and ss_hor for 4:2:0 & 4:2:2
+    f->ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
+    f->ss_hor = f->cur.p.layout - 1 < (unsigned) DAV1D_PIXEL_LAYOUT_I444 - 1;
     f->w4 = (f->frame_hdr->width + 3) >> 2;
     f->h4 = (f->frame_hdr->height + 3) >> 2;
     f->bw = ((f->frame_hdr->width + 7) >> 3) << 1;

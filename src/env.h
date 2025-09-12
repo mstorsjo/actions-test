@@ -55,7 +55,7 @@ typedef struct BlockContext {
     int8_t ALIGN(tx[32], 8);
     uint8_t ALIGN(tx_lpf_y[32], 8);
     uint8_t ALIGN(tx_lpf_uv[32], 8);
-    uint8_t ALIGN(partition[32], 8);
+    uint8_t ALIGN(partition[2][32], 8);
     uint8_t ALIGN(uvmode[32], 8);
     uint8_t ALIGN(pal_sz[32], 8);
 } BlockContext;
@@ -79,25 +79,27 @@ static inline int get_intra_ctx(const BlockContext *const a,
 static inline int get_partition_ctx(const BlockContext *const a,
                                     const BlockContext *const l,
                                     const uint8_t *const b_dim,
+                                    const int plane,
                                     const int yb4, const int xb4)
 {
-    return ((a->partition[xb4] >> imax(b_dim[2] - 1, 0)) & 1) +
-          (((l->partition[yb4] >> imax(b_dim[3] - 1, 0)) & 1) << 1);
+    return ((a->partition[plane][xb4] >> imax(b_dim[2] - 1, 0)) & 1) +
+          (((l->partition[plane][yb4] >> imax(b_dim[3] - 1, 0)) & 1) << 1);
 }
 
 static inline int get_partition2_ctx(const BlockContext *const a,
                                      const BlockContext *const l,
                                      const uint8_t *const b_dim,
-                                     const int dir, const int yb4, const int xb4)
+                                     const int plane, const int dir,
+                                     const int yb4, const int xb4)
 {
     if (!dir /* horizontal */) {
         const int hh4 = b_dim[1] >> 1;
-        return ((l->partition[yb4 + hh4] >> (b_dim[3] - 2)) & 1) +
-              (((l->partition[yb4] >> (b_dim[3] - 2)) & 1) << 1);
+        return ((l->partition[plane][yb4 + hh4] >> (b_dim[3] - 2)) & 1) +
+              (((l->partition[plane][yb4] >> (b_dim[3] - 2)) & 1) << 1);
     } else /* vertical */ {
         const int hw4 = b_dim[0] >> 1;
-        return ((a->partition[xb4 + hw4] >> (b_dim[2] - 2)) & 1) +
-              (((a->partition[xb4] >> (b_dim[2] - 2)) & 1) << 1);
+        return ((a->partition[plane][xb4 + hw4] >> (b_dim[2] - 2)) & 1) +
+              (((a->partition[plane][xb4] >> (b_dim[2] - 2)) & 1) << 1);
     }
 }
 

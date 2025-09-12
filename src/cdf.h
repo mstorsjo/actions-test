@@ -37,11 +37,11 @@
 /* Buffers padded to [4]/[8]/[16] for SIMD where needed. */
 
 typedef struct CdfModeContext {
-    uint16_t part_split[64][3];
+    uint16_t part_split[2][64][3];
     uint16_t part_square[8][3];
-    uint16_t part_dir[64][3];
-    uint16_t part_hv3[64][3];
-    uint16_t part_hv4[64][3];
+    uint16_t part_dir[2][64][3];
+    uint16_t part_ext[2][64][3];
+    uint16_t part_4way[2][64][3];
     uint16_t intra_y_set[5];
     uint16_t intra_y_idx0[3][9];
     uint16_t intra_y_idx1[3][7];
@@ -49,6 +49,13 @@ typedef struct CdfModeContext {
     uint16_t mrl_index[3][5];
     uint16_t multi_mrl[3][3];
     uint16_t dip_mode[7];
+    uint16_t cfl[3][3];
+    uint16_t intra_uv_mode[2][9];
+    uint16_t mhccp[3];
+    uint16_t mhccp_filter_dir[4][4];
+    uint16_t cfl_type[3];
+    uint16_t cfl_sign[9];
+    uint16_t cfl_alpha[6][9];
     uint16_t tx_split[2][2][9][3];
     uint16_t tx_part_2d[2][2][14][8];
     uint16_t tx_part_1d[2][2][2][3];
@@ -59,26 +66,20 @@ typedef struct CdfModeContext {
     uint16_t stx[2][5][5];
     uint16_t stx_set_adst[5];
     uint16_t stx_set[8];
-    ALIGN(uint16_t uv_mode[2][N_INTRA_PRED_MODES][N_UV_INTRA_PRED_MODES + 2], 32);
-    ALIGN(uint16_t cfl_alpha[6][16], 32);
+    uint16_t cctx[8];
     ALIGN(uint16_t txtp_inter1[2][16], 32);
     ALIGN(uint16_t txtp_inter2[12 + 4], 32);
     ALIGN(uint16_t txtp_intra1[2][N_INTRA_PRED_MODES][7 + 1], 16);
     ALIGN(uint16_t txtp_intra2[3][N_INTRA_PRED_MODES][5 + 3], 16);
-    ALIGN(uint16_t cfl_sign[8], 16);
-    ALIGN(uint16_t angle_delta[8][8], 16);
-    ALIGN(uint16_t filter_intra[5 + 3], 16);
     ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS], 16);
     ALIGN(uint16_t pal_sz[2][7][7 + 1], 16);
     ALIGN(uint16_t color_map[2][7][5][8], 16);
-    ALIGN(uint16_t txsz[N_TX_SIZES - 1][3][4], 8);
     ALIGN(uint16_t delta_q[4], 8);
     ALIGN(uint16_t delta_lf[5][4], 8);
     ALIGN(uint16_t restore_switchable[3 + 1], 8);
     ALIGN(uint16_t restore_wiener[2], 4);
     ALIGN(uint16_t restore_sgrproj[2], 4);
     ALIGN(uint16_t txtp_inter3[4][2], 4);
-    ALIGN(uint16_t use_filter_intra[N_BS_SIZES][2], 4);
     ALIGN(uint16_t txpart[7][3][2], 4);
     ALIGN(uint16_t skip[3][2], 4);
     ALIGN(uint16_t pal_y[7][3][2], 4);
@@ -88,7 +89,6 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t intrabc[2], 4);
 
     /* inter/switch */
-    ALIGN(uint16_t y_mode[4][N_INTRA_PRED_MODES + 3], 32);
     ALIGN(uint16_t wedge_idx[9][16], 32);
     ALIGN(uint16_t comp_inter_mode[8][N_COMP_INTER_PRED_MODES], 16);
     ALIGN(uint16_t filter[2][8][DAV1D_N_SWITCHABLE_FILTERS + 1], 8);
@@ -137,6 +137,12 @@ typedef struct CdfCoefContext {
     uint16_t base_y_tok_idtx[3][7][5];
     uint16_t sign_idtx[3][9][3];
     uint16_t dip[3][3];
+    uint16_t skip_v[12][3];
+    uint16_t eob_base_uv_tok_hf[4][4];
+    uint16_t base_uv_tok_hf[12][5];
+    uint16_t br_uv_tok_hf[5];
+    uint16_t eob_base_uv_tok_lf[4][6];
+    uint16_t base_uv_tok_lf[12][7];
 } CdfCoefContext;
 
 typedef struct CdfMvComponent {
