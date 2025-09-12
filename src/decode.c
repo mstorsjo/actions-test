@@ -2667,34 +2667,44 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
         break;
     case PARTITION_V:
         if (decode_sb(t, pcc->part[1][0])) return -1;
+        if (t->bx + hw4 >= f->bw) break;
         t->bx += hw4;
         if (decode_sb(t, pcc->part[1][0])) return -1;
         t->bx -= hw4;
         break;
     case PARTITION_H:
         if (decode_sb(t, pcc->part[0][0])) return -1;
+        if (t->by + hh4 >= f->bh) break;
         t->by += hh4;
         if (decode_sb(t, pcc->part[0][0])) return -1;
         t->by -= hh4;
         break;
     case PARTITION_V3:
         if (decode_sb(t, pcc->part[1][1])) return -1;
+        if (t->bx + qw4 >= f->bw) break;
         t->bx += qw4;
         if (decode_sb(t, pcc->part[1][3])) return -1;
-        t->by += hh4;
-        if (decode_sb(t, pcc->part[1][3])) return -1;
-        t->by -= hh4;
+        if (t->by + hh4 < f->bh) {
+            t->by += hh4;
+            if (decode_sb(t, pcc->part[1][3])) return -1;
+            t->by -= hh4;
+        }
+        if (t->bx + hw4 >= f->bw) { t->bx -= qw4; break; }
         t->bx += hw4;
         if (decode_sb(t, pcc->part[1][1])) return -1;
         t->bx -= 3 * qw4;
         break;
     case PARTITION_H3:
         if (decode_sb(t, pcc->part[0][1])) return -1;
+        if (t->by + qh4 >= f->bh) break;
         t->by += qh4;
         if (decode_sb(t, pcc->part[0][3])) return -1;
-        t->bx += hw4;
-        if (decode_sb(t, pcc->part[0][3])) return -1;
-        t->bx -= hw4;
+        if (t->bx + hw4 < f->bw) {
+            t->bx += hw4;
+            if (decode_sb(t, pcc->part[0][3])) return -1;
+            t->bx -= hw4;
+        }
+        if (t->by + hh4 >= f->bh) { t->by -= qh4; break; }
         t->by += hh4;
         if (decode_sb(t, pcc->part[0][1])) return -1;
         t->by -= 3 * qh4;
@@ -2703,12 +2713,16 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
     case PARTITION_V4B: {
         const int ew4 = qw4 >> 1;
         if (decode_sb(t, pcc->part[1][2])) return -1;
+        if (t->bx + ew4 >= f->bw) break;
         t->bx += ew4;
         const int var = bp - PARTITION_V4A; // v4b: 1, v4a: 0
         if (decode_sb(t, pcc->part[1][!var])) return -1;
-        t->bx += qw4 << var;
+        const int w4a = qw4 << var, w4b = hw4 >> var;
+        if (t->bx + w4a >= f->bw) { t->bx -= ew4; break; }
+        t->bx += w4a;
         if (decode_sb(t, pcc->part[1][var])) return -1;
-        t->bx += hw4 >> var;
+        if (t->bx + w4b >= f->bw) { t->bx -= ew4 + w4a; break; }
+        t->bx += w4b;
         if (decode_sb(t, pcc->part[1][2])) return -1;
         t->bx -= 7 * ew4;
         break;
@@ -2717,12 +2731,16 @@ static int decode_sb(Dav1dTaskContext *const t, const enum BlockSize bs) {
     case PARTITION_H4B: {
         const int eh4 = qh4 >> 1;
         if (decode_sb(t, pcc->part[0][2])) return -1;
+        if (t->by + eh4 >= f->bh) break;
         t->by += eh4;
         const int var = bp - PARTITION_H4A; // h4b: 1, h4a: 0
         if (decode_sb(t, pcc->part[0][!var])) return -1;
-        t->by += qh4 << var;
+        const int h4a = qh4 << var, h4b = hh4 >> var;
+        if (t->by + h4a >= f->bh) { t->by -= eh4; break; }
+        t->by += h4a;
         if (decode_sb(t, pcc->part[0][var])) return -1;
-        t->by += hh4 >> var;
+        if (t->by + h4b >= f->bh) { t->by -= eh4 + h4a; break; }
+        t->by += h4b;
         if (decode_sb(t, pcc->part[0][2])) return -1;
         t->by -= 7 * eh4;
         break;
