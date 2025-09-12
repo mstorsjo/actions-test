@@ -1349,18 +1349,14 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
                                ctx, !!b->dip, ts->msac.rng);
         }
 
-        const TxfmInfo *t_dim;
+        b->tx_part = TX_PARTITION_NONE;
         if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
-            // FIXME this can be idtx & larger
-            b->tx = b->uvtx = (int) TX_4X4;
-            t_dim = &dav1d_txfm_dimensions[TX_4X4];
+            // FIXME I believe this can be wht as well as idtx?
         } else {
-            b->tx = dav1d_max_txfm_size_for_bs[bs][0];
             b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
-            t_dim = &dav1d_txfm_dimensions[b->tx];
 
             if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
-                t_dim->max > TX_4X4 && imax(bw4, bh4) <= 16)
+                bs != BS_4x4 && imax(bw4, bh4) <= 16)
             {
                 static const uint8_t size_to_tx_part_group_lookup[] = {
                     [BS_64x64] = 7,
@@ -1393,49 +1389,7 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
                 int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
                                    ts->cdf.m.tx_split[b->fsc][0][szctx]);
                 if (is_split) {
-                    static int8_t tx_part_tbl[][7] = {
-                        [ TX_4X4]   = { -1, -1, -1, -1, -1, -1, -1 },
-                        [RTX_4X8]   = { -1, TX_4X4, -1, -1, -1, -1, -1 },
-                        [RTX_4X16]  = { -1, RTX_4X8, -1, TX_4X4, -1, -1, -1 },
-                        [RTX_4X32]  = { -1, RTX_4X16, -1, RTX_4X8, -1, -1, -1 },
-                        [RTX_4X64]  = { -1, RTX_4X32, -1, RTX_4X16, -1, -1, -1 },
-                        [RTX_8X4]   = { -1, -1, TX_4X4, -1, -1, -1, -1 },
-                        [ TX_8X8]   = { TX_4X4, RTX_8X4, RTX_4X8, -1, -1, -1, -1 },
-                        [RTX_8X16]  = { RTX_4X8, TX_8X8, RTX_4X16,
-                                        RTX_8X4, -1, -1, -1 },
-                        [RTX_8X32]  = { RTX_4X16, RTX_8X16, RTX_4X32,
-                                        TX_8X8, -1, -1, -1 },
-                        [RTX_8X64]  = { RTX_4X32, RTX_8X32, RTX_4X64,
-                                        RTX_8X16, -1, -1, -1 },
-                        [RTX_16X4]  = { -1, -1, RTX_8X4, -1, TX_4X4, -1, -1 },
-                        [RTX_16X8]  = { RTX_8X4, RTX_16X4, TX_8X8,
-                                        -1, TX_8X8, -1, -1 },
-                        [ TX_16X16] = { TX_8X8, RTX_16X8, RTX_8X16,
-                                        RTX_16X4, RTX_4X16, -1, -1 },
-                        [RTX_16X32] = { RTX_8X16, TX_16X16, RTX_8X32,
-                                        RTX_16X8, RTX_4X32, -1, -1 },
-                        [RTX_16X64] = { RTX_8X32, RTX_16X32, RTX_8X64,
-                                        TX_16X16, RTX_4X64, -1, -1 },
-                        [RTX_32X4]  = { -1, -1, RTX_16X4, -1, RTX_8X4, -1, -1 },
-                        [RTX_32X8]  = { RTX_16X4, RTX_32X4, RTX_16X8,
-                                        -1, TX_8X8, -1, -1 },
-                        [RTX_32X16] = { RTX_16X8, RTX_32X8, TX_16X16,
-                                        RTX_32X4, RTX_8X16, -1, -1 },
-                        [ TX_32X32] = { TX_16X16, RTX_32X16, RTX_16X32,
-                                        RTX_32X8, RTX_8X32, -1, -1 },
-                        [RTX_32X64] = { RTX_16X32, TX_32X32, RTX_16X64,
-                                        RTX_32X16, RTX_8X64, -1, -1 },
-                        [RTX_64X4]  = { -1, -1, RTX_32X4, -1, RTX_16X4, -1, -1 },
-                        [RTX_64X8]  = { RTX_32X4, RTX_64X4, RTX_32X8,
-                                        -1, RTX_16X8, -1, -1 },
-                        [RTX_64X16] = { RTX_32X8, RTX_64X8, RTX_32X16,
-                                        RTX_64X4, TX_16X16, -1, -1 },
-                        [RTX_64X32] = { RTX_32X16, RTX_64X16, TX_32X32,
-                                        RTX_64X8, RTX_16X32, -1, -1 },
-                        [ TX_64X64] = { TX_32X32, RTX_64X32, RTX_32X64,
-                                        RTX_64X16, RTX_16X64, -1, -1 },
-                    };
-                    if (t_dim->min >= TX_8X8) {
+                    if (imin(bw4, bh4) >= 2) {
                         static const uint8_t size_to_tx_type_group_vh_lookup[] = {
                             [BS_64x64] = 9,
                             [BS_64x32] = 8,
@@ -1455,27 +1409,20 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
                             [BS_8x8] = 0,
                         };
                         const int ctx = size_to_tx_type_group_vh_lookup[bs];
-                        const int tx_part =
+                        b->tx_part = 1 +
                             dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.tx_part_2d[b->fsc][0][ctx], 6);
-                        b->tx = tx_part_tbl[b->tx][tx_part];
-                        if (b->tx == (uint8_t) -1) {
-                            printf("part=%d not yet handled for tx=%dx%d\n",
-                                   tx_part + 1, t_dim->w * 4, t_dim->h * 4);
-                            abort();
-                        }
-                    } else if (t_dim->max >= TX_16X16) {
-                        const int ctx = !!t_dim->lw;
+                    } else if (imax(bw4, bh4) >= 4) {
+                        const int ctx = bw4 >= 4;
                         const int tx_part_4way =
                             dav1d_msac_decode_bool_adapt(&ts->msac,
                                 ts->cdf.m.tx_part_1d[b->fsc][0][ctx]);
-                        b->tx = tx_part_tbl[b->tx][1 + ctx + tx_part_4way * 2];
-                        assert(b->tx != (uint8_t) -1);
+                        b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
                     } else {
-                        assert(t_dim->min == TX_4X4 && t_dim->max == TX_8X8);
-                        b->tx = (int) TX_4X4;
+                        assert(bs == BS_4x8 || bs == BS_8x4);
+                        b->tx_part = bs == BS_4x8 ? TX_PARTITION_H :
+                                                    TX_PARTITION_V;
                     }
-                    t_dim = &dav1d_txfm_dimensions[b->tx];
                 }
             }
             DEBUG_BLOCK_printf("Post-tx: r=%d\n", ts->msac.rng);
@@ -1495,7 +1442,7 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
                                        (const uint8_t (*)[8][2])
                                        &ts->lflvl[b->seg_id][0][0][0],
                                        t->bx, t->by, f->w4, f->h4, bs,
-                                       b->tx, b->uvtx, f->cur.p.layout,
+                                       0 /*b->tx*/, b->uvtx, f->cur.p.layout,
                                        &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                        has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
                                        has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
@@ -1505,10 +1452,8 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
             b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
         BlockContext *edge = t->a;
         for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
-            int t_lsz = ((uint8_t *) &t_dim->lw)[i]; // lw then lh
 #define set_ctx(rep_macro) \
-            rep_macro(edge->tx_intra, off, t_lsz); \
-            rep_macro(edge->tx, off, t_lsz); \
+            rep_macro(edge->tx, off, 0 /* t_lsz */); \
             rep_macro(edge->fsc, off, b->fsc); \
             rep_macro(edge->mode, off, y_mode_nofilt); \
             rep_macro(edge->midx, off, midx); \
@@ -1642,7 +1587,6 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
         BlockContext *edge = t->a;
         for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
-            rep_macro(edge->tx_intra, off, b_dim[2 + i]); \
             rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->mode, off, DC_PRED); \
             rep_macro(edge->mrl, off, 0); \
@@ -2206,7 +2150,6 @@ static int decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) {
             rep_macro(edge->pal_sz, off, 0); \
             /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
             rep_macro(t->pal_sz_uv[i], off, 0); \
-            rep_macro(edge->tx_intra, off, b_dim[2 + i]); \
             rep_macro(edge->comp_type, off, b->comp_type); \
             rep_macro(edge->filter[0], off, filter[0]); \
             rep_macro(edge->filter[1], off, filter[1]); \
@@ -2765,7 +2708,6 @@ static void reset_context(BlockContext *const ctx, const int keyframe, const int
     memset(ctx->skip_mode, 0, sizeof(ctx->skip_mode));
     memset(ctx->tx_lpf_y, 2, sizeof(ctx->tx_lpf_y));
     memset(ctx->tx_lpf_uv, 1, sizeof(ctx->tx_lpf_uv));
-    memset(ctx->tx_intra, -1, sizeof(ctx->tx_intra));
     memset(ctx->tx, TX_64X64, sizeof(ctx->tx));
     if (!keyframe) {
         memset(ctx->ref, -1, sizeof(ctx->ref));

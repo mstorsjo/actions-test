@@ -161,6 +161,17 @@ enum BlockPartition {
     N_PARTITIONS,
 };
 
+enum TxPartition {
+    TX_PARTITION_NONE,
+    TX_PARTITION_SPLIT,
+    TX_PARTITION_H,
+    TX_PARTITION_V,
+    TX_PARTITION_H4,
+    TX_PARTITION_V4,
+    TX_PARTITION_H5,
+    TX_PARTITION_V5,
+};
+
 enum BlockSize {
     BS_INVALID = -1,
     BS_256x256,
@@ -281,7 +292,7 @@ typedef struct Av1Block {
     union {
         struct {
             uint8_t y_mode, fsc, mrl_index, multi_mrl, dip;
-            uint8_t uv_mode, tx, pal_sz[2];
+            uint8_t uv_mode, tx_part, pal_sz[2];
             int8_t y_angle, uv_angle, cfl_alpha[2];
         }; // intra
         struct {

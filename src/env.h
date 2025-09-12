@@ -52,7 +52,6 @@ typedef struct BlockContext {
     uint8_t ALIGN(comp_type[32], 8);
     int8_t ALIGN(ref[2][32], 8); // -1 means intra
     uint8_t ALIGN(filter[2][32], 8); // 3 means unset
-    int8_t ALIGN(tx_intra[32], 8);
     int8_t ALIGN(tx[32], 8);
     uint8_t ALIGN(tx_lpf_y[32], 8);
     uint8_t ALIGN(tx_lpf_uv[32], 8);
@@ -75,14 +74,6 @@ static inline int get_intra_ctx(const BlockContext *const a,
     } else {
         return have_top ? a->intra[xb4] * 2 : 0;
     }
-}
-
-static inline int get_tx_ctx(const BlockContext *const a,
-                             const BlockContext *const l,
-                             const TxfmInfo *const max_tx,
-                             const int yb4, const int xb4)
-{
-    return (l->tx_intra[yb4] >= max_tx->lh) + (a->tx_intra[xb4] >= max_tx->lw);
 }
 
 static inline int get_partition_ctx(const BlockContext *const a,

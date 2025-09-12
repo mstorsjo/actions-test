@@ -1107,6 +1107,7 @@ static void read_coef_tree(Dav1dTaskContext *const t,
 void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
                                     const enum BlockSize bs, const Av1Block *const b)
 {
+#if 0
     const Dav1dFrameContext *const f = t->f;
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
@@ -1217,6 +1218,7 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
             }
         }
     }
+#endif
 }
 
 static int mc(Dav1dTaskContext *const t,
@@ -1457,10 +1459,248 @@ static int warp_affine(Dav1dTaskContext *const t,
     return 0;
 }
 
+static void recon_b_intra_tx(Dav1dTaskContext *const t,
+                             const enum RectTxfmSize tx,
+                             const Av1Block *const b)
+{
+    const Dav1dFrameContext *const f = t->f;
+    Dav1dTileState *const ts = t->ts;
+    const int bx4 = t->bx & 31, by4 = t->by & 31;
+    const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+
+    // FIXME predict
+    // ..
+
+    assert(!b->skip);
+
+    // decode coefficients
+    coef *const cf = bitfn(t->cf);
+    enum TxfmType txtp;
+    uint8_t cf_ctx;
+    int eob = decode_coefs(t, &t->a->lcoef[bx4], &t->l.lcoef[by4],
+                           tx, b->bs, b, 1, 0, cf, &txtp, &cf_ctx);
+    DEBUG_BLOCK_printf("Post-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
+                       t_dim->w * 4, t_dim->h * 4, txtp, eob, ts->msac.rng);
+    dav1d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
+                             imin(t_dim->w, f->bw - t->bx));
+    dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
+                             imin(t_dim->h, f->bh - t->by));
+
+    // FIXME reconstruct
+    // ..
+}
+
 void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t, const enum BlockSize bs,
                                  const enum EdgeFlags intra_edge_flags,
                                  const Av1Block *const b)
 {
+#if 1
+    const Dav1dFrameContext *const f = t->f;
+    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const int bw4 = b_dim[0], bh4 = b_dim[1];
+    if (imax(bw4, bh4) > 16) {
+        const int y_start = t->by, y_end = imin(y_start + bh4, f->bh);
+        const int x_start = t->bx, x_end = imin(x_start + bw4, f->bw);
+        for (; t->by < y_end; t->by += 16) {
+            for (; t->bx < x_end; t->bx += 16) {
+                // FIXME it's possible we can call directly into a sub-function
+                // here that manages one transform-block, since tx_part=none
+                // (at least if not lossless)
+                bytefn(dav1d_recon_b_intra)(t, BS_64x64, intra_edge_flags, b);
+            }
+            t->bx = x_start;
+        }
+        t->by = y_start;
+        return;
+    }
+    // FIXME lossless handling (i.e. where one prediction block contains
+    // multiple transform blocks
+
+    // order: split, horz, vert, horz4, vert4, horz5[small], ver5[small]
+    // the big ones in horz5 and vert5 are identical to horz or vert
+    static const int8_t tx_part_tbl[][8] = {
+        [BS_4x4]   = { TX_4X4, -1, -1, -1, -1, -1, -1, -1 },
+        [BS_4x8]   = { RTX_4X8, -1, TX_4X4, -1, -1, -1, -1, -1 },
+        [BS_4x16]  = { RTX_4X16, -1, RTX_4X8, -1, TX_4X4, -1, -1, -1 },
+        [BS_4x32]  = { RTX_4X32, -1, RTX_4X16, -1, RTX_4X8, -1, -1, -1 },
+        [BS_4x64]  = { RTX_4X64, -1, RTX_4X32, -1, RTX_4X16, -1, -1, -1 },
+        [BS_8x4]   = { RTX_8X4, -1, -1, TX_4X4, -1, -1, -1, -1 },
+        [BS_8x8]   = { TX_8X8, TX_4X4, RTX_8X4, RTX_4X8, -1, -1, -1, -1 },
+        [BS_8x16]  = { RTX_8X16, RTX_4X8, TX_8X8, RTX_4X16,
+                       RTX_8X4, -1, TX_4X4, -1 },
+        [BS_8x32]  = { RTX_8X32, RTX_4X16, RTX_8X16, RTX_4X32,
+                       TX_8X8, -1, RTX_4X8, -1 },
+        [BS_8x64]  = { RTX_8X64, RTX_4X32, RTX_8X32, RTX_4X64,
+                       RTX_8X16, -1, RTX_4X16, -1 },
+        [BS_16x4]  = { RTX_16X4, -1, -1, RTX_8X4, -1, TX_4X4, -1, -1 },
+        [BS_16x8]  = { RTX_16X8, RTX_8X4, RTX_16X4, TX_8X8,
+                       -1, TX_8X8, -1, TX_4X4 },
+        [BS_16x16] = { TX_16X16, TX_8X8, RTX_16X8, RTX_8X16,
+                       RTX_16X4, RTX_4X16, RTX_8X4, RTX_4X8 },
+        [BS_16x32] = { RTX_16X32, RTX_8X16, TX_16X16, RTX_8X32,
+                       RTX_16X8, RTX_4X32, TX_8X8, RTX_4X16 },
+        [BS_16x64] = { RTX_16X64, RTX_8X32, RTX_16X32, RTX_8X64,
+                       TX_16X16, RTX_4X64, RTX_8X16, RTX_4X32 },
+        [BS_32x4]  = { RTX_32X4, -1, -1, RTX_16X4, -1, RTX_8X4, -1, -1 },
+        [BS_32x8]  = { RTX_32X8, RTX_16X4, RTX_32X4, RTX_16X8,
+                       -1, TX_8X8, -1, RTX_8X4 },
+        [BS_32x16] = { RTX_32X16, RTX_16X8, RTX_32X8, TX_16X16,
+                       RTX_32X4, RTX_8X16, RTX_16X4, TX_8X8 },
+        [BS_32x32] = { TX_32X32, TX_16X16, RTX_32X16, RTX_16X32,
+                       RTX_32X8, RTX_8X32, RTX_16X8, RTX_8X16 },
+        [BS_32x64] = { RTX_32X64, RTX_16X32, TX_32X32, RTX_16X64,
+                       RTX_32X16, RTX_8X64, TX_16X16, RTX_8X32 },
+        [BS_64x4]  = { RTX_64X4, -1, -1, RTX_32X4, -1, RTX_16X4, -1, -1 },
+        [BS_64x8]  = { RTX_64X8, RTX_32X4, RTX_64X4, RTX_32X8,
+                       -1, RTX_16X8, -1, RTX_16X4 },
+        [BS_64x16] = { RTX_64X16, RTX_32X8, RTX_64X8, RTX_32X16,
+                       RTX_64X4, TX_16X16, RTX_32X4, RTX_16X8 },
+        [BS_64x32] = { RTX_64X32, RTX_32X16, RTX_64X16, TX_32X32,
+                       RTX_64X8, RTX_16X32, RTX_32X8, TX_16X16 },
+        [BS_64x64] = { TX_64X64, TX_32X32, RTX_64X32, RTX_32X64,
+                       RTX_64X16, RTX_16X64, RTX_32X16, RTX_16X32 },
+    };
+    const int8_t *const tp = tx_part_tbl[bs];
+    // FIXME do error reporting, to shortcut further decoding
+    if (tp[b->tx_part] == -1) return;
+
+    // FIXME do palette handling at prediction block level
+    // ..
+
+    const enum RectTxfmSize tx = tp[b->tx_part];
+    switch (b->tx_part) {
+    case TX_PARTITION_NONE:
+        recon_b_intra_tx(t, tx, b);
+        break;
+    case TX_PARTITION_SPLIT: {
+        const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w, th4 = t_dim->h;
+        recon_b_intra_tx(t, tx, b);
+        const int have_v_split = t->bx + tw4 < f->bw;
+        if (have_v_split) {
+            t->bx += tw4;
+            recon_b_intra_tx(t, tx, b);
+            t->bx -= tw4;
+        }
+        if (t->by + th4 >= f->bh) break;
+        t->by += th4;
+        recon_b_intra_tx(t, tx, b);
+        if (have_v_split) {
+            t->bx += tw4;
+            recon_b_intra_tx(t, tx, b);
+            t->bx -= tw4;
+        }
+        t->by -= th4;
+        break;
+    }
+    case TX_PARTITION_H: {
+        const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+        const int th4 = t_dim->h;
+        recon_b_intra_tx(t, tx, b);
+        if (t->by + th4 >= f->bh) break;
+        t->by += th4;
+        recon_b_intra_tx(t, tx, b);
+        t->by -= th4;
+        break;
+    }
+    case TX_PARTITION_V: {
+        const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w;
+        recon_b_intra_tx(t, tx, b);
+        if (t->bx + tw4 >= f->bw) break;
+        t->bx += tw4;
+        recon_b_intra_tx(t, tx, b);
+        t->bx -= tw4;
+        break;
+    }
+    case TX_PARTITION_H4: {
+        const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+        const int th4 = t_dim->h;
+        recon_b_intra_tx(t, tx, b);
+        if (t->by + th4 >= f->bh) break;
+        t->by += th4;
+        recon_b_intra_tx(t, tx, b);
+        if (t->by + th4 >= f->bh) { t->by -= th4; break; }
+        t->by += th4;
+        recon_b_intra_tx(t, tx, b);
+        if (t->by + th4 >= f->bh) { t->by -= 2 * th4; break; }
+        t->by += th4;
+        recon_b_intra_tx(t, tx, b);
+        t->by -= 3 * th4;
+        break;
+    }
+    case TX_PARTITION_V4: {
+        const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w;
+        recon_b_intra_tx(t, tx, b);
+        if (t->bx + tw4 >= f->bw) break;
+        t->bx += tw4;
+        recon_b_intra_tx(t, tx, b);
+        if (t->bx + tw4 >= f->bw) { t->bx -= tw4; break; }
+        t->bx += tw4;
+        recon_b_intra_tx(t, tx, b);
+        if (t->bx + tw4 >= f->bw) { t->bx -= 2 * tw4; break; }
+        t->bx += tw4;
+        recon_b_intra_tx(t, tx, b);
+        t->bx -= 3 * tw4;
+        break;
+    }
+    case TX_PARTITION_H5: {
+        const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
+        const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
+                       *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
+        const int tw4_small = t_dim_small->w, th4_small = t_dim_small->w;
+        const int th4_big = t_dim_big->h;
+        recon_b_intra_tx(t, tx, b);
+        const int have_v_split = t->bx + tw4_small < f->bw;
+        if (have_v_split) {
+            t->bx += tw4_small;
+            recon_b_intra_tx(t, tx, b);
+            t->bx -= tw4_small;
+        }
+        if (t->by + th4_small >= f->bh) break;
+        t->by += th4_small;
+        recon_b_intra_tx(t, tx_big, b);
+        if (t->by + th4_big >= f->bh) { t->by -= th4_small; break; }
+        t->by += th4_big;
+        recon_b_intra_tx(t, tx, b);
+        if (have_v_split) {
+            t->bx += tw4_small;
+            recon_b_intra_tx(t, tx, b);
+            t->bx -= tw4_small;
+        }
+        t->by -= th4_small + th4_big;
+        break;
+    }
+    case TX_PARTITION_V5: {
+        const enum RectTxfmSize tx_big = tp[TX_PARTITION_V];
+        const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
+                       *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
+        const int tw4_small = t_dim_small->w, th4_small = t_dim_small->w;
+        const int tw4_big = t_dim_big->w;
+        recon_b_intra_tx(t, tx, b);
+        const int have_h_split = t->by + th4_small < f->bh;
+        if (have_h_split) {
+            t->by += th4_small;
+            recon_b_intra_tx(t, tx, b);
+            t->by -= th4_small;
+        }
+        if (t->bx + tw4_small >= f->bw) break;
+        t->bx += tw4_small;
+        recon_b_intra_tx(t, tx_big, b);
+        if (t->bx + tw4_big >= f->bw) { t->bx -= tw4_small; break; }
+        t->bx += tw4_big;
+        recon_b_intra_tx(t, tx, b);
+        if (have_h_split) {
+            t->by += th4_small;
+            recon_b_intra_tx(t, tx, b);
+            t->by -= th4_small;
+        }
+        t->bx -= tw4_small + tw4_big;
+    }
+    default: assert(0);
+    }
+#else
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
@@ -1837,6 +2077,7 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t, const enum BlockSize
             }
         }
     }
+#endif
 }
 
 int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize bs,
