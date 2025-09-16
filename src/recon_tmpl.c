@@ -1451,12 +1451,11 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              const enum RectTxfmSize tx, const Av1Block *const b)
 {
     const Dav1dFrameContext *const f = t->f;
+    const Dav1dDSPContext *const dsp = f->dsp;
     Dav1dTileState *const ts = t->ts;
     const int bx4 = t->bx & 31, by4 = t->by & 31;
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
-
-    // FIXME predict
-    // ..
+    const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
     assert(!b->skip);
 
@@ -1468,12 +1467,34 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
                            tx, b->bs, b, 1, 0, cf, &txtp, &cf_ctx);
     DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
-                       depth + 1, "", t_dim->w * 4, t_dim->h * 4, txtp, eob,
-                       ts->msac.rng);
+                       depth + 1, "", tw, th, txtp, eob, ts->msac.rng);
     dav1d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
                              imin(t_dim->w, f->bw - t->bx));
     dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
+
+    // FIXME predict
+    // ..
+    if (b->y_mode >= SMOOTH_PRED && b->y_mode >= SMOOTH_H_PRED) {
+        int n_pel_left = th + 3;
+        int n_pel_above = tw + th;
+        pixel *const edge = bitfn(t->scratch.edge) + 128;
+        memset(edge - n_pel_left, 129, n_pel_left * sizeof(pixel));
+        memset(edge, 127, (n_pel_above + 1) * sizeof(pixel));
+        pixel *dst = ((pixel *) f->cur.data[0]) +
+            4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
+        dsp->ipred.intra_pred[b->y_mode](dst, f->cur.stride[0],
+                                         edge, tw, th, 0,
+                                         4 * f->bw - 4 * t->bx,
+                                         4 * f->bh - 4 * t->by
+                                         HIGHBD_CALL_SUFFIX);
+        if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS) {
+            hex_dump(edge - n_pel_left, n_pel_left, n_pel_left, 1, "l");
+            hex_dump(edge, 0, 1, 1, "tl");
+            hex_dump(edge + 1, n_pel_above, n_pel_above, 1, "t");
+            hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
+        }
+    }
 
     // FIXME reconstruct
     // ..

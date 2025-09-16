@@ -270,17 +270,29 @@ static void ipred_smooth_c(pixel *dst, const ptrdiff_t stride,
                            const int max_width, const int max_height
                            HIGHBD_DECL_SUFFIX)
 {
-    const uint8_t *const weights_hor = &dav1d_sm_weights[width];
-    const uint8_t *const weights_ver = &dav1d_sm_weights[height];
+    const int bwl2 = ulog2(width), bhl2 = ulog2(height);
+    const int rnd_ver = height >> 1;
+    const int rnd_hor = width >> 1;
+    const int n_pel = width * height;
+    const int scale = n_pel >= 64 && n_pel <= 512;
+    const uint8_t *const weights_ver = &dav1d_avm_sm_weights[scale][height];
+    const uint8_t *const weights_hor = &dav1d_avm_sm_weights[scale][width];
     const int right = topleft[width], bottom = topleft[-height];
 
     for (int y = 0; y < height; y++) {
+        const int left = topleft[-(y + 1)];
+        const int diff_hor = left - right;
+        const int off_ver = height - 1 - y;
+        const int w_ver = weights_ver[y];
         for (int x = 0; x < width; x++) {
-            const int pred = weights_ver[y]  * topleft[1 + x] +
-                      (256 - weights_ver[y]) * bottom +
-                             weights_hor[x]  * topleft[-(1 + y)] +
-                      (256 - weights_hor[x]) * right;
-            dst[x] = (pred + 256) >> 9;
+            const int above = topleft[1 + x];
+            const int mul_ver = (above - bottom) * off_ver;
+            const int mul_hor = diff_hor * (width - 1 - x);
+            int pred_ver = bottom + ((mul_ver + rnd_ver) >> bhl2);
+            int pred_hor = right + ((mul_hor + rnd_hor) >> bwl2);
+            pred_ver += ((above - pred_ver) * w_ver + 32) >> 6;
+            pred_hor += ((left - pred_hor) * weights_hor[x] + 32) >> 6;
+            dst[x] = (pred_ver + pred_hor + 1) >> 1;
         }
         dst += PXSTRIDE(stride);
     }
@@ -292,14 +304,21 @@ static void ipred_smooth_v_c(pixel *dst, const ptrdiff_t stride,
                              const int max_width, const int max_height
                              HIGHBD_DECL_SUFFIX)
 {
-    const uint8_t *const weights_ver = &dav1d_sm_weights[height];
+    const int bhl2 = ulog2(height);
+    const int rnd = height >> 1;
+    const int n_pel = width * height;
+    const int scale = n_pel >= 64 && n_pel <= 512;
+    const uint8_t *const weights_ver = &dav1d_avm_sm_weights[scale][height];
     const int bottom = topleft[-height];
 
     for (int y = 0; y < height; y++) {
+        const int off = height - 1 - y;
+        const int w_ver = weights_ver[y];
         for (int x = 0; x < width; x++) {
-            const int pred = weights_ver[y]  * topleft[1 + x] +
-                      (256 - weights_ver[y]) * bottom;
-            dst[x] = (pred + 128) >> 8;
+            const int above = topleft[1 + x];
+            const int mul = (above - bottom) * off;
+            const int pred = bottom + ((mul + rnd) >> bhl2);
+            dst[x] = pred + (((above - pred) * w_ver + 32) >> 6);
         }
         dst += PXSTRIDE(stride);
     }
@@ -311,14 +330,20 @@ static void ipred_smooth_h_c(pixel *dst, const ptrdiff_t stride,
                              const int max_width, const int max_height
                              HIGHBD_DECL_SUFFIX)
 {
-    const uint8_t *const weights_hor = &dav1d_sm_weights[width];
+    const int bwl2 = ulog2(width);
+    const int rnd = width >> 1;
+    const int n_pel = width * height;
+    const int scale = n_pel >= 64 && n_pel <= 512;
+    const uint8_t *const weights_hor = &dav1d_avm_sm_weights[scale][width];
     const int right = topleft[width];
 
     for (int y = 0; y < height; y++) {
+        const int left = topleft[-(y + 1)];
+        const int diff = left - right;
         for (int x = 0; x < width; x++) {
-            const int pred = weights_hor[x]  * topleft[-(y + 1)] +
-                      (256 - weights_hor[x]) * right;
-            dst[x] = (pred + 128) >> 8;
+            const int mul = diff * (width - 1 - x);
+            const int pred = right + ((mul + rnd) >> bwl2);
+            dst[x] = pred + (((left - pred) * weights_hor[x] + 32) >> 6);
         }
         dst += PXSTRIDE(stride);
     }
@@ -768,6 +793,7 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
 
     c->pal_pred = pal_pred_c;
 
+#if 0
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
     intra_pred_dsp_init_arm(c);
@@ -777,6 +803,7 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
     intra_pred_dsp_init_x86(c);
 #elif ARCH_LOONGARCH64
     intra_pred_dsp_init_loongarch(c);
+#endif
 #endif
 #endif
 }

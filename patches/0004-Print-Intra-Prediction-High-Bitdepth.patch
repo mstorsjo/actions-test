@@ -1,0 +1,137 @@
+From 9ba44a3e05d4f66900c786d98a12d1ad30a4f23c Mon Sep 17 00:00:00 2001
+From: Luc Trudeau <ltrudeau@twoorioles.com>
+Date: Wed, 17 Sep 2025 16:53:29 -0400
+Subject: [PATCH] Print Intra Prediction High Bitdepth
+
+---
+ av1/common/reconintra.c | 24 ++++++++++++++++++++----
+ av1/decoder/decoder.h   | 25 +++++++++++++++++++++++++
+ 2 files changed, 45 insertions(+), 4 deletions(-)
+
+diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
+index e4b0cf0f7..13ed62602 100644
+--- a/av1/common/reconintra.c
++++ b/av1/common/reconintra.c
+@@ -27,6 +27,8 @@
+ #include "av1/common/reconintra.h"
+ #include <av1/encoder/block.h>
+ 
++#include "av1/decoder/decoder.h"
++
+ enum {
+   NEED_LEFT = 1 << 1,
+   NEED_ABOVE = 1 << 2,
+@@ -1116,7 +1118,7 @@ void av1_highbd_ibp_dr_prediction_z3_c(
+   }
+ }
+ 
+-static void build_intra_predictors_high(
++static void build_intra_predictors_high(DB_ONLY(const AV1_COMMON *cm)
+     const MACROBLOCKD *xd, const uint16_t *ref, int ref_stride, uint16_t *dst,
+     int dst_stride, PREDICTION_MODE mode, int angle_delta, TX_SIZE tx_size,
+     int disable_edge_filter, int n_top_px, int n_topright_px, int n_left_px,
+@@ -1232,13 +1234,14 @@ static void build_intra_predictors_high(
+   }
+ 
+   // NEED_LEFT
++  int num_left_pixels_needed = 0;
+   if (need_left) {
+     int need_bottom = extend_modes[mode] & NEED_BOTTOMLEFT;
+     if (use_intra_dip) need_bottom = 1;
+     if (is_dr_mode)
+       need_bottom =
+           apply_ibp ? (p_angle < 90) || (p_angle > 180) : p_angle > 180;
+-    int num_left_pixels_needed =
++    num_left_pixels_needed =
+         txhpx + (need_bottom ? txwpx : 3) + (mrl_index << 1);
+     if (use_intra_dip) {
+       // DIP mode requires left edge + 1/4 tx height for overhang feature.
+@@ -1270,12 +1273,13 @@ static void build_intra_predictors_high(
+   }
+ 
+   // NEED_ABOVE
++  int num_top_pixels_needed = 0;
+   if (need_above) {
+     int need_right = extend_modes[mode] & NEED_ABOVERIGHT;
+     if (use_intra_dip) need_right = 1;
+     if (is_dr_mode)
+       need_right = apply_ibp ? (p_angle < 90) || (p_angle > 180) : p_angle < 90;
+-    int num_top_pixels_needed =
++    num_top_pixels_needed =
+         txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
+     if (use_intra_dip) {
+       // DIP mode requires above line + 1/4 tx width for overhang feature.
+@@ -1488,6 +1492,18 @@ static void build_intra_predictors_high(
+     pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
+                              xd->bd);
+   }
++#if DEBUG_B_PIXELS
++  const int mi_row = xd->mi_row;
++  const int mi_col = xd->mi_col;
++  if (BLOCK_TO_DEBUG) {
++    hex_dump(left_col_1st, num_left_pixels_needed,
++             num_left_pixels_needed, 1, "l");
++    hex_dump(&above_row_1st[-1], 1, 1, 1, "tl");
++    hex_dump(above_row_1st, num_top_pixels_needed,
++             num_top_pixels_needed, 1, "t");
++    hex_dump(dst, dst_stride, txwpx, txhpx, "y-intra-pred");
++  }
++#endif
+ 
+   // Apply sub-block based filter for DC/smooth intra mode
+   apply_sub_block_based_refinement_filter &=
+@@ -1578,7 +1594,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+   const int is_sb_boundary =
+       (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
+ 
+-  build_intra_predictors_high(
++  build_intra_predictors_high(DB_ONLY(cm)
+       xd, ref, ref_stride, dst, dst_stride, mode, angle_delta, tx_size,
+       disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
+       have_top_right ? px_top_right : 0,
+diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
+index 4ebcff5c0..c2d7c30cd 100644
+--- a/av1/decoder/decoder.h
++++ b/av1/decoder/decoder.h
+@@ -34,6 +34,7 @@
+ #define DEBUG_SEQ_HDR 0
+ #define DEBUG_FRAME_HDR 0
+ #define DEBUG_BLOCK_INFO 0
++#define DEBUG_B_PIXELS 0
+ #if DEBUG_BLOCK_INFO
+ #define DB_ONLY(x...) x,
+ #define BLOCK_TO_DEBUG \
+@@ -50,6 +51,30 @@
+ #define DEBUG_CF_printf(fmt...)
+ #endif
+ 
++#if DEBUG_B_PIXELS
++#define PIX_HEX_FMT "%02x"
++#define PXSTRIDE(x) (x)
++
++static void hex_fdump(FILE *out, const uint16_t *buf, ptrdiff_t stride,
++                             int w, int h, const char *what)
++{
++    fprintf(out, "%s\n", what);
++    while (h--) {
++        int x;
++        for (x = 0; x < w; x++)
++            fprintf(out, " " PIX_HEX_FMT, buf[x]);
++        buf += PXSTRIDE(stride);
++        fprintf(out, "\n");
++    }
++}
++
++static void hex_dump(const uint16_t *buf, ptrdiff_t stride,
++                            int w, int h, const char *what)
++{
++    hex_fdump(stdout, buf, stride, w, h, what);
++}
++#endif
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-- 
+2.43.0
+
