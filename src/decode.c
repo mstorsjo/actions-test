@@ -2659,7 +2659,9 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (!is_split) {
                 bp = PARTITION_NONE;
             } else {
-                if (bs == BS_128x128 || bs == BS_256x256) {
+                if ((bs == BS_128x128 || bs == BS_256x256) &&
+                    have_v_split && have_h_split)
+                {
                     assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
                     const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
                     const int is_square =
@@ -2685,30 +2687,32 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     assert(pcc->part[dir][0] != -1);
                     bp = dir ? PARTITION_V : PARTITION_H;
 
-                    // v3/h3 [ext-partition]
-                    const int has_hv3 = f->seq_hdr->ext_partitions &&
-                                        bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2;
-                    const int has_hv4ab = f->seq_hdr->uneven_4way_partitions &&
-                                          bwh4ss[!dir] >= 8;
-                    if (has_hv3 || has_hv4ab) {
-                        assert(pcc->part[dir][1] != -1);
-                        const int ctx5 = get_partition2_ctx(t->a, &t->l, b_dim,
-                                                            pl, dir, by4, bx4);
-                        const int ctx6 = ctx5 + pcc->ctx[0] * 4;
-                        const int is_ext =
-                            dav1d_msac_decode_bool_adapt(&ts->msac,
-                                ts->cdf.m.part_ext[pl][ctx6]);
-                        if (is_ext) {
-                            bp = dir ? PARTITION_V3 : PARTITION_H3;
-                            if (has_hv4ab) {
-                                assert(pcc->part[dir][2] != -1);
-                                const int is_4way = !has_hv3 ||
-                                    dav1d_msac_decode_bool_adapt(&ts->msac,
-                                        ts->cdf.m.part_4way[pl][ctx6]);
-                                if (is_4way) {
-                                    const int is_a_or_b =
-                                        dav1d_msac_decode_bool_bypass(&ts->msac);
-                                    bp = PARTITION_H4A + dir * 2 + is_a_or_b;
+                    if (imax(bw4, bh4) <= 16) {
+                        // v3/h3 [ext-partition]
+                        const int has_hv3 = f->seq_hdr->ext_partitions &&
+                                            bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2;
+                        const int has_hv4ab = f->seq_hdr->uneven_4way_partitions &&
+                                              bwh4ss[!dir] >= 8;
+                        if (has_hv3 || has_hv4ab) {
+                            assert(pcc->part[dir][1] != -1);
+                            const int ctx5 = get_partition2_ctx(t->a, &t->l, b_dim,
+                                                                pl, dir, by4, bx4);
+                            const int ctx6 = ctx5 + pcc->ctx[0] * 4;
+                            const int is_ext =
+                                dav1d_msac_decode_bool_adapt(&ts->msac,
+                                    ts->cdf.m.part_ext[pl][ctx6]);
+                            if (is_ext) {
+                                bp = dir ? PARTITION_V3 : PARTITION_H3;
+                                if (has_hv4ab) {
+                                    assert(pcc->part[dir][2] != -1);
+                                    const int is_4way = !has_hv3 ||
+                                        dav1d_msac_decode_bool_adapt(&ts->msac,
+                                            ts->cdf.m.part_4way[pl][ctx6]);
+                                    if (is_4way) {
+                                        const int is_a_or_b =
+                                            dav1d_msac_decode_bool_bypass(&ts->msac);
+                                        bp = PARTITION_H4A + dir * 2 + is_a_or_b;
+                                    }
                                 }
                             }
                         }
@@ -2794,6 +2798,21 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         {
             return -1;
         }
+        t->by -= hh4;
+        break;
+    }
+    case PARTITION_SPLIT: {
+        assert(have_v_split && have_h_split && cbs == lbs);
+        const enum BlockSize sbs = pcc->part[0][3];
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        t->bx += hw4;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        t->bx -= hw4;
+        t->by += hh4;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        t->bx += hw4;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        t->bx -= hw4;
         t->by -= hh4;
         break;
     }
