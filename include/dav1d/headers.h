@@ -448,7 +448,16 @@ typedef struct Dav1dFrameHeader {
         enum Dav1dRestorationType type[3 /* plane */];
         uint8_t unit_size[2 /* y, uv */];
     } restoration;
-    uint8_t ccso;
+    struct {
+        uint8_t enabled;
+        struct {
+            uint8_t enabled;
+            uint8_t reuse, sb_reuse;
+            uint8_t bo_only, scale_idx, quant_idx;
+            uint8_t ext_filter_support, edge_clf, max_band_log2;
+            int8_t filter_off[128 /* band */][3 /* d0 */][3 /* d1 */];
+        } p[3];
+    } ccso;
     enum Dav1dTxfmMode txfm_mode;
     uint8_t switchable_comp_refs;
     uint8_t skip_mode_allowed, skip_mode_enabled;

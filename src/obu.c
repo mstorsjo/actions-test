@@ -1072,7 +1072,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 #endif
 
     // cdef
-    if (!hdr->all_lossless && seqhdr->cdef && !hdr->allow_intrabc) {
+    if (!hdr->all_lossless && seqhdr->cdef) {
         hdr->cdef.enabled = dav1d_get_bit(gb);
         if (hdr->cdef.enabled) {
             hdr->cdef.damping = dav1d_get_bits(gb, 2) + 3;
@@ -1094,32 +1094,36 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 
     // restoration
     if (!hdr->all_lossless && seqhdr->restoration) {
-        if (seqhdr->rst_disable_mask[0] == 0) {
-            hdr->restoration.type[0] = dav1d_get_bits(gb, 2);
-        } else if (seqhdr->rst_disable_mask[0] == 3) {
-            hdr->restoration.type[0] = DAV1D_RESTORATION_NONE;
-        } else {
-            hdr->restoration.type[0] = dav1d_get_bit(gb);
-        }
-        // FIXME something about non-separable wiener?
+        for (int p = 0; p < 3; p++) {
+            const unsigned disable_mask = seqhdr->rst_disable_mask[!!p];
+            if (disable_mask == 0) {
+                hdr->restoration.type[p] = dav1d_get_bits(gb, 2);
+            } else if (disable_mask == 3) {
+                hdr->restoration.type[p] = DAV1D_RESTORATION_NONE;
+            } else {
+                hdr->restoration.type[p] = dav1d_get_bit(gb) * (2 - disable_mask);
+            }
 
-        if (!seqhdr->monochrome && seqhdr->rst_disable_mask[1] != 3) {
-            hdr->restoration.type[1] = dav1d_get_bit(gb);
-            hdr->restoration.type[2] = dav1d_get_bit(gb);
-            // FIXME something about non-separable wiener?
+            if (hdr->restoration.type[p] != DAV1D_RESTORATION_NONE) {
+                const int frame_filters_on = dav1d_get_bit(gb);
+                if (frame_filters_on) {
+                    // FIXME temporal/refs
+                }
+            }
         }
 
+        hdr->restoration.unit_size[0] = 9;
         if (hdr->restoration.type[0]) {
-            // Log2 of the restoration unit size.
-            hdr->restoration.unit_size[0] = 6; // ??
             if (dav1d_get_bit(gb)) {
                 hdr->restoration.unit_size[0]--;
             } else if (!dav1d_get_bit(gb)) {
                 hdr->restoration.unit_size[0] -= 2;
             }
         }
+
+        const int ss = seqhdr->layout == DAV1D_PIXEL_LAYOUT_I420;
+        hdr->restoration.unit_size[1] = 9 - ss;
         if (hdr->restoration.type[1] || hdr->restoration.type[2]) {
-            hdr->restoration.unit_size[1] = 6; // ??
             if (dav1d_get_bit(gb)) {
                 hdr->restoration.unit_size[1]--;
             } else if (!dav1d_get_bit(gb)) {
@@ -1136,13 +1140,68 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 #endif
 
     if (!hdr->all_lossless && seqhdr->ccso) {
-        hdr->ccso = dav1d_get_bit(gb);
-    }
+        hdr->ccso.enabled = dav1d_get_bit(gb);
+        if (hdr->ccso.enabled) {
+            for (int p = 0; p < (seqhdr->monochrome ? 1 : 3); p++) {
+                hdr->ccso.p[p].enabled = dav1d_get_bit(gb);
+                if (!hdr->ccso.p[p].enabled) continue;
+                if (hdr->frame_type & 1 && !hdr->error_resilient_mode) {
+                    hdr->ccso.p[p].reuse = dav1d_get_bit(gb);
+                    hdr->ccso.p[p].sb_reuse = dav1d_get_bit(gb);
+                    if (hdr->ccso.p[p].reuse || hdr->ccso.p[p].sb_reuse) {
+                        // FIXME read ref frame index
+                        // FIXME if sb_reuse=1, assert that resolution matches,
+                        // along with layout (if p > 0)
+                    }
+                }
+                static const uint16_t quant_sz[4][4] = {
+                    { 16, 8, 32, 0 },
+                    { 56, 40, 64, 128 },
+                    { 48, 24, 96, 192 },
+                    { 80, 112, 160, 256 }
+                };
+                if (!hdr->ccso.p[p].reuse) {
+                    hdr->ccso.p[p].bo_only = dav1d_get_bit(gb);
+                    const int si = hdr->ccso.p[p].scale_idx = dav1d_get_bits(gb, 2);
+                    if (hdr->ccso.p[p].bo_only) {
+                        hdr->ccso.p[p].max_band_log2 = dav1d_get_bits(gb, 3);
+                    } else {
+                        const int qi =
+                        hdr->ccso.p[p].quant_idx = dav1d_get_bits(gb, 2);
+                        hdr->ccso.p[p].ext_filter_support = dav1d_get_bits(gb, 3);
+                        if (hdr->ccso.p[p].ext_filter_support == 7) goto error;
+                        if (quant_sz[si][qi])
+                            hdr->ccso.p[p].edge_clf = dav1d_get_bit(gb);
+                        hdr->ccso.p[p].max_band_log2 = dav1d_get_bits(gb, 2);
+                    }
+                    const int n_edge_off_intervals = hdr->ccso.p[p].bo_only ? 1 :
+                                                     3 - hdr->ccso.p[p].edge_clf;
+                    const int max_band = 1 << hdr->ccso.p[p].max_band_log2;
+                    for (int n = 0; n < n_edge_off_intervals; n++) {
+                        for (int m = 0; m < n_edge_off_intervals; m++) {
+                            for (int o = 0; o < max_band; o++) {
+                                int off = 0;
+                                for (; off < 7; off++)
+                                    if (!dav1d_get_bit(gb)) break;
+                                static const int8_t ccso_offset[8] = {
+                                    0, 1, -1, 3, -3, 7, -7, -10
+                                }, ccso_scale[4] = { 1, 2, 3, 4 };
+                                hdr->ccso.p[p].filter_off[o][n][m] =
+                                    ccso_offset[off] * ccso_scale[si];
+                            }
+                        }
+                    }
+                } else {
+                    // FIXME copy ccso plane data from reference
+                }
+            }
+        }
 #if DEBUG_FRAME_HDR
     printf("HDR: post-ccso[%d]: off=%td\n",
-           hdr->ccso,
+           hdr->ccso.enabled,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    }
 
     if (!hdr->all_lossless)
         hdr->txfm_mode = dav1d_get_bit(gb) ? DAV1D_TX_SWITCHABLE : DAV1D_TX_LARGEST;
@@ -1273,8 +1332,8 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
             mat[1] = dav1d_get_bits_subexp(gb, ref_mat[1] >> shift, bits) * (1 << shift);
         }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-gmv: off=%td\n",
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-gmv: off=%td\n",
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
 
@@ -1354,12 +1413,12 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
                 fgd->clip_to_restricted_range = dav1d_get_bit(gb);
             }
         }
-    }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-filmgrain[%d]: off=%td\n",
-           hdr->film_grain.present,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-filmgrain[%d]: off=%td\n",
+               hdr->film_grain.present,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    }
 
     return 0;
 

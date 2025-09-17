@@ -1,4 +1,4 @@
-From 59c0011faf87968bbe3db9665cc56e33af24740b Mon Sep 17 00:00:00 2001
+From acf5878764f70f60caaf67aa77d09d1733301d22 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/3] Partitioning, intra block and coefficient decoding
@@ -14,7 +14,7 @@ Subject: [PATCH 3/3] Partitioning, intra block and coefficient decoding
  6 files changed, 599 insertions(+), 183 deletions(-)
 
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 999bead1fb..532d80de16 100644
+index 24617f5bb3..adbf7b2818 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -223,7 +223,7 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
