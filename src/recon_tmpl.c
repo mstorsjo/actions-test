@@ -148,12 +148,11 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
     }
 }
 
-static inline unsigned get_dc_sign_ctx(const int /*enum RectTxfmSize*/ tx,
+static inline unsigned get_dc_sign_ctx(const TxfmInfo *const t_dim,
                                        const uint8_t *const a,
                                        const uint8_t *const l)
 {
     uint64_t mask = 0xC0C0C0C0C0C0C0C0ULL, mul = 0x0101010101010101ULL;
-    int s;
 
 #if ARCH_X86_64 && defined(__GNUC__)
     /* Coerce compilers into producing better code. For some reason
@@ -161,148 +160,31 @@ static inline unsigned get_dc_sign_ctx(const int /*enum RectTxfmSize*/ tx,
     __asm__("" : "+r"(mask), "+r"(mul));
 #endif
 
-    switch(tx) {
-    default: assert(0); /* fall-through */
-    case TX_4X4: {
-        int t = *(const uint8_t *) a >> 6;
-        t    += *(const uint8_t *) l >> 6;
-        s = t - 1 - 1;
-        break;
-    }
-    case TX_8X8: {
-        uint32_t t = *(const uint16_t *) a & (uint32_t) mask;
-        t         += *(const uint16_t *) l & (uint32_t) mask;
-        t *= 0x04040404U;
-        s = (int) (t >> 24) - 2 - 2;
-        break;
-    }
-    case TX_16X16: {
-        uint32_t t = (*(const uint32_t *) a & (uint32_t) mask) >> 6;
-        t         += (*(const uint32_t *) l & (uint32_t) mask) >> 6;
-        t *= (uint32_t) mul;
-        s = (int) (t >> 24) - 4 - 4;
-        break;
-    }
-    case TX_32X32: {
-        uint64_t t = (*(const uint64_t *) a & mask) >> 6;
-        t         += (*(const uint64_t *) l & mask) >> 6;
-        t *= mul;
-        s = (int) (t >> 56) - 8 - 8;
-        break;
-    }
-    case TX_64X64: {
-        uint64_t t = (*(const uint64_t *) &a[0] & mask) >> 6;
-        t         += (*(const uint64_t *) &a[8] & mask) >> 6;
-        t         += (*(const uint64_t *) &l[0] & mask) >> 6;
-        t         += (*(const uint64_t *) &l[8] & mask) >> 6;
-        t *= mul;
-        s = (int) (t >> 56) - 16 - 16;
-        break;
-    }
-    case RTX_4X8: {
-        uint32_t t = *(const uint8_t  *) a & (uint32_t) mask;
-        t         += *(const uint16_t *) l & (uint32_t) mask;
-        t *= 0x04040404U;
-        s = (int) (t >> 24) - 1 - 2;
-        break;
-    }
-    case RTX_8X4: {
-        uint32_t t = *(const uint16_t *) a & (uint32_t) mask;
-        t         += *(const uint8_t  *) l & (uint32_t) mask;
-        t *= 0x04040404U;
-        s = (int) (t >> 24) - 2 - 1;
-        break;
-    }
-    case RTX_8X16: {
-        uint32_t t = *(const uint16_t *) a & (uint32_t) mask;
-        t         += *(const uint32_t *) l & (uint32_t) mask;
-        t = (t >> 6) * (uint32_t) mul;
-        s = (int) (t >> 24) - 2 - 4;
-        break;
-    }
-    case RTX_16X8: {
-        uint32_t t = *(const uint32_t *) a & (uint32_t) mask;
-        t         += *(const uint16_t *) l & (uint32_t) mask;
-        t = (t >> 6) * (uint32_t) mul;
-        s = (int) (t >> 24) - 4 - 2;
-        break;
-    }
-    case RTX_16X32: {
-        uint64_t t = *(const uint32_t *) a & (uint32_t) mask;
-        t         += *(const uint64_t *) l & mask;
-        t = (t >> 6) * mul;
-        s = (int) (t >> 56) - 4 - 8;
-        break;
-    }
-    case RTX_32X16: {
-        uint64_t t = *(const uint64_t *) a & mask;
-        t         += *(const uint32_t *) l & (uint32_t) mask;
-        t = (t >> 6) * mul;
-        s = (int) (t >> 56) - 8 - 4;
-        break;
-    }
-    case RTX_32X64: {
-        uint64_t t = (*(const uint64_t *) &a[0] & mask) >> 6;
-        t         += (*(const uint64_t *) &l[0] & mask) >> 6;
-        t         += (*(const uint64_t *) &l[8] & mask) >> 6;
-        t *= mul;
-        s = (int) (t >> 56) - 8 - 16;
-        break;
-    }
-    case RTX_64X32: {
-        uint64_t t = (*(const uint64_t *) &a[0] & mask) >> 6;
-        t         += (*(const uint64_t *) &a[8] & mask) >> 6;
-        t         += (*(const uint64_t *) &l[0] & mask) >> 6;
-        t *= mul;
-        s = (int) (t >> 56) - 16 - 8;
-        break;
-    }
-    case RTX_4X16: {
-        uint32_t t = *(const uint8_t  *) a & (uint32_t) mask;
-        t         += *(const uint32_t *) l & (uint32_t) mask;
-        t = (t >> 6) * (uint32_t) mul;
-        s = (int) (t >> 24) - 1 - 4;
-        break;
-    }
-    case RTX_16X4: {
-        uint32_t t = *(const uint32_t *) a & (uint32_t) mask;
-        t         += *(const uint8_t  *) l & (uint32_t) mask;
-        t = (t >> 6) * (uint32_t) mul;
-        s = (int) (t >> 24) - 4 - 1;
-        break;
-    }
-    case RTX_8X32: {
-        uint64_t t = *(const uint16_t *) a & (uint32_t) mask;
-        t         += *(const uint64_t *) l & mask;
-        t = (t >> 6) * mul;
-        s = (int) (t >> 56) - 2 - 8;
-        break;
-    }
-    case RTX_32X8: {
-        uint64_t t = *(const uint64_t *) a & mask;
-        t         += *(const uint16_t *) l & (uint32_t) mask;
-        t = (t >> 6) * mul;
-        s = (int) (t >> 56) - 8 - 2;
-        break;
-    }
-    case RTX_16X64: {
-        uint64_t t = *(const uint32_t *) a & (uint32_t) mask;
-        t         += *(const uint64_t *) &l[0] & mask;
-        t = (t >> 6) + ((*(const uint64_t *) &l[8] & mask) >> 6);
-        t *= mul;
-        s = (int) (t >> 56) - 4 - 16;
-        break;
-    }
-    case RTX_64X16: {
-        uint64_t t = *(const uint64_t *) &a[0] & mask;
-        t         += *(const uint32_t *) l & (uint32_t) mask;
-        t = (t >> 6) + ((*(const uint64_t *) &a[8] & mask) >> 6);
-        t *= mul;
-        s = (int) (t >> 56) - 16 - 4;
-        break;
-    }
+    uint64_t t = 0;
+    const uint8_t *edge = a;
+    for (int dir = 0, len = t_dim->lw; dir < 2; dir++, edge = l, len = t_dim->lh) {
+        switch(len) {
+        default: assert(0); /* fall-through */
+        case TX_4X4:
+            t += *(const uint8_t *) edge >> 6;
+            break;
+        case TX_8X8:
+            t += (*(const uint16_t *) edge & (uint32_t) mask) >> 6;
+            break;
+        case TX_16X16:
+            t += (*(const uint32_t *) edge & (uint32_t) mask) >> 6;
+            break;
+        case TX_64X64:
+            t += (*(const uint64_t *) &edge[8] & mask) >> 6;
+            // fall-through
+        case TX_32X32:
+            t += (*(const uint64_t *) edge & mask) >> 6;
+            break;
+        }
     }
 
+    t *= mul;
+    const int s = (int) (t >> 56) - t_dim->w - t_dim->h;
     return (s != 0) + (s > 0);
 }
 
@@ -1059,7 +941,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         DEBUG_CF_printf("%*sPost-dc_sign[pos=0,%d]: r=%d\n",
                         depth, "", dc_sign, ts->msac.rng);
     } else {
-        const int dc_sign_ctx = get_dc_sign_ctx(tx, a, l);
+        const int dc_sign_ctx = get_dc_sign_ctx(t_dim, a, l);
         uint16_t *const dc_sign_cdf = ts->cdf.coef.dc_sign[chroma][0][dc_sign_ctx];
         dc_sign = dav1d_msac_decode_bool_adapt(&ts->msac, dc_sign_cdf);
         DEBUG_CF_printf("%*sPost-dc_sign[pos=0,ctx=%d,%d]: r=%d\n",
