@@ -627,6 +627,10 @@ static const CdfDefaultContext default_cdf = {
                 { CDF1(16384),  20 },
                 { CDF1(16384),   6 },
             },
+        }, .intrabc = {
+            { CDF1(30958), 1 },
+            { CDF1(19490), 0 },
+            { CDF1(8708), 90 },
         }, .intra_y_set = {
           CDF3(28618, 30909, 31555), 118
         }, .intra_y_idx0 = {
@@ -1144,8 +1148,6 @@ static const CdfDefaultContext default_cdf = {
                     { CDF7(31190, 31329, 31516, 31679, 31825, 32026, 32322) },
                 },
             },
-        }, .intrabc = {
-            CDF1(30531)
         },
     }, .mv = {
         .comp = {
@@ -6129,7 +6131,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
 #define update_cdf_4d(n1d, n2d, n3d, n4d, name) \
     for (int l = 0; l < (n1d); l++) update_cdf_3d(n2d, n3d, n4d, name[l])
 
-    memcpy(dst, src, offsetof(CdfContext, m.intrabc));
+    memcpy(dst, src, sizeof(CdfContext));
 
     update_cdf_2d(2, 1, m.rst_switchable);
     update_cdf_1d(1, m.rst_ns_wiener);
@@ -6141,6 +6143,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_3d(2, 64, 1, m.part_dir);
     update_cdf_3d(2, 64, 1, m.part_ext);
     update_cdf_3d(2, 64, 1, m.part_4way);
+    update_cdf_2d(3, 1, m.intrabc);
     update_cdf_1d(3, m.intra_y_set);
     update_cdf_2d(3, 7, m.intra_y_idx0);
     update_cdf_2d(3, 5, m.intra_y_idx1);

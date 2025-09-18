@@ -917,12 +917,41 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (DEBUG_BLOCK_INFO)
                 printf("Post-intra[%d]: r=%d\n", b->intra, ts->msac.rng);
         }
-    } else if (f->frame_hdr->allow_intrabc) {
-        b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.intrabc);
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-intrabcflag[%d]: r=%d\n", b->intra, ts->msac.rng);
     } else {
         b->intra = 1;
+    }
+
+    const BlockContext *nb0, *nb1;
+    int boff0, boff1;
+
+    b->intrabc = 0;
+    if (has_luma) {
+        // get "spatial neighbours", depending on edge availability;
+        // do not cross SB boundaries vertically
+        const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
+        boff0 = -1;
+
+        if (have_top_in_sb) {
+            if (have_left) {
+                nb0 = t->a;  boff0 = bx4 + bw4 - 1;
+                nb1 = &t->l; boff1 = by4 + bh4 - 1;
+            } else {
+                nb0 = nb1 = t->a; boff0 = bx4; boff1 = bx4 + bw4 - 1;
+            }
+        } else if (have_left) {
+            // we use left by default, which is initialized to zero
+            nb0 = nb1 = &t->l; boff0 = by4; boff1 = by4 + bh4 - 1;
+        }
+
+        // FIXME inter frames have extra conditions for enabling intrabc
+        if (f->frame_hdr->allow_intrabc && imin(bw4, bh4) < 64) {
+            const int ctx = boff0 == -1 ? 0 : nb0->intrabc[boff0] +
+                                              nb1->intrabc[boff1];
+            b->intrabc = dav1d_msac_decode_bool_adapt(&ts->msac,
+                             ts->cdf.m.intrabc[ctx]);
+            DEBUG_BLOCK_printf("%*sPost-intrabc[ctx=%d,%d]: r=%d\n",
+                               depth, "", ctx, b->intrabc, ts->msac.rng);
+        }
     }
 
     // skip
@@ -1075,10 +1104,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // intra/inter-specific stuff
     int midx = 0xff; // intra/luma directional intra prediction index, if set
-    if (b->intra) {
-        const BlockContext *nb0, *nb1;
-        int boff0, boff1;
-
+    if (b->intra && !b->intrabc) {
         static const uint8_t reordered_nondir_y_mode[] = {
             DC_PRED, SMOOTH_PRED, SMOOTH_V_PRED, SMOOTH_H_PRED, PAETH_PRED,
         };
@@ -1180,23 +1206,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                depth, "", y_set, y_mode_idx,
                                y_set > 0 ? -1 : y_mode_ctx,
                                b->y_mode, b->y_angle, ts->msac.rng);
-
-            // get "spatial neighbours", depending on edge availability;
-            // do not cross SB boundaries vertically
-            const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
-            boff0 = -1;
-
-            if (have_top_in_sb) {
-                if (have_left) {
-                    nb0 = t->a;  boff0 = bx4 + bw4 - 1;
-                    nb1 = &t->l; boff1 = by4 + bh4 - 1;
-                } else {
-                    nb0 = nb1 = t->a; boff0 = bx4; boff1 = bx4 + bw4 - 1;
-                }
-            } else if (have_left) {
-                // we use left by default, which is initialized to zero
-                nb0 = nb1 = &t->l; boff0 = by4; boff1 = by4 + bh4 - 1;
-            }
 
             // =min(5,floor(log2(bw4+bh4)*1.99-1.62)) or
             // =      floor(log2(bw4+bh4)*1.55-0.555) - or anything in between
@@ -1562,6 +1571,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->seg_pred, off, seg_pred); \
             rep_macro(edge->skip_mode, off, 0); \
             rep_macro(edge->intra, off, 1); \
+            rep_macro(edge->intrabc, off, 0); \
             rep_macro(edge->skip, off, b->skip); \
             /* see aomedia bug 2183 for why we use luma coordinates here */ \
             rep_macro(t->pal_sz_uv[i], off, (has_chroma ? b->pal_sz[1] : 0)); \
@@ -1586,7 +1596,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
             splat_intraref(f->c, t, bs, bw4, bh4);
-    } else if (IS_KEY_OR_INTRA(f->frame_hdr)) {
+    } else if (b->intrabc) {
         // intra block copy
         refmvs_candidate mvstack[8];
         int n_mvs, ctx;
@@ -1695,7 +1705,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(t->pal_sz_uv[i], off, 0); \
             rep_macro(edge->seg_pred, off, seg_pred); \
             rep_macro(edge->skip_mode, off, 0); \
-            rep_macro(edge->intra, off, 0); \
+            rep_macro(edge->intrabc, off, 1); \
+            rep_macro(edge->intra, off, 1); \
             rep_macro(edge->skip, off, b->skip)
             case_set(b_dim[2 + i]);
 #undef set_ctx
@@ -2243,6 +2254,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->seg_pred, off, seg_pred); \
             rep_macro(edge->skip_mode, off, b->skip_mode); \
             rep_macro(edge->intra, off, 0); \
+            rep_macro(edge->intrabc, off, 0); \
             rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->skip, off, b->skip); \
             rep_macro(edge->pal_sz, off, 0); \

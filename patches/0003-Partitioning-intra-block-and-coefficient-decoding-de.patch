@@ -1,4 +1,4 @@
-From f80b4aa9b1909abb926c0d089ebf445320db959b Mon Sep 17 00:00:00 2001
+From 1d985d5ca4687e817cb8c0fec524dcb1ce2cef8a Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/3] Partitioning, intra block and coefficient decoding
@@ -516,7 +516,7 @@ index 24617f5bb3..db3e7fa0c0 100644
        aom_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..69d19abbc8 100644
+index 47abeeb4ef..90f3ba4809 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -1054,8 +1054,8 @@ index 47abeeb4ef..69d19abbc8 100644
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          aom_read_symbol(r, ec_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
-+      DEBUG_BLOCK_printf("%*sPost-is_intrabc[%d]: r=%d\n",
-+                         depth, "",
++      DEBUG_BLOCK_printf("%*sPost-intrabc[ctx=%d,%d]: r=%d\n",
++                         depth, "", intrabc_ctx,
 +                         mbmi->use_intrabc[xd->tree_type == CHROMA_PART],
 +                         r->ec.rng);
    }

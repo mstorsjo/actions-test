@@ -294,7 +294,7 @@ enum CflType {
 
 typedef struct Av1Block {
     uint8_t bl, bs, bp;
-    uint8_t intra, seg_id, skip_mode, skip, uvtx;
+    uint8_t intra, intrabc, seg_id, skip_mode, skip, uvtx;
     union {
         struct {
             uint8_t y_mode, fsc, mrl_index, multi_mrl, dip;
