@@ -380,6 +380,11 @@ struct Dav1dTileState {
     const uint8_t (*lflvl)[4][8][2];
 
     Av1RestorationUnit *lr_ref[3];
+
+    struct NsWienerBank {
+        uint8_t bank_size[16], bank_idx[16];
+        int8_t filter[4][16][32];
+    } ns_wiener_bank[3];
 };
 
 struct Dav1dTaskContext {

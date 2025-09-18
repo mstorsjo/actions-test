@@ -82,9 +82,9 @@ enum Dav1dAdaptiveBoolean {
 
 enum Dav1dRestorationType {
     DAV1D_RESTORATION_NONE,
+    DAV1D_RESTORATION_PC_WIENER,
+    DAV1D_RESTORATION_NS_WIENER,
     DAV1D_RESTORATION_SWITCHABLE,
-    DAV1D_RESTORATION_WIENER,
-    DAV1D_RESTORATION_SGRPROJ,
 };
 
 enum Dav1dWarpedMotionType {
@@ -445,7 +445,13 @@ typedef struct Dav1dFrameHeader {
         uint8_t uv_strength[DAV1D_MAX_CDEF_STRENGTHS];
     } cdef;
     struct {
-        enum Dav1dRestorationType type[3 /* plane */];
+        struct {
+            uint8_t /*enum Dav1dRestorationType*/ type;
+            struct {
+                uint8_t frame_filters_on;
+                uint8_t num_classes;
+            } ns;
+        } p[3 /* plane */];
         uint8_t unit_size[2 /* y, uv */];
     } restoration;
     struct {

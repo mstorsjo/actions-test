@@ -37,6 +37,11 @@
 /* Buffers padded to [4]/[8]/[16] for SIMD where needed. */
 
 typedef struct CdfModeContext {
+    uint16_t rst_switchable[2][3];
+    uint16_t rst_pc_wiener[3];
+    uint16_t rst_ns_wiener[3];
+    uint16_t wiener_ns_len[2][3];
+    uint16_t wiener_ns_cf[5];
     uint16_t part_split[2][64][3];
     uint16_t part_square[8][3];
     uint16_t part_dir[2][64][3];
@@ -76,9 +81,6 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t color_map[2][7][5][8], 16);
     ALIGN(uint16_t delta_q[4], 8);
     ALIGN(uint16_t delta_lf[5][4], 8);
-    ALIGN(uint16_t restore_switchable[3 + 1], 8);
-    ALIGN(uint16_t restore_wiener[2], 4);
-    ALIGN(uint16_t restore_sgrproj[2], 4);
     ALIGN(uint16_t txtp_inter3[4][2], 4);
     ALIGN(uint16_t txpart[7][3][2], 4);
     ALIGN(uint16_t skip[3][2], 4);

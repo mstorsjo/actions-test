@@ -38,6 +38,7 @@ static void lr_stripe(const Dav1dFrameContext *const f, pixel *p,
                       const int plane, const int unit_w, const int row_h,
                       const Av1RestorationUnit *const lr, enum LrEdgeFlags edges)
 {
+#if 0
     const Dav1dDSPContext *const dsp = f->dsp;
     const int chroma = !!plane;
     const int ss_ver = chroma & (f->sr_cur.p.p.layout == DAV1D_PIXEL_LAYOUT_I420);
@@ -95,6 +96,7 @@ static void lr_stripe(const Dav1dFrameContext *const f, pixel *p,
         if (stripe_h == 0) break;
         lpf += 4 * PXSTRIDE(stride);
     }
+#endif
 }
 
 static void backup4xU(pixel (*dst)[4], const pixel *src, const ptrdiff_t src_stride,

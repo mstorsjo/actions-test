@@ -1097,23 +1097,25 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
         for (int p = 0; p < 3; p++) {
             const unsigned disable_mask = seqhdr->rst_disable_mask[!!p];
             if (disable_mask == 0) {
-                hdr->restoration.type[p] = dav1d_get_bits(gb, 2);
+                hdr->restoration.p[p].type = dav1d_get_bits(gb, 2);
             } else if (disable_mask == 3) {
-                hdr->restoration.type[p] = DAV1D_RESTORATION_NONE;
+                hdr->restoration.p[p].type = DAV1D_RESTORATION_NONE;
             } else {
-                hdr->restoration.type[p] = dav1d_get_bit(gb) * (2 - disable_mask);
+                hdr->restoration.p[p].type = dav1d_get_bit(gb) * (2 - disable_mask);
             }
 
-            if (hdr->restoration.type[p] != DAV1D_RESTORATION_NONE) {
-                const int frame_filters_on = dav1d_get_bit(gb);
-                if (frame_filters_on) {
+            if (hdr->restoration.p[p].type >= DAV1D_RESTORATION_NS_WIENER) {
+                hdr->restoration.p[p].ns.frame_filters_on = dav1d_get_bit(gb);
+                if (hdr->restoration.p[p].ns.frame_filters_on) {
                     // FIXME temporal/refs
+                } else {
+                    hdr->restoration.p[p].ns.num_classes = 1;
                 }
             }
         }
 
         hdr->restoration.unit_size[0] = 9;
-        if (hdr->restoration.type[0]) {
+        if (hdr->restoration.p[0].type) {
             if (dav1d_get_bit(gb)) {
                 hdr->restoration.unit_size[0]--;
             } else if (!dav1d_get_bit(gb)) {
@@ -1123,7 +1125,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 
         const int ss = seqhdr->layout == DAV1D_PIXEL_LAYOUT_I420;
         hdr->restoration.unit_size[1] = 9 - ss;
-        if (hdr->restoration.type[1] || hdr->restoration.type[2]) {
+        if (hdr->restoration.p[1].type || hdr->restoration.p[2].type) {
             if (dav1d_get_bit(gb)) {
                 hdr->restoration.unit_size[1]--;
             } else if (!dav1d_get_bit(gb)) {

@@ -1,20 +1,20 @@
-From acf5878764f70f60caaf67aa77d09d1733301d22 Mon Sep 17 00:00:00 2001
+From f80b4aa9b1909abb926c0d089ebf445320db959b Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/3] Partitioning, intra block and coefficient decoding
  debugging helpers.
 
 ---
- av1/decoder/decodeframe.c | 221 ++++++++++++++++++++-------
+ av1/decoder/decodeframe.c | 222 ++++++++++++++++++++++------
  av1/decoder/decodemv.c    | 303 ++++++++++++++++++++++++++++----------
  av1/decoder/decodemv.h    |  18 ++-
  av1/decoder/decoder.h     |  22 ++-
  av1/decoder/decodetxb.c   | 204 +++++++++++++++++++------
  av1/decoder/decodetxb.h   |  14 +-
- 6 files changed, 599 insertions(+), 183 deletions(-)
+ 6 files changed, 601 insertions(+), 182 deletions(-)
 
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 24617f5bb3..adbf7b2818 100644
+index 24617f5bb3..db3e7fa0c0 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -223,7 +223,7 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -398,7 +398,7 @@ index 24617f5bb3..adbf7b2818 100644
                       ptree, parse_decode_flag);
      xd->tree_type = SHARED_PART;
      return;
-@@ -2065,6 +2140,26 @@ static AOM_INLINE void decode_partition(
+@@ -2065,6 +2140,13 @@ static AOM_INLINE void decode_partition(
    }
  
    if (parse_decode_flag & 1) {
@@ -409,6 +409,31 @@ index 24617f5bb3..adbf7b2818 100644
 +        parent ? parent->bsize : BLOCK_INVALID,
 +        parent ? parent->partition : PARTITION_NONE, ss_x, ss_y);
 +
+     if (is_sb_root) {
+ #if CONFIG_BRU
+       if (cm->bru.enabled) {
+@@ -2103,6 +2185,11 @@ static AOM_INLINE void decode_partition(
+           for (int rcol = rcol0; rcol < rcol1; ++rcol) {
+             const int runit_idx = rcol + rrow * rstride;
+             loop_restoration_read_sb_coeffs(cm, xd, reader, plane, runit_idx);
++          DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
++                             plane,
++                             cm->rst_info[plane].unit_info[
++                                 runit_idx].restoration_type,
++                             reader->ec.rng);
+           }
+         }
+       }
+@@ -2124,17 +2211,41 @@ static AOM_INLINE void decode_partition(
+ #endif  // CONFIG_SDP_CFL_LATENCY_FIX
+     }
+ 
+-    PARTITION_TREE *parent = ptree->parent;
+-    set_chroma_ref_info(
+-        xd->tree_type, mi_row, mi_col, ptree->index, bsize,
+-        &ptree->chroma_ref_info, parent ? &parent->chroma_ref_info : NULL,
+-        parent ? parent->bsize : BLOCK_INVALID,
+-        parent ? parent->partition : PARTITION_NONE, ss_x, ss_y);
 +#if DEBUG_BLOCK_INFO
 +    const char *const names[] = {
 +        [SHARED_PART] = "yuv",
@@ -421,30 +446,7 @@ index 24617f5bb3..adbf7b2818 100644
 +                       names[ptree->chroma_ref_info.is_chroma_ref ?
 +                             xd->tree_type : LUMA_PART], reader->ec.rng);
 +#endif
-+
-     if (is_sb_root) {
- #if CONFIG_BRU
-       if (cm->bru.enabled) {
-@@ -2105,6 +2200,8 @@ static AOM_INLINE void decode_partition(
-             loop_restoration_read_sb_coeffs(cm, xd, reader, plane, runit_idx);
-           }
-         }
-+          DEBUG_BLOCK_printf("decode_partition|post-rst[p=%d]: r=%d\n",
-+                             plane, reader->ec.rng);
-       }
-     }
  
-@@ -2124,17 +2221,28 @@ static AOM_INLINE void decode_partition(
- #endif  // CONFIG_SDP_CFL_LATENCY_FIX
-     }
- 
--    PARTITION_TREE *parent = ptree->parent;
--    set_chroma_ref_info(
--        xd->tree_type, mi_row, mi_col, ptree->index, bsize,
--        &ptree->chroma_ref_info, parent ? &parent->chroma_ref_info : NULL,
--        parent ? parent->bsize : BLOCK_INVALID,
--        parent ? parent->partition : PARTITION_NONE, ss_x, ss_y);
--
      partition = !is_partition_point(bsize)
                      ? PARTITION_NONE
                      : read_partition(cm, xd, mi_row, mi_col, reader, has_rows,
@@ -470,7 +472,7 @@ index 24617f5bb3..adbf7b2818 100644
  #if CONFIG_SDP_CFL_LATENCY_FIX
      ptree->is_cfl_allowed_for_this_chroma_partition |=
          is_cfl_allowed_for_sdp(cm, xd, ptree_luma, partition, bsize);
-@@ -2303,11 +2411,13 @@ static AOM_INLINE void decode_partition(
+@@ -2303,11 +2414,13 @@ static AOM_INLINE void decode_partition(
  #define DEC_BLOCK_STX_ARG
  #define DEC_BLOCK_EPT_ARG partition,
  #define DEC_BLOCK(db_r, db_c, db_subsize, index)                               \
@@ -486,7 +488,7 @@ index 24617f5bb3..adbf7b2818 100644
                     (db_subsize), sbi, ptree->sub_tree[(index)],      \
                     get_partition_subtree_const(ptree_luma, index),   \
                     parse_decode_flag)
-@@ -2486,7 +2596,7 @@ static AOM_INLINE void decode_partition_sb(AV1Decoder *const pbi,
+@@ -2486,7 +2599,7 @@ static AOM_INLINE void decode_partition_sb(AV1Decoder *const pbi,
      av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
      if (is_intra_sdp_enabled) av1_reset_ptree_in_sbi(xd->sbi, CHROMA_PART);
    }
@@ -495,7 +497,7 @@ index 24617f5bb3..adbf7b2818 100644
        pbi, td, mi_row, mi_col, reader, bsize, xd->sbi,
        td->dcb.xd.sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
        (is_intra_sdp_enabled ? td->dcb.xd.sbi->ptree_root[1] : NULL),
-@@ -5133,6 +5243,17 @@ static const uint8_t *decode_tiles(AV1Decoder *pbi, const uint8_t *data,
+@@ -5133,6 +5246,17 @@ static const uint8_t *decode_tiles(AV1Decoder *pbi, const uint8_t *data,
        td->dcb.xd.tile_ctx = &tile_data->tctx;
  
        // decode tile

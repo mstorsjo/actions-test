@@ -78,7 +78,19 @@ typedef struct CdfDefaultContext {
 
 static const CdfDefaultContext default_cdf = {
     .m  = {
-        .part_split = {
+        .rst_switchable = {
+            { CDF1(21337), 37 },
+            { CDF1(20429), 37 },
+        }, .rst_ns_wiener = {
+            CDF1(6995), 37
+        }, .rst_pc_wiener = {
+            CDF1(14330), 8
+        }, .wiener_ns_len = {
+            { CDF1(16384), 61 },
+            { CDF1(16384), 31 },
+        }, .wiener_ns_cf = {
+            CDF3(16384, 24576, 28672), 7
+        }, .part_split = {
             {
                 { CDF1(29592),   3 },
                 { CDF1(25157),   0 },
@@ -980,12 +992,6 @@ static const CdfDefaultContext default_cdf = {
             { CDF7( 5622,  7893, 16093, 18233, 27809, 28373, 32533) },
             { CDF7(14274, 18230, 22557, 24935, 29980, 30851, 32344) },
             { CDF7(27527, 28487, 28723, 28890, 32397, 32647, 32679) },
-        }, .restore_wiener = {
-            CDF1(11570)
-        }, .restore_sgrproj = {
-            CDF1(16855)
-        }, .restore_switchable = {
-            CDF2( 9413, 22581)
         }, .delta_q = {
             CDF3(28160, 32120, 32677)
         }, .delta_lf = {
@@ -6125,6 +6131,11 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
 
     memcpy(dst, src, offsetof(CdfContext, m.intrabc));
 
+    update_cdf_2d(2, 1, m.rst_switchable);
+    update_cdf_1d(1, m.rst_ns_wiener);
+    update_cdf_1d(1, m.rst_pc_wiener);
+    update_cdf_2d(2, 1, m.wiener_ns_len);
+    update_cdf_1d(3, m.wiener_ns_cf);
     update_cdf_3d(2, 64, 1, m.part_split);
     update_cdf_2d(8, 1, m.part_square);
     update_cdf_3d(2, 64, 1, m.part_dir);
@@ -6193,9 +6204,6 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_4d(2, 7, 5, k + 1, m.color_map);
     update_cdf_1d(3, m.delta_q);
     update_cdf_2d(5, 3, m.delta_lf);
-    update_cdf_1d(2, m.restore_switchable);
-    update_cdf_1d(1, m.restore_wiener);
-    update_cdf_1d(1, m.restore_sgrproj);
     update_cdf_2d(4, 1, m.txtp_inter3);
     update_cdf_3d(7, 3, 1, m.txpart);
     update_cdf_2d(3, 1, m.skip);
