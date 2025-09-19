@@ -1034,23 +1034,60 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // cdef index
-    if (!b->skip) {
+    if (f->frame_hdr->cdef.enabled &&
+        (!b->skip || f->frame_hdr->cdef.on_skiptx))
+    {
+        // FIXME 256x256 block size support
         const int idx = f->seq_hdr->sb128 ? ((t->bx & 16) >> 4) +
-                                           ((t->by & 16) >> 3) : 0;
+                                            ((t->by & 16) >> 3) : 0;
         if (t->cur_sb_cdef_idx_ptr[idx] == -1) {
-            const int v = dav1d_msac_decode_bools_bypass(&ts->msac,
-                              ulog2(f->frame_hdr->cdef.n_strengths));
+            int v;
+            if (f->frame_hdr->cdef.n_strengths == 1) {
+                v = 0;
+            } else {
+                const int left_cdef_idx =
+                    t->bx - 16 < ts->tiling.col_start ? -1 :
+                    idx & 1 ? t->cur_sb_cdef_idx_ptr[idx - 1] :
+                    t->lf_mask[-1].cdef_idx[idx + 1];
+                const int top_cdef_idx =
+                    t->by - 16 < ts->tiling.row_start ? -1 :
+                    idx & 2 ? t->cur_sb_cdef_idx_ptr[idx - 2] :
+                    t->lf_mask[-f->sb128w].cdef_idx[idx + 2];
+                // cdef_idx=-1: --, 0: true, 1-7: false, edge combo -> context
+                // ctx=0: false/false, false/--, --/false, --/--
+                // ctx=1: false/true, true/false
+                // ctx=2: true/--, --/true, true/true [same coded block]
+                // ctx=3: true/true [different coded block]
+                int ctx;
+                if ((left_cdef_idx | top_cdef_idx) != -1) {
+                    // both edges are available
+                    ctx = !left_cdef_idx + !top_cdef_idx;
+                    // FIXME this should only be done when both edges are *not*
+                    // from the same coded block
+                    ctx += ctx == 2;
+                } else {
+                    ctx = !(left_cdef_idx & top_cdef_idx) * 2;
+                }
+                if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                 ts->cdf.m.cdef_idx0[ctx]))
+                {
+                    v = 0;
+                } else if (f->frame_hdr->cdef.n_strengths == 2) {
+                    v = 1;
+                } else {
+                    const int rem = f->frame_hdr->cdef.n_strengths - 3;
+                    v = 1 + (rem < 3 ?
+                             dav1d_msac_decode_symbol_adapt4 :
+                             dav1d_msac_decode_symbol_adapt8)(&ts->msac,
+                                 ts->cdf.m.cdef_idx[rem], rem + 1);
+                }
+                DEBUG_BLOCK_printf("%*sPost-cdef_idx[ctx=%d,%d]: r=%d\n",
+                                   depth, "", ctx, v, ts->msac.rng);
+            }
             t->cur_sb_cdef_idx_ptr[idx] = v;
             if (bw4 > 16) t->cur_sb_cdef_idx_ptr[idx + 1] = v;
             if (bh4 > 16) t->cur_sb_cdef_idx_ptr[idx + 2] = v;
             if (bw4 == 32 && bh4 == 32) t->cur_sb_cdef_idx_ptr[idx + 3] = v;
-
-#if DEBUG_BLOCK_INFO
-            if (f->frame_hdr->cdef.n_strengths > 1)
-                DEBUG_BLOCK_printf("%*sPost-cdef_idx[%d]: r=%d\n",
-                                   depth, "", t->cur_sb_cdef_idx_ptr[idx],
-                                   ts->msac.rng);
-#endif
         }
     }
 
