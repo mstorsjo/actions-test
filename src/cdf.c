@@ -645,6 +645,23 @@ static const CdfDefaultContext default_cdf = {
             { CDF4(6554, 13107, 19661, 26214) },
             { CDF5(5461, 10923, 16384, 21845, 27307) },
             { CDF6(4681, 9362, 14043, 18725, 23406, 28087) },
+        }, .ccso = {
+            {
+                { CDF1(24690), 37 },
+                { CDF1(17161), 37 },
+                { CDF1(10618), 37 },
+                { CDF1(7830), 37 }
+            }, {
+                { CDF1(26090), 37 },
+                { CDF1(18122), 37 },
+                { CDF1(12248), 37 },
+                { CDF1(8523), 37 }
+            }, {
+                { CDF1(27240), 37 },
+                { CDF1(18679), 37 },
+                { CDF1(10831), 37 },
+                { CDF1(7846), 37 }
+            }
         }, .intra_y_set = {
             CDF3(28618, 30909, 31555), 118
         }, .intra_y_idx0 = {
@@ -6161,6 +6178,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_1d(1, m.gdf);
     update_cdf_2d(4, 1, m.cdef_idx0);
     update_cdf_2d(6, 1 + j, m.cdef_idx);
+    update_cdf_3d(3, 4, 1, m.ccso);
     update_cdf_1d(3, m.intra_y_set);
     update_cdf_2d(3, 7, m.intra_y_idx0);
     update_cdf_2d(3, 5, m.intra_y_idx1);

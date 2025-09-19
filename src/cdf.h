@@ -51,6 +51,7 @@ typedef struct CdfModeContext {
     uint16_t gdf[3];
     uint16_t cdef_idx0[4][3];
     uint16_t cdef_idx[6][8];
+    uint16_t ccso[3][4][3];
     uint16_t intra_y_set[5];
     uint16_t intra_y_idx0[3][9];
     uint16_t intra_y_idx1[3][7];

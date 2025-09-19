@@ -931,6 +931,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
         boff0 = -1;
 
+        // FIXME deal with bottom/right overhangs
         if (have_top_in_sb) {
             if (have_left) {
                 nb0 = t->a;  boff0 = bx4 + bw4 - 1;
@@ -1088,6 +1089,28 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (bw4 > 16) t->cur_sb_cdef_idx_ptr[idx + 1] = v;
             if (bh4 > 16) t->cur_sb_cdef_idx_ptr[idx + 2] = v;
             if (bw4 == 32 && bh4 == 32) t->cur_sb_cdef_idx_ptr[idx + 3] = v;
+        }
+    }
+
+    // ccso
+    if (!((t->bx | t->by) & 63)) {
+        for (int p = 0; p < 3; p++) {
+            if (!f->frame_hdr->ccso.p[p].enabled) continue;
+            if (f->frame_hdr->ccso.p[p].sb_reuse) {
+                // FIXME copy from reference
+            } else {
+                // for left/left-bottom [if no overhang] context:
+                // ctx=0: --/--, false/--, --/false, false/false
+                // ctx=1: false/true, true/false
+                // ctx=2: true/--, --/true, true/true [same coded block]
+                // ctx=3: true/true [different coded block]
+                const int ctx = have_left ? t->lf_mask[-1].ccso[p] * 2 : 0;
+                t->lf_mask->ccso[p] = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                            ts->cdf.m.ccso[p][ctx]);
+                DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,%d]: r=%d\n",
+                                   depth, "", "yuv"[p], t->lf_mask->ccso[p],
+                                   ts->msac.rng);
+            }
         }
     }
 
