@@ -1013,6 +1013,26 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                    b->seg_id, ts->msac.rng);
     }
 
+    if (has_luma) {
+        // FIXME some of these can be pre-calculated at th estart of a frame
+        const int gdf_bs = f->frame_hdr->frame_type == DAV1D_FRAME_TYPE_KEY ?
+                           32 : imax(32, 16 << f->seq_hdr->sb128);
+        if (!((t->bx | t->by) & (gdf_bs - 1)) &&
+            imax(f->cur.p.w, f->cur.p.h) > gdf_bs)
+        {
+            for (int y = 0; y < bh4; y += gdf_bs) {
+                for (int x = 0; x < bw4; x += gdf_bs) {
+                    // FIXME separate storage sites for 256x256 blocks
+                    t->lf_mask->gdf = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                                   ts->cdf.m.gdf);
+                    DEBUG_BLOCK_printf("%*sPost-gdf[y=%d,x=%d,gdf=%d]: r=%d\n",
+                                       depth, "", t->by + y, t->bx + x,
+                                       t->lf_mask->gdf, ts->msac.rng);
+                }
+            }
+        }
+    }
+
     // cdef index
     if (!b->skip) {
         const int idx = f->seq_hdr->sb128 ? ((t->bx & 16) >> 4) +

@@ -49,6 +49,7 @@ typedef struct Av1Filter {
     // each bit is 1 col
     uint16_t filter_y[2 /* 0=col, 1=row */][32][3][2];
     uint16_t filter_uv[2 /* 0=col, 1=row */][32][2][2];
+    uint8_t gdf;
     int8_t cdef_idx[4]; // -1 means "unset"
     uint16_t noskip_mask[16][2]; // for 8x8 blocks, but stored on a 4x8 basis
 } Av1Filter;

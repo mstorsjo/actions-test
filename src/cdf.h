@@ -48,6 +48,7 @@ typedef struct CdfModeContext {
     uint16_t part_ext[2][64][3];
     uint16_t part_4way[2][64][3];
     uint16_t intrabc[3][3];
+    uint16_t gdf[3];
     uint16_t intra_y_set[5];
     uint16_t intra_y_idx0[3][9];
     uint16_t intra_y_idx1[3][7];
