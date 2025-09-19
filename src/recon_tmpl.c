@@ -349,7 +349,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     ts->msac.rng);
 
     // does this block have any non-zero coefficients
-    const int sctx = b->fsc ? 13 :
+    const int sctx = (b->fsc && !chroma) ? 13 :
                      get_skip_ctx(t_dim, bs, a, l, plane, f->cur.p.layout);
     const int all_skip =
         dav1d_msac_decode_bool_adapt(&ts->msac,
