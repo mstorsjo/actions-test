@@ -662,6 +662,13 @@ static const CdfDefaultContext default_cdf = {
                 { CDF1(10831), 37 },
                 { CDF1(7846), 37 }
             }
+        }, .skip_txfm = {
+            { CDF1(23601), 0 },
+            { CDF1(12657), 75 },
+            { CDF1(3777), 90 },
+            { CDF1(23222), 1 },
+            { CDF1(8799), 76 },
+            { CDF1(1437), 90 },
         }, .intra_y_set = {
             CDF3(28618, 30909, 31555), 118
         }, .intra_y_idx0 = {
@@ -1017,8 +1024,6 @@ static const CdfDefaultContext default_cdf = {
                   21561, 24089, 26595, 28526, 30529)
         }, .txtp_inter3 = {
             { CDF1(16384) }, { CDF1( 4167) }, { CDF1( 1998) }, { CDF1(  748) },
-        }, .skip = {
-            { CDF1(31671) }, { CDF1(16515) }, { CDF1( 4576) },
         }, .skip_mode = {
             { CDF1(32621) }, { CDF1(20708) }, { CDF1( 8127) },
         }, .seg_pred = {
@@ -6179,6 +6184,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(4, 1, m.cdef_idx0);
     update_cdf_2d(6, 1 + j, m.cdef_idx);
     update_cdf_3d(3, 4, 1, m.ccso);
+    update_cdf_2d(6, 1, m.skip_txfm);
     update_cdf_1d(3, m.intra_y_set);
     update_cdf_2d(3, 7, m.intra_y_idx0);
     update_cdf_2d(3, 5, m.intra_y_idx1);
@@ -6244,7 +6250,6 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(5, 3, m.delta_lf);
     update_cdf_2d(4, 1, m.txtp_inter3);
     update_cdf_3d(7, 3, 1, m.txpart);
-    update_cdf_2d(3, 1, m.skip);
     update_cdf_3d(7, 3, 1, m.pal_y);
     update_cdf_2d(2, 1, m.pal_uv);
 

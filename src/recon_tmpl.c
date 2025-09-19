@@ -1108,7 +1108,7 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
                            (bw4 > ss_hor || t->bx & 1) &&
                            (bh4 > ss_ver || t->by & 1);
 
-    if (b->skip) {
+    if (b->skip_txfm) {
         BlockContext *const a = t->a;
         dav1d_memset_pow2[b_dim[2]](&a->lcoef[bx4], 0x40);
         dav1d_memset_pow2[b_dim[3]](&t->l.lcoef[by4], 0x40);
@@ -1127,7 +1127,7 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
     const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
     const int cw4 = (w4 + ss_hor) >> ss_hor, ch4 = (h4 + ss_ver) >> ss_ver;
     assert(t->frame_thread.pass == 1);
-    assert(!b->skip);
+    assert(!b->skip_txfm);
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[b->uvtx];
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[b->intra ? b->tx : b->max_ytx];
     const uint16_t tx_split[2] = { b->tx_split0, b->tx_split1 };
@@ -1457,7 +1457,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
-    assert(!b->skip);
+    assert(!b->skip_txfm);
 
     // decode coefficients
     coef *const cf = bitfn(t->cf);
@@ -1864,7 +1864,7 @@ chroma: {}
                     }
 
                 skip_y_pred: {}
-                    if (!b->skip) {
+                    if (!b->skip_txfm) {
                         coef *cf;
                         int eob;
                         enum TxfmType txtp;
@@ -2077,7 +2077,7 @@ chroma: {}
                         }
 
                     skip_uv_pred: {}
-                        if (!b->skip) {
+                        if (!b->skip_txfm) {
                             enum TxfmType txtp;
                             int eob;
                             coef *cf;
@@ -2453,7 +2453,7 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
 
     const int cw4 = (w4 + ss_hor) >> ss_hor, ch4 = (h4 + ss_ver) >> ss_ver;
 
-    if (b->skip) {
+    if (b->skip_txfm) {
         // reset coef contexts
         BlockContext *const a = t->a;
         dav1d_memset_pow2[b_dim[2]](&a->lcoef[bx4], 0x40);

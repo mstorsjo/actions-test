@@ -52,6 +52,7 @@ typedef struct CdfModeContext {
     uint16_t cdef_idx0[4][3];
     uint16_t cdef_idx[6][8];
     uint16_t ccso[3][4][3];
+    uint16_t skip_txfm[6][3];
     uint16_t intra_y_set[5];
     uint16_t intra_y_idx0[3][9];
     uint16_t intra_y_idx1[3][7];
@@ -88,7 +89,6 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t delta_lf[5][4], 8);
     ALIGN(uint16_t txtp_inter3[4][2], 4);
     ALIGN(uint16_t txpart[7][3][2], 4);
-    ALIGN(uint16_t skip[3][2], 4);
     ALIGN(uint16_t pal_y[7][3][2], 4);
     ALIGN(uint16_t pal_uv[2][2], 4);
 

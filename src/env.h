@@ -46,7 +46,7 @@ typedef struct BlockContext {
     uint8_t ALIGN(lcoef[32], 8);
     uint8_t ALIGN(ccoef[2][32], 8);
     uint8_t ALIGN(seg_pred[32], 8);
-    uint8_t ALIGN(skip[32], 8);
+    uint8_t ALIGN(skip_txfm[32], 8);
     uint8_t ALIGN(skip_mode[32], 8);
     uint8_t ALIGN(intra[32], 8);
     uint8_t ALIGN(intrabc[32], 8);

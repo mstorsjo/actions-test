@@ -466,15 +466,15 @@ static void read_vartx_tree(Dav1dTaskContext *const t,
     // var-tx tree coding
     uint16_t tx_split[2] = { 0 };
     b->max_ytx = dav1d_max_txfm_size_for_bs[bs][0];
-    if (!b->skip && (f->frame_hdr->segmentation.lossless[b->seg_id] ||
-                     b->max_ytx == TX_4X4))
+    if (!b->skip_txfm && (f->frame_hdr->segmentation.lossless[b->seg_id] ||
+                          b->max_ytx == TX_4X4))
     {
         b->max_ytx = b->uvtx = TX_4X4;
         if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE) {
             dav1d_memset_pow2[b_dim[2]](&t->a->tx[bx4], TX_4X4);
             dav1d_memset_pow2[b_dim[3]](&t->l.tx[by4], TX_4X4);
         }
-    } else if (f->frame_hdr->txfm_mode != DAV1D_TX_SWITCHABLE || b->skip) {
+    } else if (f->frame_hdr->txfm_mode != DAV1D_TX_SWITCHABLE || b->skip_txfm) {
         if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE) {
             dav1d_memset_pow2[b_dim[2]](&t->a->tx[bx4], b_dim[2 + 0]);
             dav1d_memset_pow2[b_dim[3]](&t->l.tx[by4], b_dim[2 + 1]);
@@ -891,6 +891,25 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         b->seg_id = 0;
     }
 
+    // cross-sb boundary neighbours
+    const BlockContext *nx[2];
+    int xoff[2], idx = 0;
+    if (have_left && t->by + bh4 <= ts->tiling.row_end) {
+        nx[0] = &t->l; xoff[0] = by4 + bh4 - 1; idx++;
+    }
+    if (have_top && t->bx + bw4 <= ts->tiling.col_end) {
+        nx[idx] = t->a; xoff[idx] = bx4 + bw4 - 1; idx++;
+    }
+    if (idx < 2 && have_left) {
+        nx[idx] = &t->l; xoff[idx] = by4; idx++;
+    }
+    if (idx < 2) {
+        nx[idx] = t->a; xoff[idx] = bx4;
+        if (!idx) {
+            nx[idx + 1] = t->a; xoff[idx + 1] = bx4;
+        }
+    }
+
     // skip_mode
     if ((!seg || (!seg->globalmv && seg->ref == -1 && !seg->skip)) &&
         f->frame_hdr->skip_mode_enabled && imin(bw4, bh4) > 1)
@@ -955,16 +974,18 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
 
-    // skip
+    // skip_txfm
     if (b->skip_mode || (seg && seg->skip)) {
-        b->skip = 1;
-    } else if (b->intra) {
-        b->skip = 0;
+        b->skip_txfm = 1;
+    } else if (b->intra && !b->intrabc) {
+        b->skip_txfm = 0;
     } else {
-        const int sctx = t->a->skip[bx4] + t->l.skip[by4];
-        b->skip = dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.skip[sctx]);
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-skip[%d]: r=%d\n", b->skip, ts->msac.rng);
+        const int ctx = nx[0]->skip_txfm[xoff[0]] + nx[1]->skip_txfm[xoff[1]] +
+                        b->skip_mode * 3;
+        b->skip_txfm = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                    ts->cdf.m.skip_txfm[ctx]);
+        DEBUG_BLOCK_printf("%*sPost-skip_txfm[ctx=%d,%d]: r=%d\n",
+                           depth, "", ctx, b->skip_txfm, ts->msac.rng);
     }
 
     // segment_id
@@ -972,7 +993,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         f->frame_hdr->segmentation.update_map &&
         !f->frame_hdr->segmentation.seg_data.preskip)
     {
-        if (!b->skip && f->frame_hdr->segmentation.temporal &&
+        if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
             (seg_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.seg_pred[t->a->seg_pred[bx4] +
                             t->l.seg_pred[by4]])))
@@ -992,7 +1013,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned pred_seg_id =
                 get_cur_frame_segid(t->by, t->bx, have_top, have_left,
                                     &seg_ctx, f->cur_segmap, f->b4_stride);
-            if (b->skip) {
+            if (b->skip_txfm) {
                 b->seg_id = pred_seg_id;
             } else {
                 const unsigned diff = dav1d_msac_decode_symbol_adapt8(&ts->msac,
@@ -1036,7 +1057,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // cdef index
     if (f->frame_hdr->cdef.enabled &&
-        (!b->skip || f->frame_hdr->cdef.on_skiptx))
+        (!b->skip_txfm || f->frame_hdr->cdef.on_skiptx))
     {
         // FIXME 256x256 block size support
         const int idx = f->seq_hdr->sb128 ? ((t->bx & 16) >> 4) +
@@ -1118,7 +1139,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (!((t->bx | t->by) & (31 >> !f->seq_hdr->sb128))) {
         const int prev_qidx = ts->last_qidx;
         const int have_delta_q = f->frame_hdr->delta.q.present &&
-            (bs != (f->seq_hdr->sb128 ? BS_128x128 : BS_64x64) || !b->skip);
+            (bs != (f->seq_hdr->sb128 ? BS_128x128 : BS_64x64) || !b->skip_txfm);
 
         uint32_t prev_delta_lf = ts->last_delta_lf.u32;
 
@@ -1652,7 +1673,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->skip_mode, off, 0); \
             rep_macro(edge->intra, off, 1); \
             rep_macro(edge->intrabc, off, 0); \
-            rep_macro(edge->skip, off, b->skip); \
+            rep_macro(edge->skip_txfm, off, b->skip_txfm); \
             /* see aomedia bug 2183 for why we use luma coordinates here */ \
             rep_macro(t->pal_sz_uv[i], off, (has_chroma ? b->pal_sz[1] : 0)); \
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) { \
@@ -1787,7 +1808,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->skip_mode, off, 0); \
             rep_macro(edge->intrabc, off, 1); \
             rep_macro(edge->intra, off, 1); \
-            rep_macro(edge->skip, off, b->skip)
+            rep_macro(edge->skip_txfm, off, b->skip_txfm)
             case_set(b_dim[2 + i]);
 #undef set_ctx
         }
@@ -2316,8 +2337,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 uvtx = (enum RectTxfmSize) TX_4X4;
             }
             dav1d_create_lf_mask_inter(t->lf_mask, f->lf.level, f->b4_stride, lf_lvls,
-                                       t->bx, t->by, f->w4, f->h4, b->skip, bs,
-                                       ytx, tx_split, uvtx, f->cur.p.layout,
+                                       t->bx, t->by, f->w4, f->h4, b->skip_txfm,
+                                       bs, ytx, tx_split, uvtx, f->cur.p.layout,
                                        &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                        has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
                                        has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
@@ -2336,7 +2357,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->intra, off, 0); \
             rep_macro(edge->intrabc, off, 0); \
             rep_macro(edge->fsc, off, 0); \
-            rep_macro(edge->skip, off, b->skip); \
+            rep_macro(edge->skip_txfm, off, b->skip_txfm); \
             rep_macro(edge->pal_sz, off, 0); \
             /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
             rep_macro(t->pal_sz_uv[i], off, 0); \
@@ -2371,7 +2392,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         case_set(b_dim[2]);
 #undef set_ctx
     }
-    if (!b->skip) {
+    if (!b->skip_txfm) {
         uint16_t (*noskip_mask)[2] = &t->lf_mask->noskip_mask[by4 >> 1];
         const unsigned mask = (~0U >> (32 - bw4)) << (bx4 & 15);
         const int bx_idx = (bx4 & 16) >> 4;
@@ -3092,7 +3113,7 @@ static void reset_context(BlockContext *const ctx, const int keyframe, const int
     if (pass == 2) return;
 
     memset(ctx->partition, 0, sizeof(ctx->partition));
-    memset(ctx->skip, 0, sizeof(ctx->skip));
+    memset(ctx->skip_txfm, 0, sizeof(ctx->skip_txfm));
     memset(ctx->skip_mode, 0, sizeof(ctx->skip_mode));
     memset(ctx->tx_lpf_y, 2, sizeof(ctx->tx_lpf_y));
     memset(ctx->tx_lpf_uv, 1, sizeof(ctx->tx_lpf_uv));

@@ -1,4 +1,4 @@
-From 94da9dc7510f8e8188843755cd0160531463349e Mon Sep 17 00:00:00 2001
+From fa4381ed438a202092a88e0206a67ed339745356 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/3] Partitioning, intra block and coefficient decoding
@@ -516,7 +516,7 @@ index 24617f5bb3..db3e7fa0c0 100644
        aom_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..1fda994f61 100644
+index 47abeeb4ef..255a69bcb3 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -1063,8 +1063,8 @@ index 47abeeb4ef..1fda994f61 100644
    if (is_intrabc_block(mbmi, xd->tree_type)) {
      mbmi->skip_txfm[xd->tree_type == CHROMA_PART] =
          read_skip_txfm(cm, xd, mbmi->segment_id, r);
-+      DEBUG_BLOCK_printf("%*sPost-skip_txfm[%d]: r=%d\n",
-+                         depth, "",
++      DEBUG_BLOCK_printf("%*sPost-skip_txfm[ctx=%d,%d]: r=%d\n",
++                         depth, "", av1_get_skip_txfm_context(xd),
 +                         mbmi->skip_txfm[xd->tree_type == CHROMA_PART],
 +                         r->ec.rng);
    } else {
