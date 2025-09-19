@@ -304,14 +304,14 @@ static inline unsigned get_sign_ctx_idtx(const int8_t *const levels,
                     levels[-1 * stride - 1];
     const int offset = *levels > 3 ? 2 : 0;
     switch (sum) {
-    case -3:
-    case -2: return offset + 6;
+    case -3: return offset + 6;
+    case -2:
     case -1: return offset + 2;
     default: assert(0);
     case 0: return 0;
-    case 1: return offset + 1;
-    case 3:
-    case 2: return offset + 5;
+    case 1:
+    case 2: return offset + 1;
+    case 3: return offset + 5;
     }
 }
 
