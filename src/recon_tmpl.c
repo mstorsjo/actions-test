@@ -1475,7 +1475,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // FIXME predict
     // ..
-    if (b->y_mode >= SMOOTH_PRED && b->y_mode >= SMOOTH_H_PRED) {
+    if (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED) {
         int n_pel_left = th + 3;
         int n_pel_above = tw + th;
         pixel *const edge = bitfn(t->scratch.edge) + 128;
