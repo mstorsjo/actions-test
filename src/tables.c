@@ -134,9 +134,9 @@ const TxfmInfo dav1d_txfm_dimensions[N_RECT_TX_SIZES] = {
     [RTX_64X8]  = { .w = 16, .h = 2, .lw = 4, .lh = 1,
                     .min = 1, .max = 4, .sub = RTX_32X8, .ctx = 3 },
     [RTX_4X64]  = { .w = 1, .h = 16, .lw = 0, .lh = 4,
-                    .min = 0, .max = 4, .sub = RTX_4X32, .ctx = 3 },
+                    .min = 0, .max = 4, .sub = RTX_4X32, .ctx = 2 },
     [RTX_64X4]  = { .w = 16, .h = 1, .lw = 4, .lh = 0,
-                    .min = 0, .max = 4, .sub = RTX_32X4, .ctx = 3 },
+                    .min = 0, .max = 4, .sub = RTX_32X4, .ctx = 2 },
 };
 
 const uint8_t /* enum (Rect)TxfmSize */
