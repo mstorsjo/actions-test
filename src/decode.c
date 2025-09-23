@@ -2955,7 +2955,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         if (t->bx + qw4 >= f->bw) break;
         t->bx += qw4;
-        if (bs == cbs) t->cbx = t->bx;
+        if (!i_3only) t->cbx = t->bx;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][3],
                       sub4 ? pcc->part[1][3] : BS_INVALID))
@@ -2974,7 +2974,6 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         if (t->bx + hw4 >= f->bw) { t->bx -= qw4; break; }
         t->bx += hw4;
-        if (bs == cbs) t->cbx = t->bx;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][1],
                       i_3only ? cbs : pcc->part[1][1]))
@@ -2998,7 +2997,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         if (t->by + qh4 >= f->bh) break;
         t->by += qh4;
-        if (bs == cbs) t->cby = t->by;
+        if (!i_3only) t->cby = t->by;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][3],
                       sub4 ? pcc->part[0][3] : BS_INVALID))
