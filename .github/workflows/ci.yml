@@ -19,7 +19,13 @@ jobs:
           ./test/run-test.sh
 
   linux-cmake:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -83,7 +89,14 @@ jobs:
           make -j$(sysctl -n hw.ncpu) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror -Wno-deprecated-declarations"
 
   macos-cmake:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-13
+          - macos-14
+          - macos-latest
+    runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -144,7 +157,13 @@ jobs:
           cmake --build build
 
   msvc-cmake:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - windows-latest
+          - windows-11-arm
+    runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
