@@ -1799,6 +1799,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #define set_ctx(rep_macro) \
             rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->mode, off, DC_PRED); \
+            rep_macro(edge->midx, off, 0xff); \
             rep_macro(edge->mrl, off, 0); \
             rep_macro(edge->multi_mrl, off, 0); \
             rep_macro(edge->dip, off, 0); \
@@ -2357,6 +2358,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->skip_mode, off, b->skip_mode); \
             rep_macro(edge->intra, off, 0); \
             rep_macro(edge->intrabc, off, 0); \
+            rep_macro(edge->midx, off, 0xff); \
             rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->skip_txfm, off, b->skip_txfm); \
             rep_macro(edge->pal_sz, off, 0); \
