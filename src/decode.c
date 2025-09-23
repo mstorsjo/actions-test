@@ -2793,8 +2793,15 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 if (bp == PARTITION_INVALID) {
                     // split - find direction
                     int dir;
+                    const int aspect = 1 << f->seq_hdr->max_pb_aspect_ratio_log2;
+                    assert(bw4 * aspect >= bh4 && bh4 * aspect >= bw4);
+                    const int v_aspect = bw4 * aspect >= bh4 * 2;
+                    const int h_aspect = bh4 * aspect >= bw4 * 2;
+                    assert(v_aspect || h_aspect);
                     if (imin(bwh4ss[0], bwh4ss[1]) == 1) {
                         dir = bwh4ss[0] > bwh4ss[1];
+                    } else if (!(v_aspect && h_aspect)) {
+                        dir = v_aspect;
                     } else {
                         const int ctx4 = ctx1 + pcc->ctx[1] * 4;
                         dir = dav1d_msac_decode_bool_adapt(&ts->msac,
@@ -2806,9 +2813,11 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     if (imax(bw4, bh4) <= 16) {
                         // v3/h3 [ext-partition]
                         const int has_hv3 = f->seq_hdr->ext_partitions &&
-                                            bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2;
+                                            bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2 &&
+                                            b_dim[!dir] * aspect >= b_dim[dir] * 4;
                         const int has_hv4ab = f->seq_hdr->uneven_4way_partitions &&
-                                              bwh4ss[!dir] >= 8;
+                                              bwh4ss[!dir] >= 8 &&
+                                              b_dim[!dir] * aspect >= b_dim[dir] * 8;
                         if (has_hv3 || has_hv4ab) {
                             assert(pcc->part[dir][1] != -1);
                             const int ctx5 = get_partition2_ctx(t->a, &t->l, b_dim,
