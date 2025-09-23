@@ -45,6 +45,8 @@ endif()
 
 project(fdk-aac VERSION 2.0.3)
 
+message("CMAKE_HOST_SYSTEM_PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+
 # Includes
 
 include(CheckFunctionExists)
