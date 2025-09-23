@@ -1203,6 +1203,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
 
+    b->fsc = 0;
+
     // intra/inter-specific stuff
     int midx = 0xff; // intra/luma directional intra prediction index, if set
     if (b->intra && !b->intrabc) {
@@ -1214,7 +1216,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             DIAG_DOWN_RIGHT_PRED, HOR_DOWN_PRED,  HOR_PRED,  HOR_UP_PRED,
         };
 
-        b->fsc = 0;
         if (has_luma) {
             const int y_set = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                   ts->cdf.m.intra_y_set, 3);

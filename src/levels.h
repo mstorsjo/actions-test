@@ -294,10 +294,10 @@ enum CflType {
 
 typedef struct Av1Block {
     uint8_t bl, bs, bp;
-    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, uvtx;
+    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, uvtx, fsc;
     union {
         struct {
-            uint8_t y_mode, fsc, mrl_index, multi_mrl, dip;
+            uint8_t y_mode, mrl_index, multi_mrl, dip;
             uint8_t uv_mode, tx_part, pal_sz[2];
             int8_t y_angle, uv_angle, cfl_type;
             union {
