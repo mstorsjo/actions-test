@@ -292,7 +292,7 @@ static inline unsigned get_lo_ctx_idtx(const int8_t *const levels,
     add(levels[-1 * stride + 0]);
 #undef lim
 #undef add
-    *hi_mag_ptr = hi_mag;
+    *hi_mag_ptr = imin(hi_mag, 6);
     return lo_mag;
 }
 
