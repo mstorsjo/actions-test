@@ -896,7 +896,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             DECODE_COEFS_CLASS(TX_CLASS_2D, x + y);
         }
         case TX_CLASS_H: {
-            const ptrdiff_t stride = 16;
+            const ptrdiff_t stride = 32;
             const unsigned shift = slh + 2, shift2 = 0;
             const unsigned mask = (4 << slh) - 1;
             memset(levels, 0, stride * ((4 << slh) + 2));
@@ -904,7 +904,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             DECODE_COEFS_CLASS(TX_CLASS_H, y);
         }
         case TX_CLASS_V: {
-            const ptrdiff_t stride = 16;
+            const ptrdiff_t stride = 32;
             const unsigned shift = slw + 2, shift2 = slh + 2;
             const unsigned mask = (4 << slw) - 1;
             memset(levels, 0, stride * ((4 << slw) + 2));
