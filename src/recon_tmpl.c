@@ -863,7 +863,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int tcq = (tcq_state & 2) >> 1; \
             tcq_state = tcq_next_state(tcq_state, tok); \
             /* residual */ \
-            const int max_br = rc < 10 ? (chroma ? 5 : 8) : 6; \
+            const int max_br = i < hi_to_low_tx ? (chroma ? 5 : 8) : 6; \
             int ac_val; \
             if (tok >= max_br - tcq_enabled) { \
                 const int hr = decode_hr(&ts->msac, hr_avg); \
