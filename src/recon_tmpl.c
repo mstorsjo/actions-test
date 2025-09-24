@@ -847,10 +847,12 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 continue; \
             } \
             int sign; \
-            if (tx_class == TX_CLASS_2D || y > 0) { \
+            if (tx_class == TX_CLASS_2D || y > 0 || chroma) { \
                 sign = dav1d_msac_decode_bool_bypass(&ts->msac); \
-                DEBUG_CF_printf("%*sPost-sign[pos=%d,%d]: r=%d\n", \
-                                depth, "", i, sign, ts->msac.rng); \
+                DEBUG_CF_printf("%*sPost-%ssign[pos=%d,%d]: r=%d\n", \
+                                depth, "", (tx_class != TX_CLASS_2D && \
+                                            !y) ? "dc_" : "", i, sign, \
+                                ts->msac.rng); \
             } else { \
                 sign = dav1d_msac_decode_bool_adapt(&ts->msac, \
                            ts->cdf.coef.dc_sign[chroma][0][0]); \
