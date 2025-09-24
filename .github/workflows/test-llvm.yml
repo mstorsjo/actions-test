@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Checkout llvm-project
         env:
-          LLVM_VERSION: a38794ff3d47588cb226881eb048cb2333962ab9
+          LLVM_VERSION: 7f2dcaab393a75877fe84d40b0a2633b0cae141b
         run: |
           git config --global core.autocrlf false
           bash -c "CHECKOUT_ONLY=1 ./build-llvm.sh"
