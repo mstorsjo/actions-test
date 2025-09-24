@@ -884,11 +884,28 @@ static const CdfDefaultContext default_cdf = {
             }
         }, .txtp_long32_dct = {
             { CDF1(67) }, { CDF1(129) }
-        }, .txtp_short_1d = {
+        }, .txtp_intra_short_1d = {
             { CDF3(11656, 26664, 29603) },
             { CDF3(22336, 31457, 32748) },
             { CDF3(24537, 32017, 32748) },
             { CDF3(8192, 16384, 24576) } // unused?
+        }, .txtp_inter_short_1d = {
+            {
+                { CDF3(7821, 18687, 24236) },
+                { CDF3(14442, 26756, 32748) },
+                { CDF3(16946, 27485, 32748) },
+                { CDF3(8192, 16384, 24576) }
+            }, {
+                { CDF3(20461, 26250, 29309) },
+                { CDF3(24931, 30589, 32748) },
+                { CDF3(28078, 31430, 32748) },
+                { CDF3(8192, 16384, 24576) }
+            }, {
+                { CDF3(7593, 15185, 16784) },
+                { CDF3(17164, 21845, 31208) },
+                { CDF3(9362, 23406, 28087) },
+                { CDF3(8192, 16384, 24576) }
+            }
         }, .txtp_ext = {
             { CDF6(3910, 13624, 16648, 19644, 23773, 27952), 35 },
             { CDF6(11788, 21074, 24067, 27345, 29126, 30842), 40 },
@@ -899,6 +916,60 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(16384), 0 },
             { CDF1(16384), 0 },
             { CDF1(16384), 0 }, // unused?
+        }, .txtp_inter_tx_set = {
+            {
+                {
+                    { CDF1(20576), 0 },
+                    { CDF1(16541), 0 },
+                    { CDF1(16384), 0 },
+                    { CDF1(16384), 0 },
+                }, {
+                    { CDF1(16147), 0 },
+                    { CDF1(30302), 0 },
+                    { CDF1(16384), 0 },
+                    { CDF1(16384), 0 },
+                }, {
+                    { CDF1(25522), 0 },
+                    { CDF1(23776), 0 },
+                    { CDF1(16384), 0 },
+                    { CDF1(16384), 0 },
+                },
+            }, {
+                {
+                    { CDF1(16384), 0 },
+                    { CDF1(16384), 0 },
+                    { CDF1(22866), 0 },
+                    { CDF1(16384), 0 },
+                }, {
+                    { CDF1(16384), 0 },
+                    { CDF1(16384), 0 },
+                    { CDF1(32277), 0 },
+                    { CDF1(16384), 0 },
+                }, {
+                    { CDF1(16384), 0 },
+                    { CDF1(16384), 0 },
+                    { CDF1(29701), 0 },
+                    { CDF1(16384), 0 },
+                },
+            },
+        }, .txtp_inter_set0 = {
+            {
+                { CDF7(14380, 16658, 18988, 22077, 25194, 27959, 30950), 0 },
+                { CDF7(442, 561, 737, 1131, 1214, 1494, 1624), 0 },
+                { CDF7(18414, 19897, 21481, 23996, 27098, 29474, 32457), 0 },
+            }, {
+                { CDF7(3612, 5799, 8468, 16149, 20607, 25655, 29211), 0 },
+                { CDF7(135, 279, 923, 31785, 32279, 32421, 32564), 0 },
+                { CDF7(26230, 26927, 28614, 29682, 30095, 30901, 31759), 0 },
+            },
+        }, .txtp_inter_set1 = {
+            { CDF7(2787, 6375, 8620, 11630, 17688, 22228, 27481), 0 },
+            { CDF7(401, 499, 693, 829, 2141, 2356, 2791), 0 },
+            { CDF7(1984, 5908, 7465, 10371, 17345, 21585, 26968), 0 },
+        }, .txtp_inter_set2 = {
+            { CDF3(10244, 16768, 25390), 0 },
+            { CDF3(10230, 16432, 24377), 0 },
+            { CDF3(8301, 19386, 25851), 0 },
         }, .stx = {
             {
                 { CDF3(293, 11683, 25053), 75 },
@@ -1026,16 +1097,6 @@ static const CdfDefaultContext default_cdf = {
             { { CDF1(26549) }, { CDF1(19308) }, { CDF1(14224) } },
             { { CDF1(28015) }, { CDF1(21546) }, { CDF1(14400) } },
             { { CDF1(28165) }, { CDF1(22401) }, { CDF1(16088) } },
-        }, .txtp_inter1 = {
-            { CDF15( 4458,  5560,  7695,  9709, 13330, 14789, 17537, 20266,
-                    21504, 22848, 23934, 25474, 27727, 28915, 30631) },
-            { CDF15( 1645,  2573,  4778,  5711,  7807,  8622, 10522, 15357,
-                    17674, 20408, 22517, 25010, 27116, 28856, 30749) },
-        }, .txtp_inter2 = {
-            CDF11(  770,  2421,  5225, 12907, 15819, 18927,
-                  21561, 24089, 26595, 28526, 30529)
-        }, .txtp_inter3 = {
-            { CDF1(16384) }, { CDF1( 4167) }, { CDF1( 1998) }, { CDF1(  748) },
         }, .skip_mode = {
             { CDF1(32621) }, { CDF1(20708) }, { CDF1( 8127) },
         }, .seg_pred = {
@@ -6265,9 +6326,14 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_4d(2, 2, 14, 6, m.tx_part_2d);
     update_cdf_4d(2, 2, 2, 1, m.tx_part_1d);
     update_cdf_2d(2, 1, m.txtp_long32_dct);
-    update_cdf_2d(4, 3, m.txtp_short_1d);
+    update_cdf_2d(4, 3, m.txtp_intra_short_1d);
+    update_cdf_3d(3, 4, 3, m.txtp_inter_short_1d);
     update_cdf_2d(4, 6, m.txtp_ext);
     update_cdf_2d(4, 1, m.txtp_ext_reduced);
+    update_cdf_4d(2, 3, 4, 1, m.txtp_inter_tx_set);
+    update_cdf_3d(2, 3, 7, m.txtp_inter_set0);
+    update_cdf_2d(3, 7, m.txtp_inter_set1);
+    update_cdf_2d(3, 3, m.txtp_inter_set2);
     update_cdf_3d(2, 5, 3, m.stx);
     update_cdf_1d(3, m.stx_set_adst);
     update_cdf_1d(6, m.stx_set);
@@ -6301,16 +6367,11 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(4, 4, coef.eob_base_uv_tok_lf);
     update_cdf_2d(12, 5, coef.base_uv_tok_lf);
 
-    update_cdf_2d(2, 15, m.txtp_inter1);
-    update_cdf_1d(11, m.txtp_inter2);
-    update_cdf_3d(2, N_INTRA_PRED_MODES, 6, m.txtp_intra1);
-    update_cdf_3d(3, N_INTRA_PRED_MODES, 4, m.txtp_intra2);
     update_cdf_2d(3, DAV1D_MAX_SEGMENTS - 1, m.seg_id);
     update_cdf_3d(2, 7, 6, m.pal_sz);
     update_cdf_4d(2, 7, 5, k + 1, m.color_map);
     update_cdf_1d(3, m.delta_q);
     update_cdf_2d(5, 3, m.delta_lf);
-    update_cdf_2d(4, 1, m.txtp_inter3);
     update_cdf_3d(7, 3, 1, m.txpart);
     update_cdf_3d(7, 3, 1, m.pal_y);
     update_cdf_2d(2, 1, m.pal_uv);

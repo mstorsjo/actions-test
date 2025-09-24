@@ -401,6 +401,15 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     assert(eob >= 0);
 
     // transform type (chroma: derived, luma: explicitly coded)
+    static const uint8_t txtp_long_tbl[2][2][4] = {
+        {
+            { V_DCT, V_ADST, V_FLIPADST, IDTX },
+            { H_DCT, H_ADST, H_FLIPADST, IDTX },
+        }, {
+            { DCT_DCT, ADST_DCT, FLIPADST_DCT, H_DCT },
+            { DCT_DCT, DCT_ADST, DCT_FLIPADST, V_DCT },
+        },
+    };
     if (lossless) {
         // FIXME this can be IDTX or WHT_WHT
         assert(t_dim->max == TX_4X4);
@@ -424,21 +433,12 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         } else if (!eob /* dc-only */ || tx == TX_32X32) {
             *txtp = DCT_DCT;
         } else if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
-            static const uint8_t txtp_long_tbl[2][2][4] = {
-                {
-                    { V_DCT, V_ADST, V_FLIPADST, IDTX },
-                    { H_DCT, H_ADST, H_FLIPADST, IDTX },
-                }, {
-                    { DCT_DCT, ADST_DCT, FLIPADST_DCT, H_DCT },
-                    { DCT_DCT, DCT_ADST, DCT_FLIPADST, V_DCT },
-                },
-            };
             // long64/32
             const int long_dct = t_dim->max == TX_64X64 ||
                                  dav1d_msac_decode_bool_adapt(&ts->msac,
                                      ts->cdf.m.txtp_long32_dct[0]);
             const int short_idx = dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                                      ts->cdf.m.txtp_short_1d[t_dim->min], 3);
+                                      ts->cdf.m.txtp_intra_short_1d[t_dim->min], 3);
             *txtp = txtp_long_tbl[long_dct][t_dim->w < t_dim->h][short_idx];
         } else if (f->frame_hdr->reduced_txtp_set == 2) {
             // ext_tx_set_dct_idtx
@@ -518,28 +518,51 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             *txtp = av1_md_idx2type[sz_ctx][b->y_mode][tx_idx];
         }
     } else {
-        // FIXME inferred DCT_DCT txtp if n_coefs==0?
-        // if 64x64, 64x32 or 32x64: DCT-only
-        // if 32x32: dct_idtx?
-        // if 64xN/Nx64: long64 [DCT on 64-side, 4 types on short side]
-        // if 32xN/Nx32: long32 [DCT/idtx on 32-side, 4 types on short side]
-        // if reduced_txtp_set==3: EXT_TX_SET_DCT_IDTX_IDDCT
-        // if reduced_txtp_set: EXT_TX_SET_DCT_IDTX
-        // if 16x16: dtt9_idtx_1ddct
-        // else: all16
-        unsigned idx;
-        if (f->frame_hdr->reduced_txtp_set || t_dim->max == TX_32X32) {
-            idx = dav1d_msac_decode_bool_adapt(&ts->msac,
-                      ts->cdf.m.txtp_inter3[t_dim->min]);
-            *txtp = (idx - 1) & IDTX; /* idx ? DCT_DCT : IDTX */
-        } else if (t_dim->min == TX_16X16) {
-            idx = dav1d_msac_decode_symbol_adapt16(&ts->msac,
-                      ts->cdf.m.txtp_inter2, 11);
-            *txtp = dav1d_tx_types_per_set[idx + 12];
+        if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
+            *txtp = DCT_DCT;
+        } else if (tx == TX_32X32) {
+            // FIXME shouldn't this be DCT v. IDTX?
+            *txtp = DCT_DCT;
         } else {
-            idx = dav1d_msac_decode_symbol_adapt16(&ts->msac,
-                      ts->cdf.m.txtp_inter1[t_dim->min], 15);
-            *txtp = dav1d_tx_types_per_set[idx + 24];
+            const int y = eob >> (2 + t_dim->lw), x = eob & (4 * t_dim->w - 1);
+            const int xy = x + y;
+            const int ctx = xy < 2 ? 1 : xy > 4 * (t_dim->w + t_dim->h) - 4 ? 2 : 0;
+            if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
+                // long64/32
+                const int long_dct = t_dim->max == TX_64X64 ||
+                                     dav1d_msac_decode_bool_adapt(&ts->msac,
+                                         ts->cdf.m.txtp_long32_dct[1]);
+                const int short_idx = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                                          ts->cdf.m.txtp_inter_short_1d[ctx]
+                                                                [t_dim->min], 3);
+                *txtp = txtp_long_tbl[long_dct][t_dim->w < t_dim->h][short_idx];
+            } else if (f->frame_hdr->reduced_txtp_set == 3) {
+                // FIXME EXT_TX_SET_DCT_IDTX_IDDCT
+                printf("FIXME\n");
+            } else if (f->frame_hdr->reduced_txtp_set) {
+                // FIXME EXT_TX_SET_DCT_IDTX
+                printf("FIXME\n");
+            } else {
+                const int setidx = tx == TX_16X16;
+                const int set = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                    ts->cdf.m.txtp_inter_tx_set[setidx][ctx]
+                                                               [t_dim->min]);
+                if (!set) {
+                    *txtp = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                ts->cdf.m.txtp_inter_set0[setidx][ctx], 7);
+                } else if (setidx) {
+                    *txtp = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                ts->cdf.m.txtp_inter_set2[ctx], 3) + 8;
+                } else {
+                    *txtp = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                ts->cdf.m.txtp_inter_set1[ctx], 7) + 8;
+                }
+                static const uint8_t txtp_inv_tbl[][16] = {
+                    { 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 4, 5, 3, 6, 7, 8 },
+                    { 9, 10, 11, 0, 1, 2, 4, 5, 3, 6, 7, 8, 0, 0, 0, 0 },
+                };
+                *txtp = txtp_inv_tbl[setidx][*txtp];
+            }
         }
     }
     DEBUG_CF_printf("%*sPost-txtp[%d]: r=%d\n",
@@ -1458,10 +1481,11 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // decode coefficients
     uint8_t cf_ctx;
+    enum TxfmType txtp;
     if (b->skip_txfm) {
         cf_ctx = 0x40;
+        txtp = DCT_DCT;
     } else {
-        enum TxfmType txtp;
         coef *const cf = bitfn(t->cf);
         int eob = decode_coefs(t, DB_ONLY(depth + 1)
                                &t->a->lcoef[bx4], &t->l.lcoef[by4],
@@ -1473,6 +1497,15 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->w, f->bw - t->bx));
     dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
+#define set_ctx(rep_macro) \
+    for (int y = 0; y < t_dim->h; y++) { \
+        rep_macro(txtp_map, 0, pri_txtp); \
+        txtp_map += 32; \
+    }
+    const enum TxfmType pri_txtp = txtp & 0xf;
+    uint8_t *txtp_map = &t->scratch.txtp_map[by4 * 32 + bx4];
+    case_set_upto16(t_dim->lw);
+#undef set_ctx
 
     // FIXME predict
     // ..
@@ -1743,7 +1776,8 @@ chroma: {}
         if (b->skip_txfm) {
             cf_ctx = 0x40;
         } else {
-            enum TxfmType txtp;
+            enum TxfmType txtp = t->scratch.txtp_map[(t->cby & 31) * 32 +
+                                                     (t->cbx & 31)];
             const int eob = decode_coefs(t, DB_ONLY(depth + 1)
                                          &t->a->ccoef[pl][cbx4],
                                          &t->l.ccoef[pl][cby4], uvtx, cbs,
