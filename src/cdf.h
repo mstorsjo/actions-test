@@ -67,6 +67,8 @@ typedef struct CdfModeContext {
     uint16_t cfl_type[3];
     uint16_t cfl_sign[9];
     uint16_t cfl_alpha[6][9];
+    uint16_t intrabc_mode[3];
+    uint16_t intrabc_precision[3];
     uint16_t tx_split[2][2][9][3];
     uint16_t tx_part_2d[2][2][14][8];
     uint16_t tx_part_1d[2][2][2][3];
@@ -163,6 +165,14 @@ typedef struct CdfMvComponent {
 typedef struct CdfMvContext {
     CdfMvComponent comp[2];
     ALIGN(uint16_t joint[N_MV_JOINTS], 8);
+    uint16_t shell_set[3];
+    uint16_t shell_lower[7][9];
+    uint16_t shell_upper[7][9];
+    uint16_t shell_offset_low[2][3];
+    uint16_t shell_offset_cl2[3];
+    uint16_t shell_offset_hi[16][3];
+    uint16_t col_component[2][3];
+    uint16_t col_index[4][3];
 } CdfMvContext;
 
 typedef struct CdfContext {

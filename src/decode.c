@@ -129,6 +129,85 @@ static void read_mv_residual(Dav1dTileState *const ts, mv *const ref_mv,
         ref_mv->x += read_mv_component_diff(msac, &ts->cdf.mv.comp[1], mv_prec);
 }
 
+static inline void read_dv_residual(Dav1dTileState *const ts, mv *const mv,
+                                    const int is_qpel)
+{
+    int sh_class;
+    if (dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.mv.shell_set)) {
+        sh_class = 7 + is_qpel +
+                   dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                       ts->cdf.mv.shell_upper[3 + 2 * is_qpel], 6 + is_qpel);
+    } else {
+        sh_class = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                       ts->cdf.mv.shell_lower[3 + 2 * is_qpel], 6 + is_qpel);
+    }
+    int sh_index;
+    if (sh_class < 2) {
+        sh_index = dav1d_msac_decode_bool_adapt(&ts->msac,
+                       ts->cdf.mv.shell_offset_low[sh_class]);
+    } else if (sh_class == 2) {
+        sh_index = dav1d_msac_decode_bool_adapt(&ts->msac,
+                       ts->cdf.mv.shell_offset_cl2);
+        if (sh_index) {
+            sh_index += dav1d_msac_decode_bool_bypass(&ts->msac);
+            if (sh_index == 2)
+                sh_index += dav1d_msac_decode_bool_bypass(&ts->msac);
+        }
+    } else {
+        sh_index = 0;
+        for (int i = 0, m = 1; i < sh_class; i++, m <<= 1) {
+            sh_index |= m * dav1d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.mv.shell_offset_hi[i]);
+        }
+    }
+
+    if (sh_class) sh_index += 1 << sh_class;
+    if (!sh_index) {
+        mv->n = 0;
+        return;
+    }
+
+    int pair_index = 0;
+    if (sh_index >= 2) {
+        pair_index = dav1d_msac_decode_bool_adapt(&ts->msac,
+                         ts->cdf.mv.col_component[0]);
+        if (pair_index && sh_index >= 4) {
+            pair_index += dav1d_msac_decode_bool_adapt(&ts->msac,
+                              ts->cdf.mv.col_component[1]);
+            if (pair_index == 2 && sh_index >= 6)
+                pair_index += dav1d_msac_decode_uniform(&ts->msac,
+                                  (sh_index >> 1) - 1);
+        }
+    }
+    const int sh = 3 - 2 * is_qpel;
+    if (pair_index * 2 == sh_index) {
+        mv->x = mv->y = (sh_index >> 1) << sh;
+    } else {
+        const int b = dav1d_msac_decode_bool_adapt(&ts->msac,
+                          ts->cdf.mv.col_index[imin(sh_class, 3)]);
+        if (b) {
+            mv->y = pair_index << sh;
+            mv->x = (sh_index - pair_index) << sh;
+        } else {
+            mv->x = pair_index << sh;
+            mv->y = (sh_index - pair_index) << sh;
+        }
+    }
+}
+
+static inline int mv_lower_precision_fpel_comp(int v) {
+    if (!(v & 7)) return v;
+    v += 3 + (v < 0);
+    v &= ~7;
+    // FIXME clamp
+    return v;
+}
+
+static inline void mv_lower_precision_fpel(mv *const mv) {
+    mv->x = mv_lower_precision_fpel_comp(mv->x);
+    mv->y = mv_lower_precision_fpel_comp(mv->y);
+}
+
 static void read_tx_tree(Dav1dTaskContext *const t,
                          const enum RectTxfmSize from,
                          const int depth, uint16_t *const masks,
@@ -1705,24 +1784,60 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
                           (union refmvs_refpair) { .ref = { 0, -1 }},
                           bs, 0, t->by, t->bx);
+#if DEBUG_BLOCK_INFO
+        if (BLOCK_TO_DEBUG) {
+            printf("%*sfind_mv_refs(intra)\n", depth, "");
+            for (int n = 0; n < n_mvs; n++)
+                printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
+                       depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
+                       mvstack[n].mv.mv[0].x, mvstack[n].weight);
+        }
+#endif
+ 
+        const int is_refmv = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                 ts->cdf.m.intrabc_mode);
+        int drl_idx;
+        for (drl_idx = 0; drl_idx < f->frame_hdr->max_bvp_drl_bits; drl_idx++)
+            if (!dav1d_msac_decode_bool_bypass(&ts->msac)) break;
 
-        if (mvstack[0].mv.mv[0].n)
-            b->mv[0] = mvstack[0].mv.mv[0];
-        else if (mvstack[1].mv.mv[0].n)
-            b->mv[0] = mvstack[1].mv.mv[0];
-        else {
-            if (t->by - (16 << f->seq_hdr->sb128) < ts->tiling.row_start) {
-                b->mv[0].y = 0;
-                b->mv[0].x = -(512 << f->seq_hdr->sb128) - 2048;
+        b->mv[0] = mvstack[drl_idx].mv.mv[0];
+        if (!b->mv[0].n) {
+            // I don't know if this can actually happen, but AVM has code here
+            // to force the refmv to a nonzero value
+            const int sbsz = 64 << f->seq_hdr->sb128;
+            if (t->by - f->sb_step < ts->tiling.row_start) {
+                b->mv[0].x = -(8 * (sbsz + 256));
             } else {
-                b->mv[0].y = -(512 << f->seq_hdr->sb128);
-                b->mv[0].x = 0;
+                b->mv[0].y = -(8 * sbsz);
             }
         }
+        int is_qpel = 0;
+        if (!is_refmv && !f->frame_hdr->force_integer_mv) {
+            is_qpel = dav1d_msac_decode_bool_adapt(&ts->msac,
+                          ts->cdf.m.intrabc_precision);
+        }
+        if (!is_refmv) {
+            mv diff;
+            read_dv_residual(ts, &diff, is_qpel);
+            if (diff.y) {
+                const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                if (s) diff.y = -diff.y;
+            }
+            if (diff.x) {
+                const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                if (s) diff.x = -diff.x;
+            }
+            if (!is_qpel) mv_lower_precision_fpel(&b->mv[0]);
+            b->mv[0].x += diff.x;
+            b->mv[0].y += diff.y;
+        }
+        if (!(f->frame_hdr->frame_type & 1) && f->seq_hdr->bawp &&
+            f->frame_hdr->allow_screen_content_tools)
+        {
+            printf("FIXME morph_pred symbol\n");
+        }
 
-        const union mv ref = b->mv[0];
-        read_mv_residual(ts, &b->mv[0], -1);
-
+#if 0
         // clip intrabc motion vector to decoded parts of current tile
         int border_left = ts->tiling.col_start * 4;
         int border_top  = ts->tiling.row_start * 4;
@@ -1778,11 +1893,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
         b->mv[0].x = (src_left - t->bx * 4) * 8;
         b->mv[0].y = (src_top  - t->by * 4) * 8;
+#endif
 
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-dmv[%d/%d,ref=%d/%d|%d/%d]: r=%d\n",
-                   b->mv[0].y, b->mv[0].x, ref.y, ref.x,
-                   mvstack[0].mv.mv[0].y, mvstack[0].mv.mv[0].x, ts->msac.rng);
+        DEBUG_BLOCK_printf("%*sPost-intrabc_info[mode=%d,drl=%d,mv=y:%d,x:%d,"
+                           "prec=%d,morphctx=%d,morph=%d]: r=%d\n",
+                           depth, "", is_refmv, drl_idx, b->mv[0].y, b->mv[0].x,
+                           is_qpel, -1, 0, ts->msac.rng);
         read_vartx_tree(t, b, bs, bx4, by4);
 
         // reconstruction

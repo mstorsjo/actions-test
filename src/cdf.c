@@ -72,6 +72,14 @@ typedef struct CdfDefaultContext {
     struct {
         CdfMvComponent comp;
         ALIGN(uint16_t joint[N_MV_JOINTS], 8);
+        uint16_t shell_set[3];
+        uint16_t shell_lower[7][9];
+        uint16_t shell_upper[7][9];
+        uint16_t shell_offset_low[2][3];
+        uint16_t shell_offset_cl2[3];
+        uint16_t shell_offset_hi[16][3];
+        uint16_t col_component[2][3];
+        uint16_t col_index[4][3];
     } mv;
     ALIGN(uint16_t kfym[5][5][N_INTRA_PRED_MODES + 3], 32);
 } CdfDefaultContext;
@@ -744,6 +752,10 @@ static const CdfDefaultContext default_cdf = {
             { CDF7(27996, 31615, 32179, 32454, 32541, 32587, 32607), 62 },
             { CDF7(18158, 24791, 28870, 29367, 31384, 31714, 32004), 37 },
             { CDF7(18147, 27954, 31623, 31810, 31958, 32276, 32341), 62 },
+        }, .intrabc_mode = {
+            CDF1(26560), 31
+        }, .intrabc_precision = {
+            CDF1(24576), 0
         }, .tx_split = {
             {
                 {
@@ -1211,6 +1223,54 @@ static const CdfDefaultContext default_cdf = {
             },
         }, .joint = {
             CDF3( 4096, 11264, 19328)
+        }, .shell_set = {
+            CDF1(24576), 0
+        }, .shell_lower = {
+            { CDF4(6847, 15990, 24873, 32100), 0 },
+            { CDF5(8452, 19730, 26138, 30154, 32100), 0 },
+            { CDF5(6553, 13106, 19659, 26212, 32100), 0 },
+            { CDF6(5062, 12676, 19127, 24565, 29511, 32100), 0 },
+            { CDF6(4553, 16572, 24700, 28964, 31428, 32100), 0 },
+            { CDF7(2750, 12194, 20615, 25661, 28862, 31157, 32100), 0 },
+            { CDF7(7886, 19300, 26400, 29900, 31400, 32100, 32740), 0 },
+        }, .shell_upper = {
+            { CDF5(17356, 28590, 32415, 32740, 32760), 0 },
+            { CDF5(21505, 30000, 31700, 31819, 32100), 0 },
+            { CDF6(5461, 10922, 16383, 21844, 27305, 32100), 0 },
+            { CDF6(21567, 30194, 32730, 32755, 32760, 32764), 0 },
+            { CDF7(20234, 28560, 30530, 31246, 31694, 32141, 32740), 0 },
+            { CDF7(18126, 26500, 30750, 32100, 32185, 32400, 32740), 0 },
+            { CDF7(16384, 24576, 28672, 29696, 29970, 30244, 30518), 0 },
+        }, .shell_offset_low = {
+            { CDF1(3268), 1 },
+            { CDF1(17309), 75 },
+        }, .shell_offset_cl2 = {
+            CDF1(16384), 75
+        }, .shell_offset_hi = {
+            { CDF1(16786), 75 },
+            { CDF1(19319), 78 },
+            { CDF1(18504), 93 },
+            { CDF1(18606), 93 },
+            { CDF1(19609), 93 },
+            { CDF1(20222), 93 },
+            { CDF1(20715), 93 },
+            { CDF1(22309), 93 },
+            { CDF1(22194), 93 },
+            { CDF1(23081), 95 },
+            { CDF1(25072), 1 },
+            { CDF1(29343), 50 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+        }, .col_component = {
+            { CDF1(3371), 78 },
+            { CDF1(5706), 93 },
+        }, .col_index = {
+            { CDF1(13012), 75 },
+            { CDF1(13771), 0 },
+            { CDF1(13429), 1 },
+            { CDF1(14771), 1 },
         },
     }, .kfym = {
         {
@@ -6199,6 +6259,8 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_1d(1, m.cfl_type);
     update_cdf_1d(7, m.cfl_sign);
     update_cdf_2d(6, 7, m.cfl_alpha);
+    update_cdf_1d(1, m.intrabc_mode);
+    update_cdf_1d(1, m.intrabc_precision);
     update_cdf_4d(2, 2, 9, 1, m.tx_split);
     update_cdf_4d(2, 2, 14, 6, m.tx_part_2d);
     update_cdf_4d(2, 2, 2, 1, m.tx_part_1d);
@@ -6292,6 +6354,14 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
         update_cdf_1d(1, mv.comp[k].classN_hp);
     }
     update_cdf_1d(N_MV_JOINTS - 1, mv.joint);
+    update_cdf_1d(1, mv.shell_set);
+    update_cdf_2d(7, 7, mv.shell_lower);
+    update_cdf_2d(7, 7, mv.shell_upper);
+    update_cdf_2d(2, 1, mv.shell_offset_low);
+    update_cdf_1d(1, mv.shell_offset_cl2);
+    update_cdf_2d(16, 1, mv.shell_offset_hi);
+    update_cdf_2d(2, 1, mv.col_component);
+    update_cdf_2d(4, 1, mv.col_index);
 }
 
 /*
