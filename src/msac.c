@@ -93,7 +93,7 @@ static inline void ctx_norm_bypass(MsacContext *const s, ec_win dif,
 {
     s->cnt -= n_bits;
     s->dif = dif << n_bits;
-    if (s->cnt < 0) ctx_refill(s);
+    if (s->cnt < 8) ctx_refill(s);
 }
 
 unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
