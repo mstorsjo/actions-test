@@ -12,7 +12,9 @@ jobs:
           - macos-13
           - macos-14
           - macos-15
+          - macos-15-intel
           - macos-latest
+          - macos-26
     runs-on: ${{matrix.runner}}
     steps:
       - name: Inspect the SDK
