@@ -1135,9 +1135,9 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
     }
 #if DEBUG_FRAME_HDR
     printf("HDR: post-restoration[y:%d,u:%d,v:%d]: off=%td\n",
-           hdr->restoration.type[0],
-           hdr->restoration.type[1],
-           hdr->restoration.type[2],
+           hdr->restoration.p[0].type,
+           hdr->restoration.p[1].type,
+           hdr->restoration.p[2].type,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
