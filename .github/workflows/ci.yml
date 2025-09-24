@@ -1,0 +1,61 @@
+name: dav2d CI
+
+on:
+  push:
+    branches: [dav2d]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ dav2d ]
+
+jobs:
+  build-mac:
+    if: github.event.pull_request.draft == false
+    name: Build and test
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: checkout dav2d
+      uses: actions/checkout@v4
+    - name: install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install nasm cmake meson ninja-build
+    - name: checkout AVM v11.0.0
+      run: |
+        git clone -b research-v11.0.0 --depth 1 --shallow-submodules https://gitlab.com/AOMediaCodec/avm.git avm
+    - name: build AVM v11.0.0
+      run: |
+        cd avm
+        git config user.email "a@b.c"
+        git config user.name "test"
+        git am ../patches/*.patch
+        sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' av1/decoder/decoder.h
+        sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' av1/decoder/decoder.h
+        sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' av1/decoder/decoder.h
+        sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' av1/decoder/decoder.h
+        git diff
+        mkdir x86-64
+        cd x86-64
+        cmake .. -DENABLE_TESTS=0 -DCONFIG_AV1_ENCODER=0
+        make -j$(nproc) aomdec
+        cd ../..
+    - name: build dav2d
+      run: |
+        sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' src/obu.c
+        sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' src/obu.c
+        sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
+        sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/recon.h
+        git diff
+        meson build -Denable_tests=false
+        cd build
+        ninja
+        cd ..
+    - name: run tests
+      run: |
+        for sdp in 0 1; do
+            file="media/avm-v11.0.0-sdp${sdp}.ivf"
+            avm/x86-64/aomdec $file -o /dev/null > avm.sdp${sdp}.log
+            build/tools/dav1d -i $file --muxer=null --threads=1 --quiet > dav1d.sdp${sdp}.log
+            diff -uw {avm,dav1d}.sdp${sdp}.log
+            wc -l avm.sdp${sdp}.log
+        done
