@@ -1,4 +1,4 @@
-From edc17f54a68a73fdeb4fa2c48d7e1d013e3aeeea Mon Sep 17 00:00:00 2001
+From e4e48bca98544246eb3bb2646203ff45c9c39ede Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
@@ -516,7 +516,7 @@ index 24617f5bb3..db3e7fa0c0 100644
        aom_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..398ca1cabb 100644
+index 47abeeb4ef..0705905a45 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -866,8 +866,8 @@ index 47abeeb4ef..398ca1cabb 100644
                tx_size_high[tx_size], *eob, get_primary_tx_type(*tx_type),
                stx_flag, get_secondary_tx_set(*tx_type));
  #endif  // STX_SYNTAX_DEBUG
-+        DEBUG_CF_printf("Post-stx[type=%d,set=%d]: r=%d\n",
-+                        stx_flag, stx_set, r->ec.rng);
++        DEBUG_CF_printf("%*sPost-stx[type=%d,set=%d]: r=%d\n",
++                        depth, "", stx_flag, stx_set, r->ec.rng);
      }
    }
  }
