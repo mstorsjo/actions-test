@@ -1289,7 +1289,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // ccso
-    if (!((t->bx | t->by) & 63)) {
+    if (has_luma && !((t->bx | t->by) & 63)) {
         for (int p = 0; p < 3; p++) {
             if (!f->frame_hdr->ccso.p[p].enabled) continue;
             if (f->frame_hdr->ccso.p[p].sb_reuse) {
