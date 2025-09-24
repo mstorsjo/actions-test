@@ -2689,7 +2689,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }, [BS_16x4] = {
             { { -1, -1, -1, -1 },
               { BS_8x4, -1, -1, -1 } },
-            { 11, 14 },
+            { 11, -1 },
         }, [BS_8x64] = {
             { { -1, -1, -1, -1 },
               { -1, -1, -1, -1 } },
@@ -2769,7 +2769,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #endif
             const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, pl, by4, bx4);
             const int ctx2 = ctx1 + pcc->ctx[0] * 4;
-            const int is_split =
+            const int is_split = (!have_h_split || !have_v_split) ||
                 dav1d_msac_decode_bool_adapt(&ts->msac,
                                              ts->cdf.m.part_split[pl][ctx2]);
             if (!is_split) {
