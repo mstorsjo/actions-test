@@ -772,6 +772,97 @@ static void obmc_lowest_px(Dav1dTaskContext *const t,
         }
 }
 
+static void read_tx_part(Dav1dTaskContext *const t,
+                         DB_ONLY(const int depth) Av1Block *const b,
+                         const enum BlockSize bs)
+{
+    Dav1dTileState *const ts = t->ts;
+    const Dav1dFrameContext *const f = t->f;
+    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const int bw4 = b_dim[0], bh4 = b_dim[1];
+
+    b->tx_part = TX_PARTITION_NONE;
+    if (f->frame_hdr->segmentation.lossless[b->seg_id] || b->skip_txfm) {
+        // FIXME I believe lossless can be wht as well as idtx?
+    } else {
+        b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
+
+        if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
+            bs != BS_4x4 && imax(bw4, bh4) <= 16)
+        {
+            const int inter = !b->intra || b->intrabc;
+            static const uint8_t size_to_tx_part_group_lookup[] = {
+                [BS_64x64] = 7,
+                [BS_64x32] = 6,
+                [BS_64x16] = 8,
+                [BS_64x8] = 8,
+                [BS_64x4] = 8,
+                [BS_32x64] = 6,
+                [BS_32x32] = 5,
+                [BS_32x16] = 4,
+                [BS_32x8] = 8,
+                [BS_32x4] = 8,
+                [BS_16x64] = 8,
+                [BS_16x32] = 4,
+                [BS_16x16] = 3,
+                [BS_16x8] = 2,
+                [BS_16x4] = 8,
+                [BS_8x64] = 8,
+                [BS_8x32] = 8,
+                [BS_8x16] = 2,
+                [BS_8x8] = 1,
+                [BS_8x4] = 0,
+                [BS_4x64] = 8,
+                [BS_4x32] = 8,
+                [BS_4x16] = 8,
+                [BS_4x8] = 0,
+                [BS_4x4] = 0,
+            };
+            const int szctx = size_to_tx_part_group_lookup[bs];
+            int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
+                               ts->cdf.m.tx_split[b->fsc][inter][szctx]);
+            if (is_split) {
+                if (imin(bw4, bh4) >= 2) {
+                    static const uint8_t size_to_tx_type_group_vh_lookup[] = {
+                        [BS_64x64] = 9,
+                        [BS_64x32] = 8,
+                        [BS_64x16] = 13,
+                        [BS_64x8] = 11,
+                        [BS_32x64] = 7,
+                        [BS_32x32] = 6,
+                        [BS_32x16] = 5,
+                        [BS_32x8] = 11,
+                        [BS_16x64] = 12,
+                        [BS_16x32] = 4,
+                        [BS_16x16] = 3,
+                        [BS_16x8] = 2,
+                        [BS_8x64] = 10,
+                        [BS_8x32] = 10,
+                        [BS_8x16] = 1,
+                        [BS_8x8] = 0,
+                    };
+                    const int ctx = size_to_tx_type_group_vh_lookup[bs];
+                    b->tx_part = 1 +
+                        dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                            ts->cdf.m.tx_part_2d[b->fsc][inter][ctx], 6);
+                } else if (imax(bw4, bh4) >= 4) {
+                    const int ctx = bw4 >= 4;
+                    const int tx_part_4way =
+                        dav1d_msac_decode_bool_adapt(&ts->msac,
+                            ts->cdf.m.tx_part_1d[b->fsc][inter][ctx]);
+                    b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
+                } else {
+                    assert(bs == BS_4x8 || bs == BS_8x4);
+                    b->tx_part = bs == BS_4x8 ? TX_PARTITION_H :
+                                                TX_PARTITION_V;
+                }
+            }
+        }
+    }
+    DEBUG_BLOCK_printf("%*sPost-tx[%d]: r=%d\n",
+                       depth, "", b->tx_part, ts->msac.rng);
+}
+
 static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const enum BlockSize lbs, const enum BlockSize cbs)
 {
@@ -1635,85 +1726,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", ctx, !!b->dip, ts->msac.rng);
             }
 
-            b->tx_part = TX_PARTITION_NONE;
-            if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
-                // FIXME I believe this can be wht as well as idtx?
-            } else {
-                b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
-
-                if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
-                    bs != BS_4x4 && imax(bw4, bh4) <= 16)
-                {
-                    static const uint8_t size_to_tx_part_group_lookup[] = {
-                        [BS_64x64] = 7,
-                        [BS_64x32] = 6,
-                        [BS_64x16] = 8,
-                        [BS_64x8] = 8,
-                        [BS_64x4] = 8,
-                        [BS_32x64] = 6,
-                        [BS_32x32] = 5,
-                        [BS_32x16] = 4,
-                        [BS_32x8] = 8,
-                        [BS_32x4] = 8,
-                        [BS_16x64] = 8,
-                        [BS_16x32] = 4,
-                        [BS_16x16] = 3,
-                        [BS_16x8] = 2,
-                        [BS_16x4] = 8,
-                        [BS_8x64] = 8,
-                        [BS_8x32] = 8,
-                        [BS_8x16] = 2,
-                        [BS_8x8] = 1,
-                        [BS_8x4] = 0,
-                        [BS_4x64] = 8,
-                        [BS_4x32] = 8,
-                        [BS_4x16] = 8,
-                        [BS_4x8] = 0,
-                        [BS_4x4] = 0,
-                    };
-                    const int szctx = size_to_tx_part_group_lookup[bs];
-                    int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                       ts->cdf.m.tx_split[b->fsc][0][szctx]);
-                    if (is_split) {
-                        if (imin(bw4, bh4) >= 2) {
-                            static const uint8_t size_to_tx_type_group_vh_lookup[] = {
-                                [BS_64x64] = 9,
-                                [BS_64x32] = 8,
-                                [BS_64x16] = 13,
-                                [BS_64x8] = 11,
-                                [BS_32x64] = 7,
-                                [BS_32x32] = 6,
-                                [BS_32x16] = 5,
-                                [BS_32x8] = 11,
-                                [BS_16x64] = 12,
-                                [BS_16x32] = 4,
-                                [BS_16x16] = 3,
-                                [BS_16x8] = 2,
-                                [BS_8x64] = 10,
-                                [BS_8x32] = 10,
-                                [BS_8x16] = 1,
-                                [BS_8x8] = 0,
-                            };
-                            const int ctx = size_to_tx_type_group_vh_lookup[bs];
-                            b->tx_part = 1 +
-                                dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                    ts->cdf.m.tx_part_2d[b->fsc][0][ctx], 6);
-                        } else if (imax(bw4, bh4) >= 4) {
-                            const int ctx = bw4 >= 4;
-                            const int tx_part_4way =
-                                dav1d_msac_decode_bool_adapt(&ts->msac,
-                                    ts->cdf.m.tx_part_1d[b->fsc][0][ctx]);
-                            b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
-                        } else {
-                            assert(bs == BS_4x8 || bs == BS_8x4);
-                            b->tx_part = bs == BS_4x8 ? TX_PARTITION_H :
-                                                        TX_PARTITION_V;
-                        }
-                    }
-                }
-                DEBUG_BLOCK_printf("%*sPost-tx[%d]: r=%d\n",
-                                   depth, "", b->tx_part, ts->msac.rng);
-            }
+            read_tx_part(t, DB_ONLY(depth) b, bs);
         }
 
         // reconstruction
@@ -1899,7 +1912,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                            "prec=%d,morphctx=%d,morph=%d]: r=%d\n",
                            depth, "", is_refmv, drl_idx, b->mv[0].y, b->mv[0].x,
                            is_qpel, -1, 0, ts->msac.rng);
-        read_vartx_tree(t, b, bs, bx4, by4);
+        read_tx_part(t, DB_ONLY(depth) b, bs);
 
         // reconstruction
         if (t->frame_thread.pass == 1) {
