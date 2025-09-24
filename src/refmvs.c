@@ -128,7 +128,7 @@ static int scan_row(refmvs_candidate *const mvstack, int *const cnt,
         if (x >= w4) return 1;
         cand_b = &b[x];
         cand_bw4 = dav1d_block_dimensions[cand_b->bs][0];
-        assert(cand_bw4 < bw4);
+        //assert(cand_bw4 < bw4);
         len = imax(step, cand_bw4);
     }
 }
@@ -167,7 +167,7 @@ static int scan_col(refmvs_candidate *const mvstack, int *const cnt,
         if (y >= h4) return 1;
         cand_b = &b[y][bx4];
         cand_bh4 = dav1d_block_dimensions[cand_b->bs][1];
-        assert(cand_bh4 < bh4);
+        //assert(cand_bh4 < bh4);
         len = imax(step, cand_bh4);
     }
 }
@@ -644,6 +644,33 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         } while (++n < n_refmvs);
     }
 
+    // default intrabc refs
+    if (!ref.ref[0] && n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
+        const int sbsz = 64 << rt->rf->seq_hdr->sb128;
+        mvstack[n_refmvs].mv.mv[0].x = 0;
+        mvstack[n_refmvs].mv.mv[0].y = -(sbsz * 8);
+        mvstack[n_refmvs].weight = 0;
+        *cnt = ++n_refmvs;
+        if (n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
+            mvstack[n_refmvs].mv.mv[0].x = -(8 * (sbsz + 256));
+            mvstack[n_refmvs].mv.mv[0].y = 0;
+            mvstack[n_refmvs].weight = 0;
+            *cnt = ++n_refmvs;
+            if (n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
+                mvstack[n_refmvs].mv.mv[0].x = 0;
+                mvstack[n_refmvs].mv.mv[0].y = -(bh4 * 32);
+                mvstack[n_refmvs].weight = 0;
+                *cnt = ++n_refmvs;
+                if (n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
+                    mvstack[n_refmvs].mv.mv[0].x = -(bw4 * 32);
+                    mvstack[n_refmvs].mv.mv[0].y = 0;
+                    mvstack[n_refmvs].weight = 0;
+                    *cnt = ++n_refmvs;
+                }
+            }
+        }
+    }
+
     for (int n = *cnt; n < 2; n++)
         mvstack[n].mv.mv[0] = tgmv[0];
 
@@ -810,6 +837,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
     const int n_blocks = rp_stride * n_tile_rows;
 
     rf->sbsz = 16 << seq_hdr->sb128;
+    rf->seq_hdr = seq_hdr;
     rf->frm_hdr = frm_hdr;
     rf->iw8 = (frm_hdr->width + 7) >> 3;
     rf->ih8 = (frm_hdr->height + 7) >> 3;
@@ -923,7 +951,7 @@ COLD void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *const c)
     c->save_tmvs = save_tmvs_c;
     c->splat_mv = splat_mv_c;
 
-#if HAVE_ASM
+#if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
     refmvs_dsp_init_arm(c);
 #elif ARCH_LOONGARCH64

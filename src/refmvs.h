@@ -66,6 +66,7 @@ PACKED(typedef struct refmvs_block {
 CHECK_SIZE(refmvs_block, 12);
 
 typedef struct refmvs_frame {
+    const Dav1dSequenceHeader *seq_hdr;
     const Dav1dFrameHeader *frm_hdr;
     int iw4, ih4, iw8, ih8;
     int sbsz;
