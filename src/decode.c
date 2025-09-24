@@ -1919,7 +1919,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.read_coef_blocks(t, bs, b);
             b->filter2d = FILTER_2D_BILINEAR;
         } else {
-            if (f->bd_fn.recon_b_inter(t, bs, b)) return -1;
+            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
         }
 
         splat_intrabc_mv(f->c, t, bs, b, bw4, bh4);

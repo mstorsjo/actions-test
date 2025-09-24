@@ -327,12 +327,12 @@ static inline int tcq_next_state(const int state, const int abs_level) {
 static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         uint8_t *const a, uint8_t *const l,
                         const enum RectTxfmSize tx, const enum BlockSize bs,
-                        const Av1Block *const b, const int intra,
-                        const int plane, coef *cf,
+                        const Av1Block *const b, const int plane, coef *cf,
                         enum TxfmType *const txtp, uint8_t *res_ctx)
 {
     Dav1dTileState *const ts = t->ts;
     const int chroma = !!plane; // FIXME perhaps make this an inlined function arg?
+    const int intra = b->intra && !b->intrabc;
     const Dav1dFrameContext *const f = t->f;
     const int lossless = f->frame_hdr->segmentation.lossless[b->seg_id];
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
@@ -1056,7 +1056,7 @@ static void read_coef_tree(Dav1dTaskContext *const t,
         }
         if (t->frame_thread.pass != 2) {
             eob = decode_coefs(t, DB_ONLY(0) &t->a->lcoef[bx4], &t->l.lcoef[by4],
-                               ytx, bs, b, 0, 0, cf, &txtp, &cf_ctx);
+                               ytx, bs, b, 0, cf, &txtp, &cf_ctx);
             DEBUG_BLOCK_printf("Post-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
                                4 * txw, 4 * txh, txtp, eob, ts->msac.rng);
             txtp &= 0xf; // FIXME
@@ -1151,7 +1151,7 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
                         enum TxfmType txtp;
                         const int eob =
                             decode_coefs(t, &t->a->lcoef[bx4 + x],
-                                         &t->l.lcoef[by4 + y], b->tx, bs, b, 1,
+                                         &t->l.lcoef[by4 + y], b->tx, bs, b,
                                          0, ts->frame_thread[1].cf, &txtp, &cf_ctx);
                         DEBUG_BLOCK_printf("Post-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
                                            t_dim->w * 4, t_dim->h * 4, txtp, eob,
@@ -1186,7 +1186,7 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
                         const int eob =
                             decode_coefs(t, &t->a->ccoef[pl][cbx4 + x],
                                          &t->l.ccoef[pl][cby4 + y], b->uvtx, bs,
-                                         b, b->intra, 1 + pl, ts->frame_thread[1].cf,
+                                         b, 1 + pl, ts->frame_thread[1].cf,
                                          &txtp, &cf_ctx);
                         if (DEBUG_BLOCK_INFO)
                             printf("Post-uv-cf-blk[pl=%d,tx=%d,"
@@ -1456,17 +1456,19 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
-    assert(!b->skip_txfm);
-
     // decode coefficients
-    coef *const cf = bitfn(t->cf);
-    enum TxfmType txtp;
     uint8_t cf_ctx;
-    int eob = decode_coefs(t, DB_ONLY(depth + 1)
-                           &t->a->lcoef[bx4], &t->l.lcoef[by4],
-                           tx, b->bs, b, 1, 0, cf, &txtp, &cf_ctx);
-    DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
-                       depth + 1, "", tw, th, txtp, eob, ts->msac.rng);
+    if (b->skip_txfm) {
+        cf_ctx = 0x40;
+    } else {
+        enum TxfmType txtp;
+        coef *const cf = bitfn(t->cf);
+        int eob = decode_coefs(t, DB_ONLY(depth + 1)
+                               &t->a->lcoef[bx4], &t->l.lcoef[by4],
+                               tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
+        DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
+                           depth + 1, "", tw, th, txtp & 0xf, eob, ts->msac.rng);
+    }
     dav1d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
                              imin(t_dim->w, f->bw - t->bx));
     dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
@@ -1731,21 +1733,25 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
 chroma: {}
     const int ss_ver = f->ss_ver, ss_hor = f->ss_hor;
     const int cbx4 = (t->cbx & 31) >> f->ss_hor, cby4 = (t->cby & 31) >> f->ss_ver;
-    uint8_t cf_ctx;
     coef *const cf = bitfn(t->cf);
     const enum RectTxfmSize uvtx = dav1d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
     int ctw = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     int cth = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
     for (int pl = 0; pl < 2; pl++) {
-        enum TxfmType txtp;
-        const int eob = decode_coefs(t, DB_ONLY(depth + 1)
-                                     &t->a->ccoef[pl][cbx4],
-                                     &t->l.ccoef[pl][cby4], uvtx, cbs,
-                                     b, 1, 1 + pl, cf, &txtp, &cf_ctx);
-        DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
-                           depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
-                           uv_t_dim->h * 4, txtp, eob, t->ts->msac.rng);
+        uint8_t cf_ctx;
+        if (b->skip_txfm) {
+            cf_ctx = 0x40;
+        } else {
+            enum TxfmType txtp;
+            const int eob = decode_coefs(t, DB_ONLY(depth + 1)
+                                         &t->a->ccoef[pl][cbx4],
+                                         &t->l.ccoef[pl][cby4], uvtx, cbs,
+                                         b, 1 + pl, cf, &txtp, &cf_ctx);
+            DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
+                               depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
+                               uv_t_dim->h * 4, txtp, eob, t->ts->msac.rng);
+        }
         dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx, ctw);
         dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx, cth);
     }
@@ -1879,7 +1885,7 @@ chroma: {}
                             cf = bitfn(t->cf);
                             eob = decode_coefs(t, &t->a->lcoef[bx4 + x],
                                                &t->l.lcoef[by4 + y], b->tx, bs,
-                                               b, 1, 0, cf, &txtp, &cf_ctx);
+                                               b, 0, cf, &txtp, &cf_ctx);
                             DEBUG_BLOCK_printf("Post-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
                                                t_dim->w * 4, t_dim->h * 4, txtp, eob,
                                                ts->msac.rng);
@@ -2092,7 +2098,7 @@ chroma: {}
                                 cf = bitfn(t->cf);
                                 eob = decode_coefs(t, &t->a->ccoef[pl][cbx4 + x],
                                                    &t->l.ccoef[pl][cby4 + y],
-                                                   b->uvtx, bs, b, 1, 1 + pl, cf,
+                                                   b->uvtx, bs, b, 1 + pl, cf,
                                                    &txtp, &cf_ctx);
                                 if (DEBUG_BLOCK_INFO)
                                     printf("Post-uv-cf-blk[pl=%d,tx=%d,"
@@ -2523,7 +2529,7 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
                                                         bx4 + (x << ss_hor)];
                             eob = decode_coefs(t, DB_ONLY(0) &t->a->ccoef[pl][cbx4 + x],
                                                &t->l.ccoef[pl][cby4 + y],
-                                               b->uvtx, bs, b, 0, 1 + pl,
+                                               b->uvtx, bs, b, 1 + pl,
                                                cf, &txtp, &cf_ctx);
                             if (DEBUG_BLOCK_INFO)
                                 printf("Post-uv-cf-blk[pl=%d,tx=%d,"
