@@ -43,10 +43,6 @@ static const uint8_t av1_mode_conv[N_INTRA_PRED_MODES]
                      { HOR_PRED,     PAETH_PRED  } },
 };
 
-static const uint8_t av1_mode_to_angle_map[8] = {
-    90, 180, 45, 135, 113, 157, 203, 67
-};
-
 static const struct {
     uint8_t needs_left:1;
     uint8_t needs_top:1;

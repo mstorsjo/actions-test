@@ -51,7 +51,7 @@
 #define decl_recon_b_intra_fn(name) \
 void (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
             enum BlockSize bs, enum BlockSize cbs, \
-            enum EdgeFlags intra_edge_flags, const Av1Block *b)
+            enum EdgeFlags intra_edge_flags, Av1Block *b)
 typedef decl_recon_b_intra_fn(*recon_b_intra_fn);
 
 #define decl_recon_b_inter_fn(name) \

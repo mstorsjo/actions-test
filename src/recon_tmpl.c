@@ -1470,7 +1470,7 @@ static int warp_affine(Dav1dTaskContext *const t,
 }
 
 static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
-                             const enum RectTxfmSize tx, const Av1Block *const b)
+                             const enum RectTxfmSize tx, Av1Block *const b)
 {
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
@@ -1478,6 +1478,24 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const int bx4 = t->bx & 31, by4 = t->by & 31;
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
+
+    const enum IntraPredMode orig_y_mode = b->y_mode;
+    if (b->intra && (unsigned) b->y_mode - 1 <= VERT_LEFT_PRED - 1) {
+        // map directional modes
+        const int angle = av1_mode_to_angle_map[b->y_mode - 1] + b->y_angle * 3 +
+                          (b->mrl_index == 1) - (b->mrl_index == 2);
+        static const uint8_t thresh[] = { 61, 73, 82, 86 };
+        const int rect = t_dim->lw - t_dim->lh;
+        if (rect > 0) {
+            assert(rect <= 4);
+            if (angle > 270 - thresh[rect - 1])
+                b->y_mode = DIAG_DOWN_LEFT_PRED;
+        } else if (rect < 0) {
+            assert(rect >= -4);
+            if (angle < thresh[-1 - rect])
+                b->y_mode = HOR_UP_PRED;
+        }
+    }
 
     // decode coefficients
     uint8_t cf_ctx;
@@ -1532,6 +1550,8 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // FIXME reconstruct
     // ..
+
+    b->y_mode = orig_y_mode;
 }
 
 void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
@@ -1539,7 +1559,7 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
                                  const enum BlockSize lbs,
                                  const enum BlockSize cbs,
                                  const enum EdgeFlags intra_edge_flags,
-                                 const Av1Block *const b)
+                                 Av1Block *const b)
 {
 #if 1
     const Dav1dFrameContext *const f = t->f;
