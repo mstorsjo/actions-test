@@ -417,14 +417,11 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                   [t_dim->h >= 8][t_dim->w >= 8] :
                         get_uv_inter_txtp(t_dim, *txtp);
     } else if (intra) {
-        // FIXME inferred DCT_DCT txtp if n_coefs==1
-        if (!eob /* dc-only */ ||
-            t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */)
-        {
+        if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
             *txtp = DCT_DCT;
         } else if (b->fsc) {
             *txtp = IDTX;
-        } else if (tx == TX_32X32) {
+        } else if (!eob /* dc-only */ || tx == TX_32X32) {
             *txtp = DCT_DCT;
         } else if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
             static const uint8_t txtp_long_tbl[2][2][4] = {
