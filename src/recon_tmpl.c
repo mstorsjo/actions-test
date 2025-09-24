@@ -439,7 +439,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                      ts->cdf.m.txtp_long32_dct[0]);
             const int short_idx = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                       ts->cdf.m.txtp_short_1d[t_dim->min], 3);
-            *txtp = txtp_long_tbl[long_dct][t_dim->w > t_dim->h][short_idx];
+            *txtp = txtp_long_tbl[long_dct][t_dim->w < t_dim->h][short_idx];
         } else if (f->frame_hdr->reduced_txtp_set == 2) {
             // ext_tx_set_dct_idtx
             *txtp = DCT_DCT;
