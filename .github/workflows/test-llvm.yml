@@ -84,11 +84,4 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ `
             -DCMAKE_CXX_FLAGS="-D__USE_MINGW_ANSI_STDIO=${{startsWith(matrix.arch, 'a') && '0' || '1'}}" `
             -DLLVM_LIT_ARGS="-v --time-tests"
-          ninja test-depends
-          cp c:\llvm-mingw\bin\libc++.dll bin
-          cp c:\llvm-mingw\bin\libunwind.dll bin
-      - name: Run tests
-        run: |
-          cd llvm-project
-          cd build
-          ninja check
+          ninja check-lit
