@@ -20,7 +20,7 @@ on:
 
 jobs:
   prepare:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     runs-on: ubuntu-latest
     outputs:
       LLVM_VERSION: ${{steps.get-parameters.outputs.LLVM_VERSION}}
@@ -40,7 +40,6 @@ jobs:
           cat $GITHUB_OUTPUT
 
   test-llvm:
-    needs: [prepare]
     strategy:
       fail-fast: false
       matrix:
@@ -49,16 +48,9 @@ jobs:
           - aarch64
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
-      - name: Download toolchain
-        uses: dawidd6/action-download-artifact@v10
-        with:
-          workflow: build.yml
-          workflow_conclusion: success
-          ref: ${{github.event_name == 'workflow_dispatch' && inputs.ref || 'master'}}
-          event: ${{github.event_name == 'workflow_dispatch' && inputs.pipeline_type || 'schedule'}}
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20250910/llvm-mingw-20250910-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
