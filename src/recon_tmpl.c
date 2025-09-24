@@ -439,7 +439,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // long64/32
             const int long_dct = t_dim->max == TX_64X64 ||
                                  dav1d_msac_decode_bool_adapt(&ts->msac,
-                                     ts->cdf.m.txtp_long32_dct[!intra]);
+                                     ts->cdf.m.txtp_long32_dct[0]);
             const int short_idx = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                       ts->cdf.m.txtp_short_1d[t_dim->min], 3);
             *txtp = txtp_long_tbl[long_dct][t_dim->w > t_dim->h][short_idx];
