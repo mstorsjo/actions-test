@@ -756,7 +756,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 lo_cdf = ts->cdf.coef.base_y_tok_hf[t_dim->ctx][0][0]; \
             } else { \
                 eob_cdf = ts->cdf.coef.eob_base_uv_tok_hf[0]; \
-                hi_cdf = &ts->cdf.coef.br_uv_tok_hf; \
+                hi_cdf = ts->cdf.coef.br_uv_tok_hf; \
                 lo_cdf = ts->cdf.coef.base_uv_tok_hf[0]; \
             } \
         } else { \

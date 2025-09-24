@@ -2593,7 +2593,10 @@ static const CdfCoefContext default_coef_cdf[4] = {
             { CDF3(10167, 22287, 27755), 20 },
             { CDF3(3763, 10274, 17843), 84 },
         }, .br_uv_tok_hf = {
-            CDF3(24100, 29563, 31289), 6
+            { CDF3(24100, 29563, 31289), 6 },
+            { CDF3(22448, 28885, 31071), 93 },
+            { CDF3(17701, 25572, 29153), 93 },
+            { CDF3(10401, 17438, 22074), 91 },
         }, .eob_base_uv_tok_lf = {
             { CDF4(27581, 31285, 32137, 32389), 75 },
             { CDF4(32091, 32608, 32696, 32731), 109 },
@@ -3812,7 +3815,10 @@ static const CdfCoefContext default_coef_cdf[4] = {
             { CDF3(8545, 20451, 26400), 5 },
             { CDF3(3297, 10809, 17416), 96 },
         }, .br_uv_tok_hf = {
-            CDF3(24628, 29706, 31324), 90
+            { CDF3(24628, 29706, 31324), 90 },
+            { CDF3(22478, 28819, 31013), 123 },
+            { CDF3(17451, 25258, 28880), 118 },
+            { CDF3(9999, 16711, 21246), 75 },
         }, .eob_base_uv_tok_lf = {
             { CDF4(29919, 32176, 32482, 32582), 75 },
             { CDF4(31710, 32521, 32675, 32720), 95 },
@@ -5031,7 +5037,10 @@ static const CdfCoefContext default_coef_cdf[4] = {
             { CDF3(10619, 23941, 29332), 76 },
             { CDF3(3730, 9857, 15718), 100 },
         }, .br_uv_tok_hf = {
-            CDF3(25969, 30708, 31931), 90
+            { CDF3(25969, 30708, 31931), 90 },
+            { CDF3(22739, 29115, 31272), 118 },
+            { CDF3(17098, 24923, 28772), 115 },
+            { CDF3(10475, 17482, 22279), 75 },
         }, .eob_base_uv_tok_lf = {
             { CDF4(29814, 32132, 32501, 32588), 75 },
             { CDF4(31625, 32617, 32733, 32740), 78 },
@@ -6250,7 +6259,10 @@ static const CdfCoefContext default_coef_cdf[4] = {
             { CDF3(12288, 24576, 28672), 0 },
             { CDF3(8192, 16384, 24576), 0 },
         }, .br_uv_tok_hf = {
-            CDF3(28465, 31762, 32366), 0
+            { CDF3(28465, 31762, 32366), 0 },
+            { CDF3(25610, 30882, 32100), 23 },
+            { CDF3(19724, 27881, 31089), 10 },
+            { CDF3(15206, 23453, 28302), 120 },
         }, .eob_base_uv_tok_lf = {
             { CDF4(31131, 32506, 32661, 32703), 100 },
             { CDF4(31161, 32411, 32589, 32679), 100 },
@@ -6363,7 +6375,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(12, 1, coef.skip_v);
     update_cdf_2d(4, 2, coef.eob_base_uv_tok_hf);
     update_cdf_2d(12, 3, coef.base_uv_tok_hf);
-    update_cdf_1d(3, coef.br_uv_tok_hf);
+    update_cdf_2d(4, 3, coef.br_uv_tok_hf);
     update_cdf_2d(4, 4, coef.eob_base_uv_tok_lf);
     update_cdf_2d(12, 5, coef.base_uv_tok_lf);
 

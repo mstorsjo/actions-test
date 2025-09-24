@@ -146,7 +146,7 @@ typedef struct CdfCoefContext {
     uint16_t skip_v[12][3];
     uint16_t eob_base_uv_tok_hf[4][4];
     uint16_t base_uv_tok_hf[12][5];
-    uint16_t br_uv_tok_hf[5];
+    uint16_t br_uv_tok_hf[4][5];
     uint16_t eob_base_uv_tok_lf[4][6];
     uint16_t base_uv_tok_lf[12][7];
 } CdfCoefContext;
