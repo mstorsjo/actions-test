@@ -1754,35 +1754,39 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
         }
         // update contexts
-        const enum IntraPredMode y_mode_nofilt =
-            b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
-        BlockContext *edge = t->a;
-        for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
+        if (has_luma) {
+            const enum IntraPredMode y_mode_nofilt =
+                b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
+            BlockContext *edge = t->a;
+            for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
-            rep_macro(edge->tx, off, 0 /* t_lsz */); \
-            rep_macro(edge->fsc, off, b->fsc); \
-            rep_macro(edge->mode, off, y_mode_nofilt); \
-            rep_macro(edge->midx, off, midx); \
-            rep_macro(edge->mrl, off, !!b->mrl_index); \
-            rep_macro(edge->multi_mrl, off, b->multi_mrl); \
-            rep_macro(edge->dip, off, !!b->dip); \
-            rep_macro(edge->pal_sz, off, b->pal_sz[0]); \
-            rep_macro(edge->seg_pred, off, seg_pred); \
-            rep_macro(edge->skip_mode, off, 0); \
-            rep_macro(edge->intra, off, 1); \
-            rep_macro(edge->intrabc, off, 0); \
-            rep_macro(edge->skip_txfm, off, b->skip_txfm); \
-            /* see aomedia bug 2183 for why we use luma coordinates here */ \
-            rep_macro(t->pal_sz_uv[i], off, (has_chroma ? b->pal_sz[1] : 0)); \
-            if (IS_INTER_OR_SWITCH(f->frame_hdr)) { \
-                rep_macro(edge->comp_type, off, COMP_INTER_NONE); \
-                rep_macro(edge->ref[0], off, ((uint8_t) -1)); \
-                rep_macro(edge->ref[1], off, ((uint8_t) -1)); \
-                rep_macro(edge->filter[0], off, DAV1D_N_SWITCHABLE_FILTERS); \
-                rep_macro(edge->filter[1], off, DAV1D_N_SWITCHABLE_FILTERS); \
-            }
-            case_set(b_dim[2 + i]);
+                rep_macro(edge->tx, off, 0 /* t_lsz */); \
+                rep_macro(edge->fsc, off, b->fsc); \
+                rep_macro(edge->mode, off, y_mode_nofilt); \
+                rep_macro(edge->midx, off, midx); \
+                rep_macro(edge->mrl, off, !!b->mrl_index); \
+                rep_macro(edge->multi_mrl, off, b->multi_mrl); \
+                rep_macro(edge->dip, off, !!b->dip); \
+                rep_macro(edge->pal_sz, off, b->pal_sz[0]); \
+                rep_macro(edge->seg_pred, off, seg_pred); \
+                rep_macro(edge->skip_mode, off, 0); \
+                rep_macro(edge->intra, off, 1); \
+                rep_macro(edge->intrabc, off, 0); \
+                rep_macro(edge->skip_txfm, off, b->skip_txfm); \
+                /* see aomedia bug 2183 for why we use luma coordinates here */ \
+                rep_macro(t->pal_sz_uv[i], off, (has_chroma ? b->pal_sz[1] : 0)); \
+                if (IS_INTER_OR_SWITCH(f->frame_hdr)) { \
+                    rep_macro(edge->comp_type, off, COMP_INTER_NONE); \
+                    rep_macro(edge->ref[0], off, ((uint8_t) -1)); \
+                    rep_macro(edge->ref[1], off, ((uint8_t) -1)); \
+                    rep_macro(edge->filter[0], off, DAV1D_N_SWITCHABLE_FILTERS); \
+                    rep_macro(edge->filter[1], off, DAV1D_N_SWITCHABLE_FILTERS); \
+                }
+                case_set(b_dim[2 + i]);
 #undef set_ctx
+            }
+            if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
+                splat_intraref(f->c, t, bs, bw4, bh4);
         }
         if (b->pal_sz[0])
             f->bd_fn.copy_pal_block_y(t, bx4, by4, bw4, bh4);
@@ -1793,8 +1797,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (b->pal_sz[1])
                 f->bd_fn.copy_pal_block_uv(t, bx4, by4, bw4, bh4);
         }
-        if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
-            splat_intraref(f->c, t, bs, bw4, bh4);
     } else if (b->intrabc) {
         // intra block copy
         refmvs_candidate mvstack[8];
@@ -1927,26 +1929,28 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
         }
 
-        splat_intrabc_mv(f->c, t, bs, b, bw4, bh4);
-        BlockContext *edge = t->a;
-        for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
+        if (has_luma) {
+            splat_intrabc_mv(f->c, t, bs, b, bw4, bh4);
+            BlockContext *edge = t->a;
+            for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
-            rep_macro(edge->fsc, off, 0); \
-            rep_macro(edge->mode, off, DC_PRED); \
-            rep_macro(edge->midx, off, 0xff); \
-            rep_macro(edge->mrl, off, 0); \
-            rep_macro(edge->multi_mrl, off, 0); \
-            rep_macro(edge->dip, off, 0); \
-            rep_macro(edge->pal_sz, off, 0); \
-            /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
-            rep_macro(t->pal_sz_uv[i], off, 0); \
-            rep_macro(edge->seg_pred, off, seg_pred); \
-            rep_macro(edge->skip_mode, off, 0); \
-            rep_macro(edge->intrabc, off, 1); \
-            rep_macro(edge->intra, off, 1); \
-            rep_macro(edge->skip_txfm, off, b->skip_txfm)
-            case_set(b_dim[2 + i]);
+                rep_macro(edge->fsc, off, 0); \
+                rep_macro(edge->mode, off, DC_PRED); \
+                rep_macro(edge->midx, off, 0xff); \
+                rep_macro(edge->mrl, off, 0); \
+                rep_macro(edge->multi_mrl, off, 0); \
+                rep_macro(edge->dip, off, 0); \
+                rep_macro(edge->pal_sz, off, 0); \
+                /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
+                rep_macro(t->pal_sz_uv[i], off, 0); \
+                rep_macro(edge->seg_pred, off, seg_pred); \
+                rep_macro(edge->skip_mode, off, 0); \
+                rep_macro(edge->intrabc, off, 1); \
+                rep_macro(edge->intra, off, 1); \
+                rep_macro(edge->skip_txfm, off, b->skip_txfm)
+                case_set(b_dim[2 + i]);
 #undef set_ctx
+            }
         }
         if (has_chroma) {
             dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
