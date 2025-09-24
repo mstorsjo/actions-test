@@ -649,7 +649,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int sz_ctx = imin(t_dim->ctx, 2);
         const int sz = (16 << tx2dszctx) - 1;
         const int bob = sz - eob;
-        unsigned ctx = (bob >= 2 << tx2dszctx) + (bob >= 4 << tx2dszctx);
+        unsigned ctx = (bob > 2 << tx2dszctx) + (bob > 4 << tx2dszctx);
         uint16_t (*hi_cdf)[5] = ts->cdf.coef.br_y_tok_idtx[sz_ctx];
         int tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac,
                           ts->cdf.coef.bob_base_y_tok[sz_ctx][ctx], 2);
