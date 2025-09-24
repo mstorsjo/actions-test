@@ -1,7 +1,7 @@
-From fa4381ed438a202092a88e0206a67ed339745356 Mon Sep 17 00:00:00 2001
+From edc17f54a68a73fdeb4fa2c48d7e1d013e3aeeea Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
-Subject: [PATCH 3/3] Partitioning, intra block and coefficient decoding
+Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
  debugging helpers.
 
 ---
@@ -516,7 +516,7 @@ index 24617f5bb3..db3e7fa0c0 100644
        aom_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..255a69bcb3 100644
+index 47abeeb4ef..398ca1cabb 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -573,8 +573,8 @@ index 47abeeb4ef..255a69bcb3 100644
        const int ccso_ctx = av1_get_ccso_context(xd, 0);
        blk_idc = aom_read_symbol(r, xd->tile_ctx->ccso_cdf[0][ccso_ctx], 2,
                                  ACCT_INFO("blk_idc"));
-+      DEBUG_BLOCK_printf("%*sPost-ccso[pl=y,%d]: r=%d\n",
-+                         depth, "", blk_idc, r->ec.rng);
++      DEBUG_BLOCK_printf("%*sPost-ccso[pl=y,ctx=%d,%d]: r=%d\n",
++                         depth, "", ccso_ctx, blk_idc, r->ec.rng);
      } else {
        CcsoInfo *ref_frame_ccso_info =
            &get_ref_frame_buf(cm, cm->ccso_info.ccso_ref_idx[0])->ccso_info;
@@ -582,8 +582,8 @@ index 47abeeb4ef..255a69bcb3 100644
        const int ccso_ctx = av1_get_ccso_context(xd, 1);
        blk_idc = aom_read_symbol(r, xd->tile_ctx->ccso_cdf[1][ccso_ctx], 2,
                                  ACCT_INFO("blk_idc"));
-+      DEBUG_BLOCK_printf("%*sPost-ccso[pl=u,%d]: r=%d\n",
-+                         depth, "", blk_idc, r->ec.rng);
++      DEBUG_BLOCK_printf("%*sPost-ccso[pl=u,ctx=%d,%d]: r=%d\n",
++                         depth, "", ccso_ctx, blk_idc, r->ec.rng);
      } else {
        CcsoInfo *ref_frame_ccso_info =
            &get_ref_frame_buf(cm, cm->ccso_info.ccso_ref_idx[1])->ccso_info;
@@ -591,8 +591,8 @@ index 47abeeb4ef..255a69bcb3 100644
        const int ccso_ctx = av1_get_ccso_context(xd, 2);
        blk_idc = aom_read_symbol(r, xd->tile_ctx->ccso_cdf[2][ccso_ctx], 2,
                                  ACCT_INFO("blk_idc"));
-+      DEBUG_BLOCK_printf("%*sPost-ccso[pl=v,%d]: r=%d\n",
-+                         depth, "", blk_idc, r->ec.rng);
++      DEBUG_BLOCK_printf("%*sPost-ccso[pl=v,ctx=%d,%d]: r=%d\n",
++                         depth, "", ccso_ctx, blk_idc, r->ec.rng);
      } else {
        CcsoInfo *ref_frame_ccso_info =
            &get_ref_frame_buf(cm, cm->ccso_info.ccso_ref_idx[2])->ccso_info;

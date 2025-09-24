@@ -1125,12 +1125,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 // ctx=1: false/true, true/false
                 // ctx=2: true/--, --/true, true/true [same coded block]
                 // ctx=3: true/true [different coded block]
-                const int ctx = have_left ? t->lf_mask[-1].ccso[p] * 2 : 0;
+                const int ctx = have_left ? t->lf_mask[-2].ccso[p] * 2 : 0;
                 t->lf_mask->ccso[p] = dav1d_msac_decode_bool_adapt(&ts->msac,
                                             ts->cdf.m.ccso[p][ctx]);
-                DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,%d]: r=%d\n",
-                                   depth, "", "yuv"[p], t->lf_mask->ccso[p],
-                                   ts->msac.rng);
+                DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,ctx=%d,%d]: r=%d\n",
+                                   depth, "", "yuv"[p], ctx,
+                                   t->lf_mask->ccso[p], ts->msac.rng);
             }
         }
     }
