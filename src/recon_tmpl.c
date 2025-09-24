@@ -1673,7 +1673,7 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
         const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
         const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
                        *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
-        const int tw4_small = t_dim_small->w, th4_small = t_dim_small->w;
+        const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
         const int th4_big = t_dim_big->h;
         recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
         const int have_v_split = t->bx + tw4_small < f->bw;
