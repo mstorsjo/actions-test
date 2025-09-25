@@ -1534,7 +1534,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
         if (has_chroma) {
             const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
-            const int cfl_allowed = f->seq_hdr->cfl &&
+            const int cfl_allowed = f->seq_hdr->cfl && !t->sdp_cfl_disallowed &&
                                     imax(cbw4, cbh4) <= (ll ? 1 : 16);
             int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
             if (cfl_allowed) {
@@ -2882,6 +2882,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int eff_ss_hor = f->ss_hor & (lbs == BS_INVALID);
         const int bwh4ss[2] = { bw4 >> eff_ss_hor, bh4 >> eff_ss_ver };
         assert(bwh4ss[0] >= 1 && bwh4ss[1] >= 1);
+        int dir = -1;
         if (imax(bwh4ss[0], bwh4ss[1]) == 1 ||
             // 1:8/1:16 partitions don't recursive (normatively)
             (pcc->part[0][0] & pcc->part[1][0]) == -1)
@@ -2889,13 +2890,18 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             bp = PARTITION_NONE;
         } else if (!have_h_split || !have_v_split) {
             if (bw4 == bh4) {
+                dir = have_v_split;
                 bp = !have_v_split ? PARTITION_H : PARTITION_V;
             } else if (bw4 > bh4) {
-                if (!have_h_split || f->bh <= t->by + qh4)
+                if (!have_h_split || f->bh <= t->by + qh4) {
+                    dir = 1;
                     bp = PARTITION_V;
+                }
             } else if (bh4 > bw4) {
-                if (!have_v_split || f->bw <= t->bx + qw4)
+                if (!have_v_split || f->bw <= t->bx + qw4) {
+                    dir = 0;
                     bp = PARTITION_H;
+                }
             }
         }
         if (bp == PARTITION_INVALID) {
@@ -2930,7 +2936,6 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 if (bp == PARTITION_INVALID) {
                     // split - find direction
-                    int dir;
                     const int aspect = 1 << f->seq_hdr->max_pb_aspect_ratio_log2;
                     assert(bw4 * aspect >= bh4 && bh4 * aspect >= bw4);
                     const int v_aspect = bw4 * aspect >= bh4 * 2;
@@ -3000,6 +3005,12 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                            depth, "", t->by, t->bx, 4 * bw4, 4 * bh4, bp,
                            names[bp], ts->msac.rng);
 #endif
+        // F157 "limit SDP-imposed CfL delay"
+        if (lbs == BS_64x64 && cbs == BS_INVALID) {
+            t->sdp_cfl_disallowed = dir; // cache
+        } else if (lbs == BS_INVALID && cbs == BS_64x64) {
+            t->sdp_cfl_disallowed = dir != -1 && dir != t->sdp_cfl_disallowed;
+        }
     } else {
         //.. FIXME 2-pass decoding
         abort();

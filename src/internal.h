@@ -391,7 +391,7 @@ struct Dav1dTaskContext {
     const Dav1dContext *c;
     const Dav1dFrameContext *f;
     Dav1dTileState *ts;
-    int bx, by, cbx, cby;
+    int bx, by, cbx, cby, sdp_cfl_disallowed;
     BlockContext l, *a;
     refmvs_tile rt;
     ALIGN(union, 64) {
