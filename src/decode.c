@@ -2716,7 +2716,8 @@ static int checked_decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) 
 #endif /* defined(__has_feature) */
 
 static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
-                     const enum BlockSize lbs, const enum BlockSize cbs)
+                     const enum BlockSize lbs, const enum BlockSize cbs,
+                     int *const dir_ptr)
 {
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
@@ -2733,8 +2734,9 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (lbs == BS_64x64 && cbs == BS_64x64 &&
         f->seq_hdr->sdp && !(f->frame_hdr->frame_type & 1))
     {
-        if (decode_sb(t, DB_ONLY(depth) lbs, BS_INVALID)) return -1;
-        return decode_sb(t, DB_ONLY(depth) BS_INVALID, cbs);
+        int dir = 0;
+        if (decode_sb(t, DB_ONLY(depth) lbs, BS_INVALID, &dir)) return -1;
+        return decode_sb(t, DB_ONLY(depth) BS_INVALID, cbs, &dir);
     }
 
     DEBUG_BLOCK_printf("%*sdecode_sb[y=%d,x=%d,bs=%dx%d,plane=%s]: r=%d\n",
@@ -2915,75 +2917,91 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 printf("poc=%d,y=%d,x=%d,bs=%d,r=%d\n",
                        f->frame_hdr->frame_offset, t->by, t->bx, bs, ts->msac.rng);
 #endif
-            const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, pl, by4, bx4);
-            const int ctx2 = ctx1 + pcc->ctx[0] * 4;
-            const int is_split = (!have_h_split || !have_v_split) ||
-                dav1d_msac_decode_bool_adapt(&ts->msac,
-                                             ts->cdf.m.part_split[pl][ctx2]);
-            if (!is_split) {
-                bp = PARTITION_NONE;
-            } else {
-                if ((bs == BS_128x128 || bs == BS_256x256) &&
-                    have_v_split && have_h_split)
-                {
-                    assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
-                    const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
-                    const int is_square =
-                        dav1d_msac_decode_bool_adapt(&ts->msac,
-                            ts->cdf.m.part_square[ctx3]);
-                    if (is_square)
-                        bp = PARTITION_SPLIT;
-                } else if (imax(bw4, bh4) >= 32) {
-                    assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
-                    assert(bw4 != bh4);
-                    bp = bw4 > bh4 ? PARTITION_V : PARTITION_H;
-                }
-                if (bp == PARTITION_INVALID) {
-                    // split - find direction
-                    const int aspect = 1 << f->seq_hdr->max_pb_aspect_ratio_log2;
-                    assert(bw4 * aspect >= bh4 && bh4 * aspect >= bw4);
-                    const int v_aspect = bw4 * aspect >= bh4 * 2;
-                    const int h_aspect = bh4 * aspect >= bw4 * 2;
-                    assert(v_aspect || h_aspect);
-                    if (imin(bwh4ss[0], bwh4ss[1]) == 1) {
-                        dir = bwh4ss[0] > bwh4ss[1];
-                    } else if (!(v_aspect && h_aspect)) {
-                        dir = v_aspect;
-                    } else {
-                        const int ctx4 = ctx1 + pcc->ctx[1] * 4;
-                        dir = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                  ts->cdf.m.part_dir[pl][ctx4]);
-                    }
-                    assert(pcc->part[dir][0] != -1);
+            if (cbs == BS_64x64 && lbs == BS_INVALID &&
+                (*dir_ptr == -1 || (*dir_ptr & 0x303) == 0x102 ||
+                                   (*dir_ptr & 0x303) == 0x201))
+            {
+                // F164: infer SDP chroma partitioning at 64x64 level
+                if (*dir_ptr == -1) {
+                    bp = PARTITION_NONE; // if luma did not split, don't split chroma
+                } else {
+                    // if luma split one way, and all children split another way,
+                    // then copy the initial first-way split for chroma
+                    dir = (*dir_ptr & 0x303) == 0x102;
                     bp = dir ? PARTITION_V : PARTITION_H;
+                }
+            } else {
+                const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, pl, by4, bx4);
+                const int ctx2 = ctx1 + pcc->ctx[0] * 4;
+                const int is_split = (!have_h_split || !have_v_split) ||
+                    dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                 ts->cdf.m.part_split[pl][ctx2]);
+                if (!is_split) {
+                    bp = PARTITION_NONE;
+                } else {
+                    if ((bs == BS_128x128 || bs == BS_256x256) &&
+                        have_v_split && have_h_split)
+                    {
+                        assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
+                        const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
+                        const int is_square =
+                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.m.part_square[ctx3]);
+                        if (is_square)
+                            bp = PARTITION_SPLIT;
+                    } else if (imax(bw4, bh4) >= 32) {
+                        assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
+                        assert(bw4 != bh4);
+                        bp = bw4 > bh4 ? PARTITION_V : PARTITION_H;
+                    }
+                    if (bp == PARTITION_INVALID) {
+                        // split - find direction
+                        const int aspect = 1 << f->seq_hdr->max_pb_aspect_ratio_log2;
+                        assert(bw4 * aspect >= bh4 && bh4 * aspect >= bw4);
+                        const int v_aspect = bw4 * aspect >= bh4 * 2;
+                        const int h_aspect = bh4 * aspect >= bw4 * 2;
+                        assert(v_aspect || h_aspect);
+                        if (imin(bwh4ss[0], bwh4ss[1]) == 1) {
+                            dir = bwh4ss[0] > bwh4ss[1];
+                        } else if (!(v_aspect && h_aspect)) {
+                            dir = v_aspect;
+                        } else {
+                            const int ctx4 = ctx1 + pcc->ctx[1] * 4;
+                            dir = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                      ts->cdf.m.part_dir[pl][ctx4]);
+                        }
+                        assert(pcc->part[dir][0] != -1);
+                        bp = dir ? PARTITION_V : PARTITION_H;
 
-                    if (imax(bw4, bh4) <= 16) {
-                        // v3/h3 [ext-partition]
-                        const int has_hv3 = f->seq_hdr->ext_partitions &&
-                                            bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2 &&
-                                            b_dim[!dir] * aspect >= b_dim[dir] * 4;
-                        const int has_hv4ab = f->seq_hdr->uneven_4way_partitions &&
-                                              bwh4ss[!dir] >= 8 &&
-                                              b_dim[!dir] * aspect >= b_dim[dir] * 8;
-                        if (has_hv3 || has_hv4ab) {
-                            assert(pcc->part[dir][1] != -1);
-                            const int ctx5 = get_partition2_ctx(t->a, &t->l, b_dim,
-                                                                pl, dir, by4, bx4);
-                            const int ctx6 = ctx5 + pcc->ctx[0] * 4;
-                            const int is_ext =
-                                dav1d_msac_decode_bool_adapt(&ts->msac,
-                                    ts->cdf.m.part_ext[pl][ctx6]);
-                            if (is_ext) {
-                                bp = dir ? PARTITION_V3 : PARTITION_H3;
-                                if (has_hv4ab) {
-                                    assert(pcc->part[dir][2] != -1);
-                                    const int is_4way = !has_hv3 ||
-                                        dav1d_msac_decode_bool_adapt(&ts->msac,
-                                            ts->cdf.m.part_4way[pl][ctx6]);
-                                    if (is_4way) {
-                                        const int is_a_or_b =
-                                            dav1d_msac_decode_bool_bypass(&ts->msac);
-                                        bp = PARTITION_H4A + dir * 2 + is_a_or_b;
+                        if (imax(bw4, bh4) <= 16) {
+                            // v3/h3 [ext-partition]
+                            const int has_hv3 = f->seq_hdr->ext_partitions &&
+                                bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2 &&
+                                b_dim[!dir] * aspect >= b_dim[dir] * 4;
+                            const int has_hv4ab = bwh4ss[!dir] >= 8 &&
+                                f->seq_hdr->uneven_4way_partitions &&
+                                b_dim[!dir] * aspect >= b_dim[dir] * 8;
+                            if (has_hv3 || has_hv4ab) {
+                                assert(pcc->part[dir][1] != -1);
+                                const int ctx5 =
+                                    get_partition2_ctx(t->a, &t->l, b_dim,
+                                                       pl, dir, by4, bx4);
+                                const int ctx6 = ctx5 + pcc->ctx[0] * 4;
+                                const int is_ext =
+                                    dav1d_msac_decode_bool_adapt(&ts->msac,
+                                        ts->cdf.m.part_ext[pl][ctx6]);
+                                if (is_ext) {
+                                    bp = dir ? PARTITION_V3 : PARTITION_H3;
+                                    if (has_hv4ab) {
+                                        assert(pcc->part[dir][2] != -1);
+                                        const int is_4way = !has_hv3 ||
+                                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                ts->cdf.m.part_4way[pl][ctx6]);
+                                        if (is_4way) {
+                                            const int is_a_or_b =
+                                                dav1d_msac_decode_bool_bypass(&ts->msac);
+                                            bp = PARTITION_H4A + dir * 2 + is_a_or_b;
+                                        }
                                     }
                                 }
                             }
@@ -3009,12 +3027,11 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                            depth, "", t->by, t->bx, 4 * bw4, 4 * bh4, bp,
                            names[bp], ts->msac.rng);
 #endif
+        dir += dir != -1; // -1 for PARTITION_NONE, 1 or 2 for hor/ver
         // F157 "limit SDP-imposed CfL delay"
-        if (lbs == BS_64x64 && cbs == BS_INVALID) {
-            t->sdp_cfl_disallowed = dir; // cache
-        } else if (lbs == BS_INVALID && cbs == BS_64x64) {
-            t->sdp_cfl_disallowed = dir != -1 && dir != t->sdp_cfl_disallowed;
-        }
+        if (lbs == BS_INVALID && cbs == BS_64x64)
+            t->sdp_cfl_disallowed = dir != -1 && dir != (*dir_ptr & 0x3);
+        *dir_ptr |= dir;
     } else {
         //.. FIXME 2-pass decoding
         abort();
@@ -3024,6 +3041,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->cbx = t->bx;
         t->cby = t->by;
     }
+    int child_dir = 0;
     switch (bp) {
     case PARTITION_NONE:
         if (decode_b(t, DB_ONLY(depth + 1) lbs, cbs)) return -1;
@@ -3043,7 +3061,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][0],
-                      sub4 ? pcc->part[1][0] : BS_INVALID))
+                      sub4 ? pcc->part[1][0] : BS_INVALID, &child_dir))
         {
             return -1;
         }
@@ -3051,7 +3069,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->bx += hw4;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][0],
-                      sub4 ? pcc->part[1][0] : cbs))
+                      sub4 ? pcc->part[1][0] : cbs, &child_dir))
         {
             return -1;
         }
@@ -3064,7 +3082,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][0],
-                      sub4 ? pcc->part[0][0] : BS_INVALID))
+                      sub4 ? pcc->part[0][0] : BS_INVALID, &child_dir))
         {
             return -1;
         }
@@ -3072,7 +3090,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->by += hh4;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][0],
-                      sub4 ? pcc->part[0][0] : cbs))
+                      sub4 ? pcc->part[0][0] : cbs, &child_dir))
         {
             return -1;
         }
@@ -3082,14 +3100,14 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     case PARTITION_SPLIT: {
         assert(have_v_split && have_h_split && cbs == lbs);
         const enum BlockSize sbs = pcc->part[0][3];
-        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
         t->bx += hw4;
-        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
         t->bx -= hw4;
         t->by += hh4;
-        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
         t->bx += hw4;
-        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs)) return -1;
+        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
         t->bx -= hw4;
         t->by -= hh4;
         break;
@@ -3102,7 +3120,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int i_3only = cbs == BS_INVALID || (!sub4 && bs != BS_32x8);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][1],
-                      i_3only ? BS_INVALID : pcc->part[1][1]))
+                      i_3only ? BS_INVALID : pcc->part[1][1], &child_dir))
         {
             return -1;
         }
@@ -3111,7 +3129,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (!i_3only) t->cbx = t->bx;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][3],
-                      sub4 ? pcc->part[1][3] : BS_INVALID))
+                      sub4 ? pcc->part[1][3] : BS_INVALID, &child_dir))
         {
             return -1;
         }
@@ -3119,7 +3137,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             t->by += hh4;
             if (decode_sb(t, DB_ONLY(depth + 1)
                           pl ? BS_INVALID : pcc->part[1][3],
-                          i_3only ? BS_INVALID : pcc->part[1][sub4 * 3]))
+                          i_3only ? BS_INVALID : pcc->part[1][sub4 * 3], &child_dir))
             {
                 return -1;
             }
@@ -3129,7 +3147,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->bx += hw4;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][1],
-                      i_3only ? cbs : pcc->part[1][1]))
+                      i_3only ? cbs : pcc->part[1][1], &child_dir))
         {
             return -1;
         }
@@ -3144,7 +3162,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int i_3only = cbs == BS_INVALID || (!sub4 && bs != BS_8x32);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][1],
-                      i_3only ? BS_INVALID : pcc->part[0][1]))
+                      i_3only ? BS_INVALID : pcc->part[0][1], &child_dir))
         {
             return -1;
         }
@@ -3153,7 +3171,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (!i_3only) t->cby = t->by;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][3],
-                      sub4 ? pcc->part[0][3] : BS_INVALID))
+                      sub4 ? pcc->part[0][3] : BS_INVALID, &child_dir))
         {
             return -1;
         }
@@ -3161,7 +3179,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             t->bx += hw4;
             if (decode_sb(t, DB_ONLY(depth + 1)
                           pl ? BS_INVALID : pcc->part[0][3],
-                          i_3only ? BS_INVALID : pcc->part[0][sub4 * 3]))
+                          i_3only ? BS_INVALID : pcc->part[0][sub4 * 3], &child_dir))
             {
                 return -1;
             }
@@ -3171,7 +3189,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->by += hh4;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][1],
-                      i_3only ? cbs : pcc->part[0][1]))
+                      i_3only ? cbs : pcc->part[0][1], &child_dir))
         {
             return -1;
         }
@@ -3186,7 +3204,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][2],
-                      sub4 ? pcc->part[1][2] : BS_INVALID))
+                      sub4 ? pcc->part[1][2] : BS_INVALID, &child_dir))
         {
             return -1;
         }
@@ -3195,7 +3213,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int var = bp - PARTITION_V4A; // v4b: 1, v4a: 0
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][!var],
-                      sub4 ? pcc->part[1][!var] : -1))
+                      sub4 ? pcc->part[1][!var] : -1, &child_dir))
         {
             return -1;
         }
@@ -3204,7 +3222,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->bx += w4a;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][var],
-                      sub4 ? pcc->part[1][var] : -1))
+                      sub4 ? pcc->part[1][var] : -1, &child_dir))
         {
             return -1;
         }
@@ -3212,7 +3230,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->bx += w4b;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][2],
-                      sub4 ? pcc->part[1][2] : cbs))
+                      sub4 ? pcc->part[1][2] : cbs, &child_dir))
         {
             return -1;
         }
@@ -3227,7 +3245,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][2],
-                      sub4 ? pcc->part[0][2] : BS_INVALID))
+                      sub4 ? pcc->part[0][2] : BS_INVALID, &child_dir))
         {
             return -1;
         }
@@ -3236,7 +3254,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int var = bp - PARTITION_H4A; // h4b: 1, h4a: 0
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][!var],
-                      sub4 ? pcc->part[0][!var] : -1))
+                      sub4 ? pcc->part[0][!var] : -1, &child_dir))
         {
             return -1;
         }
@@ -3245,7 +3263,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->by += h4a;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][var],
-                      sub4 ? pcc->part[0][var] : -1))
+                      sub4 ? pcc->part[0][var] : -1, &child_dir))
         {
             return -1;
         }
@@ -3253,7 +3271,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->by += h4b;
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][2],
-                      sub4 ? pcc->part[0][2] : cbs))
+                      sub4 ? pcc->part[0][2] : cbs, &child_dir))
         {
             return -1;
         }
@@ -3263,6 +3281,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     default:
         assert(0);
     }
+    *dir_ptr |= child_dir << 8;
 
     return 0;
 }
@@ -3520,7 +3539,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         {
             if (atomic_load_explicit(c->flush, memory_order_acquire))
                 return 1;
-            if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs))
+            if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, NULL))
                 return 1;
             if (t->bx & 16 || f->seq_hdr->sb128)
                 t->a++;
@@ -3593,7 +3612,8 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 }
             }
         }
-        if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs))
+        int dir = 0;
+        if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
             return 1;
         if (t->bx & 16 || f->seq_hdr->sb128) {
             t->a++;
