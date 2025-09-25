@@ -1,4 +1,4 @@
-From f84cc71e821f93f159d09fe630a6a9c1f9da3e1a Mon Sep 17 00:00:00 2001
+From 7058d1ff024abf32afae18e079c6dcfed835fe97 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
@@ -9,9 +9,9 @@ Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
  av1/decoder/decodemv.c    | 336 +++++++++++++++++++++++++++++---------
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.h     |  22 ++-
- av1/decoder/decodetxb.c   | 217 ++++++++++++++++++------
+ av1/decoder/decodetxb.c   | 219 +++++++++++++++++++------
  av1/decoder/decodetxb.h   |  14 +-
- 6 files changed, 615 insertions(+), 186 deletions(-)
+ 6 files changed, 616 insertions(+), 187 deletions(-)
 
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
 index 24617f5bb3..99c263c94a 100644
@@ -1507,7 +1507,7 @@ index 2c8ad00d2c..4ebcff5c0d 100644
                                     PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                     PARTITION_TREE *parent, int index);
 diff --git a/av1/decoder/decodetxb.c b/av1/decoder/decodetxb.c
-index 4f85230ef3..b097daf6df 100644
+index 4f85230ef3..573b0d9d88 100644
 --- a/av1/decoder/decodetxb.c
 +++ b/av1/decoder/decodetxb.c
 @@ -115,7 +115,11 @@ static int read_adaptive_hr(MACROBLOCKD *xd, aom_reader *r, int ctx) {
@@ -1757,7 +1757,7 @@ index 4f85230ef3..b097daf6df 100644
  }
  
 -uint8_t av1_read_sig_txtype(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
-+uint8_t av1_read_sig_txtype(DB_ONLY(const int depth)
++int     av1_read_sig_txtype(DB_ONLY(const int depth)
 +                            const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
                              aom_reader *const r, const int blk_row,
                              const int blk_col, const int plane,
@@ -2086,8 +2086,9 @@ index 4f85230ef3..b097daf6df 100644
 +                    tx_size_wide[tx_size], tx_size_high[tx_size], r->ec.rng);
 +#endif
  
-   const uint8_t decode_rest =
+-  const uint8_t decode_rest =
 -      av1_read_sig_txtype(cm, dcb, r, row, col, plane, &txb_ctx, tx_size);
++  const int decode_rest =
 +      av1_read_sig_txtype(DB_ONLY(depth)
 +                          cm, dcb, r, row, col, plane, &txb_ctx, tx_size);
  
@@ -2121,7 +2122,7 @@ index 4f85230ef3..b097daf6df 100644
  #if TXCOEFF_TIMER
    aom_usec_timer_mark(&timer);
 diff --git a/av1/decoder/decodetxb.h b/av1/decoder/decodetxb.h
-index 66385d5ffe..4ca65e203d 100644
+index 66385d5ffe..e85a1e904f 100644
 --- a/av1/decoder/decodetxb.h
 +++ b/av1/decoder/decodetxb.h
 @@ -15,12 +15,15 @@
@@ -2154,7 +2155,7 @@ index 66385d5ffe..4ca65e203d 100644
                                  const TX_SIZE tx_size);
  
 -uint8_t av1_read_sig_txtype(const struct AV1Common *const cm,
-+uint8_t av1_read_sig_txtype(DB_ONLY(const int depth)
++int     av1_read_sig_txtype(DB_ONLY(const int depth)
 +                            const struct AV1Common *const cm,
                              struct DecoderCodingBlock *dcb,
                              struct aom_reader *const r, const int blk_row,
