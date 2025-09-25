@@ -419,7 +419,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             [DCT_DCT]   = { { DCT_DCT,   DCT_DCT   }, { DCT_DCT,   DCT_DCT } },
             [ADST_DCT]  = { { ADST_DCT,  ADST_DCT  }, { DCT_DCT,   DCT_DCT } },
             [DCT_ADST]  = { { DCT_ADST,  DCT_DCT   }, { DCT_ADST,  DCT_DCT } },
-            [ADST_ADST] = { { ADST_ADST, ADST_DCT  }, { DCT_ADST,  DCT_DCT } },
+            [ADST_ADST] = { { ADST_ADST, DCT_DCT   }, { DCT_DCT,   DCT_DCT } },
         };
         // inferred from either the luma txtp (inter) or a LUT (intra)
         *txtp = intra ? txsz_trunc[dav1d_txtp_from_uvmode[b->uv_mode]]
