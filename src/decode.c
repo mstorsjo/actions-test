@@ -1134,7 +1134,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         // FIXME inter frames have extra conditions for enabling intrabc
-        if (f->frame_hdr->allow_intrabc && imin(bw4, bh4) < 64) {
+        if (f->frame_hdr->allow_intrabc && imin(bw4, bh4) < 16) {
             const int ctx = boff0 == -1 ? 0 : nb0->intrabc[boff0] +
                                               nb1->intrabc[boff1];
             b->intrabc = dav1d_msac_decode_bool_adapt(&ts->msac,
