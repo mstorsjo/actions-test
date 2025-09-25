@@ -3095,7 +3095,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int sub4 = bs == cbs && (qw4 >> f->ss_hor) > 0 &&
                                       (hh4 >> f->ss_ver) > 0;
         assert(sub4 || !pl);
-        const int i_3only = !sub4 && bs != BS_32x8;
+        const int i_3only = cbs == BS_INVALID || (!sub4 && bs != BS_32x8);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][1],
                       i_3only ? BS_INVALID : pcc->part[1][1]))
@@ -3137,7 +3137,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int sub4 = bs == cbs && (qh4 >> f->ss_ver) > 0 &&
                                       (hw4 >> f->ss_hor) > 0;
         assert(sub4 || !pl);
-        const int i_3only = !sub4 && bs != BS_8x32;
+        const int i_3only = cbs == BS_INVALID || (!sub4 && bs != BS_8x32);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][1],
                       i_3only ? BS_INVALID : pcc->part[0][1]))
