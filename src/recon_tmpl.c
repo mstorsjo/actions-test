@@ -1513,16 +1513,20 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     // decode coefficients
     uint8_t cf_ctx;
     enum TxfmType txtp;
+    coef *cf;
+    int eob;
     if (b->skip_txfm) {
         cf_ctx = 0x40;
         txtp = DCT_DCT;
+        eob = -1;
     } else {
-        coef *const cf = bitfn(t->cf);
-        int eob = decode_coefs(t, DB_ONLY(depth + 1)
-                               &t->a->lcoef[bx4], &t->l.lcoef[by4],
-                               tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
+        cf = bitfn(t->cf);
+        eob = decode_coefs(t, DB_ONLY(depth + 1)
+                           &t->a->lcoef[bx4], &t->l.lcoef[by4],
+                           tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
+        txtp = txtp & 0xf;
         DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
-                           depth + 1, "", tw, th, txtp & 0xf, eob, ts->msac.rng);
+                           depth + 1, "", tw, th, txtp, eob, ts->msac.rng);
     }
     dav1d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
                              imin(t_dim->w, f->bw - t->bx));
@@ -1530,8 +1534,6 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->h, f->bh - t->by));
     t->scratch.txtp_map[by4 * 32 + bx4] = txtp & 0xf;
 
-    // FIXME predict
-    // ..
     if (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED) {
         int n_pel_left = th + 3;
         int n_pel_above = tw + th;
@@ -1550,11 +1552,19 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             hex_dump(edge, 0, 1, 1, "tl");
             hex_dump(edge + 1, n_pel_above, n_pel_above, 1, "t");
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
+            if (eob != -1)
+                coef_dump(cf, imin(t_dim->h, 8) * 4,
+                          imin(t_dim->w, 8) * 4, 3, "dq");
+        }
+
+        if (eob != -1) {
+            dsp->itx.itxfm_add[tx][txtp](dst, f->cur.stride[0],
+                                         cf, eob HIGHBD_CALL_SUFFIX);
+            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                hex_dump(dst, f->cur.stride[0], t_dim->w * 4, t_dim->h * 4, "recon");
+            }
         }
     }
-
-    // FIXME reconstruct
-    // ..
 
     b->y_mode = orig_y_mode;
 }

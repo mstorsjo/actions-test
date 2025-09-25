@@ -40,6 +40,34 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
+static const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2] = {
+    [ TX_4X4]   = { 7, 10 },
+    [ TX_8X8]   = { 7, 11 },
+    [ TX_16X16] = { 6, 13 },
+    [ TX_32X32] = { 6, 13 },
+    [ TX_64X64] = { 6, 13 },
+    [RTX_4X8]   = { 7, 10 },
+    [RTX_8X4]   = { 7, 10 },
+    [RTX_8X16]  = { 7, 11 },
+    [RTX_16X8]  = { 7, 11 },
+    [RTX_16X32] = { 6, 12 },
+    [RTX_32X16] = { 6, 12 },
+    [RTX_32X64] = { 6, 12 },
+    [RTX_64X32] = { 6, 12 },
+    [RTX_4X16]  = { 6, 12 },
+    [RTX_16X4]  = { 6, 12 },
+    [RTX_8X32]  = { 6, 13 },
+    [RTX_32X8]  = { 6, 13 },
+    [RTX_16X64] = { 6, 13 },
+    [RTX_64X16] = { 6, 13 },
+    [RTX_4X32]  = { 7, 11 },
+    [RTX_32X4]  = { 7, 11 },
+    [RTX_8X64]  = { 6, 12 },
+    [RTX_64X8]  = { 6, 12 },
+    [RTX_4X64]  = { 6, 13 },
+    [RTX_64X4]  = { 6, 13 },
+};
+
 static NOINLINE void
 inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                const int eob, const /*enum RectTxfmSize*/ int tx, const int shift,
@@ -47,14 +75,14 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
 {
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int w = 4 * t_dim->w, h = 4 * t_dim->h;
-    const int has_dconly = txtp == DCT_DCT;
     assert(w >= 4 && w <= 64);
     assert(h >= 4 && h <= 64);
     assert(eob >= 0);
 
     const int is_rect2 = w * 2 == h || h * 2 == w;
-    const int rnd = (1 << shift) >> 1;
-
+#if 0
+    // FIXME Disabled for now
+    const int has_dconly = txtp == DCT_DCT;
     if (eob < has_dconly) {
         int dc = coeff[0];
         coeff[0] = 0;
@@ -68,6 +96,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                 dst[x] = iclip_pixel(dst[x] + dc);
         return;
     }
+#endif
 
     const uint8_t *const txtps = dav1d_tx1d_types[txtp];
     const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtps[0]];
@@ -84,6 +113,8 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     const int col_clip_max = ~col_clip_min;
 
     int32_t tmp[64 * 64], *c = tmp;
+#if 0
+    // FIXME Disabled for now,this needs to be updated to AVM
     int last_nonzero_col; // in first 1d itx
     if (txtps[1] == IDENTITY && txtps[0] != IDENTITY) {
         last_nonzero_col = imin(sh - 1, eob);
@@ -93,29 +124,38 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
         last_nonzero_col = dav1d_last_nonzero_col_from_eob[tx][eob];
     }
     assert(last_nonzero_col < sh);
-    for (int y = 0; y <= last_nonzero_col; y++, c += w) {
+#else
+    int last_nonzero_col = sh - 1;
+#endif
+ for (int y = 0; y <= last_nonzero_col; y++, c += w) {
         if (is_rect2)
             for (int x = 0; x < sw; x++)
                 c[x] = (coeff[y + x * sh] * 181 + 128) >> 8;
         else
             for (int x = 0; x < sw; x++)
                 c[x] = coeff[y + x * sh];
-        first_1d_fn(c, 1, row_clip_min, row_clip_max);
+        first_1d_fn(c, 1, 0, 0);
     }
+
+#if 0
     if (last_nonzero_col + 1 < sh)
         memset(c, 0, sizeof(*c) * (sh - last_nonzero_col - 1) * w);
-
+#endif
     memset(coeff, 0, sizeof(*coeff) * sw * sh);
+    int new_shift = dav1d_tx_shift[tx][0];
+    int rnd = (1 << new_shift) >> 1;
     for (int i = 0; i < w * sh; i++)
-        tmp[i] = iclip((tmp[i] + rnd) >> shift, col_clip_min, col_clip_max);
+        tmp[i] = iclip((tmp[i] + rnd) >> new_shift, row_clip_min, row_clip_max);
 
     for (int x = 0; x < w; x++)
-        second_1d_fn(&tmp[x], w, col_clip_min, col_clip_max);
+        second_1d_fn(&tmp[x], w, 0, 0);
 
+    new_shift = dav1d_tx_shift[tx][1];
+    rnd = (1 << new_shift) >> 1;
     c = tmp;
     for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
         for (int x = 0; x < w; x++)
-            dst[x] = iclip_pixel(dst[x] + ((*c++ + 8) >> 4));
+            dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> new_shift));
 }
 
 #define inv_txfm_fn(type1, type2, type, pfx, w, h, shift) \
@@ -160,19 +200,25 @@ inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h, shift) \
 inv_txfm_fn84( ,  4,  4, 0)
 inv_txfm_fn84(R,  4,  8, 0)
 inv_txfm_fn84(R,  4, 16, 1)
+inv_txfm_fn84(R,  4, 32, 1)
+inv_txfm_fn84(R,  4, 64, 1)
 inv_txfm_fn84(R,  8,  4, 0)
 inv_txfm_fn84( ,  8,  8, 1)
 inv_txfm_fn84(R,  8, 16, 1)
 inv_txfm_fn32(R,  8, 32, 2)
+inv_txfm_fn64(R,  8, 64, 2)
 inv_txfm_fn84(R, 16,  4, 1)
 inv_txfm_fn84(R, 16,  8, 1)
 inv_txfm_fn16( , 16, 16, 2)
 inv_txfm_fn32(R, 16, 32, 1)
 inv_txfm_fn64(R, 16, 64, 2)
+inv_txfm_fn32(R, 32,  4, 2)
 inv_txfm_fn32(R, 32,  8, 2)
 inv_txfm_fn32(R, 32, 16, 1)
 inv_txfm_fn32( , 32, 32, 2)
 inv_txfm_fn64(R, 32, 64, 1)
+inv_txfm_fn64(R, 64,  4, 2)
+inv_txfm_fn64(R, 64,  8, 2)
 inv_txfm_fn64(R, 64, 16, 2)
 inv_txfm_fn64(R, 64, 32, 1)
 inv_txfm_fn64( , 64, 64, 2)
@@ -270,24 +316,31 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
     assign_itx_all_fn84( 4,  4, );
     assign_itx_all_fn84( 4,  8, R);
     assign_itx_all_fn84( 4, 16, R);
+    assign_itx_all_fn84( 4, 32, R);
+    assign_itx_all_fn84( 4, 64, R);
     assign_itx_all_fn84( 8,  4, R);
     assign_itx_all_fn84( 8,  8, );
     assign_itx_all_fn84( 8, 16, R);
     assign_itx_all_fn32( 8, 32, R);
+    assign_itx_all_fn64( 8, 64, R);
     assign_itx_all_fn84(16,  4, R);
     assign_itx_all_fn84(16,  8, R);
     assign_itx_all_fn16(16, 16, );
     assign_itx_all_fn32(16, 32, R);
     assign_itx_all_fn64(16, 64, R);
+    assign_itx_all_fn32(32,  4, R);
     assign_itx_all_fn32(32,  8, R);
     assign_itx_all_fn32(32, 16, R);
     assign_itx_all_fn32(32, 32, );
     assign_itx_all_fn64(32, 64, R);
+    assign_itx_all_fn64(64,  4, R);
+    assign_itx_all_fn64(64,  8, R);
     assign_itx_all_fn64(64, 16, R);
     assign_itx_all_fn64(64, 32, R);
     assign_itx_all_fn64(64, 64, );
 
     int all_simd = 0;
+#if 0
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
     itx_dsp_init_arm(c, bpc, &all_simd);
@@ -303,6 +356,7 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
 #endif
 #if ARCH_X86
     itx_dsp_init_x86(c, bpc, &all_simd);
+#endif
 #endif
 #endif
 

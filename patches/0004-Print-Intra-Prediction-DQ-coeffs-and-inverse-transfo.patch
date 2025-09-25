@@ -1,12 +1,13 @@
-From d29525ecf36d77654eab6555f86da619b4658a85 Mon Sep 17 00:00:00 2001
+From 330749f9f9aa8e69372e33ce3c30544a06213519 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
-Subject: [PATCH] Print Intra Prediction High Bitdepth
+Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- av1/common/reconintra.c | 27 +++++++++++++++++++++++----
- av1/decoder/decoder.h   | 25 +++++++++++++++++++++++++
- 2 files changed, 48 insertions(+), 4 deletions(-)
+ av1/common/reconintra.c   | 27 +++++++++++++++++++++++----
+ av1/decoder/decodeframe.c |  9 +++++++++
+ av1/decoder/decoder.h     | 36 ++++++++++++++++++++++++++++++++++++
+ 3 files changed, 68 insertions(+), 4 deletions(-)
 
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
 index e4b0cf0f7..dbd6daf34 100644
@@ -92,8 +93,28 @@ index e4b0cf0f7..dbd6daf34 100644
        xd, ref, ref_stride, dst, dst_stride, mode, angle_delta, tx_size,
        disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
+diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
+index 99c263c94..53fb3b0d6 100644
+--- a/av1/decoder/decodeframe.c
++++ b/av1/decoder/decodeframe.c
+@@ -215,6 +215,15 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
+       cm->seq_params.enable_t64_resample
+ #endif  // CONFIG_TX64_SEQ_FLAG
+   );
++#if DEBUG_B_PIXELS
++  const int mi_row = dcb->xd.mi_row;
++  const int mi_col = dcb->xd.mi_col;
++  if (BLOCK_TO_DEBUG && plane == AOM_PLANE_Y) {
++    coef_dump_transpose(dqcoeff, tx_size_wide[tx_size],
++                        tx_size_high[tx_size], 3, "dq");
++    hex_dump(dst, stride, tx_size_wide[tx_size], tx_size_high[tx_size], "recon");
++  }
++#endif
+   const int width = tx_size_wide[tx_size] <= 32 ? tx_size_wide[tx_size] : 32;
+   const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
+   const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 4ebcff5c0..c2d7c30cd 100644
+index 4ebcff5c0..39c6142bd 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
 @@ -34,6 +34,7 @@
@@ -104,7 +125,7 @@ index 4ebcff5c0..c2d7c30cd 100644
  #if DEBUG_BLOCK_INFO
  #define DB_ONLY(x...) x,
  #define BLOCK_TO_DEBUG \
-@@ -50,6 +51,30 @@
+@@ -50,6 +51,41 @@
  #define DEBUG_CF_printf(fmt...)
  #endif
  
@@ -113,22 +134,33 @@ index 4ebcff5c0..c2d7c30cd 100644
 +#define PXSTRIDE(x) (x)
 +
 +static void hex_fdump(FILE *out, const uint16_t *buf, ptrdiff_t stride,
-+                             int w, int h, const char *what)
++                      int w, int h, const char *what)
 +{
-+    fprintf(out, "%s\n", what);
-+    while (h--) {
-+        int x;
-+        for (x = 0; x < w; x++)
-+            fprintf(out, " " PIX_HEX_FMT, buf[x]);
-+        buf += PXSTRIDE(stride);
-+        fprintf(out, "\n");
-+    }
++  fprintf(out, "%s\n", what);
++  while (h--) {
++    int x;
++    for (x = 0; x < w; x++)
++      fprintf(out, " " PIX_HEX_FMT, buf[x]);
++    buf += PXSTRIDE(stride);
++    fprintf(out, "\n");
++  }
 +}
 +
 +static void hex_dump(const uint16_t *buf, ptrdiff_t stride,
-+                            int w, int h, const char *what)
++                     int w, int h, const char *what)
 +{
-+    hex_fdump(stdout, buf, stride, w, h, what);
++  hex_fdump(stdout, buf, stride, w, h, what);
++}
++
++static void coef_dump_transpose(const int32_t *buf, const int w, const int h,
++                                const int len, const char *what)
++{
++  printf("%s\n", what);
++  for (int y = 0; y < w; y++) {
++    for (int x = 0; x < h; x++)
++      printf(" %*d", len, buf[x * w + y]);
++    printf("\n");
++  }
 +}
 +#endif
 +

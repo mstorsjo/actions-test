@@ -41,6 +41,7 @@ enum Tx1dType {
     N_TX_1D_TYPES,
 };
 
+// FIXME remove min and max when all inverse transforms are done
 #define decl_itx_1d_fn(name) \
 void (name)(int32_t *c, ptrdiff_t stride, int min, int max)
 typedef decl_itx_1d_fn(*itx_1d_fn);
