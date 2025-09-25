@@ -1101,7 +1101,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
             } else if (disable_mask == 3) {
                 hdr->restoration.p[p].type = DAV1D_RESTORATION_NONE;
             } else {
-                hdr->restoration.p[p].type = dav1d_get_bit(gb) * (2 - disable_mask);
+                hdr->restoration.p[p].type = dav1d_get_bit(gb) * (3 - disable_mask);
             }
 
             if (hdr->restoration.p[p].type >= DAV1D_RESTORATION_NS_WIENER) {
