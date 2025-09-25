@@ -360,7 +360,8 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     t_dim->ctx, sctx, all_skip, ts->msac.rng);
     if (all_skip) {
         *res_ctx = 0x40;
-        *txtp = lossless * WHT_WHT; /* lossless ? WHT_WHT : DCT_DCT */
+        *txtp = (!chroma && b->fsc) ? IDTX :
+                lossless * WHT_WHT; /* lossless ? WHT_WHT : DCT_DCT */
         return -1;
     }
 
