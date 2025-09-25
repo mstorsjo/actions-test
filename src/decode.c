@@ -1396,8 +1396,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                   ts->cdf.m.intra_y_set, 3);
             int y_mode_idx, y_mode_ctx;
             if (!y_set) {
-                y_mode_ctx = (t->a->midx[bx4 + bw4 - 1] != 0xff) +
-                             (t->l.midx[by4 + bh4 - 1] != 0xff);
+                y_mode_ctx = (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) +
+                             (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff);
                 y_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                  ts->cdf.m.intra_y_idx0[y_mode_ctx], 7);
                 if (y_mode_idx == 7)
@@ -1429,12 +1429,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     uint64_t mask = 0;
                     uint8_t *ptr = custom_mode_list_y;
                     *ptr = -1;
-                    if (t->l.midx[by4 + bh4 - 1] != 0xff) {
+                    if (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff) {
                         const int lmidx = t->l.midx[by4 + bh4 - 1];
                         *ptr++ = lmidx;
                         mask |= 1ULL << lmidx;
                     }
-                    if (t->a->midx[bx4 + bw4 - 1] != 0xff) {
+                    if (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) {
                         const int amidx = t->a->midx[bx4 + bw4 - 1];
                         if (amidx != custom_mode_list_y[0]) {
                             *ptr++ = amidx;
