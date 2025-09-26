@@ -116,7 +116,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
                                            { 7, 0, 2, 4, 5, 6, 6, 6 } };
     const uint8_t *uv_dir = uv_dirs[layout == DAV1D_PIXEL_LAYOUT_I422];
     const int have_tt = f->c->n_tc > 1;
-    const int sb128 = f->seq_hdr->sb128;
+    const int sb128 = f->frame_hdr->sb128;
     const ptrdiff_t y_stride = PXSTRIDE(f->cur.stride[0]);
     const ptrdiff_t uv_stride = PXSTRIDE(f->cur.stride[1]);
 

@@ -43,10 +43,10 @@ static void lr_stripe(const Dav1dFrameContext *const f, pixel *p,
     const int chroma = !!plane;
     const int ss_ver = chroma & (f->sr_cur.p.p.layout == DAV1D_PIXEL_LAYOUT_I420);
     const ptrdiff_t stride = f->sr_cur.p.stride[chroma];
-    const int sby = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver + f->seq_hdr->sb128);
+    const int sby = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver + f->frame_hdr->sb128);
     const int have_tt = f->c->n_tc > 1;
     const pixel *lpf = f->lf.lr_lpf_line[plane] +
-        have_tt * (sby * (4 << f->seq_hdr->sb128) - 4) * PXSTRIDE(stride) + x;
+        have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(stride) + x;
 
     // The first stripe of the frame is shorter by 8 luma pixel rows.
     int stripe_h = imin((64 - 8 * !y) >> ss_ver, row_h - y);
@@ -178,9 +178,9 @@ void bytefn(dav1d_lr_sbrow)(Dav1dFrameContext *const f, pixel *const dst[3],
     if (restore_planes & LR_RESTORE_Y) {
         const int h = f->sr_cur.p.p.h;
         const int w = f->sr_cur.p.p.w;
-        const int next_row_y = (sby + 1) << (6 + f->seq_hdr->sb128);
+        const int next_row_y = (sby + 1) << (6 + f->frame_hdr->sb128);
         const int row_h = imin(next_row_y - 8 * not_last, h);
-        const int y_stripe = (sby << (6 + f->seq_hdr->sb128)) - offset_y;
+        const int y_stripe = (sby << (6 + f->frame_hdr->sb128)) - offset_y;
         lr_sbrow(f, dst[0] - offset_y * PXSTRIDE(dst_stride[0]), y_stripe, w,
                  h, row_h, 0);
     }
@@ -189,10 +189,10 @@ void bytefn(dav1d_lr_sbrow)(Dav1dFrameContext *const f, pixel *const dst[3],
         const int ss_hor = f->sr_cur.p.p.layout != DAV1D_PIXEL_LAYOUT_I444;
         const int h = (f->sr_cur.p.p.h + ss_ver) >> ss_ver;
         const int w = (f->sr_cur.p.p.w + ss_hor) >> ss_hor;
-        const int next_row_y = (sby + 1) << ((6 - ss_ver) + f->seq_hdr->sb128);
+        const int next_row_y = (sby + 1) << ((6 - ss_ver) + f->frame_hdr->sb128);
         const int row_h = imin(next_row_y - (8 >> ss_ver) * not_last, h);
         const int offset_uv = offset_y >> ss_ver;
-        const int y_stripe = (sby << ((6 - ss_ver) + f->seq_hdr->sb128)) - offset_uv;
+        const int y_stripe = (sby << ((6 - ss_ver) + f->frame_hdr->sb128)) - offset_uv;
         if (restore_planes & LR_RESTORE_U)
             lr_sbrow(f, dst[1] - offset_uv * PXSTRIDE(dst_stride[1]), y_stripe,
                      w, h, row_h, 1);

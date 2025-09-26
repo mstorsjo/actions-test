@@ -646,7 +646,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
 
     // default intrabc refs
     if (!ref.ref[0] && n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
-        const int sbsz = 64 << rt->rf->seq_hdr->sb128;
+        const int sbsz = 64 << rt->rf->frm_hdr->sb128;
         mvstack[n_refmvs].mv.mv[0].x = 0;
         mvstack[n_refmvs].mv.mv[0].y = -(sbsz * 8);
         mvstack[n_refmvs].weight = 0;
@@ -836,7 +836,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
     const int n_tile_rows = n_tile_threads > 1 ? frm_hdr->tiling.rows : 1;
     const int n_blocks = rp_stride * n_tile_rows;
 
-    rf->sbsz = 16 << seq_hdr->sb128;
+    rf->sbsz = 16 << frm_hdr->sb128;
     rf->seq_hdr = seq_hdr;
     rf->frm_hdr = frm_hdr;
     rf->iw8 = (frm_hdr->width + 7) >> 3;

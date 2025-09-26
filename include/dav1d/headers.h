@@ -392,6 +392,7 @@ typedef struct Dav1dFrameHeader {
     uint8_t switchable_motion_mode;
     uint8_t use_ref_frame_mvs;
     uint8_t refresh_context;
+    uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {
         uint8_t uniform;
         uint8_t n_bytes;

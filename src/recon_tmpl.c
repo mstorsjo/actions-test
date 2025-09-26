@@ -2650,7 +2650,7 @@ void bytefn(dav1d_filter_sbrow_deblock_cols)(Dav1dFrameContext *const f, const i
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *mask = f->lf.mask + (sby >> !f->seq_hdr->sb128) * f->sb128w;
+    Av1Filter *mask = f->lf.mask + (sby >> !f->frame_hdr->sb128) * f->sb128w;
     bytefn(dav1d_loopfilter_sbrow_cols)(f, p, mask, sby,
                                         f->lf.start_of_tile_row[sby]);
 }
@@ -2663,7 +2663,7 @@ void bytefn(dav1d_filter_sbrow_deblock_rows)(Dav1dFrameContext *const f, const i
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *mask = f->lf.mask + (sby >> !f->seq_hdr->sb128) * f->sb128w;
+    Av1Filter *mask = f->lf.mask + (sby >> !f->frame_hdr->sb128) * f->sb128w;
     if (f->c->inloop_filters & DAV1D_INLOOPFILTER_DEBLOCK &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
@@ -2686,8 +2686,8 @@ void bytefn(dav1d_filter_sbrow_cdef)(Dav1dTaskContext *const tc, const int sby) 
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *prev_mask = f->lf.mask + ((sby - 1) >> !f->seq_hdr->sb128) * f->sb128w;
-    Av1Filter *mask = f->lf.mask + (sby >> !f->seq_hdr->sb128) * f->sb128w;
+    Av1Filter *prev_mask = f->lf.mask + ((sby - 1) >> !f->frame_hdr->sb128) * f->sb128w;
+    Av1Filter *mask = f->lf.mask + (sby >> !f->frame_hdr->sb128) * f->sb128w;
     const int start = sby * sbsz;
     if (sby) {
         const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;

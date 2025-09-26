@@ -780,9 +780,10 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 #endif
 
     // tile data
+    hdr->sb128 = hdr->frame_type & 1 ? seqhdr->sb128 : !!seqhdr->sb128;
     hdr->tiling.uniform = dav1d_get_bit(gb);
-    const int sbsz_min1 = (64 << seqhdr->sb128) - 1;
-    const int sbsz_log2 = 6 + seqhdr->sb128;
+    const int sbsz_min1 = (64 << hdr->sb128) - 1;
+    const int sbsz_log2 = 6 + hdr->sb128;
     const int sbw = (hdr->width + sbsz_min1) >> sbsz_log2;
     const int sbh = (hdr->height + sbsz_min1) >> sbsz_log2;
     const int max_tile_width_sb = 4096 >> sbsz_log2;
@@ -1057,8 +1058,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 #endif
 
     if (!hdr->all_lossless && seqhdr->gdf /* && not large-scale tiles */) {
-        const int gdf_bs = hdr->frame_type == DAV1D_FRAME_TYPE_KEY ?
-                           128 : imax(128, 64 << seqhdr->sb128);
+        const int gdf_bs = 128 << (hdr->sb128 == 2);
         hdr->gdf.enabled = dav1d_get_bit(gb);
         if (hdr->gdf.enabled) {
             if (imax(hdr->width, hdr->height) > gdf_bs)

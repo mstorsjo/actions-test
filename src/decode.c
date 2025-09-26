@@ -1208,7 +1208,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (has_luma) {
         // FIXME some of these can be pre-calculated at the start of a frame
         const int gdf_bs = f->frame_hdr->frame_type == DAV1D_FRAME_TYPE_KEY ?
-                           32 : imax(32, 16 << f->seq_hdr->sb128);
+                           32 : imax(32, 16 << f->frame_hdr->sb128);
         if (!((t->bx | t->by) & (gdf_bs - 1))) {
             if (f->frame_hdr->gdf.enabled == DAV1D_ADAPTIVE &&
                 imax(f->cur.p.w, f->cur.p.h) > 4 * gdf_bs)
@@ -1235,7 +1235,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         (!b->skip_txfm || f->frame_hdr->cdef.on_skiptx))
     {
         // FIXME 256x256 block size support
-        const int idx = f->seq_hdr->sb128 ? ((t->bx & 16) >> 4) +
+        const int idx = f->frame_hdr->sb128 ? ((t->bx & 16) >> 4) +
                                             ((t->by & 16) >> 3) : 0;
         if (t->cur_sb_cdef_idx_ptr[idx] == -1) {
             int v;
@@ -1311,10 +1311,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // delta-q/lf
-    if (!((t->bx | t->by) & (31 >> !f->seq_hdr->sb128))) {
+    if (!((t->bx | t->by) & (31 >> !f->frame_hdr->sb128))) {
         const int prev_qidx = ts->last_qidx;
         const int have_delta_q = f->frame_hdr->delta.q.present &&
-            (bs != (f->seq_hdr->sb128 ? BS_128x128 : BS_64x64) || !b->skip_txfm);
+            (bs != (f->frame_hdr->sb128 ? BS_128x128 : BS_64x64) || !b->skip_txfm);
 
         uint32_t prev_delta_lf = ts->last_delta_lf.u32;
 
@@ -1828,7 +1828,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (!b->mv[0].n) {
             // I don't know if this can actually happen, but AVM has code here
             // to force the refmv to a nonzero value
-            const int sbsz = 64 << f->seq_hdr->sb128;
+            const int sbsz = 64 << f->frame_hdr->sb128;
             if (t->by - f->sb_step < ts->tiling.row_start) {
                 b->mv[0].x = -(8 * (sbsz + 256));
             } else {
@@ -1891,9 +1891,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             src_top    += border_top - src_top;
         }
 
-        const int sbx = (t->bx >> (4 + f->seq_hdr->sb128)) << (6 + f->seq_hdr->sb128);
-        const int sby = (t->by >> (4 + f->seq_hdr->sb128)) << (6 + f->seq_hdr->sb128);
-        const int sb_size = 1 << (6 + f->seq_hdr->sb128);
+        const int sbx = (t->bx >> (4 + f->frame_hdr->sb128)) << (6 + f->frame_hdr->sb128);
+        const int sby = (t->by >> (4 + f->frame_hdr->sb128)) << (6 + f->frame_hdr->sb128);
+        const int sb_size = 1 << (6 + f->frame_hdr->sb128);
         // check for overlap with current superblock
         if (src_bottom > sby && src_right > sbx) {
             if (src_top - border_top >= src_bottom - sby) {
@@ -2912,8 +2912,8 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         if (bp == PARTITION_INVALID) {
 #if DEBUG_BLOCK_INFO
-            if (0 && bs == (f->seq_hdr->sb128 == 2 ? BS_256x256 :
-                            f->seq_hdr->sb128 == 1 ? BS_128x128 : BS_64x64))
+            if (0 && bs == (f->frame_hdr->sb128 == 2 ? BS_256x256 :
+                            f->frame_hdr->sb128 == 1 ? BS_128x128 : BS_64x64))
                 printf("poc=%d,y=%d,x=%d,bs=%d,r=%d\n",
                        f->frame_hdr->frame_offset, t->by, t->bx, bs, ts->msac.rng);
 #endif
@@ -3505,7 +3505,7 @@ static int check_trailing_bits_after_symbol_coder(const MsacContext *const msac)
 int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     const Dav1dFrameContext *const f = t->f;
     const enum BlockSize root_bs =
-        (const uint8_t[]) { BS_64x64, BS_128x128, BS_256x256 }[f->seq_hdr->sb128];
+        (const uint8_t[]) { BS_64x64, BS_128x128, BS_256x256 }[f->frame_hdr->sb128];
     const enum BlockSize c_root_bs =
         f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400 ? BS_INVALID : root_bs;
     Dav1dTileState *const ts = t->ts;
@@ -3513,7 +3513,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     const int sb_step = f->sb_step;
     const int tile_row = ts->tiling.row, tile_col = ts->tiling.col;
     const int col_sb_start = f->frame_hdr->tiling.col_start_sb[tile_col];
-    const int col_sb128_start = col_sb_start >> !f->seq_hdr->sb128;
+    const int col_sb128_start = col_sb_start >> !f->frame_hdr->sb128;
 
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
         dav1d_refmvs_tile_sbrow_init(&t->rt, &f->rf, ts->tiling.col_start,
@@ -3541,7 +3541,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 return 1;
             if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, NULL))
                 return 1;
-            if (t->bx & 16 || f->seq_hdr->sb128)
+            if (t->bx & 16 || f->frame_hdr->sb128)
                 t->a++;
         }
         f->bd_fn.backup_ipred_edge(t);
@@ -3615,7 +3615,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         int dir = 0;
         if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
             return 1;
-        if (t->bx & 16 || f->seq_hdr->sb128) {
+        if (t->bx & 16 || f->frame_hdr->sb128) {
             t->a++;
             t->lf_mask++;
         }
@@ -3839,7 +3839,7 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         f->lf.cdef_buf_sbh = f->sbh;
     }
 
-    const int sb128 = f->seq_hdr->sb128;
+    const int sb128 = f->frame_hdr->sb128;
     const int num_lines = c->n_tc > 1 ? f->sbh * 4 << sb128 : 12;
     y_stride = f->sr_cur.p.stride[0], uv_stride = f->sr_cur.p.stride[1];
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
@@ -4092,7 +4092,7 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
         for (int sby = f->frame_hdr->tiling.row_start_sb[tile_row];
              sby < sbh_end; sby++)
         {
-            t->by = sby << (4 + f->seq_hdr->sb128);
+            t->by = sby << (4 + f->frame_hdr->sb128);
             const int by_end = (t->by + f->sb_step) >> 1;
             if (f->frame_hdr->use_ref_frame_mvs) {
                 f->c->refmvs_dsp.load_tmvs(&f->rf, tile_row,
@@ -4412,8 +4412,8 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     f->bh = ((f->frame_hdr->height + 7) >> 3) << 1;
     f->sb128w = (f->bw + 31) >> 5;
     f->sb128h = (f->bh + 31) >> 5;
-    f->sb_shift = 4 + f->seq_hdr->sb128;
-    f->sb_step = 16 << f->seq_hdr->sb128;
+    f->sb_shift = 4 + f->frame_hdr->sb128;
+    f->sb_step = 16 << f->frame_hdr->sb128;
     f->sbh = (f->bh + f->sb_step - 1) >> f->sb_shift;
     f->b4_stride = (f->bw + 31) & ~31;
     f->bitdepth_max = (1 << f->cur.p.bpc) - 1;
