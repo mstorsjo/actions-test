@@ -449,7 +449,7 @@ typedef struct Dav1dFrameHeader {
             uint8_t /*enum Dav1dRestorationType*/ type;
             struct {
                 uint8_t frame_filters_on;
-                uint8_t num_classes;
+                uint8_t num_classes, temporal;
             } ns;
         } p[3 /* plane */];
         uint8_t unit_size[2 /* y, uv */];

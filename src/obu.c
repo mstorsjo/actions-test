@@ -1109,7 +1109,15 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
             if (hdr->restoration.p[p].type >= DAV1D_RESTORATION_NS_WIENER) {
                 hdr->restoration.p[p].ns.frame_filters_on = dav1d_get_bit(gb);
                 if (hdr->restoration.p[p].ns.frame_filters_on) {
-                    // FIXME temporal/refs
+                    if (hdr->frame_type & 1 && !hdr->error_resilient_mode)
+                        hdr->restoration.p[p].ns.temporal = dav1d_get_bit(gb);
+                    if (hdr->restoration.p[p].ns.temporal) {
+                        // FIXME find refidx
+                    } else {
+                        const int val = dav1d_get_bits(gb, 3);
+                        hdr->restoration.p[p].ns.num_classes =
+                            1 + val + imax(val - 3, 0) + imax(val - 5, 0) * 2;
+                    }
                 } else {
                     hdr->restoration.p[p].ns.num_classes = 1;
                 }
