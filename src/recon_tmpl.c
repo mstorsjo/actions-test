@@ -853,7 +853,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         } \
         DEBUG_CF_printf("%*sPost-dc_tok[pos=0,ctx=%d|%d|%d|%d,freq=%s,plane=%s,%d]: r=%d\n", \
                         depth, "", t_dim->ctx, ctx, tcq, \
-                        dc_tok < lim ? -1 : hr_ctx, \
+                        dc_tok < lim || !hi_cdf ? -1 : hr_ctx, \
                         lim == 5 ? "lo" : "hi", chroma ? "uv" : "y", \
                         dc_tok, ts->msac.rng); \
         tcq_state = tcq_enabled * -0x80000000; \
