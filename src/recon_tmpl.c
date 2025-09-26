@@ -1516,15 +1516,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->w, f->bw - t->bx));
     dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
-#define set_ctx(rep_macro) \
-    for (int y = 0; y < t_dim->h; y++) { \
-        rep_macro(txtp_map, 0, pri_txtp); \
-        txtp_map += 32; \
-    }
-    const enum TxfmType pri_txtp = txtp & 0xf;
-    uint8_t *txtp_map = &t->scratch.txtp_map[by4 * 32 + bx4];
-    case_set_upto16(t_dim->lw);
-#undef set_ctx
+    t->scratch.txtp_map[by4 * 32 + bx4] = txtp & 0xf;
 
     // FIXME predict
     // ..
@@ -1797,8 +1789,8 @@ chroma: {}
         if (b->skip_txfm) {
             cf_ctx = 0x40;
         } else {
-            enum TxfmType txtp = t->scratch.txtp_map[(t->cby & 31) * 32 +
-                                                     (t->cbx & 31)];
+            enum TxfmType txtp = t->scratch.txtp_map[(t->by & 31) * 32 +
+                                                     (t->bx & 31)];
             const int eob = decode_coefs(t, DB_ONLY(depth + 1)
                                          &t->a->ccoef[pl][cbx4],
                                          &t->l.ccoef[pl][cby4], uvtx, cbs,
