@@ -3241,7 +3241,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     case PARTITION_H4B: {
         const int eh4 = qh4 >> 1;
         assert(eh4 > 0);
-        const int sub4 = (eh4 >> f->ss_ver) > 0;
+        const int sub4 = bs == cbs && (eh4 >> f->ss_ver) > 0;
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][2],
