@@ -428,7 +428,7 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
            hdr->mrls, hdr->cfl, hdr->mhccp,
            dav1d_get_bits_pos(gb) - init_bit_pos);
 #endif
-    hdr->tip = dav1d_get_bit(gb) ? 1 + dav1d_get_bit(gb) : 1;
+    hdr->tip = dav1d_get_bit(gb) ? 1 + dav1d_get_bit(gb) : 0;
     if (hdr->tip)
         hdr->tip_hole_fill = dav1d_get_bit(gb);
     hdr->mv_traj = dav1d_get_bit(gb);
