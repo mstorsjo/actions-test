@@ -836,7 +836,9 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
     hdr->tiling.col_start_sb[hdr->tiling.cols] = sbw;
     hdr->tiling.row_start_sb[hdr->tiling.rows] = sbh;
     if (hdr->tiling.log2_cols || hdr->tiling.log2_rows) {
-        hdr->tiling.update = dav1d_get_bits(gb, hdr->tiling.log2_cols + hdr->tiling.log2_rows);
+        if (!seqhdr->avg_cdf_type)
+            hdr->tiling.update = dav1d_get_bits(gb, hdr->tiling.log2_cols +
+                                                    hdr->tiling.log2_rows);
         if (hdr->tiling.update >= hdr->tiling.cols * hdr->tiling.rows)
             goto error;
         hdr->tiling.n_bytes = dav1d_get_bits(gb, 2) + 1;
