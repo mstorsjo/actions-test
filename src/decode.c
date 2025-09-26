@@ -1570,8 +1570,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             DIAG_DOWN_RIGHT_PRED, VERT_LEFT_PRED,
                             VERT_RIGHT_PRED, HOR_DOWN_PRED, HOR_UP_PRED,
                         };
+                        static const uint8_t intra_dir_mode_y_to_uv_idx[] = {
+                            2, 4, 0, 5, 3, 6, 1, 7
+                        };
                         int idx = uv_mode_idx - 5 - uv_mode_ctx;
-                        idx += idx >= midx / 7;
+                        idx += uv_mode_ctx &&
+                               idx >= intra_dir_mode_y_to_uv_idx[midx / 7];
                         b->uv_mode = default_mode_list_uv[idx];
                         b->uv_angle = 0;
                     }
