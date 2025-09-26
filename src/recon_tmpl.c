@@ -1470,6 +1470,31 @@ static int warp_affine(Dav1dTaskContext *const t,
     return 0;
 }
 
+static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
+                                           const enum IntraPredMode mode,
+                                           const int angle_delta, const int mrl_adj)
+{
+    if ((unsigned) mode - 1 > VERT_LEFT_PRED - 1) return mode;
+
+    // map directional modes
+    const int angle = av1_mode_to_angle_map[mode - 1] + angle_delta * 3 + mrl_adj;
+    static const uint8_t thresh[] = { 61, 73, 82, 86 };
+    const int rect = t_dim->lw - t_dim->lh;
+    // FIXME below, we should return 180 +/- angle after mode remapping,
+    // otherwise the actual intra prediction won't work correctly
+    if (rect > 0) {
+        assert(rect <= 4);
+        if (angle > 270 - thresh[rect - 1])
+            return DIAG_DOWN_LEFT_PRED;
+    } else if (rect < 0) {
+        assert(rect >= -4);
+        if (angle < thresh[-1 - rect])
+            return HOR_UP_PRED;
+    }
+
+    return mode;
+}
+
 static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              const enum RectTxfmSize tx, Av1Block *const b)
 {
@@ -1481,22 +1506,9 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
     const enum IntraPredMode orig_y_mode = b->y_mode;
-    if (b->intra && (unsigned) b->y_mode - 1 <= VERT_LEFT_PRED - 1) {
-        // map directional modes
-        const int angle = av1_mode_to_angle_map[b->y_mode - 1] + b->y_angle * 3 +
-                          (b->mrl_index == 1) - (b->mrl_index == 2);
-        static const uint8_t thresh[] = { 61, 73, 82, 86 };
-        const int rect = t_dim->lw - t_dim->lh;
-        if (rect > 0) {
-            assert(rect <= 4);
-            if (angle > 270 - thresh[rect - 1])
-                b->y_mode = DIAG_DOWN_LEFT_PRED;
-        } else if (rect < 0) {
-            assert(rect >= -4);
-            if (angle < thresh[-1 - rect])
-                b->y_mode = HOR_UP_PRED;
-        }
-    }
+    if (b->intra)
+        b->y_mode = wide_angle_remap(t_dim, b->y_mode, b->y_angle,
+                                     (b->mrl_index == 1) - (b->mrl_index == 2));
 
     // decode coefficients
     uint8_t cf_ctx;
@@ -1784,6 +1796,9 @@ chroma: {}
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
     int ctw = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     int cth = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
+    const enum IntraPredMode orig_uv_mode = b->uv_mode;
+    if (b->intra)
+        b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, b->uv_angle, 0);
     for (int pl = 0; pl < 2; pl++) {
         uint8_t cf_ctx;
         if (b->skip_txfm) {
@@ -1802,6 +1817,7 @@ chroma: {}
         dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx, ctw);
         dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx, cth);
     }
+    b->uv_mode = orig_uv_mode;
 #else
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
