@@ -59,15 +59,16 @@ static inline void ctx_refill(MsacContext *const s) {
 int dav1d_msac_decode_subexp(MsacContext *const s, const int ref,
                              const int n, unsigned k)
 {
-    assert(n >> k == 8);
-
-    unsigned a = 0;
-    if (dav1d_msac_decode_bool_bypass(s)) {
-        if (dav1d_msac_decode_bool_bypass(s))
-            k += dav1d_msac_decode_bool_bypass(s) + 1;
-        a = 1 << k;
+    int v = 0;
+    for (int i = 0, b = k, a = 1 << k;; v += a, b += !!i, a <<= !!i, i++) {
+        if (n <= v * 3 + a) {
+            v += dav1d_msac_decode_uniform(s, n - v);
+            break;
+        } else if (!dav1d_msac_decode_bool_bypass(s)) {
+            v += dav1d_msac_decode_bools_bypass(s, b);
+            break;
+        }
     }
-    const unsigned v = dav1d_msac_decode_bools_bypass(s, k) + a;
     return ref * 2 <= n ? inv_recenter(ref, v) :
                           n - 1 - inv_recenter(n - 1 - ref, v);
 }

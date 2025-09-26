@@ -106,6 +106,7 @@ EXTERN const Dav1dWarpedMotionParams dav1d_default_wm_params;
 
 EXTERN const int8_t dav1d_cdef_directions[12][2];
 
+EXTERN const int8_t dav1d_wiener_ns_filters[64][16];
 EXTERN const int8_t dav1d_ns_wiener_coef_range_y[16][2];
 EXTERN const int8_t dav1d_ns_wiener_coef_range_uv[18][2];
 EXTERN const uint16_t dav1d_sgr_params[16][2];

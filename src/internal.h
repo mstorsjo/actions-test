@@ -345,6 +345,10 @@ struct Dav1dFrameContext {
         int (*lowest_pixel_mem)[7][2];
         int lowest_pixel_mem_sz;
     } tile_thread;
+
+    struct {
+        int8_t filter[3][16][32];
+    } ns_wiener;
 };
 
 struct Dav1dTileState {
