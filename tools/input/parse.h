@@ -71,20 +71,23 @@ static int leb(const uint8_t *ptr, int sz, size_t *const len) {
 
 static inline int parse_obu_header(const uint8_t *buf, int buf_size,
                                    size_t *const obu_size,
-                                   enum Dav1dObuType *const type,
-                                   const int allow_implicit_size)
+                                   enum Dav1dObuType *const type)
 {
-    int ret, extension_flag, has_size_flag;
+    int ret, extension_flag;
 
     if (!buf_size)
         return -1;
-    if (*buf & 0x80) // obu_forbidden_bit
-        return -1;
 
-    *type = (*buf & 0x78) >> 3;
-    extension_flag = (*buf & 0x4) >> 2;
-    has_size_flag  = (*buf & 0x2) >> 1;
-    // ignore obu_reserved_1bit
+    ret = leb(buf, buf_size, obu_size);
+    if (ret < 0)
+        return -1;
+    buf += ret;
+    buf_size -= ret;
+
+    if (!buf_size)
+        return -1;
+    extension_flag = *buf >> 7;
+    *type = (*buf & 0x7c) >> 2;
     buf++;
     buf_size--;
 
@@ -95,17 +98,11 @@ static inline int parse_obu_header(const uint8_t *buf, int buf_size,
         buf_size--;
         // ignore fields
     }
-
-    if (has_size_flag) {
-        ret = leb(buf, buf_size, obu_size);
-        if (ret < 0)
-            return -1;
-        return (int) *obu_size + ret + 1 + extension_flag;
-    } else if (!allow_implicit_size)
+    if (*obu_size < 1U + extension_flag)
         return -1;
+    *obu_size -= 1 + extension_flag;
 
-    *obu_size = buf_size;
-    return buf_size + 1 + extension_flag;
+    return (int) *obu_size + ret + 1 + extension_flag;
 }
 
 #endif /* DAV1D_INPUT_PARSE_H */

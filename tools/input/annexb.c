@@ -75,7 +75,7 @@ static int annexb_probe(const uint8_t *data) {
     size_t obu_size;
     enum Dav1dObuType type;
     ret = parse_obu_header(data + cnt, imin(PROBE_SIZE - cnt, (int) obu_unit_size),
-                           &obu_size, &type, 1);
+                           &obu_size, &type);
     if (ret < 0 || type != DAV1D_OBU_TD || obu_size > 0)
         return 0;
     cnt += (int)obu_unit_size;
@@ -91,7 +91,7 @@ static int annexb_probe(const uint8_t *data) {
         frame_unit_size -= ret;
 
         ret = parse_obu_header(data + cnt, imin(PROBE_SIZE - cnt, (int) obu_unit_size),
-                               &obu_size, &type, 1);
+                               &obu_size, &type);
         if (ret < 0)
             return 0;
         cnt += (int)obu_unit_size;

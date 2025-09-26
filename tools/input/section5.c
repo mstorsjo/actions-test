@@ -50,7 +50,7 @@ static int section5_probe(const uint8_t *data) {
     size_t obu_size;
     enum Dav1dObuType type;
     ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
-                           &obu_size, &type, 0);
+                           &obu_size, &type);
     if (ret < 0 || type != DAV1D_OBU_TD || obu_size > 0)
         return 0;
     cnt += ret;
@@ -59,7 +59,7 @@ static int section5_probe(const uint8_t *data) {
     int seq = 0;
     while (cnt < PROBE_SIZE) {
         ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
-                               &obu_size, &type, 0);
+                               &obu_size, &type);
         if (ret < 0)
             return 0;
         cnt += ret;
@@ -103,21 +103,21 @@ static int section5_open(Section5InputContext *const c, const char *const file,
     for (;;) {
         uint8_t byte[2];
 
-        if (fread(&byte[0], 1, 1, c->f) < 1)
-            break;
-        const enum Dav1dObuType obu_type = (byte[0] >> 3) & 0xf;
-        if (obu_type == DAV1D_OBU_TD)
-            (*num_frames)++;
-        const int has_length_field = byte[0] & 0x2;
-        if (!has_length_field)
-            return -1;
-        const int has_extension = byte[0] & 0x4;
-        if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
-            return -1;
         size_t len;
         const int res = leb128(c->f, &len);
         if (res < 0)
+            break;
+        if (fread(&byte[0], 1, 1, c->f) < 1)
             return -1;
+        const enum Dav1dObuType obu_type = (byte[0] >> 2) & 0x1f;
+        if (obu_type == DAV1D_OBU_TD)
+            (*num_frames)++;
+        const int has_extension = byte[0] >> 7;
+        if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
+            return -1;
+        if (len < 1U + has_extension)
+            return -1;
+        len -= 1 + has_extension;
         fseeko(c->f, len, SEEK_CUR); // skip packet
     }
     fseeko(c->f, 0, SEEK_SET);
@@ -131,32 +131,32 @@ static int section5_read(Section5InputContext *const c, Dav1dData *const data) {
     for (int first = 1;; first = 0) {
         uint8_t byte[2];
 
-        if (fread(&byte[0], 1, 1, c->f) < 1) {
+        size_t len;
+        const int res = leb128(c->f, &len);
+        if (res < 0) {
             if (!first && feof(c->f)) break;
             return -1;
         }
-        const enum Dav1dObuType obu_type = (byte[0] >> 3) & 0xf;
+        if (fread(&byte[0], 1, 1, c->f) < 1)
+            return -1;
+        const enum Dav1dObuType obu_type = (byte[0] >> 2) & 0x1f;
         if (first) {
             if (obu_type != DAV1D_OBU_TD)
                 return -1;
         } else {
             if (obu_type == DAV1D_OBU_TD) {
                 // include TD in next packet
-                fseeko(c->f, -1, SEEK_CUR);
+                fseeko(c->f, -(1 + res), SEEK_CUR);
                 break;
             }
         }
-        const int has_length_field = byte[0] & 0x2;
-        if (!has_length_field)
-            return -1;
-        const int has_extension = !!(byte[0] & 0x4);
+        const int has_extension = byte[0] >> 7;
         if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
             return -1;
-        size_t len;
-        const int res = leb128(c->f, &len);
-        if (res < 0)
+        if (len < 1U + has_extension)
             return -1;
-        total_bytes += 1 + has_extension + res + len;
+        len -= 1 + has_extension;
+        total_bytes += 1U + has_extension + res + len;
         fseeko(c->f, len, SEEK_CUR); // skip packet, we'll read it below
     }
 
