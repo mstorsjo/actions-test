@@ -1104,11 +1104,11 @@ static void read_coef_tree(Dav1dTaskContext *const t,
         if (!(t->frame_thread.pass & 1)) {
             assert(dst);
             if (eob >= 0) {
-                if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS)
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                     coef_dump(cf, imin(t_dim->h, 8) * 4, imin(t_dim->w, 8) * 4, 3, "dq");
                 dsp->itx.itxfm_add[ytx][txtp](dst, f->cur.stride[0], cf, eob
                                               HIGHBD_CALL_SUFFIX);
-                if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS)
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                     hex_dump(dst, f->cur.stride[0], t_dim->w * 4, t_dim->h * 4, "recon");
             }
         }
@@ -1545,7 +1545,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                          4 * f->bw - 4 * t->bx,
                                          4 * f->bh - 4 * t->by
                                          HIGHBD_CALL_SUFFIX);
-        if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS) {
+        if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(edge - n_pel_left, n_pel_left, n_pel_left, 1, "l");
             hex_dump(edge, 0, 1, 1, "tl");
             hex_dump(edge + 1, n_pel_above, n_pel_above, 1, "t");
@@ -2509,7 +2509,7 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
         }
     }
 
-    if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS) {
+    if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
         hex_dump(dst, f->cur.stride[0], b_dim[0] * 4, b_dim[1] * 4, "y-pred");
         if (has_chroma) {
             hex_dump(&((pixel *) f->cur.data[1])[uvdstoff], f->cur.stride[1],
@@ -2604,13 +2604,13 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
                             dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4 + y], cf_ctx, cth);
                         }
                         if (eob >= 0) {
-                            if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS)
+                            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                                 coef_dump(cf, uvtx->h * 4, uvtx->w * 4, 3, "dq");
                             dsp->itx.itxfm_add[b->uvtx]
                                               [txtp](&uvdst[4 * x],
                                                      f->cur.stride[1],
                                                      cf, eob HIGHBD_CALL_SUFFIX);
-                            if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS)
+                            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                                 hex_dump(&uvdst[4 * x], f->cur.stride[1],
                                          uvtx->w * 4, uvtx->h * 4, "recon");
                         }

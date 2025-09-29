@@ -1,15 +1,15 @@
-From 9ba44a3e05d4f66900c786d98a12d1ad30a4f23c Mon Sep 17 00:00:00 2001
+From d29525ecf36d77654eab6555f86da619b4658a85 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH] Print Intra Prediction High Bitdepth
 
 ---
- av1/common/reconintra.c | 24 ++++++++++++++++++++----
+ av1/common/reconintra.c | 27 +++++++++++++++++++++++----
  av1/decoder/decoder.h   | 25 +++++++++++++++++++++++++
- 2 files changed, 45 insertions(+), 4 deletions(-)
+ 2 files changed, 48 insertions(+), 4 deletions(-)
 
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index e4b0cf0f7..13ed62602 100644
+index e4b0cf0f7..dbd6daf34 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -61,7 +61,7 @@ index e4b0cf0f7..13ed62602 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1488,6 +1492,18 @@ static void build_intra_predictors_high(
+@@ -1488,6 +1492,21 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -69,18 +69,21 @@ index e4b0cf0f7..13ed62602 100644
 +  const int mi_row = xd->mi_row;
 +  const int mi_col = xd->mi_col;
 +  if (BLOCK_TO_DEBUG) {
-+    hex_dump(left_col_1st, num_left_pixels_needed,
-+             num_left_pixels_needed, 1, "l");
-+    hex_dump(&above_row_1st[-1], 1, 1, 1, "tl");
-+    hex_dump(above_row_1st, num_top_pixels_needed,
-+             num_top_pixels_needed, 1, "t");
-+    hex_dump(dst, dst_stride, txwpx, txhpx, "y-intra-pred");
++    // FIXME only print luma for now
++    if (plane == AOM_PLANE_Y) {
++      hex_dump(left_col_1st, num_left_pixels_needed,
++               num_left_pixels_needed, 1, "l");
++      hex_dump(&above_row_1st[-1], 1, 1, 1, "tl");
++      hex_dump(above_row_1st, num_top_pixels_needed,
++               num_top_pixels_needed, 1, "t");
++      hex_dump(dst, dst_stride, txwpx, txhpx, "y-intra-pred");
++    }
 +  }
 +#endif
  
    // Apply sub-block based filter for DC/smooth intra mode
    apply_sub_block_based_refinement_filter &=
-@@ -1578,7 +1594,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1578,7 +1597,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  

@@ -59,3 +59,31 @@ jobs:
             diff -uw {avm,dav1d}.sdp${sdp}.log
             wc -l avm.sdp${sdp}.log
         done
+    - name: build AVM v11.0.0 (with reconstruction validation)
+      run: |
+        cd avm
+        sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' av1/decoder/decoder.h
+        sed -i 's|mi_row < 16|mi_row < 4|' av1/decoder/decoder.h
+        sed -i 's|mi_col < 16|mi_col < 8|' av1/decoder/decoder.h
+        git diff
+        cd x86-64
+        make -j$(nproc) aomdec
+        cd ../..
+    - name: build dav2d (with reconstruction validation)
+      run: |
+        sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/recon.h
+        sed -i 's|t->by < 16|t->by < 4|' src/recon.h
+        sed -i 's|t->bx < 16|t->bx < 8|' src/recon.h
+        git diff
+        cd build
+        ninja
+        cd ..
+    - name: run tests (with reconstruction validation)
+      run: |
+        for sdp in 0; do
+            file="media/avm-v11.0.0-sdp${sdp}.ivf"
+            avm/x86-64/aomdec $file -o /dev/null > avm.sdp${sdp}.log
+            build/tools/dav1d -i $file --muxer=null --threads=1 --quiet > dav1d.sdp${sdp}.log
+            diff -uw {avm,dav1d}.sdp${sdp}.log
+            wc -l avm.sdp${sdp}.log
+        done
