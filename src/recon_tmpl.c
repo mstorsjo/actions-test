@@ -93,6 +93,8 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         case TX_8X8:   MERGE_CTX(a, uint16_t, 0x4040);
         case TX_16X16: MERGE_CTX(a, uint32_t, 0x40404040U);
         case TX_32X32: MERGE_CTX(a, uint64_t, 0x4040404040404040ULL);
+        case TX_64X64: ca = (*(const uint64_t *) a |
+                             *(const uint64_t *) &a[8]) != 0x4040404040404040ULL;
         }
         switch (t_dim->lh) {
         default: assert(0); /* fall-through */
@@ -100,6 +102,8 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         case TX_8X8:   MERGE_CTX(l, uint16_t, 0x4040);
         case TX_16X16: MERGE_CTX(l, uint32_t, 0x40404040U);
         case TX_32X32: MERGE_CTX(l, uint64_t, 0x4040404040404040ULL);
+        case TX_64X64: cl = (*(const uint64_t *) l |
+                             *(const uint64_t *) &l[8]) != 0x4040404040404040ULL;
         }
 #undef MERGE_CTX
 
@@ -1582,17 +1586,27 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
     assert(bs != BS_INVALID);
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
+    const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
+    const uint8_t csplit[6][3] = {
+        [BS_256x256] = {  BS_64x64, BS_128x64, BS_128x128 },
+        [BS_256x128] = {  BS_64x64, BS_128x64, BS_128x128 },
+        [BS_128x256] = {  BS_64x64, BS_128x64, BS_128x128 },
+        [BS_128x128] = {  BS_64x64, BS_128x64, BS_128x128 },
+        [BS_128x64]  = {  BS_64x64, BS_128x64, BS_128x64  },
+        [BS_64x128]  = {  BS_64x64, BS_64x64,  BS_64x128  },
+    };
     if (imax(bw4, bh4) > 16) {
         const int y_start = t->by, y_end = imin(y_start + bh4, f->bh);
         const int x_start = t->bx, x_end = imin(x_start + bw4, f->bw);
-        for (; t->by < y_end; t->by += 16) {
-            for (; t->bx < x_end; t->bx += 16) {
+        for (int y = 0; t->by < y_end; t->by += 16, y++) {
+            for (int x = 0; t->bx < x_end; t->bx += 16, x++) {
                 // FIXME it's possible we can call directly into a sub-function
                 // here that manages one transform-block, since tx_part=none
                 // (at least if not lossless)
                 bytefn(dav1d_recon_b_intra)(t, DB_ONLY(depth)
                     lbs == BS_INVALID ? BS_INVALID : BS_64x64,
-                    cbs == BS_INVALID ? BS_INVALID : BS_64x64,
+                    cbs == BS_INVALID || y & ss_ver || x & ss_hor ?
+                                        BS_INVALID : csplit[cbs][ss_hor + ss_ver],
                     intra_edge_flags, b);
                 // FIXME this may be correct only for luma, whereas chroma may
                 // have to be dealt with at 64x64 *subsampled* pixels (i.e.
@@ -1799,7 +1813,6 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
 
     // chroma
 chroma: {}
-    const int ss_ver = f->ss_ver, ss_hor = f->ss_hor;
     const int cbx4 = (t->cbx & 31) >> f->ss_hor, cby4 = (t->cby & 31) >> f->ss_ver;
     coef *const cf = bitfn(t->cf);
     const enum RectTxfmSize uvtx = dav1d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
