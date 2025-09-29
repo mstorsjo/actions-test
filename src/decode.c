@@ -3544,16 +3544,17 @@ static void read_restoration_info(Dav1dTaskContext *const t,
                 if (!found) break;
             }
             const unsigned mask = masks[s];
-            // FIXME read sym bit (chroma only) if ref filter subset "s" is
-            // assymetric and has space
+            const int asym = p && s &&
+                dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
             for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
                 if (!(m & 1)) continue;
                 filter[i] = dav1d_msac_decode_4way(&ts->msac,
                                 ref_filter[i] - cf_range[i][1],
                                 ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
                             cf_range[i][1];
-                // FIXME if sym is set and this coef is assymetric, insert an
-                // extra coef here
+                if (asym && i >= 6) {
+                    // FIXME insert an extra coef here
+                }
             }
             const int bidx = bank->bank_idx[n] = (1 + bank->bank_idx[n]) & 3;
             memcpy(bank->filter[bidx][n], filter, sizeof(*filter) * (16 + 2 * !!p));

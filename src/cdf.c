@@ -96,6 +96,8 @@ static const CdfDefaultContext default_cdf = {
         }, .wiener_ns_len = {
             { CDF1(16384), 61 },
             { CDF1(16384), 31 },
+        }, .wiener_ns_sym = {
+            CDF1(16384), 57
         }, .wiener_ns_cf = {
             CDF3(16384, 24576, 28672), 7
         }, .part_split = {
@@ -6306,6 +6308,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_1d(1, m.rst_ns_wiener);
     update_cdf_1d(1, m.rst_pc_wiener);
     update_cdf_2d(2, 1, m.wiener_ns_len);
+    update_cdf_1d(1, m.wiener_ns_sym);
     update_cdf_1d(3, m.wiener_ns_cf);
     update_cdf_3d(2, 64, 1, m.part_split);
     update_cdf_2d(8, 1, m.part_square);

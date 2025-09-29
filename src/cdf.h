@@ -41,6 +41,7 @@ typedef struct CdfModeContext {
     uint16_t rst_pc_wiener[3];
     uint16_t rst_ns_wiener[3];
     uint16_t wiener_ns_len[2][3];
+    uint16_t wiener_ns_sym[3];
     uint16_t wiener_ns_cf[5];
     uint16_t part_split[2][64][3];
     uint16_t part_square[8][3];
