@@ -972,6 +972,23 @@ static const CdfDefaultContext default_cdf = {
             { CDF3(10244, 16768, 25390), 0 },
             { CDF3(10230, 16432, 24377), 0 },
             { CDF3(8301, 19386, 25851), 0 },
+        }, .txtp_inter_dct_idtx = {
+            {
+                { CDF1(5900), 32 },
+                { CDF1(984), 32 },
+                { CDF1(1539), 37 },
+                { CDF1(2809), 36 },
+            }, {
+                { CDF1(751), 77 },
+                { CDF1(19), 102 },
+                { CDF1(27), 120 },
+                { CDF1(20), 104 },
+            }, {
+                { CDF1(23032), 60 },
+                { CDF1(25224), 50 },
+                { CDF1(30401), 50 },
+                { CDF1(31447), 50 },
+            },
         }, .stx = {
             {
                 { CDF3(293, 11683, 25053), 75 },
@@ -6349,6 +6366,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_3d(2, 3, 7, m.txtp_inter_set0);
     update_cdf_2d(3, 7, m.txtp_inter_set1);
     update_cdf_2d(3, 3, m.txtp_inter_set2);
+    update_cdf_3d(3, 4, 1, m.txtp_inter_dct_idtx);
     update_cdf_3d(2, 5, 3, m.stx);
     update_cdf_1d(3, m.stx_set_adst);
     update_cdf_1d(6, m.stx_set);

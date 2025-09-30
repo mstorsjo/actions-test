@@ -82,6 +82,7 @@ typedef struct CdfModeContext {
     uint16_t txtp_inter_set0[2][3][9];
     uint16_t txtp_inter_set1[3][9];
     uint16_t txtp_inter_set2[3][5];
+    uint16_t txtp_inter_dct_idtx[3][4][3];
     uint16_t stx[2][5][5];
     uint16_t stx_set_adst[5];
     uint16_t stx_set[8];

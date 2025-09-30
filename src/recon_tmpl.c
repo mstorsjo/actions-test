@@ -525,14 +525,15 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     } else {
         if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
             *txtp = DCT_DCT;
-        } else if (tx == TX_32X32) {
-            // FIXME shouldn't this be DCT v. IDTX?
-            *txtp = DCT_DCT;
         } else {
             const int y = eob >> (2 + t_dim->lw), x = eob & (4 * t_dim->w - 1);
             const int xy = x + y;
             const int ctx = xy < 2 ? 1 : xy > 4 * (t_dim->w + t_dim->h) - 4 ? 2 : 0;
-            if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
+            if (tx == TX_32X32) {
+                *txtp = dav1d_msac_decode_bool_adapt(&ts->msac,
+                            ts->cdf.m.txtp_inter_dct_idtx[ctx][TX_32X32]) ?
+                        DCT_DCT : IDTX;
+            } else if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
                 // long64/32
                 const int long_dct = t_dim->max == TX_64X64 ||
                                      dav1d_msac_decode_bool_adapt(&ts->msac,
