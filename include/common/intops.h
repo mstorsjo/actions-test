@@ -81,4 +81,8 @@ static inline unsigned inv_recenter(const unsigned r, const unsigned v) {
         return r - ((v + 1) >> 1);
 }
 
+static inline unsigned popcnt(const unsigned x) {
+    return __builtin_popcount(x);
+}
+
 #endif /* DAV1D_COMMON_INTOPS_H */

@@ -60,6 +60,8 @@ typedef struct CdfModeContext {
     uint16_t fsc[4][6][3];
     uint16_t mrl_index[3][5];
     uint16_t multi_mrl[3][3];
+    uint16_t pal_y[3];
+    uint16_t pal_sz[8];
     uint16_t dip_mode[7];
     uint16_t cfl[3][3];
     uint16_t intra_uv_mode[2][9];
@@ -68,6 +70,8 @@ typedef struct CdfModeContext {
     uint16_t cfl_type[3];
     uint16_t cfl_sign[9];
     uint16_t cfl_alpha[6][9];
+    uint16_t pal_idx_identity[4][4];
+    uint16_t pal_idx[7][5][9];
     uint16_t intrabc_mode[3];
     uint16_t intrabc_precision[3];
     uint16_t morph_pred[3][3];
@@ -89,13 +93,9 @@ typedef struct CdfModeContext {
     uint16_t stx_set[8];
     uint16_t cctx[8];
     ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS], 16);
-    ALIGN(uint16_t pal_sz[2][7][7 + 1], 16);
-    ALIGN(uint16_t color_map[2][7][5][8], 16);
     ALIGN(uint16_t delta_q[4], 8);
     ALIGN(uint16_t delta_lf[5][4], 8);
     ALIGN(uint16_t txpart[7][3][2], 4);
-    ALIGN(uint16_t pal_y[7][3][2], 4);
-    ALIGN(uint16_t pal_uv[2][2], 4);
 
     /* inter/switch */
     ALIGN(uint16_t wedge_idx[9][16], 32);

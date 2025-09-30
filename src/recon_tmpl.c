@@ -27,6 +27,7 @@
 
 #include "config.h"
 
+#include <inttypes.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -1552,7 +1553,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
         const enum EdgeFlags edge_flags = 0;
-        const int angle = 0;
+        int angle = 0;
         const pixel *top_sb_edge = NULL;
         if (!(t->by & (f->sb_step - 1))) {
             top_sb_edge = f->ipred_edge[0];
@@ -1569,7 +1570,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             edge HIGHBD_CALL_SUFFIX);
 
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
-                                 edge, tw, th, 0,
+                                 edge, tw, th, angle,
                                  4 * f->bw - 4 * t->bx,
                                  4 * f->bh - 4 * t->by
                                  HIGHBD_CALL_SUFFIX);
@@ -1888,7 +1889,7 @@ chroma: {}
         const int sub_h4 = imin(h4, 16 + init_y);
         const int sub_ch4 = imin(ch4, (init_y + 16) >> ss_ver);
         for (int init_x = 0; init_x < w4; init_x += 16) {
-            if (b->pal_sz[0]) {
+            if (b->pal_sz) {
                 pixel *dst = ((pixel *) f->cur.data[0]) +
                              4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
                 const uint8_t *pal_idx;
@@ -1929,7 +1930,7 @@ chroma: {}
                 for (x = init_x, t->bx += init_x; x < sub_w4;
                      x += t_dim->w, t->bx += t_dim->w)
                 {
-                    if (b->pal_sz[0]) goto skip_y_pred;
+                    if (b->pal_sz) goto skip_y_pred;
 
                     int angle = b->y_angle;
                     const enum EdgeFlags edge_flags =
@@ -2075,37 +2076,6 @@ chroma: {}
                     hex_dump(uv_dst[0], stride, cbw4 * 4, cbh4 * 4, "u-cfl-pred");
                     hex_dump(uv_dst[1], stride, cbw4 * 4, cbh4 * 4, "v-cfl-pred");
                 }
-            } else if (b->pal_sz[1]) {
-                const ptrdiff_t uv_dstoff = 4 * ((t->bx >> ss_hor) +
-                                              (t->by >> ss_ver) * PXSTRIDE(f->cur.stride[1]));
-                const pixel (*pal)[8];
-                const uint8_t *pal_idx;
-                if (t->frame_thread.pass) {
-                    const int p = t->frame_thread.pass & 1;
-                    assert(ts->frame_thread[p].pal_idx);
-                    pal = f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                                              ((t->bx >> 1) + (t->by & 1))];
-                    pal_idx = ts->frame_thread[p].pal_idx;
-                    ts->frame_thread[p].pal_idx += cbw4 * cbh4 * 8;
-                } else {
-                    pal = bytefn(t->scratch.pal);
-                    pal_idx = t->scratch.pal_idx_uv;
-                }
-
-                f->dsp->ipred.pal_pred(((pixel *) f->cur.data[1]) + uv_dstoff,
-                                       f->cur.stride[1], pal[1],
-                                       pal_idx, cbw4 * 4, cbh4 * 4);
-                f->dsp->ipred.pal_pred(((pixel *) f->cur.data[2]) + uv_dstoff,
-                                       f->cur.stride[1], pal[2],
-                                       pal_idx, cbw4 * 4, cbh4 * 4);
-                if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS) {
-                    hex_dump(((pixel *) f->cur.data[1]) + uv_dstoff,
-                             PXSTRIDE(f->cur.stride[1]),
-                             cbw4 * 4, cbh4 * 4, "u-pal-pred");
-                    hex_dump(((pixel *) f->cur.data[2]) + uv_dstoff,
-                             PXSTRIDE(f->cur.stride[1]),
-                             cbw4 * 4, cbh4 * 4, "v-pal-pred");
-                }
             }
 
             const int sm_uv_fl = sm_uv_flag(t->a, cbx4) |
@@ -2127,11 +2097,8 @@ chroma: {}
                     for (x = init_x >> ss_hor, t->bx += init_x; x < sub_cw4;
                          x += uv_t_dim->w, t->bx += uv_t_dim->w << ss_hor)
                     {
-                        if ((b->uv_mode == CFL_PRED && b->cfl_alpha[pl]) ||
-                            b->pal_sz[1])
-                        {
+                        if ((b->uv_mode == CFL_PRED && b->cfl_alpha[pl]))
                             goto skip_uv_pred;
-                        }
 
                         int angle = b->uv_angle;
                         // this probably looks weird because we're using
@@ -2792,94 +2759,122 @@ void bytefn(dav1d_copy_pal_block_y)(Dav1dTaskContext *const t,
     const Dav1dFrameContext *const f = t->f;
     pixel *const pal = t->frame_thread.pass ?
         f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                            ((t->bx >> 1) + (t->by & 1))][0] :
-        bytefn(t->scratch.pal)[0];
+                            ((t->bx >> 1) + (t->by & 1))] : bytefn(t->scratch.pal);
     for (int x = 0; x < bw4; x++)
-        memcpy(bytefn(t->al_pal)[0][bx4 + x][0], pal, 8 * sizeof(pixel));
+        memcpy(bytefn(t->al_pal)[0][bx4 + x], pal, 8 * sizeof(pixel));
     for (int y = 0; y < bh4; y++)
-        memcpy(bytefn(t->al_pal)[1][by4 + y][0], pal, 8 * sizeof(pixel));
+        memcpy(bytefn(t->al_pal)[1][by4 + y], pal, 8 * sizeof(pixel));
 }
 
-void bytefn(dav1d_copy_pal_block_uv)(Dav1dTaskContext *const t,
-                                     const int bx4, const int by4,
-                                     const int bw4, const int bh4)
-
-{
-    const Dav1dFrameContext *const f = t->f;
-    const pixel (*const pal)[8] = t->frame_thread.pass ?
-        f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                            ((t->bx >> 1) + (t->by & 1))] :
-        bytefn(t->scratch.pal);
-    // see aomedia bug 2183 for why we use luma coordinates here
-    for (int pl = 1; pl <= 2; pl++) {
-        for (int x = 0; x < bw4; x++)
-            memcpy(bytefn(t->al_pal)[0][bx4 + x][pl], pal[pl], 8 * sizeof(pixel));
-        for (int y = 0; y < bh4; y++)
-            memcpy(bytefn(t->al_pal)[1][by4 + y][pl], pal[pl], 8 * sizeof(pixel));
-    }
-}
-
-void bytefn(dav1d_read_pal_plane)(Dav1dTaskContext *const t, Av1Block *const b,
-                                  const int pl, const int sz_ctx,
+void bytefn(dav1d_read_pal_plane)(DB_ONLY(const int depth)
+                                  Dav1dTaskContext *const t, Av1Block *const b,
                                   const int bx4, const int by4)
 {
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
-    const int pal_sz = b->pal_sz[pl] = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                           ts->cdf.m.pal_sz[pl][sz_ctx], 6) + 2;
-    pixel cache[16], used_cache[8];
-    int l_cache = pl ? t->pal_sz_uv[1][by4] : t->l.pal_sz[by4];
-    int n_cache = 0;
+    const int pal_sz = b->pal_sz =
+        dav1d_msac_decode_symbol_adapt8(&ts->msac, ts->cdf.m.pal_sz, 6) + 2;
     // don't reuse above palette outside SB64 boundaries
-    int a_cache = by4 & 15 ? pl ? t->pal_sz_uv[0][bx4] : t->a->pal_sz[bx4] : 0;
-    const pixel *l = bytefn(t->al_pal)[1][by4][pl];
-    const pixel *a = bytefn(t->al_pal)[0][bx4][pl];
+    const int a_cache = by4 & 15 ? t->a->pal_sz[bx4] : 0;
+    const int l_cache = t->l.pal_sz[by4];
+    const pixel *l = bytefn(t->al_pal)[1][by4], *a = bytefn(t->al_pal)[0][bx4];
 
-    // fill/sort cache
-    while (l_cache && a_cache) {
-        if (*l < *a) {
-            if (!n_cache || cache[n_cache - 1] != *l)
-                cache[n_cache++] = *l;
-            l++;
-            l_cache--;
+    // find cached entries (but don't load them yet)
+    const int n_cache = l_cache + a_cache;
+    int n_used_cache = 0;
+    unsigned cache_reuse_mask = 0;
+    int off = 0;
+    for (int n = imin(n_cache, pal_sz); n;
+         off += n, n = imin(n_cache - off, pal_sz - n_used_cache))
+    {
+        const unsigned m = dav1d_msac_decode_bools_bypass(&ts->msac, n);
+        cache_reuse_mask <<= n;
+        cache_reuse_mask |= m;
+        n_used_cache += popcnt(m);
+    }
+    pixel cache[8];
+    if (n_used_cache) {
+        if (!l_cache) {
+#define select(dir) \
+            /* directly copy the selected cache entries into cache[] */ \
+            assert(!(cache_reuse_mask & ~0xff)); \
+            unsigned mask = cache_reuse_mask << (32 - off); \
+            int i = 0, n = 0; \
+            do { \
+                int n_zero = clz(mask); \
+                cache[i++] = dir[n + n_zero++]; \
+                n += n_zero; \
+                mask <<= n_zero; \
+            } while (i < pal_sz)
+            select(a);
+        } else if (!a_cache) {
+            select(l);
+#undef select
         } else {
-            if (*a == *l) {
-                l++;
-                l_cache--;
+            // sort selected cache entries from a & l into cache[]
+            const int min_n = imin(a_cache, l_cache);
+            unsigned mask = cache_reuse_mask << (32 - off);
+            const unsigned rem_mask = mask << (min_n * 2) >> min_n;
+            unsigned shared_mask = mask - (rem_mask >> min_n);
+            shared_mask = (shared_mask & 0xaaaa0000) |
+                         ((shared_mask & 0x55550000) >> 15);
+            shared_mask |= shared_mask << 1;
+            shared_mask &= 0xcccccccc;
+            shared_mask |= shared_mask << 2;
+            shared_mask &= 0xf0f0f0f0;
+            shared_mask |= shared_mask << 4;
+            const int a_gt_l = a_cache > l_cache;
+            unsigned a_mask = (shared_mask & 0xff000000) + a_gt_l * rem_mask;
+            unsigned l_mask = ((shared_mask & 0xff00) << 16) + !a_gt_l * rem_mask;
+
+            int i = 0, a_n = 0, l_n = 0;
+            if (a_mask && l_mask) {
+#define cnt_zero(dir) do { \
+                const int n_zero = clz(dir##_mask); \
+                dir##_n += n_zero; \
+                dir##_mask <<= n_zero; \
+            } while (0)
+                cnt_zero(a);
+                cnt_zero(l);
+                for (;;) {
+                    assert((a_mask & l_mask) & 0x80000000);
+                    if (a[a_n] < l[l_n]) {
+#define consume(dir) \
+                        cache[i++] = dir[dir##_n]; \
+                        dir##_mask <<= 1; \
+                        if (!dir##_mask) break; \
+                        const int n_zero = clz(dir##_mask); \
+                        dir##_n += 1 + n_zero; \
+                        dir##_mask <<= n_zero
+                        consume(a);
+                    } else {
+                        consume(l);
+                    }
+                }
             }
-            if (!n_cache || cache[n_cache - 1] != *a)
-                cache[n_cache++] = *a;
-            a++;
-            a_cache--;
+            assert(i < pal_sz);
+            if (a_mask) {
+                cnt_zero(a);
+                for (;;) {
+                    consume(a);
+                }
+            } else {
+                cnt_zero(l);
+                for (;;) {
+                    consume(l);
+#undef cnt_zero
+#undef consume
+                }
+            }
         }
     }
-    if (l_cache) {
-        do {
-            if (!n_cache || cache[n_cache - 1] != *l)
-                cache[n_cache++] = *l;
-            l++;
-        } while (--l_cache > 0);
-    } else if (a_cache) {
-        do {
-            if (!n_cache || cache[n_cache - 1] != *a)
-                cache[n_cache++] = *a;
-            a++;
-        } while (--a_cache > 0);
-    }
-
-    // find reused cache entries
-    int i = 0;
-    for (int n = 0; n < n_cache && i < pal_sz; n++)
-        if (dav1d_msac_decode_bool_bypass(&ts->msac))
-            used_cache[i++] = cache[n];
-    const int n_used_cache = i;
 
     // parse new entries
     pixel *const pal = t->frame_thread.pass ?
         f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                            ((t->bx >> 1) + (t->by & 1))][pl] :
-        bytefn(t->scratch.pal)[pl];
-    if (i < pal_sz) {
+                            ((t->bx >> 1) + (t->by & 1))] : bytefn(t->scratch.pal);
+    if (n_used_cache < pal_sz) {
+        int i = n_used_cache;
         const int bpc = BITDEPTH == 8 ? 8 : f->cur.p.bpc;
         int prev = pal[i++] = dav1d_msac_decode_bools_bypass(&ts->msac, bpc);
 
@@ -2889,72 +2884,66 @@ void bytefn(dav1d_read_pal_plane)(Dav1dTaskContext *const t, Av1Block *const b,
 
             do {
                 const int delta = dav1d_msac_decode_bools_bypass(&ts->msac, bits);
-                prev = pal[i++] = imin(prev + delta + !pl, max);
-                if (prev + !pl >= max) {
+                prev = pal[i++] = imin(prev + delta + 1, max);
+                if (prev + 1 >= max) {
                     for (; i < pal_sz; i++)
                         pal[i] = max;
                     break;
                 }
-                bits = imin(bits, 1 + ulog2(max - prev - !pl));
+                bits = imin(bits, 1 + ulog2(max - prev - 1));
             } while (i < pal_sz);
         }
 
-        // merge cache+new entries
-        int n = 0, m = n_used_cache;
-        for (i = 0; i < pal_sz; i++) {
-            if (n < n_used_cache && (m >= pal_sz || used_cache[n] <= pal[m])) {
-                pal[i] = used_cache[n++];
-            } else {
-                assert(m < pal_sz);
-                pal[i] = pal[m++];
+        // merge selected cache & new entries into pal while sorting cache
+        if (n_used_cache) {
+            int n = 0, m = n_used_cache;
+            for (i = 0; i < pal_sz; i++) {
+                if (n < n_used_cache && (m >= pal_sz || cache[n] <= pal[m])) {
+                    pal[i] = cache[n++];
+                } else {
+                    assert(m < pal_sz);
+                    pal[i] = pal[m++];
+                }
             }
         }
     } else {
-        memcpy(pal, used_cache, n_used_cache * sizeof(*used_cache));
+        pixel_copy(pal, cache, pal_sz);
     }
 
-    if (DEBUG_BLOCK_INFO) {
-        printf("Post-pal[pl=%d,sz=%d,cache_size=%d,used_cache=%d]: r=%d, cache=",
-               pl, pal_sz, n_cache, n_used_cache, ts->msac.rng);
-        for (int n = 0; n < n_cache; n++)
-            printf("%c%02x", n ? ' ' : '[', cache[n]);
+#if DEBUG_BLOCK_INFO
+#define bitmask(x) /* emulate %b (up to 16 bits) */ \
+    ((uint64_t) ((x) & 0x8000) << 45) | \
+    ((uint64_t) ((x) & 0x4000) << 42) | \
+    ((uint64_t) ((x) & 0x2000) << 39) | \
+    ((uint64_t) ((x) & 0x1000) << 36) | \
+    ((uint64_t) ((x) &  0x800) << 33) | \
+    ((uint64_t) ((x) &  0x400) << 30) | \
+    ((uint64_t) ((x) &  0x200) << 27) | \
+    ((uint64_t) ((x) &  0x100) << 24) | \
+    ((uint64_t) ((x) &   0x80) << 21) | \
+    ((uint64_t) ((x) &   0x40) << 18) | \
+    ((uint64_t) ((x) &   0x20) << 15) | \
+    ((uint64_t) ((x) &   0x10) << 12) | \
+    ((uint64_t) ((x) &    0x8) <<  9) | \
+    ((uint64_t) ((x) &    0x4) <<  6) | \
+    ((uint64_t) ((x) &    0x2) <<  3) | \
+    ((uint64_t) ((x) &    0x1) <<  0)
+    if (BLOCK_TO_DEBUG) {
+        printf("%*sPost-ypal[sz=%d,cache_sz=%d,mask=%0*"PRIx64"|%d]: r=%d, cache=",
+               depth, "", pal_sz, n_cache, off, bitmask(cache_reuse_mask),
+               n_used_cache, ts->msac.rng);
+        const int min_n = imin(a_cache, l_cache), max_n = n_cache - min_n;
+        for (int n = 0; n < min_n; n++)
+            printf("%c"PIX_HEX_FMT","PIX_HEX_FMT,
+                   n ? ',' : '[', a[n], l[n]);
+        const pixel *dir = a_cache > l_cache ? a : l;
+        for (int n = min_n; n < max_n; n++)
+            printf("%c"PIX_HEX_FMT, n ? ',' : '[', dir[n]);
         printf("%s, pal=", n_cache ? "]" : "[]");
         for (int n = 0; n < pal_sz; n++)
-            printf("%c%02x", n ? ' ' : '[', pal[n]);
+            printf("%c"PIX_HEX_FMT, n ? ',' : '[', pal[n]);
         printf("]\n");
     }
+#endif
 }
 
-void bytefn(dav1d_read_pal_uv)(Dav1dTaskContext *const t, Av1Block *const b,
-                               const int sz_ctx, const int bx4, const int by4)
-{
-    bytefn(dav1d_read_pal_plane)(t, b, 1, sz_ctx, bx4, by4);
-
-    // V pal coding
-    Dav1dTileState *const ts = t->ts;
-    const Dav1dFrameContext *const f = t->f;
-    pixel *const pal = t->frame_thread.pass ?
-        f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                            ((t->bx >> 1) + (t->by & 1))][2] :
-        bytefn(t->scratch.pal)[2];
-    const int bpc = BITDEPTH == 8 ? 8 : f->cur.p.bpc;
-    if (dav1d_msac_decode_bool_bypass(&ts->msac)) {
-        const int bits = bpc - 4 + dav1d_msac_decode_bools_bypass(&ts->msac, 2);
-        int prev = pal[0] = dav1d_msac_decode_bools_bypass(&ts->msac, bpc);
-        const int max = (1 << bpc) - 1;
-        for (int i = 1; i < b->pal_sz[1]; i++) {
-            int delta = dav1d_msac_decode_bools_bypass(&ts->msac, bits);
-            if (delta && dav1d_msac_decode_bool_bypass(&ts->msac)) delta = -delta;
-            prev = pal[i] = (prev + delta) & max;
-        }
-    } else {
-        for (int i = 0; i < b->pal_sz[1]; i++)
-            pal[i] = dav1d_msac_decode_bools_bypass(&ts->msac, bpc);
-    }
-    if (DEBUG_BLOCK_INFO) {
-        printf("Post-pal[pl=2]: r=%d ", ts->msac.rng);
-        for (int n = 0; n < b->pal_sz[1]; n++)
-            printf("%c%02x", n ? ' ' : '[', pal[n]);
-        printf("]\n");
-    }
-}

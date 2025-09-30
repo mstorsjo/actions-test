@@ -434,104 +434,119 @@ static inline int findoddzero(const uint8_t *buf, int len) {
     return 0;
 }
 
-// meant to be SIMD'able, so that theoretical complexity of this function
-// times block size goes from w4*h4 to w4+h4-1
-// a and b are previous two lines containing (a) top/left entries or (b)
-// top/left entries, with a[0] being either the first top or first left entry,
-// depending on top_offset being 1 or 0, and b being the first top/left entry
-// for whichever has one. left_offset indicates whether the (len-1)th entry
-// has a left neighbour.
-// output is order[] and ctx for each member of this diagonal.
-static void order_palette(const uint8_t *pal_idx, const ptrdiff_t stride,
-                          const int i, const int first, const int last,
-                          uint8_t (*const order)[8], uint8_t *const ctx)
-{
-    int have_top = i > first;
-
-    assert(pal_idx);
-    pal_idx += first + (i - first) * stride;
-    for (int j = first, n = 0; j >= last; have_top = 1, j--, n++, pal_idx += stride - 1) {
-        const int have_left = j > 0;
-
-        assert(have_left || have_top);
-
-#define add(v_in) do { \
-        const int v = v_in; \
-        assert((unsigned)v < 8U); \
-        order[n][o_idx++] = v; \
-        mask |= 1 << v; \
-    } while (0)
-
-        unsigned mask = 0;
-        int o_idx = 0;
-        if (!have_left) {
-            ctx[n] = 0;
-            add(pal_idx[-stride]);
-        } else if (!have_top) {
-            ctx[n] = 0;
-            add(pal_idx[-1]);
-        } else {
-            const int l = pal_idx[-1], t = pal_idx[-stride], tl = pal_idx[-(stride + 1)];
-            const int same_t_l = t == l;
-            const int same_t_tl = t == tl;
-            const int same_l_tl = l == tl;
-            const int same_all = same_t_l & same_t_tl & same_l_tl;
-
-            if (same_all) {
-                ctx[n] = 4;
-                add(t);
-            } else if (same_t_l) {
-                ctx[n] = 3;
-                add(t);
-                add(tl);
-            } else if (same_t_tl | same_l_tl) {
-                ctx[n] = 2;
-                add(tl);
-                add(same_t_tl ? l : t);
-            } else {
-                ctx[n] = 1;
-                add(imin(t, l));
-                add(imax(t, l));
-                add(tl);
-            }
-        }
-        for (unsigned m = 1, bit = 0; m < 0x100; m <<= 1, bit++)
-            if (!(mask & m))
-                order[n][o_idx++] = bit;
-        assert(o_idx == 8);
-#undef add
-    }
-}
-
-static void read_pal_indices(Dav1dTaskContext *const t,
-                             uint8_t *const pal_idx,
-                             const int pal_sz, const int pl,
-                             const int w4, const int h4,
-                             const int bw4, const int bh4)
+static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
+                             const int pal_sz, const int sz[4])
 {
     Dav1dTileState *const ts = t->ts;
-    const ptrdiff_t stride = bw4 * 4;
-    assert(pal_idx);
-    uint8_t *const pal_tmp = t->scratch.pal_idx_uv;
-    pal_tmp[0] = dav1d_msac_decode_uniform(&ts->msac, pal_sz);
-    uint16_t (*const color_map_cdf)[8] =
-        ts->cdf.m.color_map[pl][pal_sz - 2];
-    uint8_t (*const order)[8] = t->scratch.pal_order;
-    uint8_t *const ctx = t->scratch.pal_ctx;
-    for (int i = 1; i < 4 * (w4 + h4) - 1; i++) {
-        // top/left-to-bottom/right diagonals ("wave-front")
-        const int first = imin(i, w4 * 4 - 1);
-        const int last = imax(0, i - h4 * 4 + 1);
-        order_palette(pal_tmp, stride, i, first, last, order, ctx);
-        for (int j = first, m = 0; j >= last; j--, m++) {
-            const int color_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                      color_map_cdf[ctx[m]], pal_sz - 1);
-            pal_tmp[(i - j) * stride + j] = order[m][color_idx];
+    uint16_t (*const pal_cdf)[9] = ts->cdf.m.pal_idx[pal_sz - 2];
+    uint8_t *const pal_idx = t->scratch.pal_idx_y;
+
+    const int dir = imax(sz[2], sz[3]) < 64 &&
+                    dav1d_msac_decode_bool_bypass(&ts->msac);
+    const ptrdiff_t strides[2] = { dir ? 1 : sz[2], dir ? sz[2] : 1 };
+
+    const int lim1 = sz[!dir], lim2 = sz[dir];
+    int copy = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                   ts->cdf.m.pal_idx_identity[3], 2);
+    if (copy == 2) return; // FIXME set error bit to abort decoding
+    int prev_v = pal_idx[0] = dav1d_msac_decode_uniform(&ts->msac, pal_sz);
+    if (copy == 1) {
+        // FIXME if dir=0, maybe use memset()?
+        for (int m = 1; m < lim2; m++)
+            pal_idx[m * strides[1]] = prev_v;
+    } else {
+        int prev_h = prev_v;
+        for (int m = 1; m < lim2; m++) {
+            const int v = dav1d_msac_decode_symbol_adapt8(&ts->msac, pal_cdf[0],
+                                                          pal_sz - 1);
+            prev_h = pal_idx[m * strides[1]] = !v ? prev_h : v - (v <= prev_h);
+        }
+    }
+    ptrdiff_t off = strides[0];
+    for (int n = 1; n < lim1; n++, off += strides[0]) {
+        copy = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                   ts->cdf.m.pal_idx_identity[copy], 2);
+        if (copy == 2) {
+            // FIXME if dir=0, maybe use memcpy()?
+            for (int m = 0; m < lim2; m++)
+                pal_idx[off + m * strides[1]] =
+                    pal_idx[off - strides[0] + m * strides[1]];
+        } else {
+            const int v = dav1d_msac_decode_symbol_adapt8(&ts->msac, pal_cdf[0],
+                                                          pal_sz - 1);
+            const int next_v = pal_idx[off] = !v ? prev_v : v - (v <= prev_v);
+
+            if (copy == 1) {
+                // FIXME if dir=0, maybe use memset()?
+                for (int m = 1; m < lim2; m++)
+                    pal_idx[off + m * strides[1]] = next_v;
+            } else {
+                int prev_tl = prev_v, prev_l = next_v;
+                for (int m = 1; m < lim2; m++) {
+                    int prev_t = pal_idx[off - strides[0] + m * strides[1]];
+                    int ctx;
+                    if (prev_t == prev_l) {
+                        ctx = 3 + (prev_tl == prev_l);
+                    } else {
+                        ctx = 1 + (prev_t == prev_tl || prev_l == prev_tl);
+                    }
+                    const int v = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                      pal_cdf[ctx], pal_sz - 1);
+                    int p;
+                    switch (ctx) {
+                    default: assert(0);
+                    case 1: {
+                        switch (v) {
+                        case 0:
+                        case 1: p = v == dir ? prev_l : prev_t; break;
+                        case 2: p = prev_tl; break;
+                        default: {
+                            const int s1 = prev_l < prev_t;
+                            const int s2 = prev_l < prev_tl;
+                            const int s3 = prev_t < prev_tl;
+                            p = v - (v <= prev_l + s1 + s2) -
+                                    (v <= prev_t + s3 + !s1) -
+                                    (v <= prev_tl + !s2 + !s3);
+                            break;
+                        }}
+                        break;
+                    }
+                    case 2: {
+                        const int prev_l_or_t = prev_l + prev_t - prev_tl;
+                        switch (v) {
+                        case 0: p = prev_tl; break;
+                        case 1: p = prev_l_or_t; break;
+                        default: {
+                            const int s = prev_l_or_t < prev_tl;
+                            p = v - (v <= prev_l_or_t + s) - (v <= prev_tl + !s);
+                            break;
+                        }}
+                        break;
+                    }
+                    case 3: {
+                        switch (v) {
+                        case 0: p = prev_l; break;
+                        case 1: p = prev_tl; break;
+                        default: {
+                            const int s = prev_l < prev_tl;
+                            p = v - (v <= prev_l + s) - (v <= prev_tl + !s);
+                            break;
+                        }}
+                        break;
+                    }
+                    case 4:
+                        p = !v ? prev_l : v - (v <= prev_l);
+                        break;
+                    }
+                    prev_l = pal_idx[off + m * strides[1]] = p;
+                    prev_tl = prev_t;
+                }
+            }
+            prev_v = next_v;
         }
     }
 
-    t->c->pal_dsp.pal_idx_finish(pal_idx, pal_tmp, bw4 * 4, bh4 * 4,
-                                 w4 * 4, h4 * 4);
+    t->c->pal_dsp.pal_idx_finish(pal_out, pal_idx, sz[2], sz[3], sz[0], sz[1]);
 }
 
 static void read_vartx_tree(Dav1dTaskContext *const t,
@@ -1678,66 +1693,36 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
 
-        b->pal_sz[0] = b->pal_sz[1] = 0;
-        if (f->frame_hdr->allow_screen_content_tools &&
-            imax(bw4, bh4) <= 16 && bw4 + bh4 >= 4)
-        {
-            const int sz_ctx = b_dim[2] + b_dim[3] - 2;
-            if (has_luma) {
-                if (b->y_mode == DC_PRED) {
-                    const int pal_ctx = (t->a->pal_sz[bx4] > 0) + (t->l.pal_sz[by4] > 0);
-                    const int use_y_pal = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                              ts->cdf.m.pal_y[sz_ctx][pal_ctx]);
-                    if (DEBUG_BLOCK_INFO)
-                        printf("Post-y_pal[%d]: r=%d\n", use_y_pal, ts->msac.rng);
-                    if (use_y_pal)
-                        f->bd_fn.read_pal_plane(t, b, 0, sz_ctx, bx4, by4);
-                }
-            }
-
-            if (has_chroma && b->uv_mode == DC_PRED) {
-                const int pal_ctx = b->pal_sz[0] > 0;
-                const int use_uv_pal = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                           ts->cdf.m.pal_uv[pal_ctx]);
-                if (DEBUG_BLOCK_INFO)
-                    printf("Post-uv_pal[%d]: r=%d\n", use_uv_pal, ts->msac.rng);
-                if (use_uv_pal) // see aomedia bug 2183 for why we use luma coordinates
-                    f->bd_fn.read_pal_uv(t, b, sz_ctx, bx4, by4);
-            }
-        }
-
-        if (has_luma && b->pal_sz[0]) {
-            uint8_t *pal_idx;
-            if (t->frame_thread.pass) {
-                const int p = t->frame_thread.pass & 1;
-                assert(ts->frame_thread[p].pal_idx);
-                pal_idx = ts->frame_thread[p].pal_idx;
-                ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
-            } else
-                pal_idx = t->scratch.pal_idx_y;
-            read_pal_indices(t, pal_idx, b->pal_sz[0], 0, w4, h4, bw4, bh4);
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-y-pal-indices: r=%d\n", ts->msac.rng);
-        }
-
-        if (has_chroma && b->pal_sz[1]) {
-            uint8_t *pal_idx;
-            if (t->frame_thread.pass) {
-                const int p = t->frame_thread.pass & 1;
-                assert(ts->frame_thread[p].pal_idx);
-                pal_idx = ts->frame_thread[p].pal_idx;
-                ts->frame_thread[p].pal_idx += cbw4 * cbh4 * 8;
-            } else
-                pal_idx = t->scratch.pal_idx_uv;
-            read_pal_indices(t, pal_idx, b->pal_sz[1], 1, cw4, ch4, cbw4, cbh4);
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-uv-pal-indices: r=%d\n", ts->msac.rng);
-        }
-
+        b->pal_sz = 0;
         if (has_luma) {
+            if (f->frame_hdr->allow_screen_content_tools &&
+                b->y_mode == DC_PRED && imax(bw4, bh4) <= 16 && bw4 + bh4 >= 4)
+            {
+                const int use_y_pal = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                          ts->cdf.m.pal_y);
+                if (use_y_pal) {
+                    f->bd_fn.read_pal_plane(DB_ONLY(depth) t, b, bx4, by4);
+
+                    uint8_t *pal_idx;
+                    if (t->frame_thread.pass) {
+                        const int p = t->frame_thread.pass & 1;
+                        assert(ts->frame_thread[p].pal_idx);
+                        pal_idx = ts->frame_thread[p].pal_idx;
+                        ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
+                    } else
+                        pal_idx = t->scratch.pal_idx_y;
+                    read_pal_indices(t, pal_idx, b->pal_sz,
+                                     (int[4]) { w4 * 4, h4 * 4, bw4 * 4, bh4 * 4 });
+                    DEBUG_BLOCK_printf("%*sPost-y-pal-indices: r=%d\n",
+                                       depth, "", ts->msac.rng);
+                } else
+                    DEBUG_BLOCK_printf("%*sPost-ypal[0]: r=%d\n",
+                                       depth, "", ts->msac.rng);
+            }
+
             b->dip = 0;
             if (b->y_mode == DC_PRED && f->seq_hdr->intra_dip &&
-                !b->mrl_index && imin(bw4, bh4) >= 2 && bw4 * bh4 >= 8)
+                !b->pal_sz && imin(bw4, bh4) >= 2 && bw4 * bh4 >= 8)
             {
                 const int ctx = (boff[0] == -1 ? 0 : nb[0]->dip[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->dip[boff[1]]);
@@ -1789,15 +1774,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 rep_macro(edge->mrl, off, !!b->mrl_index); \
                 rep_macro(edge->multi_mrl, off, b->multi_mrl); \
                 rep_macro(edge->dip, off, !!b->dip); \
-                rep_macro(edge->pal_sz, off, b->pal_sz[0]); \
+                rep_macro(edge->pal_sz, off, b->pal_sz); \
                 rep_macro(edge->seg_pred, off, seg_pred); \
                 rep_macro(edge->skip_mode, off, 0); \
                 rep_macro(edge->intra, off, 1); \
                 rep_macro(edge->intrabc, off, 0); \
                 rep_macro(edge->morph_pred, off, 0); \
                 rep_macro(edge->skip_txfm, off, b->skip_txfm); \
-                /* see aomedia bug 2183 for why we use luma coordinates here */ \
-                rep_macro(t->pal_sz_uv[i], off, (has_chroma ? b->pal_sz[1] : 0)); \
                 if (IS_INTER_OR_SWITCH(f->frame_hdr)) { \
                     rep_macro(edge->comp_type, off, COMP_INTER_NONE); \
                     rep_macro(edge->ref[0], off, ((uint8_t) -1)); \
@@ -1811,14 +1794,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
                 splat_intraref(f->c, t, bs, bw4, bh4);
         }
-        if (b->pal_sz[0])
+        if (b->pal_sz)
             f->bd_fn.copy_pal_block_y(t, bx4, by4, bw4, bh4);
         if (has_chroma) {
             uint8_t uv_mode = b->uv_mode;
             dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], uv_mode);
             dav1d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], uv_mode);
-            if (b->pal_sz[1])
-                f->bd_fn.copy_pal_block_uv(t, bx4, by4, bw4, bh4);
         }
     } else if (b->intrabc) {
         // intra block copy
@@ -1969,8 +1950,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 rep_macro(edge->multi_mrl, off, 0); \
                 rep_macro(edge->dip, off, 0); \
                 rep_macro(edge->pal_sz, off, 0); \
-                /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
-                rep_macro(t->pal_sz_uv[i], off, 0); \
                 rep_macro(edge->seg_pred, off, seg_pred); \
                 rep_macro(edge->skip_mode, off, 0); \
                 rep_macro(edge->intrabc, off, 1); \
@@ -2530,8 +2509,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->skip_txfm, off, b->skip_txfm); \
             rep_macro(edge->pal_sz, off, 0); \
-            /* see aomedia bug 2183 for why this is outside if (has_chroma) */ \
-            rep_macro(t->pal_sz_uv[i], off, 0); \
             rep_macro(edge->comp_type, off, b->comp_type); \
             rep_macro(edge->filter[0], off, filter[0]); \
             rep_macro(edge->filter[1], off, filter[1]); \
@@ -3671,7 +3648,6 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                                    ts->tiling.col_start >> 1, ts->tiling.col_end >> 1,
                                    t->by >> 1, (t->by + sb_step) >> 1);
     }
-    memset(t->pal_sz_uv[1], 0, sizeof(*t->pal_sz_uv));
     const int sb128y = t->by >> 5;
     for (t->bx = ts->tiling.col_start, t->a = f->a + col_sb128_start + tile_row * f->sb128w,
          t->lf_mask = f->lf.mask + sb128y * f->sb128w + col_sb128_start;
@@ -4416,9 +4392,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         f->bd_fn.backup_ipred_edge = dav1d_backup_ipred_edge_##bd##bpc; \
         f->bd_fn.read_coef_blocks = dav1d_read_coef_blocks_##bd##bpc; \
         f->bd_fn.copy_pal_block_y = dav1d_copy_pal_block_y_##bd##bpc; \
-        f->bd_fn.copy_pal_block_uv = dav1d_copy_pal_block_uv_##bd##bpc; \
-        f->bd_fn.read_pal_plane = dav1d_read_pal_plane_##bd##bpc; \
-        f->bd_fn.read_pal_uv = dav1d_read_pal_uv_##bd##bpc
+        f->bd_fn.read_pal_plane = dav1d_read_pal_plane_##bd##bpc
     if (!f->seq_hdr->hbd) {
 #if CONFIG_8BPC
         assign_bitdepth_case(8);

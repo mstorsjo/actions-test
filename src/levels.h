@@ -298,7 +298,7 @@ typedef struct Av1Block {
     union {
         struct {
             uint8_t y_mode, mrl_index, multi_mrl, dip;
-            uint8_t uv_mode, tx_part, pal_sz[2];
+            uint8_t uv_mode, tx_part, pal_sz;
             int8_t y_angle, uv_angle, cfl_type;
             union {
                 int8_t cfl_alpha[2], mh_dir;
