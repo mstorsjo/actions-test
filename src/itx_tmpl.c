@@ -99,8 +99,8 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
 #endif
 
     const uint8_t *const txtps = dav1d_tx1d_types[txtp];
-    const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtps[0]];
-    const itx_1d_fn second_1d_fn = dav1d_tx1d_fns[t_dim->lh][txtps[1]];
+    const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtps[1]];
+    const itx_1d_fn second_1d_fn = dav1d_tx1d_fns[t_dim->lh][txtps[0]];
     const int sh = imin(h, 32), sw = imin(w, 32);
 #if BITDEPTH == 8
     const int row_clip_min = INT16_MIN;
@@ -127,7 +127,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
 #else
     int last_nonzero_col = sh - 1;
 #endif
- for (int y = 0; y <= last_nonzero_col; y++, c += w) {
+    for (int y = 0; y <= last_nonzero_col; y++, c += w) {
         if (is_rect2)
             for (int x = 0; x < sw; x++)
                 c[x] = (coeff[y + x * sh] * 181 + 128) >> 8;
@@ -173,13 +173,39 @@ inv_txfm_add_##type1##_##type2##_##w##x##h##_c(pixel *dst, \
 #define inv_txfm_fn64(pfx, w, h, shift) \
 inv_txfm_fn(dct, dct, DCT_DCT, pfx, w, h, shift)
 
+#define inv_txfm_hl64(pfx, w, h, shift) \
+inv_txfm_fn64(pfx, w, h, shift) \
+inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx,  w, h, shift) \
+inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h, shift) \
+inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h, shift)
+
+#define inv_txfm_vl64(pfx, w, h, shift) \
+inv_txfm_fn64(pfx, w, h, shift) \
+inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h, shift) \
+inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h, shift) \
+inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h, shift) \
+
 #define inv_txfm_fn32(pfx, w, h, shift) \
 inv_txfm_fn64(pfx, w, h, shift) \
 inv_txfm_fn(identity, identity, IDTX, pfx, w, h, shift)
 
+#define inv_txfm_hl32(pfx, w, h, shift) \
+inv_txfm_hl64(pfx, w, h, shift) \
+inv_txfm_fn(dct,      identity, V_DCT,      pfx, w, h, shift) \
+inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h, shift) \
+inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h, shift) \
+inv_txfm_fn(identity, identity, IDTX,       pfx, w, h, shift)
+
+#define inv_txfm_vl32(pfx, w, h, shift) \
+inv_txfm_vl64(pfx, w, h, shift) \
+inv_txfm_fn(identity, dct,      H_DCT,      pfx, w, h, shift) \
+inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h, shift) \
+inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h, shift) \
+inv_txfm_fn(identity, identity, IDTX,       pfx, w, h, shift)
+
 #define inv_txfm_fn16(pfx, w, h, shift) \
 inv_txfm_fn32(pfx, w, h, shift) \
-inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx,  w, h, shift) \
+inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx, w, h, shift) \
 inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h, shift) \
 inv_txfm_fn(adst,     adst,     ADST_ADST,         pfx, w, h, shift) \
 inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h, shift) \
@@ -200,26 +226,26 @@ inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h, shift) \
 inv_txfm_fn84( ,  4,  4, 0)
 inv_txfm_fn84(R,  4,  8, 0)
 inv_txfm_fn84(R,  4, 16, 1)
-inv_txfm_fn84(R,  4, 32, 1)
-inv_txfm_fn84(R,  4, 64, 1)
+inv_txfm_vl32(R,  4, 32, 1)
+inv_txfm_vl64(R,  4, 64, 1)
 inv_txfm_fn84(R,  8,  4, 0)
 inv_txfm_fn84( ,  8,  8, 1)
 inv_txfm_fn84(R,  8, 16, 1)
-inv_txfm_fn32(R,  8, 32, 2)
-inv_txfm_fn64(R,  8, 64, 2)
+inv_txfm_vl32(R,  8, 32, 2)
+inv_txfm_vl64(R,  8, 64, 2)
 inv_txfm_fn84(R, 16,  4, 1)
 inv_txfm_fn84(R, 16,  8, 1)
 inv_txfm_fn16( , 16, 16, 2)
-inv_txfm_fn32(R, 16, 32, 1)
-inv_txfm_fn64(R, 16, 64, 2)
-inv_txfm_fn32(R, 32,  4, 2)
-inv_txfm_fn32(R, 32,  8, 2)
-inv_txfm_fn32(R, 32, 16, 1)
+inv_txfm_vl32(R, 16, 32, 1)
+inv_txfm_vl64(R, 16, 64, 2)
+inv_txfm_hl32(R, 32,  4, 2)
+inv_txfm_hl32(R, 32,  8, 2)
+inv_txfm_hl32(R, 32, 16, 1)
 inv_txfm_fn32( , 32, 32, 2)
 inv_txfm_fn64(R, 32, 64, 1)
-inv_txfm_fn64(R, 64,  4, 2)
-inv_txfm_fn64(R, 64,  8, 2)
-inv_txfm_fn64(R, 64, 16, 2)
+inv_txfm_hl64(R, 64,  4, 2)
+inv_txfm_hl64(R, 64,  8, 2)
+inv_txfm_hl64(R, 64, 16, 2)
 inv_txfm_fn64(R, 64, 32, 1)
 inv_txfm_fn64( , 64, 64, 2)
 
@@ -268,43 +294,83 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
     c->itxfm_add[pfx##TX_##w##X##h][DCT_DCT  ] = \
         inv_txfm_add_dct_dct_##w##x##h##_c
 
+#define assign_itx_all_vl64(w, h, pfx) \
+    assign_itx_all_fn64(w, h, pfx); \
+    c->itxfm_add[pfx##TX_##w##X##h][DCT_ADST ] = \
+        inv_txfm_add_dct_adst_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][DCT_FLIPADST] = \
+        inv_txfm_add_dct_flipadst_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][V_DCT] = \
+        inv_txfm_add_dct_identity_##w##x##h##_c
+
+#define assign_itx_all_hl64(w, h, pfx) \
+    assign_itx_all_fn64(w, h, pfx); \
+    c->itxfm_add[pfx##TX_##w##X##h][ADST_DCT ] = \
+        inv_txfm_add_adst_dct_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_DCT] = \
+        inv_txfm_add_flipadst_dct_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
+        inv_txfm_add_identity_dct_##w##x##h##_c
+
 #define assign_itx_all_fn32(w, h, pfx) \
     assign_itx_all_fn64(w, h, pfx); \
     c->itxfm_add[pfx##TX_##w##X##h][IDTX] = \
         inv_txfm_add_identity_identity_##w##x##h##_c
 
+#define assign_itx_all_vl32(w, h, pfx) \
+    assign_itx_all_vl64(w, h, pfx); \
+    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
+        inv_txfm_add_identity_dct_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][H_ADST] = \
+        inv_txfm_add_identity_adst_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][H_FLIPADST] = \
+        inv_txfm_add_identity_flipadst_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][IDTX] = \
+        inv_txfm_add_identity_identity_##w##x##h##_c
+
+#define assign_itx_all_hl32(w, h, pfx) \
+    assign_itx_all_hl64(w, h, pfx); \
+    c->itxfm_add[pfx##TX_##w##X##h][V_DCT] = \
+        inv_txfm_add_dct_identity_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][V_ADST] = \
+        inv_txfm_add_adst_identity_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][V_FLIPADST] = \
+        inv_txfm_add_flipadst_identity_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][IDTX] = \
+        inv_txfm_add_identity_identity_##w##x##h##_c
+
 #define assign_itx_all_fn16(w, h, pfx) \
     assign_itx_all_fn32(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_ADST ] = \
-        inv_txfm_add_adst_dct_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][ADST_DCT ] = \
+        inv_txfm_add_adst_dct_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][DCT_ADST ] = \
         inv_txfm_add_dct_adst_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][ADST_ADST] = \
         inv_txfm_add_adst_adst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][ADST_FLIPADST] = \
-        inv_txfm_add_flipadst_adst_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_ADST] = \
+        inv_txfm_add_flipadst_adst_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][ADST_FLIPADST] = \
         inv_txfm_add_adst_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_FLIPADST] = \
-        inv_txfm_add_flipadst_dct_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_DCT] = \
+        inv_txfm_add_flipadst_dct_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][DCT_FLIPADST] = \
         inv_txfm_add_dct_flipadst_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_FLIPADST] = \
         inv_txfm_add_flipadst_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
-        inv_txfm_add_dct_identity_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][V_DCT] = \
+        inv_txfm_add_dct_identity_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
         inv_txfm_add_identity_dct_##w##x##h##_c
 
 #define assign_itx_all_fn84(w, h, pfx) \
     assign_itx_all_fn16(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][H_FLIPADST] = \
-        inv_txfm_add_flipadst_identity_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][V_FLIPADST] = \
+        inv_txfm_add_flipadst_identity_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][H_FLIPADST] = \
         inv_txfm_add_identity_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_ADST] = \
-        inv_txfm_add_adst_identity_##w##x##h##_c; \
     c->itxfm_add[pfx##TX_##w##X##h][V_ADST] = \
+        inv_txfm_add_adst_identity_##w##x##h##_c; \
+    c->itxfm_add[pfx##TX_##w##X##h][H_ADST] = \
         inv_txfm_add_identity_adst_##w##x##h##_c; \
 
 #if !(HAVE_ASM && TRIM_DSP_FUNCTIONS && ( \
@@ -316,26 +382,26 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
     assign_itx_all_fn84( 4,  4, );
     assign_itx_all_fn84( 4,  8, R);
     assign_itx_all_fn84( 4, 16, R);
-    assign_itx_all_fn84( 4, 32, R);
-    assign_itx_all_fn84( 4, 64, R);
+    assign_itx_all_vl32( 4, 32, R);
+    assign_itx_all_vl64( 4, 64, R);
     assign_itx_all_fn84( 8,  4, R);
     assign_itx_all_fn84( 8,  8, );
     assign_itx_all_fn84( 8, 16, R);
-    assign_itx_all_fn32( 8, 32, R);
-    assign_itx_all_fn64( 8, 64, R);
+    assign_itx_all_vl32( 8, 32, R);
+    assign_itx_all_vl64( 8, 64, R);
     assign_itx_all_fn84(16,  4, R);
     assign_itx_all_fn84(16,  8, R);
     assign_itx_all_fn16(16, 16, );
-    assign_itx_all_fn32(16, 32, R);
-    assign_itx_all_fn64(16, 64, R);
-    assign_itx_all_fn32(32,  4, R);
-    assign_itx_all_fn32(32,  8, R);
-    assign_itx_all_fn32(32, 16, R);
+    assign_itx_all_vl32(16, 32, R);
+    assign_itx_all_vl64(16, 64, R);
+    assign_itx_all_hl32(32,  4, R);
+    assign_itx_all_hl32(32,  8, R);
+    assign_itx_all_hl32(32, 16, R);
     assign_itx_all_fn32(32, 32, );
     assign_itx_all_fn64(32, 64, R);
-    assign_itx_all_fn64(64,  4, R);
-    assign_itx_all_fn64(64,  8, R);
-    assign_itx_all_fn64(64, 16, R);
+    assign_itx_all_hl64(64,  4, R);
+    assign_itx_all_hl64(64,  8, R);
+    assign_itx_all_hl64(64, 16, R);
     assign_itx_all_fn64(64, 32, R);
     assign_itx_all_fn64(64, 64, );
 
