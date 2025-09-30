@@ -1545,19 +1545,32 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         int n_pel_left = th + 3;
         int n_pel_above = tw + th;
         pixel *const edge = bitfn(t->scratch.edge) + 128;
-        memset(edge - n_pel_left, 129, n_pel_left * sizeof(pixel));
-        memset(edge, 127, (n_pel_above + 1) * sizeof(pixel));
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
-        dsp->ipred.intra_pred[b->y_mode](dst, f->cur.stride[0],
-                                         edge, tw, th, 0,
-                                         4 * f->bw - 4 * t->bx,
-                                         4 * f->bh - 4 * t->by
-                                         HIGHBD_CALL_SUFFIX);
+
+        const enum EdgeFlags edge_flags = 0;
+        const int angle = 0;
+        const pixel *top_sb_edge = NULL;
+        if (!(t->by & (f->sb_step - 1))) {
+            top_sb_edge = f->ipred_edge[0];
+            const int sby = t->by >> f->sb_shift;
+            top_sb_edge += f->sb128w * 128 * (sby - 1);
+        }
+        const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
+            DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+            t->bx, t->bx > ts->tiling.col_start,
+            t->by, t->by > ts->tiling.row_start,
+            ts->tiling.col_end, ts->tiling.row_end, edge_flags, dst,
+            f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
+            t_dim->w, t_dim->h, f->seq_hdr->intra_edge_filter,
+            edge HIGHBD_CALL_SUFFIX);
+
+        dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
+                                 edge, tw, th, 0,
+                                 4 * f->bw - 4 * t->bx,
+                                 4 * f->bh - 4 * t->by
+                                 HIGHBD_CALL_SUFFIX);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-            hex_dump(edge - n_pel_left, n_pel_left, n_pel_left, 1, "l");
-            hex_dump(edge, 0, 1, 1, "tl");
-            hex_dump(edge + 1, n_pel_above, n_pel_above, 1, "t");
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
             if (eob != -1)
                 coef_dump(cf, imin(t_dim->h, 8) * 4,
@@ -2295,7 +2308,8 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
                 const int sby = t->by >> f->sb_shift;
                 top_sb_edge += f->sb128w * 128 * (sby - 1);
             }
-            m = bytefn(dav1d_prepare_intra_edges)(t->bx, t->bx > ts->tiling.col_start,
+            m = bytefn(dav1d_prepare_intra_edges)(DB_ONLY(0)
+                                                  t->bx, t->bx > ts->tiling.col_start,
                                                   t->by, t->by > ts->tiling.row_start,
                                                   ts->tiling.col_end, ts->tiling.row_end,
                                                   0, dst, f->cur.stride[0], top_sb_edge,
@@ -2424,7 +2438,8 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
                         const int sby = t->by >> f->sb_shift;
                         top_sb_edge += f->sb128w * 128 * (sby - 1);
                     }
-                    m = bytefn(dav1d_prepare_intra_edges)(t->bx >> ss_hor,
+                    m = bytefn(dav1d_prepare_intra_edges)(DB_ONLY(0)
+                                                          t->bx >> ss_hor,
                                                           (t->bx >> ss_hor) >
                                                               (ts->tiling.col_start >> ss_hor),
                                                           t->by >> ss_ver,

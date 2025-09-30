@@ -76,7 +76,8 @@
  * they will be extended from nearby edges as defined by the av1 spec.
  */
 enum IntraPredMode
-    bytefn(dav1d_prepare_intra_edges)(int x, int have_left, int y, int have_top,
+    bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
+                                      int x, int have_left, int y, int have_top,
                                       int w, int h, enum EdgeFlags edge_flags,
                                       const pixel *dst, ptrdiff_t stride,
                                       const pixel *prefilter_toplevel_sb_edge,

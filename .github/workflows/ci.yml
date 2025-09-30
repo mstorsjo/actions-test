@@ -44,7 +44,7 @@ jobs:
         sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' src/obu.c
         sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' src/obu.c
         sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
-        sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/recon.h
+        sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/debug.h
         git diff
         meson build -Denable_tests=false
         cd build
@@ -71,9 +71,9 @@ jobs:
         cd ../..
     - name: build dav2d (with reconstruction validation)
       run: |
-        sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/recon.h
-        sed -i 's|t->by < 16|t->by < 4|' src/recon.h
-        sed -i 's|t->bx < 16|t->bx < 8|' src/recon.h
+        sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
+        sed -i 's|t->by < 16|t->by < 4|' src/debug.h
+        sed -i 's|t->bx < 16|t->bx < 8|' src/debug.h
         git diff
         cd build
         ninja

@@ -30,12 +30,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "common/dump.h"
 #include "common/intops.h"
 
+#include "src/debug.h"
 #include "src/ipred_prepare.h"
 
-static const uint8_t av1_mode_conv[N_INTRA_PRED_MODES]
-                                  [2 /* have_left */][2 /* have_top */] =
+static const uint8_t mode_conv[N_INTRA_PRED_MODES]
+                              [2 /* have_left */][2 /* have_top */] =
 {
     [DC_PRED]    = { { DC_128_PRED,  TOP_DC_PRED },
                      { LEFT_DC_PRED, DC_PRED     } },
@@ -43,13 +45,15 @@ static const uint8_t av1_mode_conv[N_INTRA_PRED_MODES]
                      { HOR_PRED,     PAETH_PRED  } },
 };
 
-static const struct {
+typedef struct EdgeMask {
     uint8_t needs_left:1;
     uint8_t needs_top:1;
     uint8_t needs_topleft:1;
     uint8_t needs_topright:1;
     uint8_t needs_bottomleft:1;
-} av1_intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
+} EdgeMask;
+
+static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
     [DC_PRED]       = { .needs_top  = 1, .needs_left = 1 },
     [VERT_PRED]     = { .needs_top  = 1 },
     [HOR_PRED]      = { .needs_left = 1 },
@@ -61,15 +65,17 @@ static const struct {
     [Z2_PRED]       = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
     [Z3_PRED]       = { .needs_left = 1, .needs_bottomleft = 1,
                         .needs_topleft = 1 },
-    [SMOOTH_PRED]   = { .needs_left = 1, .needs_top = 1 },
-    [SMOOTH_V_PRED] = { .needs_left = 1, .needs_top = 1 },
-    [SMOOTH_H_PRED] = { .needs_left = 1, .needs_top = 1 },
+    [SMOOTH_PRED]   = { .needs_left = 1, .needs_top = 1, .needs_topright = 1,
+                        .needs_bottomleft= 1 },
+    [SMOOTH_V_PRED] = { .needs_left = 1, .needs_top = 1, .needs_bottomleft= 1 },
+    [SMOOTH_H_PRED] = { .needs_left = 1, .needs_top = 1, .needs_topright = 1 },
     [PAETH_PRED]    = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
     [FILTER_PRED]   = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
 };
 
 enum IntraPredMode
-bytefn(dav1d_prepare_intra_edges)(const int x, const int have_left,
+bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
+                                  const int x, const int have_left,
                                   const int y, const int have_top,
                                   const int w, const int h,
                                   const enum EdgeFlags edge_flags,
@@ -104,17 +110,17 @@ bytefn(dav1d_prepare_intra_edges)(const int x, const int have_left,
     }
     case DC_PRED:
     case PAETH_PRED:
-        mode = av1_mode_conv[mode][have_left][have_top];
+        mode = mode_conv[mode][have_left][have_top];
         break;
     default:
         break;
     }
 
+    // FIXME SMOOTH predictors don't need all of the edge pixels
+    const EdgeMask e = intra_prediction_edges[mode];
     const pixel *dst_top;
     if (have_top &&
-        (av1_intra_prediction_edges[mode].needs_top ||
-         av1_intra_prediction_edges[mode].needs_topleft ||
-         (av1_intra_prediction_edges[mode].needs_left && !have_left)))
+        (e.needs_top || e.needs_topleft || (e.needs_left && !have_left)))
     {
         if (prefilter_toplevel_sb_edge) {
             dst_top = &prefilter_toplevel_sb_edge[x * 4];
@@ -123,22 +129,25 @@ bytefn(dav1d_prepare_intra_edges)(const int x, const int have_left,
         }
     }
 
-    if (av1_intra_prediction_edges[mode].needs_left) {
-        const int sz = th << 2;
+    if (e.needs_left) {
+        const int sz = (th << 2) + (e.needs_bottomleft ? (tw << 2) : 3);
         pixel *const left = &topleft_out[-sz];
 
         if (have_left) {
+#if 0
             const int px_have = imin(sz, (h - y) << 2);
 
             for (int i = 0; i < px_have; i++)
                 left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
             if (px_have < sz)
                 pixel_set(left, left[sz - px_have], sz - px_have);
+#endif
         } else {
             pixel_set(left, have_top ? *dst_top : ((1 << bitdepth) >> 1) + 1, sz);
         }
 
-        if (av1_intra_prediction_edges[mode].needs_bottomleft) {
+#if 0
+        if (e.needs_bottomleft) {
             const int have_bottomleft = (!have_left || y + th >= h) ? 0 :
                                         (edge_flags & EDGE_I444_LEFT_HAS_BOTTOM);
 
@@ -153,22 +162,30 @@ bytefn(dav1d_prepare_intra_edges)(const int x, const int have_left,
                 pixel_set(left - sz, left[0], sz);
             }
         }
+#endif
+#if DEBUG_BLOCK_INFO
+        if (print_dbg)
+            hex_dump(left, sz, sz, 1, "l");
+#endif
     }
 
-    if (av1_intra_prediction_edges[mode].needs_top) {
-        const int sz = tw << 2;
+    if (e.needs_top) {
+        const int sz = (tw << 2) + (e.needs_topright ? (th << 2) : 3);
         pixel *const top = &topleft_out[1];
 
         if (have_top) {
+#if 0
             const int px_have = imin(sz, (w - x) << 2);
             pixel_copy(top, dst_top, px_have);
             if (px_have < sz)
                 pixel_set(top + px_have, top[px_have - 1], sz - px_have);
+#endif
         } else {
             pixel_set(top, have_left ? dst[-1] : ((1 << bitdepth) >> 1) - 1, sz);
         }
 
-        if (av1_intra_prediction_edges[mode].needs_topright) {
+#if 0
+        if (e.needs_topright) {
             const int have_topright = (!have_top || x + tw >= w) ? 0 :
                                       (edge_flags & EDGE_I444_TOP_HAS_RIGHT);
 
@@ -183,9 +200,14 @@ bytefn(dav1d_prepare_intra_edges)(const int x, const int have_left,
                 pixel_set(top + sz, top[sz - 1], sz);
             }
         }
+#endif
+#if DEBUG_BLOCK_INFO
+        if (print_dbg)
+            hex_dump(top, sz, sz, 1, "t");
+#endif
     }
 
-    if (av1_intra_prediction_edges[mode].needs_topleft) {
+    if (e.needs_topleft) {
         if (have_left)
             *topleft_out = have_top ? dst_top[-1] : dst[-1];
         else
@@ -194,6 +216,10 @@ bytefn(dav1d_prepare_intra_edges)(const int x, const int have_left,
         if (mode == Z2_PRED && tw + th >= 6 && filter_edge)
             *topleft_out = ((topleft_out[-1] + topleft_out[1]) * 5 +
                             topleft_out[0] * 6 + 8) >> 4;
+#if DEBUG_BLOCK_INFO
+        if (print_dbg)
+            hex_dump(topleft_out, 1, 1, 1, "tl");
+#endif
     }
 
     return mode;
