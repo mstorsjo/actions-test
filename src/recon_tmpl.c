@@ -594,7 +594,8 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 has_stx = eob < lim;
             }
         } else {
-            has_stx = t_dim->min >= TX_16X16 && eob >= 3 && eob < 32;
+            has_stx = t_dim->min >= TX_16X16 && *txtp == DCT_DCT &&
+                      eob >= 3 && eob < 32;
         }
         if (has_stx) {
             const int stx_type = dav1d_msac_decode_symbol_adapt4(&ts->msac,
