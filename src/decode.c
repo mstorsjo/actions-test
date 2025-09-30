@@ -1110,33 +1110,45 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         b->intra = 1;
     }
 
-    const BlockContext *nb0, *nb1;
-    int boff0, boff1;
+    const BlockContext *nb[2];
+    int boff[2];
 
     b->intrabc = 0;
     if (has_luma) {
         // get "spatial neighbours", depending on edge availability;
         // do not cross SB boundaries vertically
         const int have_top_in_sb = !!(t->by & (f->sb_step - 1));
-        boff0 = -1;
 
-        // FIXME deal with bottom/right overhangs
-        if (have_top_in_sb) {
-            if (have_left) {
-                nb0 = t->a;  boff0 = bx4 + bw4 - 1;
-                nb1 = &t->l; boff1 = by4 + bh4 - 1;
-            } else {
-                nb0 = nb1 = t->a; boff0 = bx4; boff1 = bx4 + bw4 - 1;
-            }
-        } else if (have_left) {
-            // we use left by default, which is initialized to zero
-            nb0 = nb1 = &t->l; boff0 = by4; boff1 = by4 + bh4 - 1;
+        int idx = 0;
+        if (have_left && bh4 == h4) {
+            nb[0] = &t->l;
+            boff[0] = by4 + bh4 - 1;
+            idx++;
+        }
+        if (have_top_in_sb && bw4 == w4) {
+            nb[idx] = t->a;
+            boff[idx] = bx4 + bw4 - 1;
+            idx++;
+        }
+        if (have_left && idx < 2) {
+            nb[idx] = &t->l;
+            boff[idx] = by4;
+            idx++;
+        }
+        if (have_top_in_sb && idx < 2) {
+            nb[idx] = t->a;
+            boff[idx] = bx4;
+            idx++;
+        }
+        if (idx < 2) {
+            boff[idx] = -1;
+            if (!idx) boff[1] = -1;
         }
 
         // FIXME inter frames have extra conditions for enabling intrabc
         if (f->frame_hdr->allow_intrabc && imin(bw4, bh4) < 16) {
-            const int ctx = boff0 == -1 ? 0 : nb0->intrabc[boff0] +
-                                              nb1->intrabc[boff1];
+            const int ctx = (boff[0] == -1 ? 0 : nb[0]->intrabc[boff[0]]) +
+                            (boff[1] == -1 ? 0 : nb[1]->intrabc[boff[1]]);
             b->intrabc = dav1d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.intrabc[ctx]);
             DEBUG_BLOCK_printf("%*sPost-intrabc[ctx=%d,%d]: r=%d\n",
@@ -1507,8 +1519,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     [BS_4x4] = 0,
                 };
                 const int sz_ctx = fsc_bsize_groups[bs];
-                const int ctx = !b->intra ? 3 : boff0 == -1 ? 0 :
-                                nb0->fsc[boff0] + nb1->fsc[boff1];
+                const int ctx = !b->intra ? 3 :
+                                (boff[0] == -1 ? 0 : nb[0]->fsc[boff[0]]) +
+                                (boff[1] == -1 ? 0 : nb[1]->fsc[boff[1]]);
                 b->fsc = dav1d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.fsc[ctx][sz_ctx]);
                 DEBUG_BLOCK_printf("%*sPost-fsc[ctx=%d|%d,%d]: r=%d\n",
@@ -1517,14 +1530,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             b->mrl_index = b->multi_mrl = 0;
             if (midx != 0xff /* directional mode */) {
-                const int ctx = boff0 == -1 ? 0 : nb0->mrl[boff0] + nb1->mrl[boff1];
+                const int ctx = (boff[0] == -1 ? 0 : nb[0]->mrl[boff[0]]) +
+                                (boff[1] == -1 ? 0 : nb[1]->mrl[boff[1]]);
                 b->mrl_index = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                    ts->cdf.m.mrl_index[ctx], 3);
                 DEBUG_BLOCK_printf("%*sPost-mrl_index[ctx=%d,%d]: r=%d\n",
                                    depth, "", ctx, b->mrl_index, ts->msac.rng);
                 if (b->mrl_index > 0) {
-                    const int ctx2 = boff0 == -1 ? 0 :
-                                     nb0->multi_mrl[boff0] + nb1->multi_mrl[boff1];
+                    const int ctx2 =
+                        (boff[0] == -1 ? 0 : nb[0]->multi_mrl[boff[0]]) +
+                        (boff[1] == -1 ? 0 : nb[1]->multi_mrl[boff[1]]);
                     b->multi_mrl = dav1d_msac_decode_bool_adapt(&ts->msac,
                                        ts->cdf.m.multi_mrl[ctx2]);
                     DEBUG_BLOCK_printf("%*sPost-multi_line_mrl[ctx=%d,%d]: r=%d\n",
@@ -1724,7 +1739,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (b->y_mode == DC_PRED && f->seq_hdr->intra_dip &&
                 !b->mrl_index && imin(bw4, bh4) >= 2 && bw4 * bh4 >= 8)
             {
-                const int ctx = boff0 == -1 ? 0 : nb0->dip[boff0] + nb1->dip[boff1];
+                const int ctx = (boff[0] == -1 ? 0 : nb[0]->dip[boff[0]]) +
+                                (boff[1] == -1 ? 0 : nb[1]->dip[boff[1]]);
                 b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                       ts->cdf.coef.dip[ctx]);
                 if (b->dip) {
