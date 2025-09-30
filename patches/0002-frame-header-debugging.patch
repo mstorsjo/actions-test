@@ -1,7 +1,7 @@
-From 750093aab61bfc208beabcc5421c9f408cf53fb5 Mon Sep 17 00:00:00 2001
+From a5872741dd03ed856f97057972a2b24c699ca93c Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Wed, 27 Aug 2025 09:40:39 -0400
-Subject: [PATCH 2/3] frame header debugging
+Subject: [PATCH 2/4] frame header debugging
 
 ---
  av1/decoder/decodeframe.c | 168 +++++++++++++++++++++++++++++++++++++-

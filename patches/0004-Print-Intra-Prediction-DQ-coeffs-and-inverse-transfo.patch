@@ -1,7 +1,7 @@
-From 330749f9f9aa8e69372e33ce3c30544a06213519 Mon Sep 17 00:00:00 2001
+From 34b370e3d7ca09f21887813ec9cda0fb24406751 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
-Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
+Subject: [PATCH 4/4] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
  av1/common/reconintra.c   | 27 +++++++++++++++++++++++----
@@ -10,7 +10,7 @@ Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
  3 files changed, 68 insertions(+), 4 deletions(-)
 
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index e4b0cf0f7..dbd6daf34 100644
+index e4b0cf0f7a..dbd6daf341 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -94,7 +94,7 @@ index e4b0cf0f7..dbd6daf34 100644
        disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 99c263c94..53fb3b0d6 100644
+index a2ee347bc3..e5e95b39f4 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -215,6 +215,15 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -114,7 +114,7 @@ index 99c263c94..53fb3b0d6 100644
    const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
    const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 4ebcff5c0..39c6142bd 100644
+index 4ebcff5c0d..39c6142bd0 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
 @@ -34,6 +34,7 @@
@@ -168,5 +168,5 @@ index 4ebcff5c0..39c6142bd 100644
  extern "C" {
  #endif
 -- 
-2.43.0
+2.48.1
 

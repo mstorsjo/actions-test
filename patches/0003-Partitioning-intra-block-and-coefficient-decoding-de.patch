@@ -1,4 +1,4 @@
-From 7058d1ff024abf32afae18e079c6dcfed835fe97 Mon Sep 17 00:00:00 2001
+From 1e52acfc30e40899cf00a8055f0d21ed42fd4221 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
@@ -14,7 +14,7 @@ Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
  6 files changed, 616 insertions(+), 187 deletions(-)
 
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 24617f5bb3..99c263c94a 100644
+index 24617f5bb3..a2ee347bc3 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -223,7 +223,7 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -474,14 +474,14 @@ index 24617f5bb3..99c263c94a 100644
  
        // decode tile
 +#if DEBUG_BLOCK_INFO
-+        const int mi_row = row, mi_col = col;
 +        TileInfo tile_info;
 +        av1_tile_set_row(&tile_info, cm, tile_row);
 +        av1_tile_set_col(&tile_info, cm, tile_col);
++        const int mi_row = tile_info.mi_row_start, mi_col = tile_info.mi_col_start;
 +        DEBUG_BLOCK_printf("decode_tile[tilerow=%d/col=%d,y=%d-%d,x=%d-%d,size=%td]: r=%d\n",
 +                           tile_row, tile_col,
-+                           row, tile_info.mi_row_end,
-+                           col, tile_info.mi_col_end,
++                           tile_info.mi_row_start, tile_info.mi_row_end,
++                           tile_info.mi_col_start, tile_info.mi_col_end,
 +                           tile_bs_buf->size, td->bit_reader->ec.rng);
 +#endif
        decode_tile(pbi, td, row, col);

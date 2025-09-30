@@ -1,7 +1,7 @@
-From 14e4b8228fcbdf9d790e4a93e680643d455e60d9 Mon Sep 17 00:00:00 2001
+From 17115f0b8215ce95f2ab091f47696b919345d93d Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Wed, 27 Aug 2025 09:03:15 -0400
-Subject: [PATCH 1/3] OBU header & sequence header debugging.
+Subject: [PATCH 1/4] OBU header & sequence header debugging.
 
 ---
  av1/decoder/decodeframe.c | 110 ++++++++++++++++++++++++++++++++++++++
