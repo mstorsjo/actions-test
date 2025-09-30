@@ -3565,7 +3565,9 @@ static void read_restoration_info(Dav1dTaskContext *const t,
                                 ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
                             cf_range[i][1];
                 if (asym && i >= 6) {
-                    // FIXME insert an extra coef here
+                    filter[i + 1] = filter[i];
+                    i++;
+                    m >>= 1;
                 }
             }
             const int bidx = bank->bank_idx[n] = (1 + bank->bank_idx[n]) & 3;
