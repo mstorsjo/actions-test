@@ -403,7 +403,7 @@ typedef struct Dav1dFrameHeader {
         uint16_t update;
     } tiling;
     struct {
-        uint8_t yac;
+        uint16_t yac;
         int8_t ydc_delta;
         int8_t udc_delta, uac_delta, vdc_delta, vac_delta;
         struct {
