@@ -3505,8 +3505,8 @@ static void read_restoration_info(Dav1dTaskContext *const t,
         } else {
             const int type = dav1d_msac_decode_bool_adapt(&ts->msac,
                                  ts->cdf.m.rst_switchable[1]);
-            lr->type = type ? DAV1D_RESTORATION_NS_WIENER :
-                              DAV1D_RESTORATION_PC_WIENER;
+            lr->type = type ? DAV1D_RESTORATION_PC_WIENER :
+                              DAV1D_RESTORATION_NS_WIENER;
         }
     } else {
         assert(!p || frame_type == DAV1D_RESTORATION_NS_WIENER);
