@@ -1534,8 +1534,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
         if (has_chroma) {
             const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
-            const int cfl_allowed = f->seq_hdr->cfl && !t->sdp_cfl_disallowed &&
-                                    imax(cbw4, cbh4) <= (ll ? 1 : 16);
+            const int cfl_allowed = f->seq_hdr->cfl &&
+                (imin(bw4, bh4) >= 16 || !t->sdp_cfl_disallowed) &&
+                imax(cbw4, cbh4) <= (ll ? 1 : 16);
             int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
             if (cfl_allowed) {
                 cfl_ctx = (t->a->uvmode[cbx4] == CFL_PRED) +
@@ -2918,8 +2919,8 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                        f->frame_hdr->frame_offset, t->by, t->bx, bs, ts->msac.rng);
 #endif
             if (cbs == BS_64x64 && lbs == BS_INVALID &&
-                (*dir_ptr == -1 || (*dir_ptr & 0x303) == 0x102 ||
-                                   (*dir_ptr & 0x303) == 0x201))
+                (*dir_ptr == -1 || (*dir_ptr & 0x30003) == 0x10002 ||
+                                   (*dir_ptr & 0x30003) == 0x20001))
             {
                 // F164: infer SDP chroma partitioning at 64x64 level
                 if (*dir_ptr == -1) {
@@ -2927,8 +2928,8 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 } else {
                     // if luma split one way, and all children split another way,
                     // then copy the initial first-way split for chroma
-                    dir = (*dir_ptr & 0x303) == 0x102;
-                    bp = dir ? PARTITION_V : PARTITION_H;
+                    dir = (*dir_ptr & 0x30003) == 0x10002;
+                    bp = (*dir_ptr >> 8) & 0xff;
                 }
             } else {
                 const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, pl, by4, bx4);
@@ -3031,7 +3032,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         // F157 "limit SDP-imposed CfL delay"
         if (lbs == BS_INVALID && cbs == BS_64x64)
             t->sdp_cfl_disallowed = dir != -1 && dir != (*dir_ptr & 0x3);
-        *dir_ptr |= dir;
+        *dir_ptr |= dir | (bp << 8);
     } else {
         //.. FIXME 2-pass decoding
         abort();
@@ -3281,7 +3282,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     default:
         assert(0);
     }
-    *dir_ptr |= child_dir << 8;
+    *dir_ptr |= child_dir << 16;
 
     return 0;
 }
