@@ -1452,7 +1452,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                     const int cmidx = custom_mode_list_y[n];
                                     for (int delta = -i, j = 0; j < 2; delta = +i, j++) {
                                         // FIXME replace modulo with fastdiv
-                                        const int dmidx = (cmidx + delta) % 56;
+                                        const int dmidx = (cmidx + delta + 56) % 56;
                                         if (!(mask & (1ULL << dmidx))) {
                                             *ptr++ = dmidx;
                                             mask |= 1ULL << dmidx;
