@@ -399,7 +399,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
               dav1d_msac_decode_bools_bypass(&ts->msac, eob_bin);
         DEBUG_CF_printf("%*sPost-eob[%d]: r=%d\n", depth, "", eob, ts->msac.rng);
     }
-    assert(eob >= 0);
+    assert(eob >= 0 && eob < 16 * t_dim->w * t_dim->h);
 
     // transform type (chroma: derived, luma: explicitly coded)
     static const uint8_t txtp_long_tbl[2][2][4] = {
