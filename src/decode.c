@@ -3048,11 +3048,21 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     case PARTITION_NONE:
         if (decode_b(t, DB_ONLY(depth + 1) lbs, cbs)) return -1;
         if (t->frame_thread.pass != 2) {
+            BlockContext *edge = t->a;
+#define set_ctx(rep_macro) \
+            rep_macro(edge->partition[0], off, (uint8_t) ~(b_dim[i] - 1)); \
+            rep_macro(edge->partition[1], off, (uint8_t) ~(b_dim[i] - 1))
+            if ((cbs | lbs) != BS_INVALID) {
+                for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
+                    case_set(b_dim[2 + i]);
+                }
+            } else {
+#undef set_ctx
 #define set_ctx(rep_macro) \
             rep_macro(edge->partition[pl], off, (uint8_t) ~(b_dim[i] - 1))
-            BlockContext *edge = t->a;
-            for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
-                case_set(b_dim[2 + i]);
+                for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
+                    case_set(b_dim[2 + i]);
+                }
             }
 #undef set_ctx
         }
