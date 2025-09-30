@@ -232,7 +232,7 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
             if (op->idc && (!(op->idc & 0xff) || !(op->idc & 0xf00)))
                 goto error;
             op->level = dav1d_get_bits(gb, 5);
-            if (op->level > 8)
+            if (op->level >= 8)
                 op->tier = dav1d_get_bit(gb);
             if (hdr->decoder_model_info_present) {
                 op->decoder_model_param_present = dav1d_get_bit(gb);
