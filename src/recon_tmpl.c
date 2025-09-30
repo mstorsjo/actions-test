@@ -403,7 +403,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
               dav1d_msac_decode_bools_bypass(&ts->msac, eob_bin);
         DEBUG_CF_printf("%*sPost-eob[%d]: r=%d\n", depth, "", eob, ts->msac.rng);
     }
-    assert(eob >= 0 && eob < 16 * t_dim->w * t_dim->h);
+    assert(eob >= 0 && eob < (16 << tx2dszctx));
 
     // transform type (chroma: derived, luma: explicitly coded)
     static const uint8_t txtp_long_tbl[2][2][4] = {
@@ -526,9 +526,10 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
             *txtp = DCT_DCT;
         } else {
-            const int y = eob >> (2 + t_dim->lw), x = eob & (4 * t_dim->w - 1);
+            const int y = eob >> (2 + slw), x = eob & ((4 << slw) - 1);
             const int xy = x + y;
-            const int ctx = xy < 2 ? 1 : xy > 4 * (t_dim->w + t_dim->h) - 4 ? 2 : 0;
+            const int ctx = xy < 2 ? 1 : xy > 4 * (imin(t_dim->w, 8) +
+                                                   imin(t_dim->h, 8)) - 4 ? 2 : 0;
             if (tx == TX_32X32) {
                 *txtp = dav1d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.txtp_inter_dct_idtx[ctx][TX_32X32]) ?
@@ -928,7 +929,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned shift = slh + 2, shift2 = 0;
             const unsigned mask = (4 << slh) - 1;
             memset(levels, 0, stride * ((4 << slh) + 2));
-            const int hi_to_low_tx = 8 * t_dim->h >> chroma;
+            const int hi_to_low_tx = (8 << slh) >> chroma;
             DECODE_COEFS_CLASS(TX_CLASS_H, y);
         }
         case TX_CLASS_V: {
@@ -936,7 +937,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned shift = slw + 2, shift2 = slh + 2;
             const unsigned mask = (4 << slw) - 1;
             memset(levels, 0, stride * ((4 << slw) + 2));
-            const int hi_to_low_tx = 8 * t_dim->w >> chroma;
+            const int hi_to_low_tx = (8 << slw) >> chroma;
             DECODE_COEFS_CLASS(TX_CLASS_V, y);
         }
 #undef DECODE_COEFS_CLASS
