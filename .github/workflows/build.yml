@@ -8,5 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run test binary
+        shell: cmd
         run: |
-          ./exit1.exe
+          ver
+          exit1.exe
