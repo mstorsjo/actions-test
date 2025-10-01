@@ -50,6 +50,7 @@ typedef struct BlockContext {
     uint8_t ALIGN(skip_mode[32], 8);
     uint8_t ALIGN(intra[32], 8);
     uint8_t ALIGN(intrabc[32], 8);
+    uint8_t ALIGN(morph_pred[32], 8);
     uint8_t ALIGN(comp_type[32], 8);
     int8_t ALIGN(ref[2][32], 8); // -1 means intra
     uint8_t ALIGN(filter[2][32], 8); // 3 means unset

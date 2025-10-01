@@ -70,6 +70,7 @@ typedef struct CdfModeContext {
     uint16_t cfl_alpha[6][9];
     uint16_t intrabc_mode[3];
     uint16_t intrabc_precision[3];
+    uint16_t morph_pred[3][3];
     uint16_t tx_split[2][2][9][3];
     uint16_t tx_part_2d[2][2][14][8];
     uint16_t tx_part_1d[2][2][2][3];

@@ -1794,6 +1794,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 rep_macro(edge->skip_mode, off, 0); \
                 rep_macro(edge->intra, off, 1); \
                 rep_macro(edge->intrabc, off, 0); \
+                rep_macro(edge->morph_pred, off, 0); \
                 rep_macro(edge->skip_txfm, off, b->skip_txfm); \
                 /* see aomedia bug 2183 for why we use luma coordinates here */ \
                 rep_macro(t->pal_sz_uv[i], off, (has_chroma ? b->pal_sz[1] : 0)); \
@@ -1873,10 +1874,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->mv[0].x += diff.x;
             b->mv[0].y += diff.y;
         }
+        int morphctx = -1;
+        b->morph_pred = 0;
         if (!(f->frame_hdr->frame_type & 1) && f->seq_hdr->bawp &&
             f->frame_hdr->allow_screen_content_tools)
         {
-            printf("FIXME morph_pred symbol\n");
+            morphctx = (boff[0] == -1 ? 0 : nb[0]->morph_pred[boff[0]]) +
+                       (boff[1] == -1 ? 0 : nb[1]->morph_pred[boff[1]]);
+            b->morph_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.m.morph_pred[morphctx]);
         }
 
 #if 0
@@ -1940,7 +1946,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         DEBUG_BLOCK_printf("%*sPost-intrabc_info[mode=%d,drl=%d,mv=y:%d,x:%d,"
                            "prec=%d,morphctx=%d,morph=%d]: r=%d\n",
                            depth, "", is_refmv, drl_idx, b->mv[0].y, b->mv[0].x,
-                           is_qpel, -1, 0, ts->msac.rng);
+                           is_qpel, morphctx, b->morph_pred, ts->msac.rng);
         read_tx_part(t, DB_ONLY(depth) b, bs);
 
         // reconstruction
@@ -1968,6 +1974,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 rep_macro(edge->seg_pred, off, seg_pred); \
                 rep_macro(edge->skip_mode, off, 0); \
                 rep_macro(edge->intrabc, off, 1); \
+                rep_macro(edge->morph_pred, off, b->morph_pred); \
                 rep_macro(edge->intra, off, 1); \
                 rep_macro(edge->skip_txfm, off, b->skip_txfm)
                 case_set(b_dim[2 + i]);
@@ -2518,6 +2525,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->skip_mode, off, b->skip_mode); \
             rep_macro(edge->intra, off, 0); \
             rep_macro(edge->intrabc, off, 0); \
+            rep_macro(edge->morph_pred, off, 0); \
             rep_macro(edge->midx, off, 0xff); \
             rep_macro(edge->fsc, off, 0); \
             rep_macro(edge->skip_txfm, off, b->skip_txfm); \

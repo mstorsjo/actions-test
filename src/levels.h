@@ -308,7 +308,7 @@ typedef struct Av1Block {
             union {
                 struct {
                     union mv mv[2];
-                    uint8_t wedge_idx, mask_sign, interintra_mode;
+                    uint8_t wedge_idx, mask_sign, interintra_mode, morph_pred;
                 };
                 struct {
                     union mv mv2d;

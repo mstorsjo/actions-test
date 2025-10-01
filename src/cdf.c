@@ -758,6 +758,10 @@ static const CdfDefaultContext default_cdf = {
             CDF1(26560), 31
         }, .intrabc_precision = {
             CDF1(24576), 0
+        }, .morph_pred = {
+            { CDF1(19186), 50 },
+            { CDF1(16483), 1 },
+            { CDF1(8242), 95 },
         }, .tx_split = {
             {
                 {
@@ -6354,6 +6358,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(6, 7, m.cfl_alpha);
     update_cdf_1d(1, m.intrabc_mode);
     update_cdf_1d(1, m.intrabc_precision);
+    update_cdf_2d(3, 1, m.morph_pred);
     update_cdf_4d(2, 2, 9, 1, m.tx_split);
     update_cdf_4d(2, 2, 14, 6, m.tx_part_2d);
     update_cdf_4d(2, 2, 2, 1, m.tx_part_1d);
