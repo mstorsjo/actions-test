@@ -1,0 +1,12 @@
+name: Builds
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run test binary
+        run: |
+          ./exit1.exe
