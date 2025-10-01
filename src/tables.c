@@ -755,56 +755,13 @@ const int8_t ALIGN(dav1d_resize_filter[64][8], 8) = {
     { 0, -1,  2,   -4, -127,  3, -1, 0 }, { 0,  0,  1,   -2, -128,  1,  0, 0 },
 };
 
-const uint8_t ALIGN(dav1d_avm_sm_weights[2][128], 16) = {
-    [0] = {
-        // Unused (align lookups to table[scale][length])
-        0, 0, 0, 0,
-        // length = 4
-        32,  8,  2,  2,
-        // length = 8
-        32,  8,  2,  2,  2,  2,  2,  2,
-        // length = 16
-        32, 32, 16, 16,  8,  8,  4,  4,
-         2,  2,  2,  2,  2,  2,  2,  2,
-        // length = 32
-        32, 32, 16, 16,  8,  8,  4,  4,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-        // length = 64
-        32, 32, 16, 16,  8,  8,  4,  4,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-    }, [1] = {
-        // Unused (align lookups to table[scale][length])
-        0, 0, 0, 0,
-        // length = 4
-        32, 16,  2,  2,
-        // length = 8
-        32, 16,  8,  4,  2,  2,  2,  2,
-        // length = 16
-        32, 16,  8,  4,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-        // length = 32
-        32, 16,  8,  4,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-        // length = 64
-        32, 16,  8,  4,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-         2,  2,  2,  2,  2,  2,  2,  2,
-    }
+// FIXME we might not need this table anymore (I guess it depends on the SIMD)
+const uint8_t ALIGN(dav1d_avm_sm_weights[3 /* scale */][64], 16) = {
+    // The ith element is computed as 32 >> min(6, (i << 2) >> scale)
+    // This table merges the AVM scales 0 and 2 into 0 (since they are complementary)
+    [0] = { 32,  8,  2,  0,  0,  0,  0,  0, },
+    [1] = { 32, 16,  8,  4,  2,  1,  0,  0, },
+    [2] = { 32, 32, 16, 16,  8,  8,  4,  4,  2,  2,  1,  1,  0,  0, },
 };
 
 ATTR_MCMODEL_SMALL
