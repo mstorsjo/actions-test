@@ -955,10 +955,12 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         uint16_t (*const hi_cdf)[5] = ts->cdf.coef.br_y_tok_lf;
         dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac, eob_cdf[0], 4);
         if (dc_tok == 5) {
-            dc_tok += dav1d_msac_decode_symbol_adapt4(&ts->msac, hi_cdf[0], 3);
+            dc_tok += dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                          hi_cdf[tx_class == TX_CLASS_2D ? 0 : 7], 3);
         }
         DEBUG_CF_printf("%*sPost-eob_tok[pos=%d,ctx=%d|0|%d,freq=lo,plane=y,%d]: r=%d\n",
-                        depth, "", eob, t_dim->ctx, dc_tok >= 5 ? 0 : -1,
+                        depth, "", eob, t_dim->ctx,
+                        dc_tok < 5 ? -1 : tx_class == TX_CLASS_2D ? 0 : 7,
                         dc_tok, ts->msac.rng);
     }
 
