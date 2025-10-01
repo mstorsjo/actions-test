@@ -1853,7 +1853,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->mv[0].y = -(8 * sbsz);
             }
         }
-        int is_qpel = 0;
+        int is_qpel = !f->frame_hdr->force_integer_mv;
         if (!is_refmv && !f->frame_hdr->force_integer_mv) {
             is_qpel = dav1d_msac_decode_bool_adapt(&ts->msac,
                           ts->cdf.m.intrabc_precision);
