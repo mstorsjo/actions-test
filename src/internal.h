@@ -57,6 +57,7 @@ typedef struct Dav1dTask Dav1dTask;
 #include "src/picture.h"
 #include "src/recon.h"
 #include "src/refmvs.h"
+#include "src/stx.h"
 #include "src/thread.h"
 
 typedef struct Dav1dDSPContext {
@@ -64,6 +65,7 @@ typedef struct Dav1dDSPContext {
     Dav1dIntraPredDSPContext ipred;
     Dav1dMCDSPContext mc;
     Dav1dInvTxfmDSPContext itx;
+    Dav1dStxDSPContext stx;
     Dav1dLoopFilterDSPContext lf;
     Dav1dCdefDSPContext cdef;
     Dav1dLoopRestorationDSPContext lr;

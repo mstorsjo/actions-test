@@ -580,8 +580,8 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const enum TxClass tx_class = dav1d_tx_type_class[*txtp];
 
     // secondary transform
+    int has_stx = 0;
     if (f->seq_hdr->ist[!intra] && !chroma) {
-        int has_stx = 0;
         if (intra) {
             if (eob >= 1 && b->y_mode != PAETH_PRED &&
                 (*txtp == DCT_DCT || *txtp == ADST_ADST))
@@ -672,6 +672,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (f->seq_hdr->fsc_residual && (!intra || b->fsc) &&
         *txtp == IDTX && !chroma)
     {
+        assert(!has_stx);
         int8_t *const levels = t->scratch.levels;
         const ptrdiff_t stride = 1 + (4 << slh);
         memset(levels, 0, stride * ((4 << slw) + 1));
@@ -755,7 +756,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     } else if (eob) {
         int8_t *const levels = t->scratch.levels;
 
-#define DECODE_COEFS_CLASS(tx_class, xy) \
+#define DECODE_COEFS_CLASS(tx_class, xy, is_stx) \
         int lim; \
         uint16_t *eob_cdf, (*hi_cdf)[5], *lo_cdf; \
         if (eob >= hi_to_low_tx) { \
@@ -805,7 +806,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         lim == 5 ? "lo" : "hi", chroma ? "uv" : "y", \
                         tok, ts->msac.rng); \
         tcq_state = tcq_next_state(tcq_state, tok); \
-        cf[rc] = tok; \
+        cf[is_stx ? eob : rc] = tok; \
         if (tx_class == TX_CLASS_2D) \
             level = levels + rc; \
         else \
@@ -849,7 +850,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             chroma ? "uv" : "y", tok, ts->msac.rng); \
             tcq_state = tcq_next_state(tcq_state, tok); \
             *level = tok; \
-            cf[rc] = tok; \
+            cf[is_stx ? i : rc] = tok; \
         } \
         /* dc */ \
         unsigned hr_ctx; \
@@ -869,9 +870,9 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const unsigned ac_dq = dq_tbl[1]; /* FIXME qm */ \
         for (int i = eob; i > 0; i--) { \
             if (tx_class == TX_CLASS_2D) \
-                rc = scan[i], x = rc >> shift, y = rc & mask; \
+                rc = is_stx ? i : scan[i]; \
             else if (tx_class == TX_CLASS_H) \
-                x = i & mask, y = i >> shift, rc = i; \
+                y = i >> shift, rc = i; \
             else /* tx_class == TX_CLASS_V */ \
                 x = i & mask, y = i >> shift, rc = (x << shift2) | y; \
             int tok = cf[rc]; \
@@ -925,7 +926,11 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned mask = (4 << slh) - 1;
             memset(levels, 0, stride * ((4 << slw) + 2));
             const int hi_to_low_tx = chroma ? 1 : 10;
-            DECODE_COEFS_CLASS(TX_CLASS_2D, x + y);
+            if (has_stx) {
+                DECODE_COEFS_CLASS(TX_CLASS_2D, x + y, 1);
+            } else {
+                DECODE_COEFS_CLASS(TX_CLASS_2D, x + y, 0);
+            }
         }
         case TX_CLASS_H: {
             const ptrdiff_t stride = 32;
@@ -933,7 +938,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned mask = (4 << slh) - 1;
             memset(levels, 0, stride * ((4 << slh) + 2));
             const int hi_to_low_tx = (8 << slh) >> chroma;
-            DECODE_COEFS_CLASS(TX_CLASS_H, y);
+            DECODE_COEFS_CLASS(TX_CLASS_H, y, 0);
         }
         case TX_CLASS_V: {
             const ptrdiff_t stride = 32;
@@ -941,7 +946,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned mask = (4 << slw) - 1;
             memset(levels, 0, stride * ((4 << slw) + 2));
             const int hi_to_low_tx = (8 << slw) >> chroma;
-            DECODE_COEFS_CLASS(TX_CLASS_V, y);
+            DECODE_COEFS_CLASS(TX_CLASS_V, y, 0);
         }
 #undef DECODE_COEFS_CLASS
         default: assert(0);
@@ -1526,15 +1531,18 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     enum TxfmType txtp;
     coef *cf;
     int eob;
+    int stx;
     if (b->skip_txfm) {
         cf_ctx = 0x40;
         txtp = DCT_DCT;
         eob = -1;
+        stx = 0;
     } else {
         cf = bitfn(t->cf);
         eob = decode_coefs(t, DB_ONLY(depth + 1)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
                            tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
+        stx = txtp >> 4;
         txtp = txtp & 0xf;
         DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
                            depth + 1, "", tw, th, txtp, eob, ts->msac.rng);
@@ -1582,6 +1590,16 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (eob != -1) {
+            if (stx) {
+                const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
+                                 (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
+                const int transpose = !((mask >> m) & 1);
+                dsp->stx.stxfm(cf, tx, stx, eob, transpose HIGHBD_CALL_SUFFIX);
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    coef_dump(cf, imin(t_dim->h, 8) * 4,
+                              imin(t_dim->w, 8) * 4, 3, "stx");
+                }
+            }
             dsp->itx.itxfm_add[tx][txtp](dst, f->cur.stride[0],
                                          cf, eob HIGHBD_CALL_SUFFIX);
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {

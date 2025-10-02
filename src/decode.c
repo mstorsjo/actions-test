@@ -1817,7 +1817,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                        mvstack[n].mv.mv[0].x, mvstack[n].weight);
         }
 #endif
- 
+
         const int is_refmv = dav1d_msac_decode_bool_adapt(&ts->msac,
                                  ts->cdf.m.intrabc_mode);
         int drl_idx;
@@ -4354,6 +4354,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             dav1d_cdef_dsp_init_##bd##bpc(&dsp->cdef); \
             dav1d_intra_pred_dsp_init_##bd##bpc(&dsp->ipred); \
             dav1d_itx_dsp_init_##bd##bpc(&dsp->itx, bpc); \
+            dav1d_stx_dsp_init_##bd##bpc(&dsp->stx); \
             dav1d_loop_filter_dsp_init_##bd##bpc(&dsp->lf); \
             dav1d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr, bpc); \
             dav1d_mc_dsp_init_##bd##bpc(&dsp->mc); \

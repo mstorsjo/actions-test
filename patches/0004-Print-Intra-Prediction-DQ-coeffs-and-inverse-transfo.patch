@@ -1,16 +1,21 @@
-From e82f3b61236edcb5463c456f5262246955bf766f Mon Sep 17 00:00:00 2001
+From 133103f3479ba2ac6a53f43da7e7c42ab4f48ba3 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
-Subject: [PATCH 4/4] Print Intra Prediction, DQ coeffs and inverse transform
+Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- aom/debug.h               | 40 ++++++++++++++++++++++++++++++++++++++
- av1/common/reconintra.c   | 41 +++++++++++++++++++++++++++++++++++----
- av1/decoder/decodeframe.c |  9 +++++++++
- 3 files changed, 86 insertions(+), 4 deletions(-)
+ aom/debug.h               | 48 +++++++++++++++++++++++++++++++++++++++
+ av1/common/idct.c         | 20 +++++++++++++---
+ av1/common/idct.h         |  7 ++++--
+ av1/common/reconintra.c   | 41 +++++++++++++++++++++++++++++----
+ av1/decoder/decodeframe.c | 16 ++++++++++++-
+ av1/encoder/encodemb.c    | 10 ++++----
+ av1/encoder/tpl_model.c   |  2 +-
+ av1/encoder/tx_search.c   |  8 +++----
+ 8 files changed, 132 insertions(+), 20 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
-index b203c56cf..d9a4afbb3 100644
+index b203c56cf..9fcfc55c6 100644
 --- a/aom/debug.h
 +++ b/aom/debug.h
 @@ -28,10 +28,15 @@
@@ -29,11 +34,10 @@ index b203c56cf..d9a4afbb3 100644
  #if DEBUG_BLOCK_INFO
  #define DB_ONLY(x...) x,
  #define BLOCK_TO_DEBUG \
-@@ -48,4 +53,39 @@
- #define DEBUG_CF_printf(fmt...) do { } while (0)
- #endif
- 
-+#if DEBUG_B_PIXELS
+@@ -41,6 +46,49 @@
+     if (BLOCK_TO_DEBUG) printf(fmt)
+ #define DEBUG_CF_printf(fmt...) \
+     if (BLOCK_TO_DEBUG && plane > -1 && 1) printf(fmt)
 +#define PIX_HEX_FMT "%02x"
 +#define PXSTRIDE(x) (x)
 +
@@ -66,11 +70,119 @@ index b203c56cf..d9a4afbb3 100644
 +    printf("\n");
 +  }
 +}
++
++static inline void coef_dump(const int32_t *buf, const int w, const int h,
++                      const int len, const char *what)
++{
++  printf("%s\n", what);
++  for (int y = 0; y < h; y++) {
++    for (int x = 0; x < w; x++)
++      printf(" %*d", len, buf[y * w + x]);
++    printf("\n");
++  }
++}
+ #else
+ #define DB_ONLY(x...)
+ #define BLOCK_TO_DEBUG 0
+diff --git a/av1/common/idct.c b/av1/common/idct.c
+index a99da9bf7..6b1b40954 100644
+--- a/av1/common/idct.c
++++ b/av1/common/idct.c
+@@ -1278,7 +1278,8 @@ static void av1_highbd_inv_txfm_add_master(const tran_low_t *input,
+   av1_highbd_inv_txfm_add(input, dest, stride, txfm_param);
+ }
+ 
+-void av1_inverse_transform_block(const MACROBLOCKD *xd,
++void av1_inverse_transform_block(DB_ONLY(const int print)
++                                 const MACROBLOCKD *xd,
+                                  const tran_low_t *dqcoeff, int plane,
+                                  TX_TYPE tx_type, TX_SIZE tx_size,
+                                  uint16_t *dst, int stride, int eob,
+@@ -1309,7 +1310,7 @@ void av1_inverse_transform_block(const MACROBLOCKD *xd,
+   DECLARE_ALIGNED(32, tran_low_t, temp_dqcoeff[MAX_TX_SQUARE]);
+   memcpy(temp_dqcoeff, dqcoeff, sizeof(tran_low_t) * tx_size_2d[tx_size]);
+ 
+-  av1_inv_stxfm(temp_dqcoeff, &txfm_param);
++  av1_inv_stxfm(DB_ONLY(print) temp_dqcoeff, &txfm_param);
+ 
+   MB_MODE_INFO *const mbmi = xd->mi[0];
+   if (xd->lossless[mbmi->segment_id]) {
+@@ -1363,7 +1364,8 @@ void inv_stxfm_c(tran_low_t *src, tran_low_t *dst, const PREDICTION_MODE mode,
+   }
+ }
+ 
+-void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
++void av1_inv_stxfm(DB_ONLY(const int print)
++                   tran_low_t *coeff, TxfmParam *txfm_param) {
+   const TX_TYPE stx_type = txfm_param->sec_tx_type;
+ 
+   const int width = tx_size_wide[txfm_param->tx_size] <= 32
+@@ -1395,6 +1397,12 @@ void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
+       *tmp = src[scan[r]];
+       tmp++;
+     }
++#if DEBUG_BLOCK_INFO
++    if (print) {
++      coef_dump(buf0, width, height, 3, "dq");
++    }
 +#endif
 +
- #endif /* AOM_DEBUG_H */
+     int8_t transpose = 0;
+     mode = AOMMIN(intra_mode, SMOOTH_H_PRED);
+     if ((mode == H_PRED) || (mode == D157_PRED) || (mode == D67_PRED) ||
+@@ -1413,6 +1421,7 @@ void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
+       fprintf(stderr, "\n");
+     }
+ #endif  // STX_COEFF_DEBUG
++
+     mode_t = txfm_param->sec_tx_set;
+     assert(mode_t < IST_SET_SIZE);
+     if (transpose) {
+@@ -1449,5 +1458,10 @@ void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
+       fprintf(stderr, "\n");
+     }
+ #endif  // STX_COEFF_DEBUG
++#if DEBUG_B_PIXELS
++    if (print) {
++      coef_dump_transpose(coeff, width, height, 3, "stx");
++    }
++#endif
+   }
+ }
+diff --git a/av1/common/idct.h b/av1/common/idct.h
+index bf16b2a01..b8f9f7b59 100644
+--- a/av1/common/idct.h
++++ b/av1/common/idct.h
+@@ -21,6 +21,8 @@
+ #include "av1/common/enums.h"
+ #include "aom_dsp/txfm_common.h"
+ 
++#include "aom/debug.h"
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+@@ -41,7 +43,8 @@ void av1_inv_cross_chroma_tx_block(tran_low_t *dqcoeff_c1,
+                                    tran_low_t *dqcoeff_c2, TX_SIZE tx_size,
+                                    CctxType cctx_type, const int bd);
+ 
+-void av1_inverse_transform_block(const MACROBLOCKD *xd,
++void av1_inverse_transform_block(DB_ONLY(int print)
++                                 const MACROBLOCKD *xd,
+                                  const tran_low_t *dqcoeff, int plane,
+                                  TX_TYPE tx_type, TX_SIZE tx_size,
+                                  uint16_t *dst, int stride, int eob,
+@@ -65,7 +68,7 @@ static INLINE const int32_t *cast_to_int32(const tran_low_t *input) {
+   return (const int32_t *)input;
+ }
+ 
+-void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param);
++void av1_inv_stxfm(DB_ONLY(int print) tran_low_t *coeff, TxfmParam *txfm_param);
+ 
+ #ifdef __cplusplus
+ }  // extern "C"
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index e4b0cf0f7..5586f3e4c 100644
+index e4b0cf0f7..857502dc6 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -126,16 +238,16 @@ index e4b0cf0f7..5586f3e4c 100644
      }
    }
  
-+#if DEBUG_B_PIXELS
++#if DEBUG_BLOCK_INFO
 +  const int mi_row = xd->mi_row;
 +  const int mi_col = xd->mi_col;
-+  if (BLOCK_TO_DEBUG) {
++  if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
 +  // FIXME only print luma for now
 +    if (plane == AOM_PLANE_Y) {
 +      if (need_left) {
 +        printf("l\n");
-+        for (int i = num_left_pixels_needed - 1; i >= 0; i--)
-+          printf(" %02x", left_col_1st[i]);
++        for (int x = num_left_pixels_needed - 1; x >= 0; x--)
++          printf(" %02x", left_col_1st[x]);
 +        printf("\n");
 +      }
 +      if (need_above)
@@ -175,25 +287,141 @@ index e4b0cf0f7..5586f3e4c 100644
        disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 7aeca1313..30130fdaa 100644
+index 589e1d122..319d9ad18 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
-@@ -215,6 +215,15 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
+@@ -205,7 +205,16 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
+     scan_line = AOMMAX(eob_data_c1->max_scan_line, eob_data_c2->max_scan_line);
+     eob = AOMMAX(eob_data_c1->eob, eob_data_c2->eob);
+   }
+-  av1_inverse_transform_block(
++#if DEBUG_BLOCK_INFO
++  const int mi_row = dcb->xd.mi_row;
++  const int mi_col = dcb->xd.mi_col;
++  const int print = BLOCK_TO_DEBUG && DEBUG_B_PIXELS && plane == AOM_PLANE_Y;
++  if (print && !(tx_type >> 4)) {
++    coef_dump_transpose(dqcoeff, tx_size_wide[tx_size], tx_size_high[tx_size],
++                        3, "dq");
++  }
++#endif
++  av1_inverse_transform_block(DB_ONLY(print)
+       &dcb->xd, dqcoeff, plane, tx_type, tx_size, dst, stride, eob,
+       replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
+                           cm->features.allow_screen_content_tools, &dcb->xd),
+@@ -215,6 +224,11 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
        cm->seq_params.enable_t64_resample
  #endif  // CONFIG_TX64_SEQ_FLAG
    );
-+#if DEBUG_B_PIXELS
-+  const int mi_row = dcb->xd.mi_row;
-+  const int mi_col = dcb->xd.mi_col;
-+  if (BLOCK_TO_DEBUG && plane == AOM_PLANE_Y) {
-+    coef_dump_transpose(dqcoeff, tx_size_wide[tx_size],
-+                        tx_size_high[tx_size], 3, "dq");
++#if DEBUG_BLOCK_INFO
++  if (print) {
 +    hex_dump(dst, stride, tx_size_wide[tx_size], tx_size_high[tx_size], "recon");
 +  }
 +#endif
    const int width = tx_size_wide[tx_size] <= 32 ? tx_size_wide[tx_size] : 32;
    const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
    const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
+diff --git a/av1/encoder/encodemb.c b/av1/encoder/encodemb.c
+index 747310646..58e27c3ce 100644
+--- a/av1/encoder/encodemb.c
++++ b/av1/encoder/encodemb.c
+@@ -1050,7 +1050,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
+     if (recon_with_cctx) {
+       av1_inv_cross_chroma_tx_block(dqcoeff_c1, dqcoeff, tx_size, cctx_type,
+                                     xd->bd);
+-      av1_inverse_transform_block(
++      av1_inverse_transform_block(DB_ONLY(0)
+           xd, dqcoeff_c1, AOM_PLANE_U, tx_type, tx_size, dst_c1,
+           pd_c1->dst.stride, max_chroma_eob,
+           replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
+@@ -1066,7 +1066,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
+ 
+   if (p->eobs[block] || recon_with_cctx) {
+     *(args->skip) = 0;
+-    av1_inverse_transform_block(
++    av1_inverse_transform_block(DB_ONLY(0)
+         xd, dqcoeff, plane, tx_type, tx_size, dst, pd->dst.stride,
+         (plane == 0 || !is_cctx_allowed(cm, xd) || !recon_with_cctx)
+             ? p->eobs[block]
+@@ -1619,7 +1619,7 @@ void av1_encode_block_intra(int plane, int block, int blk_row, int blk_col,
+   }
+ 
+   if (*eob) {
+-    av1_inverse_transform_block(
++    av1_inverse_transform_block(DB_ONLY(0)
+         xd, dqcoeff, plane, tx_type, tx_size, dst, dst_stride, *eob,
+         replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
+                             cm->features.allow_screen_content_tools, xd),
+@@ -1972,7 +1972,7 @@ void av1_encode_block_intra_joint_uv(int block, int blk_row, int blk_col,
+   if (*eob_c1 || *eob_c2) {
+     av1_inv_cross_chroma_tx_block(dqcoeff_c1, dqcoeff_c2, tx_size, cctx_type,
+                                   xd->bd);
+-    av1_inverse_transform_block(
++    av1_inverse_transform_block(DB_ONLY(0)
+         xd, dqcoeff_c1, AOM_PLANE_U, tx_type, tx_size, dst_c1, dst_stride,
+         AOMMAX(*eob_c1, *eob_c2),
+         replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
+@@ -1983,7 +1983,7 @@ void av1_encode_block_intra_joint_uv(int block, int blk_row, int blk_col,
+         cm->seq_params.enable_t64_resample
+ #endif  // CONFIG_TX64_SEQ_FLAG
+     );
+-    av1_inverse_transform_block(
++    av1_inverse_transform_block(DB_ONLY(0)
+         xd, dqcoeff_c2, AOM_PLANE_V, tx_type, tx_size, dst_c2, dst_stride,
+         AOMMAX(*eob_c1, *eob_c2),
+         replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
+diff --git a/av1/encoder/tpl_model.c b/av1/encoder/tpl_model.c
+index 4f2781ade..61fe3f354 100644
+--- a/av1/encoder/tpl_model.c
++++ b/av1/encoder/tpl_model.c
+@@ -192,7 +192,7 @@ static AOM_INLINE void txfm_quant_rdcost(
+ 
+   *rate_cost = rate_estimator(qcoeff, eob, tx_size);
+ 
+-  av1_inverse_transform_block(xd, dqcoeff, 0, DCT_DCT, tx_size, dst, dst_stride,
++  av1_inverse_transform_block(DB_ONLY(0) xd, dqcoeff, 0, DCT_DCT, tx_size, dst, dst_stride,
+                               eob, 0, 0
+ #if CONFIG_TX64_SEQ_FLAG
+                               ,
+diff --git a/av1/encoder/tx_search.c b/av1/encoder/tx_search.c
+index 9a0d26687..991515e3f 100644
+--- a/av1/encoder/tx_search.c
++++ b/av1/encoder/tx_search.c
+@@ -927,7 +927,7 @@ static AOM_INLINE void inverse_transform_block_facade(
+   const int dst_stride = pd->dst.stride;
+   uint16_t *dst =
+       &pd->dst.buf[(blk_row * dst_stride + blk_col) << MI_SIZE_LOG2];
+-  av1_inverse_transform_block(xd, dqcoeff, plane, tx_type, tx_size, dst,
++  av1_inverse_transform_block(DB_ONLY(0) xd, dqcoeff, plane, tx_type, tx_size, dst,
+                               dst_stride, eob, use_ddt, reduced_tx_set
+ #if CONFIG_TX64_SEQ_FLAG
+                               ,
+@@ -1130,7 +1130,7 @@ static INLINE int64_t dist_block_px_domain(const AV1_COMP *cpi, MACROBLOCK *x,
+   TX_TYPE tx_type =
+       av1_get_tx_type(xd, plane_type, blk_row, blk_col, tx_size,
+                       is_reduced_tx_set_used(&cpi->common, plane_type));
+-  av1_inverse_transform_block(
++  av1_inverse_transform_block(DB_ONLY(0)
+       xd, dqcoeff, plane, tx_type, tx_size, recon, MAX_TX_SIZE, eob,
+       replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
+                           cpi->common.features.allow_screen_content_tools, xd),
+@@ -1201,7 +1201,7 @@ static INLINE int64_t joint_uv_dist_block_px_domain(const AV1_COMP *cpi,
+                       is_reduced_tx_set_used(&cpi->common, PLANE_TYPE_UV));
+   av1_inv_cross_chroma_tx_block(tmp_dqcoeff_c1, tmp_dqcoeff_c2, tx_size,
+                                 cctx_type, xd->bd);
+-  av1_inverse_transform_block(
++  av1_inverse_transform_block(DB_ONLY(0)
+       xd, tmp_dqcoeff_c1, AOM_PLANE_U, tx_type, tx_size, recon_c1, MAX_TX_SIZE,
+       max_chroma_eob,
+       replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
+@@ -1212,7 +1212,7 @@ static INLINE int64_t joint_uv_dist_block_px_domain(const AV1_COMP *cpi,
+       cpi->common.seq_params.enable_t64_resample
+ #endif  // CONFIG_TX64_SEQ_FLAG
+   );
+-  av1_inverse_transform_block(
++  av1_inverse_transform_block(DB_ONLY(0)
+       xd, tmp_dqcoeff_c2, AOM_PLANE_V, tx_type, tx_size, recon_c2, MAX_TX_SIZE,
+       max_chroma_eob,
+       replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
 -- 
 2.43.0
 

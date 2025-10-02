@@ -49,6 +49,7 @@ libdav1d_sources = files(
     'ref.c',
     'refmvs.c',
     'scan.c',
+    'stx_tables.c',
     'tables.c',
     'thread_task.c',
     'warpmv.c',
@@ -72,6 +73,7 @@ libdav1d_tmpl_sources = files(
     'lr_apply_tmpl.c',
     'mc_tmpl.c',
     'recon_tmpl.c',
+    'stx_tmpl.c',
 )
 
 libdav1d_arch_tmpl_sources = {}
