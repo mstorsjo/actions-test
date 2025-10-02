@@ -598,13 +598,14 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
     const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
     Dav1dFrameHeader *const hdr = c->frame_hdr;
 
-    if (!seqhdr->reduced_still_picture_header)
+    if (!seqhdr->reduced_still_picture_header) {
         hdr->show_existing_frame = dav1d_get_bit(gb);
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-show_existing_frame[%d]: off=%td\n",
-           hdr->show_existing_frame,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-show_existing_frame[%d]: off=%td\n",
+               hdr->show_existing_frame,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    }
     if (hdr->show_existing_frame) {
         hdr->existing_frame_idx = dav1d_get_bits(gb, 3);
         if (seqhdr->decoder_model_info_present && !seqhdr->equal_picture_interval)
