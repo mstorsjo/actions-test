@@ -144,7 +144,7 @@ index 4ebcff5c0d..39c6142bd0 100644
  #define DB_ONLY(x...) x,
  #define BLOCK_TO_DEBUG \
 @@ -50,6 +51,41 @@
- #define DEBUG_CF_printf(fmt...)
+ #define DEBUG_CF_printf(fmt...) do { } while (0)
  #endif
 
 +#if DEBUG_B_PIXELS

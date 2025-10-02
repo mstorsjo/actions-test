@@ -1,4 +1,4 @@
-From 1e52acfc30e40899cf00a8055f0d21ed42fd4221 Mon Sep 17 00:00:00 2001
+From a75304d1b2a0de437316d49ff388464e7b490c2b Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
@@ -1460,7 +1460,7 @@ index 55aee3dc7f..b04b0c3b75 100644
  #endif  // CONFIG_BRU
  #endif  // AOM_AV1_DECODER_DECODEMV_H_
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 2c8ad00d2c..4ebcff5c0d 100644
+index 2c8ad00d2c..f667d43633 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
 @@ -33,6 +33,22 @@
@@ -1480,8 +1480,8 @@ index 2c8ad00d2c..4ebcff5c0d 100644
 +#else
 +#define DB_ONLY(x...)
 +#define BLOCK_TO_DEBUG 0
-+#define DEBUG_BLOCK_printf(fmt...)
-+#define DEBUG_CF_printf(fmt...)
++#define DEBUG_BLOCK_printf(fmt...) do { } while (0)
++#define DEBUG_CF_printf(fmt...) do { } while (0)
 +#endif
  
  #ifdef __cplusplus
