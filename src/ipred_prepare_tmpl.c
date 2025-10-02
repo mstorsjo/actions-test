@@ -83,7 +83,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                   const ptrdiff_t stride,
                                   const pixel *prefilter_toplevel_sb_edge,
                                   enum IntraPredMode mode, int *const angle,
-                                  const int tw, const int th, const int filter_edge,
+                                  const int tw4, const int th4, const int filter_edge,
                                   pixel *const topleft_out HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth = bitdepth_from_max(bitdepth_max);
@@ -129,19 +129,17 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         }
     }
 
+    const int tw = tw4 << 2, th = th4 << 2;
     if (e.needs_left) {
-        const int sz = (th << 2) + (e.needs_bottomleft ? (tw << 2) : 3);
+        const int sz = th + (e.needs_bottomleft ? tw : 3);
         pixel *const left = &topleft_out[-sz];
 
         if (have_left) {
-#if 0
-            const int px_have = imin(sz, (h - y) << 2);
-
+            const int px_have = imin(th, (h - y) << 2);
             for (int i = 0; i < px_have; i++)
                 left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
             if (px_have < sz)
                 pixel_set(left, left[sz - px_have], sz - px_have);
-#endif
         } else {
             pixel_set(left, have_top ? *dst_top : ((1 << bitdepth) >> 1) + 1, sz);
         }
@@ -170,7 +168,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     }
 
     if (e.needs_top) {
-        const int sz = (tw << 2) + (e.needs_topright ? (th << 2) : 3);
+        const int sz = tw + (e.needs_topright ? th : 3);
         pixel *const top = &topleft_out[1];
 
         if (have_top) {

@@ -1,22 +1,22 @@
-From 34b370e3d7ca09f21887813ec9cda0fb24406751 Mon Sep 17 00:00:00 2001
+From f5bcabcdbc29a8066ebc1cbca940a1a8f498c70e Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
-Subject: [PATCH 4/4] Print Intra Prediction, DQ coeffs and inverse transform
+Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- av1/common/reconintra.c   | 38 ++++++++++++++++++++++++++++++++++----
+ av1/common/reconintra.c   | 41 +++++++++++++++++++++++++++++++++++----
  av1/decoder/decodeframe.c |  9 +++++++++
- av1/decoder/decoder.h     | 36 ++++++++++++++++++++++++++++++++++++
- 3 files changed, 79 insertions(+), 4 deletions(-)
+ av1/decoder/decoder.h     | 36 ++++++++++++++++++++++++++++++++++
+ 3 files changed, 82 insertions(+), 4 deletions(-)
 
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index e4b0cf0f7a..dbd6daf341 100644
+index e4b0cf0f7..989f234b4 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
  #include "av1/common/reconintra.h"
  #include <av1/encoder/block.h>
-
+ 
 +#include "av1/decoder/decoder.h"
 +
  enum {
@@ -25,7 +25,7 @@ index e4b0cf0f7a..dbd6daf341 100644
 @@ -1116,7 +1118,7 @@ void av1_highbd_ibp_dr_prediction_z3_c(
    }
  }
-
+ 
 -static void build_intra_predictors_high(
 +static void build_intra_predictors_high(DB_ONLY(const AV1_COMMON *cm)
      const MACROBLOCKD *xd, const uint16_t *ref, int ref_stride, uint16_t *dst,
@@ -33,7 +33,7 @@ index e4b0cf0f7a..dbd6daf341 100644
      int disable_edge_filter, int n_top_px, int n_topright_px, int n_left_px,
 @@ -1232,13 +1234,14 @@ static void build_intra_predictors_high(
    }
-
+ 
    // NEED_LEFT
 +  int num_left_pixels_needed = 0;
    if (need_left) {
@@ -49,7 +49,7 @@ index e4b0cf0f7a..dbd6daf341 100644
        // DIP mode requires left edge + 1/4 tx height for overhang feature.
 @@ -1270,12 +1273,13 @@ static void build_intra_predictors_high(
    }
-
+ 
    // NEED_ABOVE
 +  int num_top_pixels_needed = 0;
    if (need_above) {
@@ -62,19 +62,22 @@ index e4b0cf0f7a..dbd6daf341 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1330,6 +1334,24 @@ static void build_intra_predictors_high(
+@@ -1330,6 +1334,27 @@ static void build_intra_predictors_high(
      }
    }
-
+ 
 +#if DEBUG_B_PIXELS
 +  const int mi_row = xd->mi_row;
 +  const int mi_col = xd->mi_col;
 +  if (BLOCK_TO_DEBUG) {
 +  // FIXME only print luma for now
 +    if (plane == AOM_PLANE_Y) {
-+      if (need_left)
-+        hex_dump(left_col_1st, num_left_pixels_needed,
-+                 num_left_pixels_needed, 1, "l");
++      if (need_left) {
++        printf("l\n");
++        for (int i = num_left_pixels_needed - 1; i >= 0; i--)
++          printf(" %02x", left_col_1st[i]);
++        printf("\n");
++      }
 +      if (need_above)
 +        hex_dump(above_row_1st, num_top_pixels_needed,
 +                 num_top_pixels_needed, 1, "t");
@@ -87,7 +90,7 @@ index e4b0cf0f7a..dbd6daf341 100644
    if (use_intra_dip) {
      av1_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1488,6 +1510,14 @@ static void build_intra_predictors_high(
+@@ -1488,6 +1513,14 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -99,20 +102,20 @@ index e4b0cf0f7a..dbd6daf341 100644
 +    }
 +  }
 +#endif
-
+ 
    // Apply sub-block based filter for DC/smooth intra mode
    apply_sub_block_based_refinement_filter &=
-@@ -1578,7 +1608,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1578,7 +1611,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
-
+ 
 -  build_intra_predictors_high(
 +  build_intra_predictors_high(DB_ONLY(cm)
        xd, ref, ref_stride, dst, dst_stride, mode, angle_delta, tx_size,
        disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index a2ee347bc3..e5e95b39f4 100644
+index a2ee347bc..e5e95b39f 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -215,6 +215,15 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -132,7 +135,7 @@ index a2ee347bc3..e5e95b39f4 100644
    const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
    const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 4ebcff5c0d..39c6142bd0 100644
+index 4ebcff5c0..39c6142bd 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
 @@ -34,6 +34,7 @@
@@ -146,7 +149,7 @@ index 4ebcff5c0d..39c6142bd0 100644
 @@ -50,6 +51,41 @@
  #define DEBUG_CF_printf(fmt...) do { } while (0)
  #endif
-
+ 
 +#if DEBUG_B_PIXELS
 +#define PIX_HEX_FMT "%02x"
 +#define PXSTRIDE(x) (x)
@@ -185,6 +188,6 @@ index 4ebcff5c0d..39c6142bd0 100644
  #ifdef __cplusplus
  extern "C" {
  #endif
---
-2.48.1
+-- 
+2.43.0
 
