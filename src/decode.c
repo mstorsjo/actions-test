@@ -3696,8 +3696,8 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
             const int unit_sz = 1 << unit_sz_log2;
             const unsigned mask = unit_sz - 1;
             if ((x | y) & mask) continue;
-            const int w = (f->cur.p.w + ss_hor) >> ss_hor;
-            const int h = (f->cur.p.h + ss_ver) >> ss_ver;
+            const int w = f->bw * 4 >> ss_hor;
+            const int h = f->bh * 4 >> ss_ver;
             const int half_unit = unit_sz >> 1;
             // Round half up at frame boundaries, if there's more than one
             // restoration unit
