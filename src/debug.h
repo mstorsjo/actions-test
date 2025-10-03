@@ -41,7 +41,7 @@
 #else
 #define DB_ONLY(x)
 #define BLOCK_TO_DEBUG 0
-#define DEBUG_BLOCK_printf(fmt...)
+#define DEBUG_BLOCK_printf(fmt...) do { } while (0)
 #endif
 #define DEBUG_B_PIXELS 0
 
