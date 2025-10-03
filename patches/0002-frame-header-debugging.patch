@@ -1,15 +1,26 @@
-From a5872741dd03ed856f97057972a2b24c699ca93c Mon Sep 17 00:00:00 2001
+From 5fc281ff0826d9d54dadc0910ef4dcb3d0731eb1 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Wed, 27 Aug 2025 09:40:39 -0400
 Subject: [PATCH 2/4] frame header debugging
 
 ---
+ aom/debug.h               |   1 +
  av1/decoder/decodeframe.c | 168 +++++++++++++++++++++++++++++++++++++-
- av1/decoder/decoder.h     |   1 +
  2 files changed, 168 insertions(+), 1 deletion(-)
 
+diff --git a/aom/debug.h b/aom/debug.h
+index 3339b3439..8c8847f1e 100644
+--- a/aom/debug.h
++++ b/aom/debug.h
+@@ -30,5 +30,6 @@
+ 
+ #define DEBUG_OBU_HDR 0
+ #define DEBUG_SEQ_HDR 0
++#define DEBUG_FRAME_HDR 0
+ 
+ #endif /* AOM_DEBUG_H */
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 6672bac17c..24617f5bb3 100644
+index 6672bac17..24617f5bb 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -6375,6 +6375,11 @@ static AOM_INLINE void read_film_grain(AV1_COMMON *cm,
@@ -358,18 +369,6 @@ index 6672bac17c..24617f5bb3 100644
  
    cm->cur_frame->film_grain_params_present =
        seq_params->film_grain_params_present;
-diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index adc10475b0..2c8ad00d2c 100644
---- a/av1/decoder/decoder.h
-+++ b/av1/decoder/decoder.h
-@@ -32,6 +32,7 @@
- 
- #define DEBUG_OBU_HDR 0
- #define DEBUG_SEQ_HDR 0
-+#define DEBUG_FRAME_HDR 0
- 
- #ifdef __cplusplus
- extern "C" {
 -- 
-2.48.1
+2.43.0
 

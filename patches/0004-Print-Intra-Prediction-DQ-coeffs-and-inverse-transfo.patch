@@ -1,23 +1,83 @@
-From f5bcabcdbc29a8066ebc1cbca940a1a8f498c70e Mon Sep 17 00:00:00 2001
+From e82f3b61236edcb5463c456f5262246955bf766f Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
-Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
+Subject: [PATCH 4/4] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
+ aom/debug.h               | 40 ++++++++++++++++++++++++++++++++++++++
  av1/common/reconintra.c   | 41 +++++++++++++++++++++++++++++++++++----
  av1/decoder/decodeframe.c |  9 +++++++++
- av1/decoder/decoder.h     | 36 ++++++++++++++++++++++++++++++++++
- 3 files changed, 82 insertions(+), 4 deletions(-)
+ 3 files changed, 86 insertions(+), 4 deletions(-)
 
+diff --git a/aom/debug.h b/aom/debug.h
+index b203c56cf..d9a4afbb3 100644
+--- a/aom/debug.h
++++ b/aom/debug.h
+@@ -28,10 +28,15 @@
+ #ifndef AOM_DEBUG_H
+ #define AOM_DEBUG_H
+ 
++#include <inttypes.h>
++#include <stdio.h>
++#include <stddef.h>
++
+ #define DEBUG_OBU_HDR 0
+ #define DEBUG_SEQ_HDR 0
+ #define DEBUG_FRAME_HDR 0
+ #define DEBUG_BLOCK_INFO 0
++#define DEBUG_B_PIXELS 0
+ #if DEBUG_BLOCK_INFO
+ #define DB_ONLY(x...) x,
+ #define BLOCK_TO_DEBUG \
+@@ -48,4 +53,39 @@
+ #define DEBUG_CF_printf(fmt...) do { } while (0)
+ #endif
+ 
++#if DEBUG_B_PIXELS
++#define PIX_HEX_FMT "%02x"
++#define PXSTRIDE(x) (x)
++
++static inline void hex_fdump(FILE *out, const uint16_t *buf, ptrdiff_t stride,
++                             int w, int h, const char *what)
++{
++  fprintf(out, "%s\n", what);
++  while (h--) {
++    int x;
++    for (x = 0; x < w; x++)
++      fprintf(out, " " PIX_HEX_FMT, buf[x]);
++    buf += PXSTRIDE(stride);
++    fprintf(out, "\n");
++  }
++}
++
++static inline void hex_dump(const uint16_t *buf, ptrdiff_t stride,
++                            int w, int h, const char *what)
++{
++  hex_fdump(stdout, buf, stride, w, h, what);
++}
++
++static inline void coef_dump_transpose(const int32_t *buf, const int w, const int h,
++                                       const int len, const char *what)
++{
++  printf("%s\n", what);
++  for (int y = 0; y < w; y++) {
++    for (int x = 0; x < h; x++)
++      printf(" %*d", len, buf[x * w + y]);
++    printf("\n");
++  }
++}
++#endif
++
+ #endif /* AOM_DEBUG_H */
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index e4b0cf0f7..989f234b4 100644
+index e4b0cf0f7..5586f3e4c 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
  #include "av1/common/reconintra.h"
  #include <av1/encoder/block.h>
  
-+#include "av1/decoder/decoder.h"
++#include "aom/debug.h"
 +
  enum {
    NEED_LEFT = 1 << 1,
@@ -115,7 +175,7 @@ index e4b0cf0f7..989f234b4 100644
        disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index a2ee347bc..e5e95b39f 100644
+index 7aeca1313..30130fdaa 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -215,6 +215,15 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -134,60 +194,6 @@ index a2ee347bc..e5e95b39f 100644
    const int width = tx_size_wide[tx_size] <= 32 ? tx_size_wide[tx_size] : 32;
    const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
    const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
-diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 4ebcff5c0..39c6142bd 100644
---- a/av1/decoder/decoder.h
-+++ b/av1/decoder/decoder.h
-@@ -34,6 +34,7 @@
- #define DEBUG_SEQ_HDR 0
- #define DEBUG_FRAME_HDR 0
- #define DEBUG_BLOCK_INFO 0
-+#define DEBUG_B_PIXELS 0
- #if DEBUG_BLOCK_INFO
- #define DB_ONLY(x...) x,
- #define BLOCK_TO_DEBUG \
-@@ -50,6 +51,41 @@
- #define DEBUG_CF_printf(fmt...) do { } while (0)
- #endif
- 
-+#if DEBUG_B_PIXELS
-+#define PIX_HEX_FMT "%02x"
-+#define PXSTRIDE(x) (x)
-+
-+static void hex_fdump(FILE *out, const uint16_t *buf, ptrdiff_t stride,
-+                      int w, int h, const char *what)
-+{
-+  fprintf(out, "%s\n", what);
-+  while (h--) {
-+    int x;
-+    for (x = 0; x < w; x++)
-+      fprintf(out, " " PIX_HEX_FMT, buf[x]);
-+    buf += PXSTRIDE(stride);
-+    fprintf(out, "\n");
-+  }
-+}
-+
-+static void hex_dump(const uint16_t *buf, ptrdiff_t stride,
-+                     int w, int h, const char *what)
-+{
-+  hex_fdump(stdout, buf, stride, w, h, what);
-+}
-+
-+static void coef_dump_transpose(const int32_t *buf, const int w, const int h,
-+                                const int len, const char *what)
-+{
-+  printf("%s\n", what);
-+  for (int y = 0; y < w; y++) {
-+    for (int x = 0; x < h; x++)
-+      printf(" %*d", len, buf[x * w + y]);
-+    printf("\n");
-+  }
-+}
-+#endif
-+
- #ifdef __cplusplus
- extern "C" {
- #endif
 -- 
 2.43.0
 

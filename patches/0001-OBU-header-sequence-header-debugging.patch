@@ -1,16 +1,58 @@
-From 17115f0b8215ce95f2ab091f47696b919345d93d Mon Sep 17 00:00:00 2001
+From 4efb70202146000d82b764c6b51ffedafeba80ff Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Wed, 27 Aug 2025 09:03:15 -0400
 Subject: [PATCH 1/4] OBU header & sequence header debugging.
 
 ---
+ aom/debug.h               |  34 ++++++++++++
  av1/decoder/decodeframe.c | 110 ++++++++++++++++++++++++++++++++++++++
- av1/decoder/decoder.h     |   3 ++
+ av1/decoder/decoder.h     |   2 +
  av1/decoder/obu.c         |  53 ++++++++++++++++++
- 3 files changed, 166 insertions(+)
+ 4 files changed, 199 insertions(+)
+ create mode 100644 aom/debug.h
 
+diff --git a/aom/debug.h b/aom/debug.h
+new file mode 100644
+index 000000000..3339b3439
+--- /dev/null
++++ b/aom/debug.h
+@@ -0,0 +1,34 @@
++/*
++ * Copyright © 2018, VideoLAN and dav1d authors
++ * Copyright © 2018, Two Orioles, LLC
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright notice, this
++ *    list of conditions and the following disclaimer.
++ *
++ * 2. Redistributions in binary form must reproduce the above copyright notice,
++ *    this list of conditions and the following disclaimer in the documentation
++ *    and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
++ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef AOM_DEBUG_H
++#define AOM_DEBUG_H
++
++#define DEBUG_OBU_HDR 0
++#define DEBUG_SEQ_HDR 0
++
++#endif /* AOM_DEBUG_H */
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 4d16673581..6672bac17c 100644
+index 4d1667358..6672bac17 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -6180,6 +6180,10 @@ static AOM_INLINE void read_bitdepth(
@@ -187,21 +229,20 @@ index 4d16673581..6672bac17c 100644
  
  static int read_global_motion_params(WarpedMotionParams *params,
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 3907bf8a5c..adc10475b0 100644
+index 3907bf8a5..cafc137e5 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
-@@ -30,6 +30,9 @@
+@@ -30,6 +30,8 @@
  #include "av1/decoder/inspection.h"
  #endif
  
-+#define DEBUG_OBU_HDR 0
-+#define DEBUG_SEQ_HDR 0
++#include "aom/debug.h"
 +
  #ifdef __cplusplus
  extern "C" {
  #endif
 diff --git a/av1/decoder/obu.c b/av1/decoder/obu.c
-index 0f33873b5d..36a4b9fdce 100644
+index 0f33873b5..36a4b9fdc 100644
 --- a/av1/decoder/obu.c
 +++ b/av1/decoder/obu.c
 @@ -176,11 +176,23 @@ static uint32_t read_sequence_header_obu(AV1Decoder *pbi,
@@ -326,5 +367,5 @@ index 0f33873b5d..36a4b9fdce 100644
          obu_header.type != OBU_SEQUENCE_HEADER &&
          obu_header.type != OBU_PADDING) {
 -- 
-2.48.1
+2.43.0
 

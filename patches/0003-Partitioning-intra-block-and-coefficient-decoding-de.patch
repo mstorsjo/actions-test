@@ -1,23 +1,50 @@
-From e18287e73f495d19f10d45e589170782df26f763 Mon Sep 17 00:00:00 2001
+From feb728fefd778c93359e9fdacba23c507d876ca5 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
  debugging helpers.
 
 ---
+ aom/debug.h               |  16 ++
  av1/decoder/decodeframe.c | 206 +++++++++++++++-----
  av1/decoder/decodemv.c    | 393 ++++++++++++++++++++++++++++++--------
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.c     |   5 +-
- av1/decoder/decoder.h     |  28 ++-
+ av1/decoder/decoder.h     |  12 +-
  av1/decoder/decodetxb.c   | 219 ++++++++++++++++-----
  av1/decoder/decodetxb.h   |  14 +-
  av1/decoder/detokenize.c  |   8 +-
  av1/decoder/detokenize.h  |   3 +-
- 9 files changed, 694 insertions(+), 200 deletions(-)
+ 10 files changed, 694 insertions(+), 200 deletions(-)
 
+diff --git a/aom/debug.h b/aom/debug.h
+index 8c8847f1e..b203c56cf 100644
+--- a/aom/debug.h
++++ b/aom/debug.h
+@@ -31,5 +31,21 @@
+ #define DEBUG_OBU_HDR 0
+ #define DEBUG_SEQ_HDR 0
+ #define DEBUG_FRAME_HDR 0
++#define DEBUG_BLOCK_INFO 0
++#if DEBUG_BLOCK_INFO
++#define DB_ONLY(x...) x,
++#define BLOCK_TO_DEBUG \
++    cm->current_frame.frame_number == 0 && \
++    mi_row >= 0 && mi_row < 16 && mi_col >= 0 && mi_col < 16
++#define DEBUG_BLOCK_printf(fmt...) \
++    if (BLOCK_TO_DEBUG) printf(fmt)
++#define DEBUG_CF_printf(fmt...) \
++    if (BLOCK_TO_DEBUG && plane > -1 && 1) printf(fmt)
++#else
++#define DB_ONLY(x...)
++#define BLOCK_TO_DEBUG 0
++#define DEBUG_BLOCK_printf(fmt...) do { } while (0)
++#define DEBUG_CF_printf(fmt...) do { } while (0)
++#endif
+ 
+ #endif /* AOM_DEBUG_H */
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 24617f5bb3..7aeca13137 100644
+index 24617f5bb..7aeca1313 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -223,7 +223,7 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -518,7 +545,7 @@ index 24617f5bb3..7aeca13137 100644
        aom_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..754404db95 100644
+index 47abeeb4e..754404db9 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -1522,7 +1549,7 @@ index 47abeeb4ef..754404db95 100644
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_inter_block(mbmi, xd->tree_type)) {
 diff --git a/av1/decoder/decodemv.h b/av1/decoder/decodemv.h
-index 55aee3dc7f..b04b0c3b75 100644
+index 55aee3dc7..b04b0c3b7 100644
 --- a/av1/decoder/decodemv.h
 +++ b/av1/decoder/decodemv.h
 @@ -21,7 +21,8 @@
@@ -1568,7 +1595,7 @@ index 55aee3dc7f..b04b0c3b75 100644
  #endif  // CONFIG_BRU
  #endif  // AOM_AV1_DECODER_DECODEMV_H_
 diff --git a/av1/decoder/decoder.c b/av1/decoder/decoder.c
-index 025eb5bb60..1af3b8cf42 100644
+index 025eb5bb6..1af3b8cf4 100644
 --- a/av1/decoder/decoder.c
 +++ b/av1/decoder/decoder.c
 @@ -457,7 +457,8 @@ void av1_decoder_remove(AV1Decoder *pbi) {
@@ -1591,33 +1618,10 @@ index 025eb5bb60..1af3b8cf42 100644
          assert(xd->mi[0]->palette_mode_info.palette_size[plane] == 0);
        }
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 2c8ad00d2c..cebbf4759f 100644
+index cafc137e5..6adbcad2a 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
-@@ -33,6 +33,22 @@
- #define DEBUG_OBU_HDR 0
- #define DEBUG_SEQ_HDR 0
- #define DEBUG_FRAME_HDR 0
-+#define DEBUG_BLOCK_INFO 0
-+#if DEBUG_BLOCK_INFO
-+#define DB_ONLY(x...) x,
-+#define BLOCK_TO_DEBUG \
-+    cm->current_frame.frame_number == 0 && \
-+    mi_row >= 0 && mi_row < 16 && mi_col >= 0 && mi_col < 16
-+#define DEBUG_BLOCK_printf(fmt...) \
-+    if (BLOCK_TO_DEBUG) printf(fmt)
-+#define DEBUG_CF_printf(fmt...) \
-+    if (BLOCK_TO_DEBUG && plane > -1 && 1) printf(fmt)
-+#else
-+#define DB_ONLY(x...)
-+#define BLOCK_TO_DEBUG 0
-+#define DEBUG_BLOCK_printf(fmt...) do { } while (0)
-+#define DEBUG_CF_printf(fmt...) do { } while (0)
-+#endif
- 
- #ifdef __cplusplus
- extern "C" {
-@@ -102,7 +118,8 @@ typedef struct DecoderCodingBlock {
+@@ -100,7 +100,8 @@ typedef struct DecoderCodingBlock {
  
  /*!\cond */
  
@@ -1627,7 +1631,7 @@ index 2c8ad00d2c..cebbf4759f 100644
                                            DecoderCodingBlock *dcb,
                                            aom_reader *const r, const int plane,
                                            const int row, const int col,
-@@ -526,13 +543,16 @@ static INLINE int av1_read_uniform(aom_reader *r, int n) {
+@@ -524,13 +525,16 @@ static INLINE int av1_read_uniform(aom_reader *r, int n) {
      return (v << 1) - m + aom_read_literal(r, 1, ACCT_INFO());
  }
  
@@ -1648,7 +1652,7 @@ index 2c8ad00d2c..cebbf4759f 100644
                                     PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                     PARTITION_TREE *parent, int index);
 diff --git a/av1/decoder/decodetxb.c b/av1/decoder/decodetxb.c
-index 4f85230ef3..573b0d9d88 100644
+index 4f85230ef..573b0d9d8 100644
 --- a/av1/decoder/decodetxb.c
 +++ b/av1/decoder/decodetxb.c
 @@ -115,7 +115,11 @@ static int read_adaptive_hr(MACROBLOCKD *xd, aom_reader *r, int ctx) {
@@ -2263,14 +2267,14 @@ index 4f85230ef3..573b0d9d88 100644
  #if TXCOEFF_TIMER
    aom_usec_timer_mark(&timer);
 diff --git a/av1/decoder/decodetxb.h b/av1/decoder/decodetxb.h
-index 66385d5ffe..e85a1e904f 100644
+index 66385d5ff..3abad966e 100644
 --- a/av1/decoder/decodetxb.h
 +++ b/av1/decoder/decodetxb.h
 @@ -15,12 +15,15 @@
  
  #include "av1/common/enums.h"
  
-+#include "av1/decoder/decoder.h"
++#include "aom/debug.h"
 +
  struct aom_reader;
  struct AV1Common;
@@ -2311,7 +2315,7 @@ index 66385d5ffe..e85a1e904f 100644
                                   struct aom_reader *const r, const int blk_row,
                                   const int blk_col, const int plane,
 diff --git a/av1/decoder/detokenize.c b/av1/decoder/detokenize.c
-index 45ad484012..063d9b3c63 100644
+index 45ad48401..063d9b3c6 100644
 --- a/av1/decoder/detokenize.c
 +++ b/av1/decoder/detokenize.c
 @@ -118,7 +118,8 @@ static int decode_color_map_tokens(Av1ColorMapParam *param, aom_reader *r) {
@@ -2335,7 +2339,7 @@ index 45ad484012..063d9b3c63 100644
 +#endif
  }
 diff --git a/av1/decoder/detokenize.h b/av1/decoder/detokenize.h
-index 32e347342a..c3b3bebd23 100644
+index 32e347342..c3b3bebd2 100644
 --- a/av1/decoder/detokenize.h
 +++ b/av1/decoder/detokenize.h
 @@ -22,7 +22,8 @@
@@ -2349,5 +2353,5 @@ index 32e347342a..c3b3bebd23 100644
  #ifdef __cplusplus
  }  // extern "C"
 -- 
-2.48.1
+2.43.0
 
