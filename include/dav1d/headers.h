@@ -387,10 +387,12 @@ typedef struct Dav1dFrameHeader {
     uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
     uint8_t max_bvp_drl_bits;
     int8_t refidx[DAV1D_REFS_PER_FRAME];
-    uint8_t hp;
+    uint8_t mv_precision;
     enum Dav1dFilterMode subpel_filter_mode;
-    uint8_t switchable_motion_mode;
+    uint8_t motion_modes;
     uint8_t use_ref_frame_mvs;
+    uint8_t tmvp_sample_step;
+    uint8_t opfl_refine_type;
     uint8_t refresh_context;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {
@@ -429,6 +431,7 @@ typedef struct Dav1dFrameHeader {
     uint8_t all_lossless;
     uint8_t tcq, parity_hiding;
     struct {
+        uint8_t lf_sub_pu;
         uint8_t level_y[2 /* dir */];
         uint8_t level_u, level_v;
         uint8_t delta_q_y[2], delta_q_u, delta_q_v;
@@ -467,7 +470,7 @@ typedef struct Dav1dFrameHeader {
     } ccso;
     enum Dav1dTxfmMode txfm_mode;
     uint8_t switchable_comp_refs;
-    uint8_t skip_mode_allowed, skip_mode_enabled;
+    uint8_t skip_mode_enabled;
     int8_t skip_mode_refs[2];
     uint8_t bawp;
     uint8_t warp_motion;

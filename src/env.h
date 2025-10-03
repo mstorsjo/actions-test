@@ -457,7 +457,7 @@ static inline void fix_mv_precision(const Dav1dFrameHeader *const hdr,
 {
     if (hdr->force_integer_mv) {
         fix_int_mv_precision(mv);
-    } else if (!hdr->hp) {
+    } else if (hdr->mv_precision < 3) {
         mv->x = (mv->x - (mv->x >> 15)) & ~1U;
         mv->y = (mv->y - (mv->y >> 15)) & ~1U;
     }
@@ -481,11 +481,11 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
                        gmv->matrix[3] * y + gmv->matrix[0];
         const int yc = (gmv->matrix[5] - (1 << 16)) * y +
                        gmv->matrix[4] * x + gmv->matrix[1];
-        const int shift = 16 - (3 - !hdr->hp);
+        const int shift = 16 - hdr->mv_precision;
         const int round = (1 << shift) >> 1;
         mv res = (mv) {
-            .y = apply_sign(((abs(yc) + round) >> shift) << !hdr->hp, yc),
-            .x = apply_sign(((abs(xc) + round) >> shift) << !hdr->hp, xc),
+            .y = apply_sign(((abs(yc) + round) >> shift) << (3 - hdr->mv_precision), yc),
+            .x = apply_sign(((abs(xc) + round) >> shift) << (3 - hdr->mv_precision), xc),
         };
         if (hdr->force_integer_mv)
             fix_int_mv_precision(&res);

@@ -1,4 +1,4 @@
-From feb728fefd778c93359e9fdacba23c507d876ca5 Mon Sep 17 00:00:00 2001
+From 595f5d5011aeb5ea64808d8796cfd05c71509433 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
@@ -6,8 +6,8 @@ Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
 
 ---
  aom/debug.h               |  16 ++
- av1/decoder/decodeframe.c | 206 +++++++++++++++-----
- av1/decoder/decodemv.c    | 393 ++++++++++++++++++++++++++++++--------
+ av1/decoder/decodeframe.c | 253 +++++++++++++++++-------
+ av1/decoder/decodemv.c    | 398 ++++++++++++++++++++++++++++++--------
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.c     |   5 +-
  av1/decoder/decoder.h     |  12 +-
@@ -15,10 +15,10 @@ Subject: [PATCH 3/4] Partitioning, intra block and coefficient decoding
  av1/decoder/decodetxb.h   |  14 +-
  av1/decoder/detokenize.c  |   8 +-
  av1/decoder/detokenize.h  |   3 +-
- 10 files changed, 694 insertions(+), 200 deletions(-)
+ 10 files changed, 731 insertions(+), 215 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
-index 8c8847f1e..b203c56cf 100644
+index 8c8847f1eb..b203c56cfa 100644
 --- a/aom/debug.h
 +++ b/aom/debug.h
 @@ -31,5 +31,21 @@
@@ -44,7 +44,7 @@ index 8c8847f1e..b203c56cf 100644
  
  #endif /* AOM_DEBUG_H */
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 24617f5bb..7aeca1313 100644
+index 24617f5bb3..589e1d1229 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -223,7 +223,7 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -544,8 +544,128 @@ index 24617f5bb..7aeca1313 100644
        decode_tile(pbi, td, row, col);
        aom_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
+@@ -8054,12 +8156,14 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+       if (signal_primary_ref_frame)
+         features->primary_ref_frame = aom_rb_read_literal(rb, PRIMARY_REF_BITS);
+     }
+-  }
+ #if DEBUG_FRAME_HDR
+-    printf("HDR: post-frame_size_override_flag[%d,poc=%d,p_ref=%d]: off=%u\n",
++    printf("HDR: post-frame_size_override_flag[%d,poc=%d,p_ref=%d|%d]: off=%u\n",
+            frame_size_override_flag, current_frame->order_hint,
+-           pbi->signal_primary_ref_frame, rb->bit_offset);
++           pbi->signal_primary_ref_frame,
++           pbi->signal_primary_ref_frame ? features->primary_ref_frame :
++           cm->features.derived_primary_ref_frame, rb->bit_offset);
+ #endif
++  }
+ 
+   if (seq_params->decoder_model_info_present_flag) {
+     cm->buffer_removal_time_present = aom_rb_read_bit(rb);
+@@ -8356,9 +8460,9 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+            features->allow_screen_content_tools,
+            features->cur_frame_force_integer_mv,
+            features->allow_intrabc,
+-           features->allow_global_intrabc,
+-           features->allow_local_intrabc,
+-           features->max_bvp_drl_bits,
++           features->allow_intrabc ? features->allow_global_intrabc : 0,
++           features->allow_intrabc ? features->allow_local_intrabc : 0,
++           features->allow_intrabc ? features->max_bvp_drl_bits : 0,
+            rb->bit_offset);
+ #endif
+   } else {
+@@ -8401,9 +8505,9 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+            features->allow_screen_content_tools,
+            features->cur_frame_force_integer_mv,
+            features->allow_intrabc,
+-           features->allow_global_intrabc,
+-           features->allow_local_intrabc,
+-           features->max_bvp_drl_bits,
++           features->allow_intrabc ? features->allow_global_intrabc : 0,
++           features->allow_intrabc ? features->allow_local_intrabc : 0,
++           features->allow_intrabc ? features->max_bvp_drl_bits : 0,
+            rb->bit_offset);
+ #endif
+ 
+@@ -8497,6 +8601,9 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+           cm->remapped_ref_idx[i] = ref;
+         }
+ #endif  // CONFIG_ACROSS_SCALE_REF_OPT
++#if DEBUG_FRAME_HDR
++        printf("HDR: post-explicit_ref_frame_map: off=%u\n", rb->bit_offset);
++#endif
+       }
+ #if CONFIG_ACROSS_SCALE_REF_OPT
+       if (!features->error_resilient_mode && frame_size_override_flag) {
+@@ -8504,7 +8611,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+       } else {
+         setup_frame_size(cm, frame_size_override_flag, rb);
+       }
+-
++#if DEBUG_FRAME_HDR
++      printf("HDR: post-framesize[%dx%d]: off=%u\n",
++             cm->width, cm->height, rb->bit_offset);
++#endif
+       // Overwrite the reference mapping considering the resolution
+       if (!explicit_ref_frame_map) {
+         av1_get_ref_frames(cm, current_frame->display_order_hint, 1,
+@@ -8539,6 +8649,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+             }
+           }
+         }
++#if DEBUG_FRAME_HDR
++        if (cm->seq_params.enable_bru)
++          printf("HDR: post-bru: off=%u\n", rb->bit_offset);
++#endif
+       }
+       if (cm->bru.frame_inactive_flag) {
+         cm->features.disable_cdf_update = 1;
+@@ -8819,7 +8933,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+         features->tip_frame_mode = TIP_FRAME_DISABLED;
+       }
+ 
+-      if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT
++        printf("HDR: post-tip[refmvs:%d,tmvp:%d,lfsubpu:%d,tip:%d]: off=%u\n",
++               features->allow_ref_frame_mvs, cm->tmvp_sample_step,
++               features->allow_lf_sub_pu, features->tip_frame_mode,
++               rb->bit_offset);
++
++        if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT
+ #if CONFIG_BRU
+           && !cm->bru.frame_inactive_flag
+ #endif  // CONFIG_BRU
+@@ -8844,7 +8963,7 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+            features->allow_intrabc,
+            features->allow_global_intrabc,
+            features->allow_local_intrabc,
+-           features->max_bvp_drl_bits,
++           features->allow_intrabc ? features->max_bvp_drl_bits : 0,
+            rb->bit_offset);
+ #endif
+ 
+@@ -8942,8 +9061,8 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+         }
+       }
+ #if DEBUG_FRAME_HDR
+-    printf("HDR: post-frametype-specific-bits[hp:%d,flt:%d,sm:%d,u:%d]: off=%u\n",
+-           features->fr_mv_precision == MV_PRECISION_ONE_EIGHTH_PEL,
++    printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d,opfl:%d]: off=%u\n",
++           features->fr_mv_precision - 3,
+            features->interp_filter, features->enabled_motion_modes,
+            features->opfl_refine_type, rb->bit_offset);
+ #endif
+@@ -9409,7 +9528,7 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ #if DEBUG_FRAME_HDR
+     printf("HDR: post-modebits[tx:%d,refmode:%d,skipmode:%d,bawp:%d,warp:%d,redtxset:%d]: off=%u\n",
+            features->tx_mode,
+-           current_frame->reference_mode,
++           current_frame->reference_mode >> 1,
+            current_frame->skip_mode_info.skip_mode_flag,
+            features->enable_bawp,
+            features->allow_warpmv_mode,
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4e..754404db9 100644
+index 47abeeb4ef..b838ecd8f2 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -1173,7 +1293,7 @@ index 47abeeb4e..754404db9 100644
        aom_read_symbol(r, ec_ctx->uv_mode_cdf[context],
                        CHROMA_INTRA_MODE_INDEX_COUNT, ACCT_INFO("uv_mode_idx"));
    if (uv_mode_idx == (CHROMA_INTRA_MODE_INDEX_COUNT - 1))
-@@ -1908,9 +2077,19 @@ static void read_intra_uv_mode(MACROBLOCKD *const xd,
+@@ -1908,9 +2077,24 @@ static void read_intra_uv_mode(MACROBLOCKD *const xd,
      mbmi->angle_delta[PLANE_TYPE_UV] = mbmi->angle_delta[PLANE_TYPE_Y];
    else
      mbmi->angle_delta[PLANE_TYPE_UV] = 0;
@@ -1184,7 +1304,12 @@ index 47abeeb4e..754404db9 100644
 +    DEBUG_BLOCK_printf("%*sPost-intra_uv_mode[cfl=%d,idx=%d,ctx=%d|%d,mode=%d,angle=%d]: r=%d\n",
 +                       depth, "", is_cfl_mode, uv_mode_idx,
 +                       cfl_ctx, context, mbmi->uv_mode,
-+                       mbmi->angle_delta[PLANE_TYPE_UV], r->ec.rng);
++                       (1 << mbmi->uv_mode) & ((1 << UV_DC_PRED) |
++                                               (1 << UV_SMOOTH_PRED) |
++                                               (1 << UV_SMOOTH_V_PRED) |
++                                               (1 << UV_SMOOTH_H_PRED) |
++                                               (1 << UV_PAETH_PRED)) ?
++                       0 : mbmi->angle_delta[PLANE_TYPE_UV], r->ec.rng);
 +#endif
  }
  
@@ -1194,7 +1319,7 @@ index 47abeeb4e..754404db9 100644
                                         DecoderCodingBlock *dcb, aom_reader *r) {
    MACROBLOCKD *const xd = &dcb->xd;
    MB_MODE_INFO *const mbmi = xd->mi[0];
-@@ -1919,8 +2098,13 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -1919,8 +2103,13 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
  
    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
  
@@ -1209,7 +1334,7 @@ index 47abeeb4e..754404db9 100644
  
    mbmi->skip_mode = 0;
    if (xd->tree_type != CHROMA_PART) mbmi->morph_pred = 0;
-@@ -1934,10 +2118,18 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -1934,10 +2123,18 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          aom_read_symbol(r, ec_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -1228,7 +1353,7 @@ index 47abeeb4e..754404db9 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -1948,17 +2140,17 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -1948,17 +2145,17 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
    }
  
    if (!seg->segid_preskip && xd->tree_type != CHROMA_PART)
@@ -1250,7 +1375,7 @@ index 47abeeb4e..754404db9 100644
  
    if (xd->tree_type != CHROMA_PART) read_delta_q_params(cm, xd, r);
  
-@@ -1973,7 +2165,7 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -1973,7 +2170,7 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
    }
  
    if (av1_allow_intrabc(cm, xd, bsize) && xd->tree_type != CHROMA_PART) {
@@ -1259,7 +1384,7 @@ index 47abeeb4e..754404db9 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -1985,7 +2177,7 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -1985,7 +2182,7 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_y = read_dpcm_mode(ec_ctx, r);
        if (mbmi->use_dpcm_y == 0) {
@@ -1268,7 +1393,7 @@ index 47abeeb4e..754404db9 100644
        } else {
          mbmi->dpcm_mode_y = read_dpcm_vert_horz_mode(ec_ctx, r);
          if (mbmi->dpcm_mode_y == 0) {
-@@ -2001,11 +2193,19 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2001,11 +2198,19 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
      } else {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
@@ -1289,7 +1414,7 @@ index 47abeeb4e..754404db9 100644
      } else {
        mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
      }
-@@ -2014,10 +2214,11 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2014,10 +2219,11 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
        if (mbmi->use_dpcm_y == 0) {
          mbmi->mrl_index =
              (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
@@ -1303,7 +1428,7 @@ index 47abeeb4e..754404db9 100644
                ec_ctx, r, xd->neighbors[0], xd->neighbors[1]);
          } else {
            mbmi->multi_line_mrl = 0;
-@@ -2029,11 +2230,13 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2029,11 +2235,13 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
      } else {
        mbmi->mrl_index =
            (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
@@ -1319,7 +1444,7 @@ index 47abeeb4e..754404db9 100644
        } else {
          mbmi->multi_line_mrl = 0;
        }
-@@ -2045,7 +2248,8 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2045,7 +2253,8 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
        if (xd->lossless[mbmi->segment_id]) {
          mbmi->use_dpcm_uv = read_dpcm_uv_mode(ec_ctx, r);
          if (mbmi->use_dpcm_uv == 0) {
@@ -1329,7 +1454,7 @@ index 47abeeb4e..754404db9 100644
                               is_cfl_allowed(
  #if CONFIG_CWG_F307_CFL_SEQ_FLAG
                                   cm->seq_params.enable_cfl_intra,
-@@ -2063,7 +2267,8 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2063,7 +2272,8 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
              mbmi->angle_delta[PLANE_TYPE_UV] = 0;
          }
        } else {
@@ -1339,7 +1464,7 @@ index 47abeeb4e..754404db9 100644
                             is_cfl_allowed(
  #if CONFIG_CWG_F307_CFL_SEQ_FLAG
                                 cm->seq_params.enable_cfl_intra,
-@@ -2116,6 +2321,20 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2116,6 +2326,20 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
          if (mbmi->cfl_idx == 0)
            mbmi->cfl_alpha_idx =
                read_cfl_alphas(ec_ctx, r, &mbmi->cfl_alpha_signs);
@@ -1360,7 +1485,7 @@ index 47abeeb4e..754404db9 100644
        }
      } else {
        // Avoid decoding angle_info if there is is no chroma prediction
-@@ -2131,10 +2350,10 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
+@@ -2131,10 +2355,10 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
    mbmi->palette_mode_info.palette_size[1] = 0;
    if (av1_allow_palette(PLANE_TYPE_Y, cm->features.allow_screen_content_tools,
                          bsize))
@@ -1373,7 +1498,7 @@ index 47abeeb4e..754404db9 100644
    }
  }
  
-@@ -2748,7 +2967,8 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
+@@ -2748,7 +2972,8 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
    }
  }
  
@@ -1383,7 +1508,7 @@ index 47abeeb4e..754404db9 100644
                                         MACROBLOCKD *const xd,
                                         MB_MODE_INFO *const mbmi,
                                         aom_reader *r) {
-@@ -2775,7 +2995,7 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2775,7 +3000,7 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_y = read_dpcm_mode(ec_ctx, r);
        if (mbmi->use_dpcm_y == 0) {
@@ -1392,7 +1517,7 @@ index 47abeeb4e..754404db9 100644
        } else {
          mbmi->dpcm_mode_y = read_dpcm_vert_horz_mode(ec_ctx, r);
          if (mbmi->dpcm_mode_y == 0) {
-@@ -2791,7 +3011,7 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2791,7 +3016,7 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
      } else {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
@@ -1401,7 +1526,7 @@ index 47abeeb4e..754404db9 100644
      }
    }
  
-@@ -2810,10 +3030,11 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2810,10 +3035,11 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
        if (mbmi->use_dpcm_y == 0) {
          mbmi->mrl_index =
              (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
@@ -1415,7 +1540,7 @@ index 47abeeb4e..754404db9 100644
                ec_ctx, r, xd->neighbors[0], xd->neighbors[1]);
          } else {
            mbmi->multi_line_mrl = 0;
-@@ -2825,11 +3046,13 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2825,11 +3051,13 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
      } else {
        mbmi->mrl_index =
            (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
@@ -1431,7 +1556,7 @@ index 47abeeb4e..754404db9 100644
        } else {
          mbmi->multi_line_mrl = 0;
        }
-@@ -2841,7 +3064,8 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2841,7 +3069,8 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_uv = read_dpcm_uv_mode(ec_ctx, r);
        if (mbmi->use_dpcm_uv == 0) {
@@ -1441,7 +1566,7 @@ index 47abeeb4e..754404db9 100644
                             is_cfl_allowed(
  #if CONFIG_CWG_F307_CFL_SEQ_FLAG
                                 cm->seq_params.enable_cfl_intra,
-@@ -2861,7 +3085,8 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2861,7 +3090,8 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
      } else {
        mbmi->use_dpcm_uv = 0;
        mbmi->dpcm_mode_uv = 0;
@@ -1451,7 +1576,7 @@ index 47abeeb4e..754404db9 100644
                           is_cfl_allowed(
  #if CONFIG_CWG_F307_CFL_SEQ_FLAG
                               cm->seq_params.enable_cfl_intra,
-@@ -2922,10 +3147,10 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
+@@ -2922,10 +3152,10 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
    mbmi->palette_mode_info.palette_size[1] = 0;
    if (av1_allow_palette(PLANE_TYPE_Y, cm->features.allow_screen_content_tools,
                          bsize))
@@ -1464,7 +1589,7 @@ index 47abeeb4e..754404db9 100644
    }
  }
  
-@@ -3954,7 +4179,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3954,7 +4184,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
  #endif  // DEC_MISMATCH_DEBUG
  }
  
@@ -1474,7 +1599,7 @@ index 47abeeb4e..754404db9 100644
                                         DecoderCodingBlock *dcb, aom_reader *r) {
    AV1_COMMON *const cm = &pbi->common;
    MACROBLOCKD *const xd = &dcb->xd;
-@@ -3983,7 +4209,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3983,7 +4214,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->refinemv_flag = 0;
  
    if (xd->tree_type != CHROMA_PART)
@@ -1483,7 +1608,7 @@ index 47abeeb4e..754404db9 100644
  
    mbmi->skip_mode = read_skip_mode(cm, xd, r);
  
-@@ -4035,14 +4261,14 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4035,14 +4266,14 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->warp_inter_intra = 0;
  
    if (!cm->seg.segid_preskip && xd->tree_type != CHROMA_PART)
@@ -1502,7 +1627,7 @@ index 47abeeb4e..754404db9 100644
  
    if (xd->tree_type != CHROMA_PART) read_delta_q_params(cm, xd, r);
  
-@@ -4059,7 +4285,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4059,7 +4290,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->ref_frame[1] = NONE_FRAME;
      mbmi->palette_mode_info.palette_size[0] = 0;
      mbmi->palette_mode_info.palette_size[1] = 0;
@@ -1511,7 +1636,7 @@ index 47abeeb4e..754404db9 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -4070,7 +4296,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4070,7 +4301,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    if (inter_block)
      read_inter_block_mode_info(pbi, dcb, mbmi, r);
    else
@@ -1520,7 +1645,7 @@ index 47abeeb4e..754404db9 100644
  }
  
  static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
-@@ -4096,7 +4322,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
+@@ -4096,7 +4327,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
    }
  }
  
@@ -1530,7 +1655,7 @@ index 47abeeb4e..754404db9 100644
                          aom_reader *r, int x_inside_boundary,
                          int y_inside_boundary) {
    AV1_COMMON *const cm = &pbi->common;
-@@ -4108,7 +4335,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -4108,7 +4340,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
      mi->sb_type[PLANE_TYPE_UV] = mi->sb_type[PLANE_TYPE_Y];
  
    if (frame_is_intra_only(cm)) {
@@ -1539,7 +1664,7 @@ index 47abeeb4e..754404db9 100644
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_intrabc_block(mbmi, xd->tree_type)) {
-@@ -4121,7 +4348,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -4121,7 +4353,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
        intra_copy_frame_mvs(cm, xd->mi_row, xd->mi_col, x_inside_boundary,
                             y_inside_boundary);
    } else {
@@ -1549,7 +1674,7 @@ index 47abeeb4e..754404db9 100644
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_inter_block(mbmi, xd->tree_type)) {
 diff --git a/av1/decoder/decodemv.h b/av1/decoder/decodemv.h
-index 55aee3dc7..b04b0c3b7 100644
+index 55aee3dc7f..b04b0c3b75 100644
 --- a/av1/decoder/decodemv.h
 +++ b/av1/decoder/decodemv.h
 @@ -21,7 +21,8 @@
@@ -1595,7 +1720,7 @@ index 55aee3dc7..b04b0c3b7 100644
  #endif  // CONFIG_BRU
  #endif  // AOM_AV1_DECODER_DECODEMV_H_
 diff --git a/av1/decoder/decoder.c b/av1/decoder/decoder.c
-index 025eb5bb6..1af3b8cf4 100644
+index 025eb5bb60..1af3b8cf42 100644
 --- a/av1/decoder/decoder.c
 +++ b/av1/decoder/decoder.c
 @@ -457,7 +457,8 @@ void av1_decoder_remove(AV1Decoder *pbi) {
@@ -1618,7 +1743,7 @@ index 025eb5bb6..1af3b8cf4 100644
          assert(xd->mi[0]->palette_mode_info.palette_size[plane] == 0);
        }
 diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index cafc137e5..6adbcad2a 100644
+index cafc137e53..6adbcad2a7 100644
 --- a/av1/decoder/decoder.h
 +++ b/av1/decoder/decoder.h
 @@ -100,7 +100,8 @@ typedef struct DecoderCodingBlock {
@@ -1652,7 +1777,7 @@ index cafc137e5..6adbcad2a 100644
                                     PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                     PARTITION_TREE *parent, int index);
 diff --git a/av1/decoder/decodetxb.c b/av1/decoder/decodetxb.c
-index 4f85230ef..573b0d9d8 100644
+index 4f85230ef3..573b0d9d88 100644
 --- a/av1/decoder/decodetxb.c
 +++ b/av1/decoder/decodetxb.c
 @@ -115,7 +115,11 @@ static int read_adaptive_hr(MACROBLOCKD *xd, aom_reader *r, int ctx) {
@@ -2267,7 +2392,7 @@ index 4f85230ef..573b0d9d8 100644
  #if TXCOEFF_TIMER
    aom_usec_timer_mark(&timer);
 diff --git a/av1/decoder/decodetxb.h b/av1/decoder/decodetxb.h
-index 66385d5ff..3abad966e 100644
+index 66385d5ffe..3abad966ec 100644
 --- a/av1/decoder/decodetxb.h
 +++ b/av1/decoder/decodetxb.h
 @@ -15,12 +15,15 @@
@@ -2315,7 +2440,7 @@ index 66385d5ff..3abad966e 100644
                                   struct aom_reader *const r, const int blk_row,
                                   const int blk_col, const int plane,
 diff --git a/av1/decoder/detokenize.c b/av1/decoder/detokenize.c
-index 45ad48401..063d9b3c6 100644
+index 45ad484012..063d9b3c63 100644
 --- a/av1/decoder/detokenize.c
 +++ b/av1/decoder/detokenize.c
 @@ -118,7 +118,8 @@ static int decode_color_map_tokens(Av1ColorMapParam *param, aom_reader *r) {
@@ -2339,7 +2464,7 @@ index 45ad48401..063d9b3c6 100644
 +#endif
  }
 diff --git a/av1/decoder/detokenize.h b/av1/decoder/detokenize.h
-index 32e347342..c3b3bebd2 100644
+index 32e347342a..c3b3bebd23 100644
 --- a/av1/decoder/detokenize.h
 +++ b/av1/decoder/detokenize.h
 @@ -22,7 +22,8 @@
@@ -2353,5 +2478,5 @@ index 32e347342..c3b3bebd2 100644
  #ifdef __cplusplus
  }  // extern "C"
 -- 
-2.43.0
+2.48.1
 

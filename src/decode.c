@@ -2132,8 +2132,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 break; \
             case NEWMV: \
                 b->mv[idx] = mvstack[b->drl_idx].mv.mv[idx]; \
-                const int mv_prec = f->frame_hdr->hp - f->frame_hdr->force_integer_mv; \
-                read_mv_residual(ts, &b->mv[idx], mv_prec); \
+                read_mv_residual(ts, &b->mv[idx], f->frame_hdr->mv_precision); \
                 break; \
             }
             has_subpel_filter = imin(bw4, bh4) == 1 ||
@@ -2324,8 +2323,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 if (DEBUG_BLOCK_INFO)
                     printf("Post-intermode[%d,drl=%d]: r=%d\n",
                            b->inter_mode, b->drl_idx, ts->msac.rng);
-                const int mv_prec = f->frame_hdr->hp - f->frame_hdr->force_integer_mv;
-                read_mv_residual(ts, &b->mv[0], mv_prec);
+                read_mv_residual(ts, &b->mv[0], f->frame_hdr->mv_precision);
                 if (DEBUG_BLOCK_INFO)
                     printf("Post-residualmv[mv=y:%d,x:%d]: r=%d\n",
                            b->mv[0].y, b->mv[0].x, ts->msac.rng);
@@ -2360,7 +2358,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             // motion variation
-            if (f->frame_hdr->switchable_motion_mode &&
+            if (f->frame_hdr->motion_modes > 1 &&
                 b->interintra_type == INTER_INTRA_NONE && imin(bw4, bh4) >= 2 &&
                 // is not warped global motion
                 !(!f->frame_hdr->force_integer_mv && b->inter_mode == GLOBALMV &&
