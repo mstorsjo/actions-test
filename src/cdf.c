@@ -69,19 +69,7 @@
 
 typedef struct CdfDefaultContext {
     CdfModeContext m;
-    struct {
-        CdfMvComponent comp;
-        ALIGN(uint16_t joint[N_MV_JOINTS], 8);
-        uint16_t shell_set[3];
-        uint16_t shell_lower[7][9];
-        uint16_t shell_upper[7][9];
-        uint16_t shell_offset_low[2][3];
-        uint16_t shell_offset_cl2[3];
-        uint16_t shell_offset_hi[16][3];
-        uint16_t col_component[2][3];
-        uint16_t col_index[4][3];
-    } mv;
-    ALIGN(uint16_t kfym[5][5][N_INTRA_PRED_MODES + 3], 32);
+    CdfMvContext mv;
 } CdfDefaultContext;
 
 static const CdfDefaultContext default_cdf = {
@@ -637,6 +625,16 @@ static const CdfDefaultContext default_cdf = {
                 { CDF1(16384),  20 },
                 { CDF1(16384),   6 },
             },
+        }, .region_type = {
+            { CDF1(8192), 0 },
+            { CDF1(8192), 0 },
+            { CDF1(8192), 0 },
+            { CDF1(8192), 0 },
+        }, .intra = {
+            { CDF1(2375), 75 },
+            { CDF1(16902), 75 },
+            { CDF1(16384), 0 },
+            { CDF1(29584), 0 },
         }, .intrabc = {
             { CDF1(30958), 1 },
             { CDF1(19490), 0 },
@@ -815,6 +813,169 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(19186), 50 },
             { CDF1(16483), 1 },
             { CDF1(8242), 95 },
+        }, .comp = {
+            { CDF1(27078), 75 },
+            { CDF1(22913), 1 },
+            { CDF1(15254), 1 },
+            { CDF1(13473), 1 },
+            { CDF1(5765), 0 },
+        }, .warp = {
+            { CDF1(31021), 118 },
+            { CDF1(25430), 76 },
+            { CDF1(22319), 76 },
+            { CDF1(21114), 1 },
+            { CDF1(17583), 1 },
+        }, .warp_newmv = {
+            CDF1(11941),
+        }, .inter_mode = {
+            { CDF2(11516, 11715), 0 },
+            { CDF2(24656, 24680), 0 },
+            { CDF2(27225, 27243), 0 },
+            { CDF2(13331, 13366), 0 },
+            { CDF2(16063, 16170), 0 },
+        }, .amvd = {
+            { { CDF1(11007) }, { CDF1(11114) }, { CDF1(10230) } },
+            { { CDF1(11219) }, { CDF1(10158) }, { CDF1(10997) } },
+            { { CDF1(8100)  }, { CDF1(6742)  }, { CDF1(9818)  } },
+            { { CDF1(7594)  }, { CDF1(6653)  }, { CDF1(7058)  } },
+            { { CDF1(17652) }, { CDF1(14448) }, { CDF1(13409) } },
+            { { CDF1(14808) }, { CDF1(13708) }, { CDF1(13027) } },
+            { { CDF1(8699)  }, { CDF1(7036)  }, { CDF1(7728)  } },
+            { { CDF1(9396)  }, { CDF1(8093)  }, { CDF1(10339) } },
+            { { CDF1(13855) }, { CDF1(11902) }, { CDF1(11445) } },
+        }, .bawp = {
+            { CDF1(27422), 1 },
+            { CDF1(15131), 6 },
+        }, .bawp_explicit = {
+            { CDF1(19664) },
+            { CDF1(21664) },
+            { CDF1(23664) }
+        }, .bawp_explicit_scale = {
+            CDF1(16384)
+        }, .warp_extend = {
+            { CDF1(20856) },
+            { CDF1(18023) },
+            { CDF1(16560) }
+        }, .warp_causal = {
+            { CDF1(17055) },
+            { CDF1(20889) },
+            { CDF1(17980) },
+            { CDF1(17863) },
+        }, .interintra = {
+            { CDF1(30376), 75 },
+            { CDF1(20784), 1 },
+            { CDF1(22326), 1 },
+            { CDF1(24412), 1 },
+        }, .interintra_mode = {
+            { CDF3(5420, 20952, 31034), 7 },
+            { CDF3(1948, 17325, 31146), 75 },
+            { CDF3(3623, 17784, 29374), 1 },
+            { CDF3(2843, 14004, 27752), 7 },
+        }, .interintra_wedge = {
+            CDF1(14247), 75
+        }, .wedge_quad = {
+            CDF3(9105, 18210, 25489), 93
+        }, .wedge_angle = {
+            { CDF4(6495, 14916, 23085, 27549), 76 },
+            { CDF4(12000, 15000, 22500, 28500), 76 },
+            { CDF4(16520, 21143, 25198, 28761), 76 },
+            { CDF4(13800, 16100, 23000, 27600), 76 }
+        }, .wedge_dist = {
+            CDF3(5746, 15860, 20435), 75
+        }, .wedge_dist2 = {
+            CDF2(11164, 18454), 90
+        }, .drl_idx = {
+            {
+                { CDF1(20581), 118 },
+                { CDF1(25770), 90 },
+                { CDF1(27043), 75 },
+                { CDF1(22024), 118 },
+                { CDF1(16590), 118 }
+            }, {
+                { CDF1(20638), 118 },
+                { CDF1(20418), 90 },
+                { CDF1(21113), 115 },
+                { CDF1(19645), 123 },
+                { CDF1(19650), 90 }
+            }, {
+                { CDF1(26306), 90 },
+                { CDF1(25139), 115 },
+                { CDF1(23285), 76 },
+                { CDF1(26265), 115 },
+                { CDF1(23464), 118 }
+            }
+        }, .mvprec_def = {
+            { CDF1(27840), 0 },
+            { CDF1(23276), 1 },
+            { CDF1(14105), 0 },
+        }, .mvprec_rem = {
+            {
+                { CDF2(10923, 21845), 0 },
+                { CDF2(30680, 31861), 78 },
+                { CDF2(21154, 31023), 0 },
+            }, {
+                { CDF2(10923, 21845), 0 },
+                { CDF2(31613, 32191), 78 },
+                { CDF2(25484, 32287), 75 },
+            }
+        }, .warp_ref_idx = {
+            { CDF1(21704), 90 },
+            { CDF1(23581), 115 },
+            { CDF1(21767), 123 },
+        }, .amvd_joint = {
+            CDF3(4, 19409, 32748), 1
+        }, .amvd_index = {
+            { CDF7(7804, 11354, 12626, 18581, 24598, 29144, 31608), 1 },
+            { CDF7(7392, 11106, 12422, 18167, 24480, 29230, 31714), 1 },
+        }, .warpmv_with_mvd = {
+            CDF1(16283),
+        }, .warp_delta_prec = {
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+        }, .warp_delta_param = {
+            {
+                { CDF7(9210, 20919, 23883, 28837, 29680, 31427, 31670) },
+                { CDF7(12722, 22620, 25595, 29576, 30362, 31750, 31968) }
+            }, {
+                { CDF7(7419, 12373, 17584, 20281, 23728, 27184, 29430) },
+                { CDF7(7417, 12119, 17352, 20027, 23490, 26882, 29213) }
+            }
+        }, .warp_delta_sign = {
+            CDF1(16384)
+        }, .warp_interintra = {
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
         }, .tx_split = {
             {
                 {
@@ -1067,25 +1228,14 @@ static const CdfDefaultContext default_cdf = {
         }, .cctx = {
             CDF6(13038, 14157, 16570, 18922, 21570, 29304), 37
         }, .filter = {
-            {
-                { CDF2(31935, 32720) }, { CDF2( 5568, 32719) },
-                { CDF2(  422,  2938) }, { CDF2(28244, 32608) },
-                { CDF2(31206, 31953) }, { CDF2( 4862, 32121) },
-                { CDF2(  770,  1152) }, { CDF2(20889, 25637) },
-            }, {
-                { CDF2(31910, 32724) }, { CDF2( 4120, 32712) },
-                { CDF2(  305,  2247) }, { CDF2(27403, 32636) },
-                { CDF2(31022, 32009) }, { CDF2( 2963, 32093) },
-                { CDF2(  601,   943) }, { CDF2(14969, 21398) },
-            },
-        }, .newmv_mode = {
-            { CDF1(24035) }, { CDF1(16630) }, { CDF1(15339) },
-            { CDF1( 8386) }, { CDF1(12222) }, { CDF1( 4676) },
-        }, .globalmv_mode = {
-            { CDF1( 2175) }, { CDF1( 1054) },
-        }, .refmv_mode = {
-            { CDF1(23974) }, { CDF1(24188) }, { CDF1(17848) },
-            { CDF1(28622) }, { CDF1(24312) }, { CDF1(19923) },
+            { CDF2(31476, 32736), 0 },
+            { CDF2(1637, 32702), 75 },
+            { CDF2(11, 709), 90 },
+            { CDF2(27634, 32442), 6 },
+            { CDF2(30451, 30981), 0 },
+            { CDF2(8963, 32500), 6 },
+            { CDF2(370, 693), 75 },
+            { CDF2(25697, 27654), 31 },
         }, .drl_bit = {
             { CDF1(13104) }, { CDF1(24560) }, { CDF1(18945) },
         }, .comp_inter_mode = {
@@ -1097,12 +1247,6 @@ static const CdfDefaultContext default_cdf = {
             { CDF7(10725, 17454, 20124, 22820, 24195, 25168, 26046) },
             { CDF7(17125, 24273, 25814, 27492, 28214, 28704, 30592) },
             { CDF7(13046, 23214, 24505, 25942, 27435, 28442, 29330) },
-        }, .intra = {
-            { CDF1(  806) }, { CDF1(16662) }, { CDF1(20186) },
-            { CDF1(26538) },
-        }, .comp = {
-            { CDF1(26828) }, { CDF1(24035) }, { CDF1(12031) },
-            { CDF1(10640) }, { CDF1( 2901) },
         }, .comp_dir = {
             { CDF1( 1198) }, { CDF1( 2070) }, { CDF1( 9166) },
             { CDF1( 7499) }, { CDF1(22475) },
@@ -1135,25 +1279,6 @@ static const CdfDefaultContext default_cdf = {
                     23703, 24284, 24985, 25684, 27259, 28883, 30911) },
             { CDF15( 1135,  1322,  1493,  2635,  2696,  2737,  2770, 21016,
                     22935, 25057, 27251, 29173, 30089, 30960, 31933) },
-        }, .interintra = {
-            { CDF1(16384) }, { CDF1(26887) }, { CDF1(27597) },
-            { CDF1(30237) },
-        }, .interintra_mode = {
-            { CDF3(8192, 16384, 24576) },
-            { CDF3(1875, 11082, 27332) },
-            { CDF3(2473,  9996, 26388) },
-            { CDF3(4238, 11537, 25926) },
-        }, .interintra_wedge = {
-            { CDF1(20036) }, { CDF1(24957) }, { CDF1(26704) },
-            { CDF1(27530) }, { CDF1(29564) }, { CDF1(29444) },
-            { CDF1(26872) },
-        }, .ref = {
-            { { CDF1( 4897) }, { CDF1(16973) }, { CDF1(29744) } },
-            { { CDF1( 1555) }, { CDF1(16751) }, { CDF1(30279) } },
-            { { CDF1( 4236) }, { CDF1(19647) }, { CDF1(31194) } },
-            { { CDF1( 8650) }, { CDF1(24773) }, { CDF1(31895) } },
-            { { CDF1(  904) }, { CDF1(11014) }, { CDF1(26875) } },
-            { { CDF1( 1444) }, { CDF1(15087) }, { CDF1(30304) } },
         }, .comp_fwd_ref = {
             { { CDF1( 4946) }, { CDF1(19891) }, { CDF1(30731) } },
             { { CDF1( 9468) }, { CDF1(22441) }, { CDF1(31059) } },
@@ -1189,70 +1314,9 @@ static const CdfDefaultContext default_cdf = {
             { CDF3(28160, 32120, 32677) },
             { CDF3(28160, 32120, 32677) },
             { CDF3(28160, 32120, 32677) },
-        }, .motion_mode = {
-            [BS_8x8]     = { CDF2( 7651, 24760) },
-            [BS_8x16]    = { CDF2( 4738, 24765) },
-            [BS_8x32]    = { CDF2(28799, 31390) },
-            [BS_16x8]    = { CDF2( 5391, 25528) },
-            [BS_16x16]   = { CDF2(19419, 26810) },
-            [BS_16x32]   = { CDF2( 5123, 23606) },
-            [BS_16x64]   = { CDF2(28973, 31594) },
-            [BS_32x8]    = { CDF2(26431, 30774) },
-            [BS_32x16]   = { CDF2(11606, 24308) },
-            [BS_32x32]   = { CDF2(26260, 29116) },
-            [BS_32x64]   = { CDF2(20360, 28062) },
-            [BS_64x16]   = { CDF2(29742, 31203) },
-            [BS_64x32]   = { CDF2(21679, 26830) },
-            [BS_64x64]   = { CDF2(29516, 30701) },
-            [BS_64x128]  = { CDF2(28898, 30397) },
-            [BS_128x64]  = { CDF2(30878, 31335) },
-            [BS_128x128] = { CDF2(32507, 32558) },
-        }, .obmc = {
-            [BS_8x8]     = { CDF1(10437) },
-            [BS_8x16]    = { CDF1( 9371) },
-            [BS_8x32]    = { CDF1(23664) },
-            [BS_16x8]    = { CDF1( 9301) },
-            [BS_16x16]   = { CDF1(17432) },
-            [BS_16x32]   = { CDF1(14423) },
-            [BS_16x64]   = { CDF1(24008) },
-            [BS_32x8]    = { CDF1(20901) },
-            [BS_32x16]   = { CDF1(15142) },
-            [BS_32x32]   = { CDF1(25817) },
-            [BS_32x64]   = { CDF1(22823) },
-            [BS_64x16]   = { CDF1(26879) },
-            [BS_64x32]   = { CDF1(22083) },
-            [BS_64x64]   = { CDF1(30128) },
-            [BS_64x128]  = { CDF1(31014) },
-            [BS_128x64]  = { CDF1(31560) },
-            [BS_128x128] = { CDF1(32638) },
         },
     }, .mv = {
-        .comp = {
-            .classes = {
-                CDF10(28672, 30976, 31858, 32320, 32551,
-                      32656, 32740, 32757, 32762, 32767)
-            }, .class0 = {
-                CDF1(27648)
-            }, .classN = {
-                { CDF1(17408) }, { CDF1(17920) }, { CDF1(18944) },
-                { CDF1(20480) }, { CDF1(22528) }, { CDF1(24576) },
-                { CDF1(28672) }, { CDF1(29952) }, { CDF1(29952) },
-                { CDF1(30720) },
-            }, .class0_fp = {
-                { CDF3(16384, 24576, 26624) },
-                { CDF3(12288, 21248, 24128) },
-            }, .classN_fp = {
-                CDF3( 8192, 17408, 21248)
-            }, .class0_hp = {
-                CDF1(20480)
-            }, .classN_hp = {
-                CDF1(16384)
-            }, .sign = {
-                CDF1(16384)
-            },
-        }, .joint = {
-            CDF3( 4096, 11264, 19328)
-        }, .shell_set = {
+        .shell_set = {
             CDF1(24576), 0
         }, .shell_lower = {
             { CDF4(6847, 15990, 24873, 32100), 0 },
@@ -1300,64 +1364,7 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(13771), 0 },
             { CDF1(13429), 1 },
             { CDF1(14771), 1 },
-        },
-    }, .kfym = {
-        {
-            { CDF12(15588, 17027, 19338, 20218, 20682, 21110,
-                    21825, 23244, 24189, 28165, 29093, 30466) },
-            { CDF12(12016, 18066, 19516, 20303, 20719, 21444,
-                    21888, 23032, 24434, 28658, 30172, 31409) },
-            { CDF12(10052, 10771, 22296, 22788, 23055, 23239,
-                    24133, 25620, 26160, 29336, 29929, 31567) },
-            { CDF12(14091, 15406, 16442, 18808, 19136, 19546,
-                    19998, 22096, 24746, 29585, 30958, 32462) },
-            { CDF12(12122, 13265, 15603, 16501, 18609, 20033,
-                    22391, 25583, 26437, 30261, 31073, 32475) },
-        }, {
-            { CDF12(10023, 19585, 20848, 21440, 21832, 22760,
-                    23089, 24023, 25381, 29014, 30482, 31436) },
-            { CDF12( 5983, 24099, 24560, 24886, 25066, 25795,
-                    25913, 26423, 27610, 29905, 31276, 31794) },
-            { CDF12( 7444, 12781, 20177, 20728, 21077, 21607,
-                    22170, 23405, 24469, 27915, 29090, 30492) },
-            { CDF12( 8537, 14689, 15432, 17087, 17408, 18172,
-                    18408, 19825, 24649, 29153, 31096, 32210) },
-            { CDF12( 7543, 14231, 15496, 16195, 17905, 20717,
-                    21984, 24516, 26001, 29675, 30981, 31994) },
-        }, {
-            { CDF12(12613, 13591, 21383, 22004, 22312, 22577,
-                    23401, 25055, 25729, 29538, 30305, 32077) },
-            { CDF12( 9687, 13470, 18506, 19230, 19604, 20147,
-                    20695, 22062, 23219, 27743, 29211, 30907) },
-            { CDF12( 6183,  6505, 26024, 26252, 26366, 26434,
-                    27082, 28354, 28555, 30467, 30794, 32086) },
-            { CDF12(10718, 11734, 14954, 17224, 17565, 17924,
-                    18561, 21523, 23878, 28975, 30287, 32252) },
-            { CDF12( 9194,  9858, 16501, 17263, 18424, 19171,
-                    21563, 25961, 26561, 30072, 30737, 32463) },
-        }, {
-            { CDF12(12602, 14399, 15488, 18381, 18778, 19315,
-                    19724, 21419, 25060, 29696, 30917, 32409) },
-            { CDF12( 8203, 13821, 14524, 17105, 17439, 18131,
-                    18404, 19468, 25225, 29485, 31158, 32342) },
-            { CDF12( 8451,  9731, 15004, 17643, 18012, 18425,
-                    19070, 21538, 24605, 29118, 30078, 32018) },
-            { CDF12( 7714,  9048,  9516, 16667, 16817, 16994,
-                    17153, 18767, 26743, 30389, 31536, 32528) },
-            { CDF12( 8843, 10280, 11496, 15317, 16652, 17943,
-                    19108, 22718, 25769, 29953, 30983, 32485) },
-        }, {
-            { CDF12(12578, 13671, 15979, 16834, 19075, 20913,
-                    22989, 25449, 26219, 30214, 31150, 32477) },
-            { CDF12( 9563, 13626, 15080, 15892, 17756, 20863,
-                    22207, 24236, 25380, 29653, 31143, 32277) },
-            { CDF12( 8356,  8901, 17616, 18256, 19350, 20106,
-                    22598, 25947, 26466, 29900, 30523, 32261) },
-            { CDF12(10835, 11815, 13124, 16042, 17018, 18039,
-                    18947, 22753, 24615, 29489, 30883, 32482) },
-            { CDF12( 7618,  8288,  9859, 10509, 15386, 18657,
-                    22903, 28776, 29180, 31355, 31802, 32593) },
-        },
+        }
     },
 };
 
@@ -6359,53 +6366,67 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(5, 3, m.delta_lf);
     update_cdf_3d(7, 3, 1, m.txpart);
 
+#define update_mv_cdfs(name) \
+    update_cdf_1d(1, name.shell_set); \
+    update_cdf_2d(7, 7, name.shell_lower); \
+    update_cdf_2d(7, 7, name.shell_upper); \
+    update_cdf_2d(2, 1, name.shell_offset_low); \
+    update_cdf_1d(1, name.shell_offset_cl2); \
+    update_cdf_2d(16, 1, name.shell_offset_hi); \
+    update_cdf_2d(2, 1, name.col_component); \
+    update_cdf_2d(4, 1, name.col_index)
+
+    update_mv_cdfs(dmv);
+
     if (IS_KEY_OR_INTRA(hdr))
         return;
 
-    update_cdf_2d(9, 15, m.wedge_idx);
-    update_cdf_2d(8, N_COMP_INTER_PRED_MODES - 1, m.comp_inter_mode);
-    update_cdf_3d(2, 8, DAV1D_N_SWITCHABLE_FILTERS - 1, m.filter);
-    update_cdf_2d(4, 3, m.interintra_mode);
-    update_cdf_2d(N_BS_SIZES, 2, m.motion_mode);
-    update_cdf_2d(3, 1, m.skip_mode);
-    update_cdf_2d(6, 1, m.newmv_mode);
-    update_cdf_2d(2, 1, m.globalmv_mode);
-    update_cdf_2d(6, 1, m.refmv_mode);
-    update_cdf_2d(3, 1, m.drl_bit);
+    update_cdf_2d(4, 1, m.region_type);
     update_cdf_2d(4, 1, m.intra);
     update_cdf_2d(5, 1, m.comp);
+    update_cdf_2d(5, 1, m.warp);
+    update_cdf_1d(1, m.warp_newmv);
+    update_cdf_2d(5, 2, m.inter_mode);
+    update_cdf_3d(9, 3, 1, m.amvd);
+    update_cdf_2d(2, 1, m.bawp);
+    update_cdf_2d(3, 1, m.bawp_explicit);
+    update_cdf_1d(1, m.bawp_explicit_scale);
+    update_cdf_2d(3, 1, m.warp_extend);
+    update_cdf_2d(4, 1, m.warp_causal);
+    update_cdf_2d(4, 1, m.interintra);
+    update_cdf_2d(4, 3, m.interintra_mode);
+    update_cdf_1d(1, m.interintra_wedge);
+    update_cdf_1d(3, m.wedge_quad);
+    update_cdf_2d(4, 4, m.wedge_angle);
+    update_cdf_1d(3, m.wedge_dist);
+    update_cdf_1d(2, m.wedge_dist2);
+    update_cdf_3d(3, 5, 1, m.drl_idx);
+    update_cdf_2d(3, 1, m.mvprec_def);
+    update_cdf_3d(2, 3, 2, m.mvprec_rem);
+    update_cdf_2d(3, 1, m.warp_ref_idx);
+    update_cdf_1d(3, m.amvd_joint);
+    update_cdf_2d(2, 7, m.amvd_index);
+    update_cdf_1d(1, m.warpmv_with_mvd);
+    update_cdf_2d(N_BS_SIZES, 1, m.warp_delta_prec);
+    update_cdf_3d(2, 2, 7, m.warp_delta_param);
+    update_cdf_1d(1, m.warp_delta_sign);
+    update_cdf_2d(4, 1, m.warp_interintra);
+    update_cdf_2d(8, 3, m.filter);
+
+    update_cdf_2d(9, 15, m.wedge_idx);
+    update_cdf_2d(8, N_COMP_INTER_PRED_MODES - 1, m.comp_inter_mode);
+    update_cdf_2d(3, 1, m.skip_mode);
+    update_cdf_2d(3, 1, m.drl_bit);
     update_cdf_2d(5, 1, m.comp_dir);
     update_cdf_2d(6, 1, m.jnt_comp);
     update_cdf_2d(6, 1, m.mask_comp);
     update_cdf_2d(9, 1, m.wedge_comp);
-    update_cdf_3d(6, 3, 1, m.ref);
     update_cdf_3d(3, 3, 1, m.comp_fwd_ref);
     update_cdf_3d(2, 3, 1, m.comp_bwd_ref);
     update_cdf_3d(3, 3, 1, m.comp_uni_ref);
     update_cdf_2d(3, 1, m.seg_pred);
-    update_cdf_2d(4, 1, m.interintra);
-    update_cdf_2d(7, 1, m.interintra_wedge);
-    update_cdf_2d(N_BS_SIZES, 1, m.obmc);
 
-    for (int k = 0; k < 2; k++) {
-        update_cdf_1d(10, mv.comp[k].classes);
-        update_cdf_1d(1, mv.comp[k].sign);
-        update_cdf_1d(1, mv.comp[k].class0);
-        update_cdf_2d(2, 3, mv.comp[k].class0_fp);
-        update_cdf_1d(1, mv.comp[k].class0_hp);
-        update_cdf_2d(10, 1, mv.comp[k].classN);
-        update_cdf_1d(3, mv.comp[k].classN_fp);
-        update_cdf_1d(1, mv.comp[k].classN_hp);
-    }
-    update_cdf_1d(N_MV_JOINTS - 1, mv.joint);
-    update_cdf_1d(1, mv.shell_set);
-    update_cdf_2d(7, 7, mv.shell_lower);
-    update_cdf_2d(7, 7, mv.shell_upper);
-    update_cdf_2d(2, 1, mv.shell_offset_low);
-    update_cdf_1d(1, mv.shell_offset_cl2);
-    update_cdf_2d(16, 1, mv.shell_offset_hi);
-    update_cdf_2d(2, 1, mv.col_component);
-    update_cdf_2d(4, 1, mv.col_index);
+    update_mv_cdfs(mv);
 }
 
 /*
@@ -6421,10 +6442,9 @@ void dav1d_cdf_thread_copy(CdfContext *const dst, const CdfThreadContext *const 
         memcpy(dst, src->data.cdf, sizeof(*dst));
     } else {
         dst->coef = default_coef_cdf[src->data.qcat];
-        memcpy(&dst->m, &default_cdf.m,
-               offsetof(CdfDefaultContext, mv.joint));
-        memcpy(&dst->mv.comp[1], &default_cdf.mv.comp,
-               sizeof(default_cdf) - offsetof(CdfDefaultContext, mv.comp));
+        dst->m = default_cdf.m;
+        dst->mv = default_cdf.mv;
+        dst->dmv = default_cdf.mv;
     }
 }
 

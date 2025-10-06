@@ -377,6 +377,7 @@ typedef struct Dav1dFrameHeader {
     uint8_t force_integer_mv;
     uint8_t frame_size_override;
     uint8_t primary_ref_frame;
+    uint8_t n_ref_frames;
     uint8_t buffer_removal_time_present;
     struct Dav1dFrameHeaderOperatingPoint {
         uint32_t buffer_removal_time;
@@ -385,7 +386,7 @@ typedef struct Dav1dFrameHeader {
     int render_width, render_height;
     uint8_t have_render_size;
     uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
-    uint8_t max_bvp_drl_bits;
+    uint8_t max_bvp_drl_bits, max_drl_bits;
     int8_t refidx[DAV1D_REFS_PER_FRAME];
     uint8_t mv_precision;
     enum Dav1dFilterMode subpel_filter_mode;
@@ -393,6 +394,9 @@ typedef struct Dav1dFrameHeader {
     uint8_t use_ref_frame_mvs;
     uint8_t tmvp_sample_step;
     uint8_t opfl_refine_type;
+    struct {
+        uint8_t frame_mode;
+    } tip;
     uint8_t refresh_context;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {

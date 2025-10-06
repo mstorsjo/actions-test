@@ -48,6 +48,7 @@ typedef struct CdfModeContext {
     uint16_t part_dir[2][64][3];
     uint16_t part_ext[2][64][3];
     uint16_t part_4way[2][64][3];
+    uint16_t region_type[4][3];
     uint16_t intrabc[3][3];
     uint16_t gdf[3];
     uint16_t cdef_idx0[4][3];
@@ -98,30 +99,48 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t txpart[7][3][2], 4);
 
     /* inter/switch */
+    uint16_t intra[4][3];
+    uint16_t comp[5][3];
+    uint16_t warp[5][3];
+    uint16_t warp_newmv[3];
+    uint16_t inter_mode[5][4];
+    uint16_t amvd[9][3][3];
+    uint16_t bawp[2][3];
+    uint16_t bawp_explicit[3][3];
+    uint16_t bawp_explicit_scale[3];
+    uint16_t warp_extend[3][3];
+    uint16_t warp_causal[4][3];
+    uint16_t interintra[4][3];
+    uint16_t interintra_mode[4][5];
+    uint16_t interintra_wedge[3];
+    uint16_t wedge_quad[5];
+    uint16_t wedge_angle[4][6];
+    uint16_t wedge_dist2[4];
+    uint16_t wedge_dist[5];
+    uint16_t drl_idx[3][5][3];
+    uint16_t mvprec_def[3][3];
+    uint16_t mvprec_rem[2][3][4];
+    uint16_t warp_ref_idx[3][3];
+    uint16_t amvd_joint[5];
+    uint16_t amvd_index[2][9];
+    uint16_t warpmv_with_mvd[3];
+    uint16_t warp_delta_prec[N_BS_SIZES][3];
+    uint16_t warp_delta_param[2][2][9];
+    uint16_t warp_delta_sign[3];
+    uint16_t warp_interintra[4][3];
+    uint16_t filter[8][5];
     ALIGN(uint16_t wedge_idx[9][16], 32);
     ALIGN(uint16_t comp_inter_mode[8][N_COMP_INTER_PRED_MODES], 16);
-    ALIGN(uint16_t filter[2][8][DAV1D_N_SWITCHABLE_FILTERS + 1], 8);
-    ALIGN(uint16_t interintra_mode[4][4], 8);
-    ALIGN(uint16_t motion_mode[N_BS_SIZES][3 + 1], 8);
     ALIGN(uint16_t skip_mode[3][2], 4);
-    ALIGN(uint16_t newmv_mode[6][2], 4);
-    ALIGN(uint16_t globalmv_mode[2][2], 4);
-    ALIGN(uint16_t refmv_mode[6][2], 4);
     ALIGN(uint16_t drl_bit[3][2], 4);
-    ALIGN(uint16_t intra[4][2], 4);
-    ALIGN(uint16_t comp[5][2], 4);
     ALIGN(uint16_t comp_dir[5][2], 4);
     ALIGN(uint16_t jnt_comp[6][2], 4);
     ALIGN(uint16_t mask_comp[6][2], 4);
     ALIGN(uint16_t wedge_comp[9][2], 4);
-    ALIGN(uint16_t ref[6][3][2], 4);
     ALIGN(uint16_t comp_fwd_ref[3][3][2], 4);
     ALIGN(uint16_t comp_bwd_ref[2][3][2], 4);
     ALIGN(uint16_t comp_uni_ref[3][3][2], 4);
     ALIGN(uint16_t seg_pred[3][2], 4);
-    ALIGN(uint16_t interintra[7][2], 4);
-    ALIGN(uint16_t interintra_wedge[7][2], 4);
-    ALIGN(uint16_t obmc[N_BS_SIZES][2], 4);
 } CdfModeContext;
 
 typedef struct CdfCoefContext {
@@ -154,20 +173,7 @@ typedef struct CdfCoefContext {
     uint16_t base_uv_tok_lf[12][7];
 } CdfCoefContext;
 
-typedef struct CdfMvComponent {
-    ALIGN(uint16_t classes[11 + 5], 32);
-    ALIGN(uint16_t sign[2], 4);
-    ALIGN(uint16_t class0[2], 4);
-    ALIGN(uint16_t class0_fp[2][4], 8);
-    ALIGN(uint16_t class0_hp[2], 4);
-    ALIGN(uint16_t classN[10][2], 4);
-    ALIGN(uint16_t classN_fp[4], 8);
-    ALIGN(uint16_t classN_hp[2], 4);
-} CdfMvComponent;
-
 typedef struct CdfMvContext {
-    CdfMvComponent comp[2];
-    ALIGN(uint16_t joint[N_MV_JOINTS], 8);
     uint16_t shell_set[3];
     uint16_t shell_lower[7][9];
     uint16_t shell_upper[7][9];
@@ -181,8 +187,7 @@ typedef struct CdfMvContext {
 typedef struct CdfContext {
     CdfCoefContext coef;
     CdfModeContext m;
-    CdfMvContext mv;
-    ALIGN(uint16_t kfym[5][5][N_INTRA_PRED_MODES + 3], 32);
+    CdfMvContext mv, dmv;
 } CdfContext;
 
 typedef struct CdfThreadContext {

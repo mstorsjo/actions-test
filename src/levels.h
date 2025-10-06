@@ -231,11 +231,11 @@ enum MVJoint {
 };
 
 enum InterPredMode {
-    NEARESTMV,
     NEARMV,
     GLOBALMV,
     NEWMV,
-    N_INTER_PRED_MODES,
+    WARPMV,
+    WARPNEWMV,
 };
 
 enum DRL_PROXIMITY {
@@ -265,12 +265,6 @@ enum CompInterType {
     COMP_INTER_WEDGE,
 };
 
-enum InterIntraType {
-    INTER_INTRA_NONE,
-    INTER_INTRA_BLEND,
-    INTER_INTRA_WEDGE,
-};
-
 typedef union mv {
     struct {
         int16_t y, x;
@@ -280,8 +274,10 @@ typedef union mv {
 
 enum MotionMode {
     MM_TRANSLATION,
-    MM_OBMC,
-    MM_WARP,
+    MM_INTERINTRA,
+    MM_WARP_CAUSAL,
+    MM_WARP_DELTA,
+    MM_WARP_EXTEND,
 };
 
 enum CflType {
@@ -294,11 +290,11 @@ enum CflType {
 
 typedef struct Av1Block {
     uint8_t bl, bs, bp;
-    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, uvtx, fsc;
+    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, uvtx, fsc;
     union {
         struct {
             uint8_t y_mode, mrl_index, multi_mrl, dip;
-            uint8_t uv_mode, tx_part, pal_sz;
+            uint8_t uv_mode, pal_sz;
             int8_t y_angle, uv_angle, cfl_type;
             union {
                 int8_t cfl_alpha[2], mh_dir;
@@ -308,17 +304,17 @@ typedef struct Av1Block {
             union {
                 struct {
                     union mv mv[2];
-                    uint8_t wedge_idx, mask_sign, interintra_mode, morph_pred;
+                    int8_t wedge_idx; // -1 for no wedge
+                    uint8_t mask_sign, interintra_mode, morph_pred;
                 };
                 struct {
                     union mv mv2d;
                     int16_t matrix[4];
                 };
             };
-            uint8_t comp_type, inter_mode, motion_mode, drl_idx;
+            uint8_t comp_type, inter_mode, motion_mode, warp_ii, drl_idx;
             int8_t ref[2];
-            uint8_t max_ytx, filter2d, interintra_type, tx_split0;
-            uint16_t tx_split1;
+            uint8_t bawp[2], filter;
         }; // inter
     };
 } Av1Block;

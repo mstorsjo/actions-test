@@ -227,7 +227,7 @@ struct Dav1dFrameContext {
     Dav1dRef *cur_segmap_ref, *prev_segmap_ref;
     uint8_t *cur_segmap;
     const uint8_t *prev_segmap;
-    uint8_t refpoc[7], refrefpoc[7][7];
+    uint8_t refpoc[7], refrefpoc[7][7], refdir[7];
     uint8_t gmv_warp_allowed[7];
     CdfThreadContext in_cdf, out_cdf;
     struct Dav1dTileGroup *tile;
@@ -246,7 +246,6 @@ struct Dav1dFrameContext {
     const Dav1dDSPContext *dsp;
     struct {
         recon_b_intra_fn recon_b_intra;
-        recon_b_inter_fn recon_b_inter;
         filter_sbrow_fn filter_sbrow;
         filter_sbrow_fn filter_sbrow_deblock_cols;
         filter_sbrow_fn filter_sbrow_deblock_rows;
@@ -396,7 +395,7 @@ struct Dav1dTaskContext {
     const Dav1dContext *c;
     const Dav1dFrameContext *f;
     Dav1dTileState *ts;
-    int bx, by, cbx, cby, sdp_cfl_disallowed;
+    int bx, by, cbx, cby, sdp_cfl_disallowed, intra_region;
     BlockContext l, *a;
     refmvs_tile rt;
     ALIGN(union, 64) {

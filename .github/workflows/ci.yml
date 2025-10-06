@@ -87,3 +87,36 @@ jobs:
             diff -uw {avm,dav1d}.sdp${sdp}.log
             wc -l avm.sdp${sdp}.log
         done
+    - name: build AVM v11.0.0 (with inter entropy)
+      run: |
+        cd avm
+        sed -i 's|#define DEBUG_B_PIXELS 1|#define DEBUG_B_PIXELS 0|' aom/debug.h
+        sed -i 's|mi_row < 2|mi_row < 6|' aom/debug.h
+        sed -i 's|mi_col < 9|mi_col < 8|' aom/debug.h
+        sed -i 's|cm->current_frame.frame_number == 0|cm->current_frame.frame_number == 4|' aom/debug.h
+        git diff
+        cd x86-64
+        make -j$(nproc) aomdec
+        cd ../..
+    - name: build dav2d (with inter entropy)
+      run: |
+        sed -i 's|#define DEBUG_B_PIXELS 1|#define DEBUG_B_PIXELS 0|' src/debug.h
+        sed -i 's|t->by < 2|t->by < 6|' src/debug.h
+        sed -i 's|t->bx < 9|t->bx < 8|' src/debug.h
+        sed -i 's|f->frame_hdr->frame_offset == 0|f->frame_hdr->frame_offset == 4|' src/debug.h
+        git diff
+        cd build
+        ninja
+        cd ..
+    - name: run tests (with inter entropy)
+      run: |
+        file="media/avm-v11.0.0-bus.64x64.l5.ivf"
+        avm/x86-64/aomdec $file -o /dev/null > avm.inter.log
+        # Only part of the frame will currently parse correctly, so we "catch" the error with "|| true"
+        ( build/tools/dav1d -i $file --muxer=null --threads=1 --quiet || true ) > dav1d.inter.log
+        for n in avm dav1d; do
+            # refmvs is not yet implemented, so discard these parts of the entropy debugging log
+            grep -v ' mv\[' ${n}.inter.log | head -n387 > ${n}.inter.387.log
+        done
+        diff -uw {avm,dav1d}.inter.387.log
+        wc -l avm.inter.387.log

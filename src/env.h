@@ -53,8 +53,10 @@ typedef struct BlockContext {
     uint8_t ALIGN(morph_pred[64], 8);
     uint8_t ALIGN(comp_type[64], 8);
     int8_t ALIGN(ref[2][64], 8); // -1 means intra
-    uint8_t ALIGN(filter[2][64], 8); // 3 means unset
-    int8_t ALIGN(tx[64], 8);
+    uint8_t ALIGN(motion_mode[64], 8);
+    uint8_t ALIGN(amvd[64], 8);
+    uint8_t ALIGN(mvprec[64], 8);
+    uint8_t ALIGN(filter[64], 8); // DAV1D_N_SWITCHABLE_FILTERS=3 means unset
     uint8_t ALIGN(tx_lpf_y[64], 8);
     uint8_t ALIGN(tx_lpf_uv[64], 8);
     uint8_t ALIGN(partition[2][64], 8);
@@ -62,20 +64,12 @@ typedef struct BlockContext {
     uint8_t ALIGN(pal_sz[64], 8);
 } BlockContext;
 
-static inline int get_intra_ctx(const BlockContext *const a,
-                                const BlockContext *const l,
-                                const int yb4, const int xb4,
-                                const int have_top, const int have_left)
+static inline int get_intra_ctx(const BlockContext *nx[2],
+                                const int xoff[2], const int n_ctx)
 {
-    if (have_left) {
-        if (have_top) {
-            const int ctx = l->intra[yb4] + a->intra[xb4];
-            return ctx + (ctx == 2);
-        } else
-            return l->intra[yb4] * 2;
-    } else {
-        return have_top ? a->intra[xb4] * 2 : 0;
-    }
+    if (!n_ctx) return 0;
+    const int sum = nx[0]->intra[xoff[0]] + nx[n_ctx - 1]->intra[xoff[n_ctx - 1]];
+    return sum + (sum == n_ctx);
 }
 
 static inline int get_partition_ctx(const BlockContext *const a,
@@ -120,55 +114,115 @@ static inline enum TxfmType get_uv_inter_txtp(const TxfmInfo *const uvt_dim,
     return ytxtp;
 }
 
-static inline int get_filter_ctx(const BlockContext *const a,
-                                 const BlockContext *const l,
-                                 const int comp, const int dir, const int ref,
-                                 const int yb4, const int xb4)
+static inline int get_filter_ctx(const BlockContext *nb[2],
+                                 const int boff[2], const int8_t refs[2])
 {
-    const int a_filter = (a->ref[0][xb4] == ref || a->ref[1][xb4] == ref) ?
-                         a->filter[dir][xb4] : DAV1D_N_SWITCHABLE_FILTERS;
-    const int l_filter = (l->ref[0][yb4] == ref || l->ref[1][yb4] == ref) ?
-                         l->filter[dir][yb4] : DAV1D_N_SWITCHABLE_FILTERS;
+    const int ref = refs[0];
+    const enum Dav1dFilterMode flt[2] = {
+        (boff[0] != -1 && (nb[0]->ref[0][boff[0]] == ref ||
+                           nb[0]->ref[1][boff[0]] == ref)) ?
+        nb[0]->filter[boff[0]] : DAV1D_N_SWITCHABLE_FILTERS,
+        (boff[1] != -1 && (nb[1]->ref[0][boff[1]] == ref ||
+                           nb[1]->ref[1][boff[1]] == ref)) ?
+        nb[1]->filter[boff[1]] : DAV1D_N_SWITCHABLE_FILTERS,
+    };
 
-    if (a_filter == l_filter) {
-        return comp * 4 + a_filter;
-    } else if (a_filter == DAV1D_N_SWITCHABLE_FILTERS) {
-        return comp * 4 + l_filter;
-    } else if (l_filter == DAV1D_N_SWITCHABLE_FILTERS) {
-        return comp * 4 + a_filter;
-    } else {
-        return comp * 4 + DAV1D_N_SWITCHABLE_FILTERS;
+    return (refs[1] != -1) * 4 + flt[flt[0] == flt[1] ||
+                                     flt[0] == DAV1D_N_SWITCHABLE_FILTERS];
+}
+
+static inline int get_comp_ctx(const BlockContext *nx[2],
+                               const int xoff[2], const int n_ctx,
+                               const uint8_t *const refdir)
+{
+    switch (n_ctx) {
+    default: assert(0);
+    case 2: {
+        const int refa2 = nx[0]->ref[1][xoff[0]];
+        const int refb2 = nx[1]->ref[1][xoff[1]];
+        if (refa2 == -1) {
+            const int refa1 = nx[0]->ref[0][xoff[0]];
+            if (refb2 == -1) {
+                const int refb1 = nx[1]->ref[0][xoff[1]];
+                return refdir[refa1] ^ refdir[refb1];
+            } else return nx[0]->intra[xoff[0]] || refdir[refa1];
+        } else if (refb2 == -1) {
+            const int refb1 = nx[1]->ref[0][xoff[1]];
+            return nx[1]->intra[xoff[1]] || refdir[refb1];
+        } else return 4;
+    }
+    case 1: {
+        const int ref2 = nx[0]->ref[1][xoff[0]];
+        if (ref2 == -1) {
+            const int ref1 = nx[0]->ref[0][xoff[0]];
+            return nx[0]->intra[xoff[0]] || refdir[ref1];
+        } else return 3;
+    }
+    case 0: return 1;
     }
 }
 
-static inline int get_comp_ctx(const BlockContext *const a,
+static inline int get_warp_ctx(const BlockContext *const a,
                                const BlockContext *const l,
                                const int yb4, const int xb4,
-                               const int have_top, const int have_left)
+                               const int have_top, const int have_left,
+                               const int have_top_right, const int have_bottom_left,
+                               const unsigned top_is_at_tile_boundary,
+                               const uint8_t *const b_dim, const int ref)
 {
+    int ctx = 0;
+
+#define add_matching(dir, idx) do { \
+    ctx += dir->ref[0][idx] == ref && dir->motion_mode[idx] >= 2; \
+} while (0)
     if (have_top) {
-        if (have_left) {
-            if (a->comp_type[xb4]) {
-                if (l->comp_type[yb4]) {
-                    return 4;
-                } else {
-                    // 4U means intra (-1) or bwd (>= 4)
-                    return 2 + ((unsigned)l->ref[0][yb4] >= 4U);
-                }
-            } else if (l->comp_type[yb4]) {
-                // 4U means intra (-1) or bwd (>= 4)
-                return 2 + ((unsigned)a->ref[0][xb4] >= 4U);
-            } else {
-                return (l->ref[0][yb4] >= 4) ^ (a->ref[0][xb4] >= 4);
-            }
-        } else {
-            return a->comp_type[xb4] ? 3 : a->ref[0][xb4] >= 4;
-        }
-    } else if (have_left) {
-        return l->comp_type[yb4] ? 3 : l->ref[0][yb4] >= 4;
-    } else {
-        return 1;
+        const unsigned mask = ~top_is_at_tile_boundary;
+        add_matching(a, xb4 & mask);
+        if (have_top_right && (b_dim[0] >= 4 || !top_is_at_tile_boundary))
+            add_matching(a, (xb4 + b_dim[0] - 1 - top_is_at_tile_boundary) & mask);
     }
+    if (have_left) {
+        add_matching(l, yb4);
+        if (have_bottom_left)
+            add_matching(l, yb4 + b_dim[1] - 1);
+    }
+#undef add_matching
+
+    return ctx;
+}
+
+static inline int get_sngl_ctx(const BlockContext *const a,
+                               const BlockContext *const l,
+                               const int yb4, const int xb4,
+                               const int have_top, const int have_left,
+                               const int have_top_right, const int have_bottom_left,
+                               const uint8_t *const b_dim, const int ref)
+{
+    int row = 0, col = 0, newmv = 0;
+
+#define NEWMV0_MODE_MASK (1 << NEWMV)
+#define add_matching(dir, cnt, idx) do { \
+    if (dir->ref[0][idx] == ref) { \
+        cnt++; \
+        newmv += !!((1 << dir->mode[idx]) & NEWMV0_MODE_MASK); \
+    } else if (dir->ref[1][idx] == idx) { \
+        cnt++; \
+        newmv += !!((1 << dir->mode[idx]) & 0); \
+    } \
+} while (0)
+    if (have_top) {
+        add_matching(a, col, xb4);
+        if (have_top_right)
+            add_matching(a, col, xb4 + b_dim[0] - 1);
+    }
+    if (have_left) {
+        add_matching(l, row, yb4);
+        add_matching(l, row, yb4 + b_dim[1] - 1);
+    }
+#undef NEWMV0_MODE_MASK
+#undef add_matching
+
+    return !!row + !!col + 2 * !!newmv;
 }
 
 static inline int get_comp_dir_ctx(const BlockContext *const a,
@@ -461,6 +515,17 @@ static inline void fix_mv_precision(const Dav1dFrameHeader *const hdr,
         mv->x = (mv->x - (mv->x >> 15)) & ~1U;
         mv->y = (mv->y - (mv->y >> 15)) & ~1U;
     }
+}
+
+// mv_prec=0..6 for {8,4,2,f,h,q,e}pel
+static inline void mv_reduce_prec(mv *const mv, const int mv_prec) {
+    if (mv_prec == 6) return;
+    const int rnd = 32 >> mv_prec;
+    mv->x = mv->x + rnd - (mv->x > 0);
+    mv->y = mv->y + rnd - (mv->y > 0);
+    const unsigned mask = ~(rnd * 2U - 1);
+    mv->x &= mask;
+    mv->y &= mask;
 }
 
 static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,

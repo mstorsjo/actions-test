@@ -38,10 +38,6 @@ void (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
             enum EdgeFlags intra_edge_flags, Av1Block *b)
 typedef decl_recon_b_intra_fn(*recon_b_intra_fn);
 
-#define decl_recon_b_inter_fn(name) \
-int (name)(Dav1dTaskContext *t, enum BlockSize bs, const Av1Block *b)
-typedef decl_recon_b_inter_fn(*recon_b_inter_fn);
-
 #define decl_filter_sbrow_fn(name) \
 void (name)(Dav1dFrameContext *f, int sby)
 typedef decl_filter_sbrow_fn(*filter_sbrow_fn);
@@ -65,9 +61,6 @@ typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 
 decl_recon_b_intra_fn(dav1d_recon_b_intra_8bpc);
 decl_recon_b_intra_fn(dav1d_recon_b_intra_16bpc);
-
-decl_recon_b_inter_fn(dav1d_recon_b_inter_8bpc);
-decl_recon_b_inter_fn(dav1d_recon_b_inter_16bpc);
 
 decl_filter_sbrow_fn(dav1d_filter_sbrow_8bpc);
 decl_filter_sbrow_fn(dav1d_filter_sbrow_16bpc);

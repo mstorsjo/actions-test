@@ -766,7 +766,10 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
             hdr->allow_global_intrabc = dav1d_get_bit(gb);
         hdr->allow_local_intrabc = !hdr->allow_global_intrabc || dav1d_get_bit(gb);
     }
-    // FIXME inter drl bits
+    if (IS_INTER_OR_SWITCH(hdr))
+        hdr->max_drl_bits = seqhdr->allow_frame_max_drl_bits ?
+            dav1d_get_ref_uniform(gb, 3, seqhdr->def_max_drl_bits) + 1 :
+            seqhdr->def_max_drl_bits;
     if (hdr->allow_intrabc) {
         hdr->max_bvp_drl_bits = seqhdr->allow_max_bvp_drl_bits ?
             dav1d_get_ref_uniform(gb, 3, seqhdr->def_max_bvp_drl_bits) + 1 :
@@ -774,12 +777,13 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
     }
 
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-screencontent_ibc[%d,%d,%d,%d,%d,%d]: off=%td\n",
+    printf("HDR: post-screencontent_ibc[%d,%d,%d,%d,%d,%d,%d]: off=%td\n",
            hdr->allow_screen_content_tools,
            hdr->force_integer_mv,
            hdr->allow_intrabc,
            hdr->allow_global_intrabc,
            hdr->allow_local_intrabc,
+           hdr->max_drl_bits,
            hdr->max_bvp_drl_bits,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
@@ -1260,7 +1264,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
         if (seqhdr->bawp)
             hdr->bawp = dav1d_get_bit(gb);
 
-        if (seqhdr->motion_modes & 8)
+        if (seqhdr->motion_modes & (1 << MM_WARP_DELTA))
             hdr->warp_motion = dav1d_get_bit(gb);
     }
 
@@ -1554,7 +1558,7 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
         for (int n = 0; n < (int) ARRAY_SIZE(c->refs); n++) {
             if (!c->refs[n].p.p.data[0]) continue;
             int m;
-            for (m = n; m >= 0; m--)
+            for (m = n - 1; m >= 0; m--)
                 if (c->refs[n].p.p.data[0] == c->refs[m].p.p.data[0]) break;
             n_ref_frames += m == -1;
         }
@@ -1562,6 +1566,7 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
             c->frame_hdr = NULL;
             goto error;
         }
+        c->frame_hdr->n_ref_frames = n_ref_frames;
         for (int n = 0; n < c->n_tile_data; n++)
             dav1d_data_unref_internal(&c->tile[n].data);
         c->n_tile_data = 0;
