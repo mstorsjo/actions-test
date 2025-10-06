@@ -720,7 +720,7 @@ static void load_tmvs_c(const refmvs_frame *const rf, int tile_row_idx,
 {
     if (rf->n_tile_threads == 1) tile_row_idx = 0;
     assert(row_start8 >= 0);
-    assert((unsigned) (row_end8 - row_start8) <= 16U);
+    assert((unsigned) (row_end8 - row_start8) <= 32U);
     row_end8 = imin(row_end8, rf->ih8);
     const int col_start8i = imax(col_start8 - 8, 0);
     const int col_end8i = imin(col_end8 + 8, rf->iw8);

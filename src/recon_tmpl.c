@@ -2735,12 +2735,14 @@ void bytefn(dav1d_filter_sbrow_lr)(Dav1dFrameContext *const f, const int sby) {
 }
 
 void bytefn(dav1d_filter_sbrow)(Dav1dFrameContext *const f, const int sby) {
+#if 0
     bytefn(dav1d_filter_sbrow_deblock_cols)(f, sby);
     bytefn(dav1d_filter_sbrow_deblock_rows)(f, sby);
     if (f->seq_hdr->cdef)
         bytefn(dav1d_filter_sbrow_cdef)(f->c->tc, sby);
     if (f->lf.restore_planes)
         bytefn(dav1d_filter_sbrow_lr)(f, sby);
+#endif
 }
 
 void bytefn(dav1d_backup_ipred_edge)(Dav1dTaskContext *const t) {

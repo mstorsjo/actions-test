@@ -990,7 +990,7 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->emu_edge = emu_edge_c;
     c->resize   = resize_c;
 
-#if HAVE_ASM
+#if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
     mc_dsp_init_arm(c);
 #elif ARCH_LOONGARCH64
