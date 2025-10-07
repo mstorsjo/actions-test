@@ -24,11 +24,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "tests/checkasm/checkasm.h"
+#include "tests/checkasm/internal.h"
 #include "common/attributes.h"
 #include "src/refmvs.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #if 0
 static inline int gen_mv(const int total_bits, int spel_bits) {
