@@ -397,6 +397,43 @@ static const int8_t tx_kernel_dct2_size64[64][64] = {
        35, -33,  30, -28,  26, -24,  22, -20,  18, -15,  13, -11,   9,  -7,   4,  -2 }
 };
 
+static const int8_t adst_kernel_sz4[4][4] = {
+    {  18,  50,  75,  89 },
+    {  50,  89,  18, -75 },
+    {  75,  18, -89,  50 },
+    {  89, -75,  50, -18 }
+};
+
+static const int8_t adst_kernel_sz8[8][8] = {
+    {  11,  28,  44,  58,  70,  79,  86,  89 },
+    {  34,  74,  89,  76,  39, -12, -58, -86 },
+    {  54,  89,  48, -34, -87, -66,  12,  79 },
+    {  71,  68, -41, -86,   1,  87,  38, -70 },
+    {  84,  17, -89,  10,  86, -35, -75,  58 },
+    {  88, -44, -44,  88, -44, -44,  88, -44 },
+    {  79, -83,  50,   6, -59,  86, -74,  29 },
+    {  50, -69,  81, -84,  78, -62,  40, -14 }
+};
+
+static const int8_t adst_kernel_sz16[16][16] = {
+    {   8,  17,  25,  33,  41,  48,  55,  62,  67,  73,  77,  81,  84,  87,  88,  89 },
+    {  25,  48,  67,  81,  88,  88,  81,  67,  48,  25,   0, -25, -48, -67, -81, -88 },
+    {  41,  73,  88,  84,  62,  25, -17, -55, -81, -89, -77, -48,  -8,  33,  67,  87 },
+    {  55,  87,  81,  41, -17, -67, -89, -73, -25,  33,  77,  88,  62,   8, -48, -84 },
+    {  67,  88,  48, -25, -81, -81, -25,  48,  88,  67,   0, -67, -88, -48,  25,  81 },
+    {  77,  77,   0, -77, -77,   0,  77,  77,   0, -77, -77,   0,  77,  77,   0, -77 },
+    {  84,  55, -48, -87,  -8,  81,  62, -41, -88, -17,  77,  67, -33, -89, -25,  73 },
+    {  88,  25, -81, -48,  67,  67, -48, -81,  25,  88,   0, -88, -25,  81,  48, -67 },
+    {  89,  -8, -88,  17,  87, -25, -84,  33,  81, -41, -77,  48,  73, -55, -67,  62 },
+    {  87, -41, -67,  73,  33, -88,   8,  84, -48, -62,  77,  25, -89,  17,  81, -55 },
+    {  81, -67, -25,  88, -48, -48,  88, -25, -67,  81,   0, -81,  67,  25, -88,  48 },
+    {  73, -84,  25,  55, -89,  48,  33, -87,  67,   8, -77,  81, -17, -62,  88, -41 },
+    {  62, -89,  67,  -8, -55,  88, -73,  17,  48, -87,  77, -25, -41,  84, -81,  33 },
+    {  48, -81,  88, -67,  25,  25, -67,  88, -81,  48,   0, -48,  81, -88,  67, -25 },
+    {  33, -62,  81, -89,  84, -67,  41,  -8, -25,  55, -77,  88, -87,  73, -48,  17 },
+    {  17, -33,  48, -62,  73, -81,  87, -89,  88, -84,  77, -67,  55, -41,  25,  -8 }
+};
+
 #define CLIP(a) iclip(a, min, max)
 
 static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride,
@@ -623,19 +660,18 @@ inv_adst4_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
                         int32_t *const out, const ptrdiff_t out_s)
 {
     assert(in_s > 0 && out_s != 0);
-    const int in0 = in[0 * in_s], in1 = in[1 * in_s];
-    const int in2 = in[2 * in_s], in3 = in[3 * in_s];
-
-    out[0 * out_s] = (( 1321         * in0 + (3803 - 4096) * in2 +
-                       (2482 - 4096) * in3 + (3344 - 4096) * in1 + 2048) >> 12) +
-                     in2 + in3 + in1;
-    out[1 * out_s] = (((2482 - 4096) * in0 -  1321         * in2 -
-                       (3803 - 4096) * in3 + (3344 - 4096) * in1 + 2048) >> 12) +
-                     in0 - in3 + in1;
-    out[2 * out_s] = (209 * (in0 - in2 + in3) + 128) >> 8;
-    out[3 * out_s] = (((3803 - 4096) * in0 + (2482 - 4096) * in2 -
-                        1321         * in3 - (3344 - 4096) * in1 + 2048) >> 12) +
-                     in0 + in2 - in1;
+    const int8_t (*mat)[4] = adst_kernel_sz4;
+    int sums[4];
+    for (int i = 0; i < 4; i++) {
+        int sum = 0;
+        for (int j = 0; j < 4; j++) {
+            sum += mat[j][i] * in[j * in_s];
+        }
+        sums[i] = sum;
+    }
+    for (int i = 0; i < 4; i++) {
+        out[i * out_s] = sums[i];
+    }
 }
 
 static NOINLINE void
@@ -644,47 +680,18 @@ inv_adst8_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
                         int32_t *const out, const ptrdiff_t out_s)
 {
     assert(in_s > 0 && out_s != 0);
-    const int in0 = in[0 * in_s], in1 = in[1 * in_s];
-    const int in2 = in[2 * in_s], in3 = in[3 * in_s];
-    const int in4 = in[4 * in_s], in5 = in[5 * in_s];
-    const int in6 = in[6 * in_s], in7 = in[7 * in_s];
-
-    const int t0a = (((4076 - 4096) * in7 +   401         * in0 + 2048) >> 12) + in7;
-    const int t1a = ((  401         * in7 - (4076 - 4096) * in0 + 2048) >> 12) - in0;
-    const int t2a = (((3612 - 4096) * in5 +  1931         * in2 + 2048) >> 12) + in5;
-    const int t3a = (( 1931         * in5 - (3612 - 4096) * in2 + 2048) >> 12) - in2;
-          int t4a =  ( 1299         * in3 +  1583         * in4 + 1024) >> 11;
-          int t5a =  ( 1583         * in3 -  1299         * in4 + 1024) >> 11;
-          int t6a = (( 1189         * in1 + (3920 - 4096) * in6 + 2048) >> 12) + in6;
-          int t7a = (((3920 - 4096) * in1 -  1189         * in6 + 2048) >> 12) + in1;
-
-    const int t0 = CLIP(t0a + t4a);
-    const int t1 = CLIP(t1a + t5a);
-          int t2 = CLIP(t2a + t6a);
-          int t3 = CLIP(t3a + t7a);
-    const int t4 = CLIP(t0a - t4a);
-    const int t5 = CLIP(t1a - t5a);
-          int t6 = CLIP(t2a - t6a);
-          int t7 = CLIP(t3a - t7a);
-
-    t4a = (((3784 - 4096) * t4 +  1567         * t5 + 2048) >> 12) + t4;
-    t5a = (( 1567         * t4 - (3784 - 4096) * t5 + 2048) >> 12) - t5;
-    t6a = (((3784 - 4096) * t7 -  1567         * t6 + 2048) >> 12) + t7;
-    t7a = (( 1567         * t7 + (3784 - 4096) * t6 + 2048) >> 12) + t6;
-
-    out[0 * out_s] =  CLIP(t0  + t2 );
-    out[7 * out_s] = -CLIP(t1  + t3 );
-    t2             =  CLIP(t0  - t2 );
-    t3             =  CLIP(t1  - t3 );
-    out[1 * out_s] = -CLIP(t4a + t6a);
-    out[6 * out_s] =  CLIP(t5a + t7a);
-    t6             =  CLIP(t4a - t6a);
-    t7             =  CLIP(t5a - t7a);
-
-    out[3 * out_s] = -(((t2 + t3) * 181 + 128) >> 8);
-    out[4 * out_s] =   ((t2 - t3) * 181 + 128) >> 8;
-    out[2 * out_s] =   ((t6 + t7) * 181 + 128) >> 8;
-    out[5 * out_s] = -(((t6 - t7) * 181 + 128) >> 8);
+    const int8_t (*mat)[8] = adst_kernel_sz8;
+    int sums[8];
+    for (int i = 0; i < 8; i++) {
+        int sum = 0;
+        for (int j = 0; j < 8; j++) {
+            sum += mat[j][i] * in[j * in_s];
+        }
+        sums[i] = sum;
+    }
+    for (int i = 0; i < 8; i++) {
+        out[i * out_s] = sums[i];
+    }
 }
 
 static NOINLINE void
@@ -693,109 +700,18 @@ inv_adst16_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
                          int32_t *const out, const ptrdiff_t out_s)
 {
     assert(in_s > 0 && out_s != 0);
-    const int in0  = in[ 0 * in_s], in1  = in[ 1 * in_s];
-    const int in2  = in[ 2 * in_s], in3  = in[ 3 * in_s];
-    const int in4  = in[ 4 * in_s], in5  = in[ 5 * in_s];
-    const int in6  = in[ 6 * in_s], in7  = in[ 7 * in_s];
-    const int in8  = in[ 8 * in_s], in9  = in[ 9 * in_s];
-    const int in10 = in[10 * in_s], in11 = in[11 * in_s];
-    const int in12 = in[12 * in_s], in13 = in[13 * in_s];
-    const int in14 = in[14 * in_s], in15 = in[15 * in_s];
-
-    int t0  = ((in15 * (4091 - 4096) + in0  *   201         + 2048) >> 12) + in15;
-    int t1  = ((in15 *   201         - in0  * (4091 - 4096) + 2048) >> 12) - in0;
-    int t2  = ((in13 * (3973 - 4096) + in2  *   995         + 2048) >> 12) + in13;
-    int t3  = ((in13 *   995         - in2  * (3973 - 4096) + 2048) >> 12) - in2;
-    int t4  = ((in11 * (3703 - 4096) + in4  *  1751         + 2048) >> 12) + in11;
-    int t5  = ((in11 *  1751         - in4  * (3703 - 4096) + 2048) >> 12) - in4;
-    int t6  =  (in9  *  1645         + in6  *  1220         + 1024) >> 11;
-    int t7  =  (in9  *  1220         - in6  *  1645         + 1024) >> 11;
-    int t8  = ((in7  *  2751         + in8  * (3035 - 4096) + 2048) >> 12) + in8;
-    int t9  = ((in7  * (3035 - 4096) - in8  *  2751         + 2048) >> 12) + in7;
-    int t10 = ((in5  *  2106         + in10 * (3513 - 4096) + 2048) >> 12) + in10;
-    int t11 = ((in5  * (3513 - 4096) - in10 *  2106         + 2048) >> 12) + in5;
-    int t12 = ((in3  *  1380         + in12 * (3857 - 4096) + 2048) >> 12) + in12;
-    int t13 = ((in3  * (3857 - 4096) - in12 *  1380         + 2048) >> 12) + in3;
-    int t14 = ((in1  *   601         + in14 * (4052 - 4096) + 2048) >> 12) + in14;
-    int t15 = ((in1  * (4052 - 4096) - in14 *   601         + 2048) >> 12) + in1;
-
-    int t0a  = CLIP(t0 + t8 );
-    int t1a  = CLIP(t1 + t9 );
-    int t2a  = CLIP(t2 + t10);
-    int t3a  = CLIP(t3 + t11);
-    int t4a  = CLIP(t4 + t12);
-    int t5a  = CLIP(t5 + t13);
-    int t6a  = CLIP(t6 + t14);
-    int t7a  = CLIP(t7 + t15);
-    int t8a  = CLIP(t0 - t8 );
-    int t9a  = CLIP(t1 - t9 );
-    int t10a = CLIP(t2 - t10);
-    int t11a = CLIP(t3 - t11);
-    int t12a = CLIP(t4 - t12);
-    int t13a = CLIP(t5 - t13);
-    int t14a = CLIP(t6 - t14);
-    int t15a = CLIP(t7 - t15);
-
-    t8   = ((t8a  * (4017 - 4096) + t9a  *   799         + 2048) >> 12) + t8a;
-    t9   = ((t8a  *   799         - t9a  * (4017 - 4096) + 2048) >> 12) - t9a;
-    t10  = ((t10a *  2276         + t11a * (3406 - 4096) + 2048) >> 12) + t11a;
-    t11  = ((t10a * (3406 - 4096) - t11a *  2276         + 2048) >> 12) + t10a;
-    t12  = ((t13a * (4017 - 4096) - t12a *   799         + 2048) >> 12) + t13a;
-    t13  = ((t13a *   799         + t12a * (4017 - 4096) + 2048) >> 12) + t12a;
-    t14  = ((t15a *  2276         - t14a * (3406 - 4096) + 2048) >> 12) - t14a;
-    t15  = ((t15a * (3406 - 4096) + t14a *  2276         + 2048) >> 12) + t15a;
-
-    t0   = CLIP(t0a + t4a);
-    t1   = CLIP(t1a + t5a);
-    t2   = CLIP(t2a + t6a);
-    t3   = CLIP(t3a + t7a);
-    t4   = CLIP(t0a - t4a);
-    t5   = CLIP(t1a - t5a);
-    t6   = CLIP(t2a - t6a);
-    t7   = CLIP(t3a - t7a);
-    t8a  = CLIP(t8  + t12);
-    t9a  = CLIP(t9  + t13);
-    t10a = CLIP(t10 + t14);
-    t11a = CLIP(t11 + t15);
-    t12a = CLIP(t8  - t12);
-    t13a = CLIP(t9  - t13);
-    t14a = CLIP(t10 - t14);
-    t15a = CLIP(t11 - t15);
-
-    t4a  = ((t4   * (3784 - 4096) + t5   *  1567         + 2048) >> 12) + t4;
-    t5a  = ((t4   *  1567         - t5   * (3784 - 4096) + 2048) >> 12) - t5;
-    t6a  = ((t7   * (3784 - 4096) - t6   *  1567         + 2048) >> 12) + t7;
-    t7a  = ((t7   *  1567         + t6   * (3784 - 4096) + 2048) >> 12) + t6;
-    t12  = ((t12a * (3784 - 4096) + t13a *  1567         + 2048) >> 12) + t12a;
-    t13  = ((t12a *  1567         - t13a * (3784 - 4096) + 2048) >> 12) - t13a;
-    t14  = ((t15a * (3784 - 4096) - t14a *  1567         + 2048) >> 12) + t15a;
-    t15  = ((t15a *  1567         + t14a * (3784 - 4096) + 2048) >> 12) + t14a;
-
-    out[ 0 * out_s] =  CLIP(t0  + t2  );
-    out[15 * out_s] = -CLIP(t1  + t3  );
-    t2a             =  CLIP(t0  - t2  );
-    t3a             =  CLIP(t1  - t3  );
-    out[ 3 * out_s] = -CLIP(t4a + t6a );
-    out[12 * out_s] =  CLIP(t5a + t7a );
-    t6              =  CLIP(t4a - t6a );
-    t7              =  CLIP(t5a - t7a );
-    out[ 1 * out_s] = -CLIP(t8a + t10a);
-    out[14 * out_s] =  CLIP(t9a + t11a);
-    t10             =  CLIP(t8a - t10a);
-    t11             =  CLIP(t9a - t11a);
-    out[ 2 * out_s] =  CLIP(t12 + t14 );
-    out[13 * out_s] = -CLIP(t13 + t15 );
-    t14a            =  CLIP(t12 - t14 );
-    t15a            =  CLIP(t13 - t15 );
-
-    out[ 7 * out_s] = -(((t2a  + t3a)  * 181 + 128) >> 8);
-    out[ 8 * out_s] =   ((t2a  - t3a)  * 181 + 128) >> 8;
-    out[ 4 * out_s] =   ((t6   + t7)   * 181 + 128) >> 8;
-    out[11 * out_s] = -(((t6   - t7)   * 181 + 128) >> 8);
-    out[ 6 * out_s] =   ((t10  + t11)  * 181 + 128) >> 8;
-    out[ 9 * out_s] = -(((t10  - t11)  * 181 + 128) >> 8);
-    out[ 5 * out_s] = -(((t14a + t15a) * 181 + 128) >> 8);
-    out[10 * out_s] =   ((t14a - t15a) * 181 + 128) >> 8;
+    const int8_t (*mat)[16] = adst_kernel_sz16;
+    int sums[16];
+    for (int i = 0; i < 16; i++) {
+        int sum = 0;
+        for (int j = 0; j < 16; j++) {
+            sum += mat[j][i] * in[j * in_s];
+        }
+        sums[i] = sum;
+    }
+    for (int i = 0; i < 16; i++) {
+        out[i * out_s] = sums[i];
+    }
 }
 
 #define inv_adst_1d(sz) \
