@@ -195,19 +195,6 @@ static inline void read_dv_residual(Dav1dTileState *const ts, mv *const mv,
     }
 }
 
-static inline int mv_lower_precision_fpel_comp(int v) {
-    if (!(v & 7)) return v;
-    v += 3 + (v < 0);
-    v &= ~7;
-    // FIXME clamp
-    return v;
-}
-
-static inline void mv_lower_precision_fpel(mv *const mv) {
-    mv->x = mv_lower_precision_fpel_comp(mv->x);
-    mv->y = mv_lower_precision_fpel_comp(mv->y);
-}
-
 static void read_tx_tree(Dav1dTaskContext *const t,
                          const enum RectTxfmSize from,
                          const int depth, uint16_t *const masks,
@@ -1859,7 +1846,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
                 if (s) diff.x = -diff.x;
             }
-            if (!is_qpel) mv_lower_precision_fpel(&b->mv[0]);
+            if (!is_qpel) fix_int_mv_precision(&b->mv[0]);
             b->mv[0].x += diff.x;
             b->mv[0].y += diff.y;
         }
