@@ -141,7 +141,7 @@ static void lr_sbrow(const Dav1dFrameContext *const f, pixel *p, const int y,
     if (aligned_unit_pos && aligned_unit_pos + half_unit_size > h)
         aligned_unit_pos -= unit_size;
     aligned_unit_pos <<= ss_ver;
-    const int sb_idx = (aligned_unit_pos >> 7) * f->sr_sb128w;
+    const int sb_idx = (aligned_unit_pos >> 8) * f->sb256w;
     const int unit_idx = ((aligned_unit_pos >> 6) & 1) << 1;
     lr[0] = &f->lf.lr_mask[sb_idx].lr[plane][unit_idx];
     int restore = lr[0]->type != DAV1D_RESTORATION_NONE;

@@ -106,7 +106,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
     enum CdefEdgeFlags edges = CDEF_HAVE_BOTTOM | (by_start > 0 ? CDEF_HAVE_TOP : 0);
     pixel *ptrs[3] = { p[0], p[1], p[2] };
     const int sbsz = 16;
-    const int sb64w = f->sb128w << 1;
+    const int sb64w = f->sb256w << 2;
     const int damping = f->frame_hdr->cdef.damping + bitdepth_min_8;
     const enum Dav1dPixelLayout layout = f->cur.p.layout;
     const int uv_idx = DAV1D_PIXEL_LAYOUT_I444 - layout;
@@ -155,7 +155,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
             }
 
             // Create a complete 32-bit mask for the sb row ahead of time.
-            const uint16_t (*noskip_row)[2] = &lflvl[sb128x].noskip_mask[by_idx];
+            const uint16_t (*noskip_row)[4] = &lflvl[sb128x].noskip_mask[by_idx];
             const unsigned noskip_mask = (unsigned) noskip_row[0][1] << 16 |
                                                     noskip_row[0][0];
 

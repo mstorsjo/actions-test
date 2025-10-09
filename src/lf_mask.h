@@ -44,18 +44,18 @@ typedef struct Av1RestorationUnit {
     int8_t ns_filter[16][32];
 } Av1RestorationUnit;
 
-// each struct describes one 128x128 area (1 or 4 SBs), pre-superres-scaling
+// each struct describes one 256x256 area
 typedef struct Av1Filter {
     // each bit is 1 col
-    uint16_t filter_y[2 /* 0=col, 1=row */][32][3][2];
-    uint16_t filter_uv[2 /* 0=col, 1=row */][32][2][2];
-    uint8_t gdf;
-    int8_t cdef_idx[4]; // -1 means "unset"
+    uint16_t filter_y[2 /* 0=col, 1=row */][64][3][4];
+    uint16_t filter_uv[2 /* 0=col, 1=row */][64][2][4];
+    uint8_t gdf[4];
+    int8_t cdef_idx[16]; // -1 means "unset"
     uint8_t ccso[3];
-    uint16_t noskip_mask[16][2]; // for 8x8 blocks, but stored on a 4x8 basis
+    uint16_t noskip_mask[16][4]; // for 8x8 blocks, but stored on a 4x8 basis
 } Av1Filter;
 
-// each struct describes one 128x128 area (1 or 4 SBs), post-superres-scaling
+// each struct describes one 256x256 area (1 or 4 SBs)
 typedef struct Av1Restoration {
     Av1RestorationUnit lr[3][4];
 } Av1Restoration;

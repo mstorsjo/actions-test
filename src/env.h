@@ -37,29 +37,29 @@
 #include "src/tables.h"
 
 typedef struct BlockContext {
-    uint8_t ALIGN(fsc[32], 8);
-    uint8_t ALIGN(mode[32], 8);
-    uint8_t ALIGN(midx[32], 8);
-    uint8_t ALIGN(mrl[32], 8);
-    uint8_t ALIGN(multi_mrl[32], 8);
-    uint8_t ALIGN(dip[32], 8);
-    uint8_t ALIGN(lcoef[32], 8);
-    uint8_t ALIGN(ccoef[2][32], 8);
-    uint8_t ALIGN(seg_pred[32], 8);
-    uint8_t ALIGN(skip_txfm[32], 8);
-    uint8_t ALIGN(skip_mode[32], 8);
-    uint8_t ALIGN(intra[32], 8);
-    uint8_t ALIGN(intrabc[32], 8);
-    uint8_t ALIGN(morph_pred[32], 8);
-    uint8_t ALIGN(comp_type[32], 8);
-    int8_t ALIGN(ref[2][32], 8); // -1 means intra
-    uint8_t ALIGN(filter[2][32], 8); // 3 means unset
-    int8_t ALIGN(tx[32], 8);
-    uint8_t ALIGN(tx_lpf_y[32], 8);
-    uint8_t ALIGN(tx_lpf_uv[32], 8);
-    uint8_t ALIGN(partition[2][32], 8);
-    uint8_t ALIGN(uvmode[32], 8);
-    uint8_t ALIGN(pal_sz[32], 8);
+    uint8_t ALIGN(fsc[64], 8);
+    uint8_t ALIGN(mode[64], 8);
+    uint8_t ALIGN(midx[64], 8);
+    uint8_t ALIGN(mrl[64], 8);
+    uint8_t ALIGN(multi_mrl[64], 8);
+    uint8_t ALIGN(dip[64], 8);
+    uint8_t ALIGN(lcoef[64], 8);
+    uint8_t ALIGN(ccoef[2][64], 8);
+    uint8_t ALIGN(seg_pred[64], 8);
+    uint8_t ALIGN(skip_txfm[64], 8);
+    uint8_t ALIGN(skip_mode[64], 8);
+    uint8_t ALIGN(intra[64], 8);
+    uint8_t ALIGN(intrabc[64], 8);
+    uint8_t ALIGN(morph_pred[64], 8);
+    uint8_t ALIGN(comp_type[64], 8);
+    int8_t ALIGN(ref[2][64], 8); // -1 means intra
+    uint8_t ALIGN(filter[2][64], 8); // 3 means unset
+    int8_t ALIGN(tx[64], 8);
+    uint8_t ALIGN(tx_lpf_y[64], 8);
+    uint8_t ALIGN(tx_lpf_uv[64], 8);
+    uint8_t ALIGN(partition[2][64], 8);
+    uint8_t ALIGN(uvmode[64], 8);
+    uint8_t ALIGN(pal_sz[64], 8);
 } BlockContext;
 
 static inline int get_intra_ctx(const BlockContext *const a,

@@ -108,11 +108,11 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         }
 #undef MERGE_CTX
 
-        // we assume here that the ccoef array is [2][32], and for V, ca is
+        // we assume here that the ccoef array is [2][64], and for V, ca is
         // ccoef[1][x], and U has been decoded before. Therefore, we can
-        // go "up" 32 bytes in ca/cl and get the "skip" state of the U plane.
+        // go "up" 64 bytes in ca/cl and get the "skip" state of the U plane.
         const int offset = plane == 1 ? 7 :
-                           6 * (((uint8_t(*)[32]) a)[-1][0] != 0x40);
+                           6 * (((uint8_t(*)[64]) a)[-1][0] != 0x40);
         return offset + not_one_blk * 3 + ca + cl;
     } else if (b_dim[2] == t_dim->lw && b_dim[3] == t_dim->lh) {
         return 0;
@@ -1080,7 +1080,7 @@ static void read_coef_tree(Dav1dTaskContext *const t,
         }
         t->by -= txsh;
     } else {
-        const int bx4 = t->bx & 31, by4 = t->by & 31;
+        const int bx4 = t->bx & 63, by4 = t->by & 63;
         enum TxfmType txtp;
         uint8_t cf_ctx;
         int eob;
@@ -1105,9 +1105,10 @@ static void read_coef_tree(Dav1dTaskContext *const t,
 #define set_ctx(rep_macro) \
             for (int y = 0; y < txh; y++) { \
                 rep_macro(txtp_map, 0, txtp); \
-                txtp_map += 32; \
+                txtp_map += 16; \
             }
-            uint8_t *txtp_map = &t->scratch.txtp_map[by4 * 32 + bx4];
+            uint8_t *txtp_map = &t->scratch.txtp_map[(t->by & 15) * 16 +
+                                                     (t->bx & 15)];
             case_set_upto16(t_dim->lw);
 #undef set_ctx
             if (t->frame_thread.pass == 1)
@@ -1138,7 +1139,7 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
     const Dav1dFrameContext *const f = t->f;
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
-    const int bx4 = t->bx & 31, by4 = t->by & 31;
+    const int bx4 = t->bx & 63, by4 = t->by & 63;
     const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
@@ -1221,8 +1222,8 @@ void bytefn(dav1d_read_coef_blocks)(Dav1dTaskContext *const t,
                         uint8_t cf_ctx = 0x40;
                         enum TxfmType txtp;
                         if (!b->intra)
-                            txtp = t->scratch.txtp_map[(by4 + (y << ss_ver)) * 32 +
-                                                        bx4 + (x << ss_hor)];
+                            txtp = t->scratch.txtp_map[((t->by + (y << ss_ver)) & 15) * 16 +
+                                                       ((t->bx + (x << ss_hor)) & 15)];
                         const int eob =
                             decode_coefs(t, &t->a->ccoef[pl][cbx4 + x],
                                          &t->l.ccoef[pl][cby4 + y], b->uvtx, bs,
@@ -1517,7 +1518,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
     Dav1dTileState *const ts = t->ts;
-    const int bx4 = t->bx & 31, by4 = t->by & 31;
+    const int bx4 = t->bx & 63, by4 = t->by & 63;
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
@@ -1551,7 +1552,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->w, f->bw - t->bx));
     dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
-    t->scratch.txtp_map[by4 * 32 + bx4] = txtp & 0xf;
+    t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xf;
 
     if (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED) {
         int n_pel_left = th + 3;
@@ -1566,7 +1567,7 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (!(t->by & (f->sb_step - 1))) {
             top_sb_edge = f->ipred_edge[0];
             const int sby = t->by >> f->sb_shift;
-            top_sb_edge += f->sb128w * 128 * (sby - 1);
+            top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
@@ -1851,7 +1852,7 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
 
     // chroma
 chroma: {}
-    const int cbx4 = (t->cbx & 31) >> f->ss_hor, cby4 = (t->cby & 31) >> f->ss_ver;
+    const int cbx4 = (t->cbx & 63) >> f->ss_hor, cby4 = (t->cby & 63) >> f->ss_ver;
     coef *const cf = bitfn(t->cf);
     const enum RectTxfmSize uvtx = dav1d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
@@ -1865,8 +1866,8 @@ chroma: {}
         if (b->skip_txfm) {
             cf_ctx = 0x40;
         } else {
-            enum TxfmType txtp = t->scratch.txtp_map[(t->by & 31) * 32 +
-                                                     (t->bx & 31)];
+            enum TxfmType txtp = t->scratch.txtp_map[(t->by & 15) * 16 +
+                                                     (t->bx & 15)];
             const int eob = decode_coefs(t, DB_ONLY(depth + 1)
                                          &t->a->ccoef[pl][cbx4],
                                          &t->l.ccoef[pl][cby4], uvtx, cbs,
@@ -1883,7 +1884,7 @@ chroma: {}
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
-    const int bx4 = t->bx & 31, by4 = t->by & 31;
+    const int bx4 = t->bx & 63, by4 = t->by & 63;
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
     const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
@@ -1960,7 +1961,7 @@ chroma: {}
                     if (!(t->by & (f->sb_step - 1))) {
                         top_sb_edge = f->ipred_edge[0];
                         const int sby = t->by >> f->sb_shift;
-                        top_sb_edge += f->sb128w * 128 * (sby - 1);
+                        top_sb_edge += f->sb256w * 256 * (sby - 1);
                     }
                     const enum IntraPredMode m =
                         bytefn(dav1d_prepare_intra_edges)(t->bx,
@@ -2069,7 +2070,7 @@ chroma: {}
                     if (!((t->by & ~ss_ver) & (f->sb_step - 1))) {
                         top_sb_edge = f->ipred_edge[pl + 1];
                         const int sby = t->by >> f->sb_shift;
-                        top_sb_edge += f->sb128w * 128 * (sby - 1);
+                        top_sb_edge += f->sb256w * 256 * (sby - 1);
                     }
                     const int xpos = t->bx >> ss_hor, ypos = t->by >> ss_ver;
                     const int xstart = ts->tiling.col_start >> ss_hor;
@@ -2133,7 +2134,7 @@ chroma: {}
                         if (!((t->by & ~ss_ver) & (f->sb_step - 1))) {
                             top_sb_edge = f->ipred_edge[1 + pl];
                             const int sby = t->by >> f->sb_shift;
-                            top_sb_edge += f->sb128w * 128 * (sby - 1);
+                            top_sb_edge += f->sb256w * 256 * (sby - 1);
                         }
                         const enum IntraPredMode uv_mode =
                              b->uv_mode == CFL_PRED ? DC_PRED : b->uv_mode;
@@ -2231,7 +2232,7 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
-    const int bx4 = t->bx & 31, by4 = t->by & 31;
+    const int bx4 = t->bx & 63, by4 = t->by & 63;
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
     const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
@@ -2294,7 +2295,7 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
             if (!(t->by & (f->sb_step - 1))) {
                 top_sb_edge = f->ipred_edge[0];
                 const int sby = t->by >> f->sb_shift;
-                top_sb_edge += f->sb128w * 128 * (sby - 1);
+                top_sb_edge += f->sb256w * 256 * (sby - 1);
             }
             m = bytefn(dav1d_prepare_intra_edges)(DB_ONLY(0)
                                                   t->bx, t->bx > ts->tiling.col_start,
@@ -2424,7 +2425,7 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
                     if (!(t->by & (f->sb_step - 1))) {
                         top_sb_edge = f->ipred_edge[pl + 1];
                         const int sby = t->by >> f->sb_shift;
-                        top_sb_edge += f->sb128w * 128 * (sby - 1);
+                        top_sb_edge += f->sb256w * 256 * (sby - 1);
                     }
                     m = bytefn(dav1d_prepare_intra_edges)(DB_ONLY(0)
                                                           t->bx >> ss_hor,
@@ -2617,8 +2618,8 @@ int bytefn(dav1d_recon_b_inter)(Dav1dTaskContext *const t, const enum BlockSize 
                         } else {
                             uint8_t cf_ctx;
                             cf = bitfn(t->cf);
-                            txtp = t->scratch.txtp_map[(by4 + (y << ss_ver)) * 32 +
-                                                        bx4 + (x << ss_hor)];
+                            txtp = t->scratch.txtp_map[((t->by + (y << ss_ver)) & 15) * 16 +
+                                                       ((t->bx + (x << ss_hor)) & 15)];
                             eob = decode_coefs(t, DB_ONLY(0) &t->a->ccoef[pl][cbx4 + x],
                                                &t->l.ccoef[pl][cby4 + y],
                                                b->uvtx, bs, b, 1 + pl,
@@ -2669,7 +2670,7 @@ void bytefn(dav1d_filter_sbrow_deblock_cols)(Dav1dFrameContext *const f, const i
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *mask = f->lf.mask + (sby >> !f->frame_hdr->sb128) * f->sb128w;
+    Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     bytefn(dav1d_loopfilter_sbrow_cols)(f, p, mask, sby,
                                         f->lf.start_of_tile_row[sby]);
 }
@@ -2682,7 +2683,7 @@ void bytefn(dav1d_filter_sbrow_deblock_rows)(Dav1dFrameContext *const f, const i
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *mask = f->lf.mask + (sby >> !f->frame_hdr->sb128) * f->sb128w;
+    Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     if (f->c->inloop_filters & DAV1D_INLOOPFILTER_DEBLOCK &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
@@ -2705,8 +2706,8 @@ void bytefn(dav1d_filter_sbrow_cdef)(Dav1dTaskContext *const tc, const int sby) 
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *prev_mask = f->lf.mask + ((sby - 1) >> !f->frame_hdr->sb128) * f->sb128w;
-    Av1Filter *mask = f->lf.mask + (sby >> !f->frame_hdr->sb128) * f->sb128w;
+    Av1Filter *prev_mask = f->lf.mask + ((sby - 1) >> (2 - f->frame_hdr->sb128)) * f->sb256w;
+    Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     const int start = sby * sbsz;
     if (sby) {
         const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
@@ -2749,7 +2750,7 @@ void bytefn(dav1d_backup_ipred_edge)(Dav1dTaskContext *const t) {
     const Dav1dFrameContext *const f = t->f;
     Dav1dTileState *const ts = t->ts;
     const int sby = t->by >> f->sb_shift;
-    const int sby_off = f->sb128w * 128 * sby;
+    const int sby_off = f->sb256w * 256 * sby;
     const int x_off = ts->tiling.col_start;
 
     const pixel *const y =

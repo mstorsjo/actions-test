@@ -76,7 +76,7 @@ static void decomp_tx(uint8_t (*const txa)[2 /* txsz, step */][32 /* y */][32 /*
     }
 }
 
-static inline void mask_edges_inter(uint16_t (*const masks)[32][3][2],
+static inline void mask_edges_inter(uint16_t (*const masks)[64][3][4],
                                     const int by4, const int bx4,
                                     const int w4, const int h4, const int skip,
                                     const enum RectTxfmSize max_tx,
@@ -144,7 +144,7 @@ static inline void mask_edges_inter(uint16_t (*const masks)[32][3][2],
     memcpy(a, txa[1][0][h4 - 1], w4);
 }
 
-static inline void mask_edges_intra(uint16_t (*const masks)[32][3][2],
+static inline void mask_edges_intra(uint16_t (*const masks)[64][3][4],
                                     const int by4, const int bx4,
                                     const int w4, const int h4,
                                     const enum RectTxfmSize tx,
@@ -197,7 +197,7 @@ static inline void mask_edges_intra(uint16_t (*const masks)[32][3][2],
     dav1d_memset_likely_pow2(l, twl4c, h4);
 }
 
-static void mask_edges_chroma(uint16_t (*const masks)[32][2][2],
+static void mask_edges_chroma(uint16_t (*const masks)[64][2][4],
                               const int cby4, const int cbx4,
                               const int cw4, const int ch4,
                               const int skip_inter,

@@ -39,7 +39,7 @@ union alias16 { uint16_t u16; uint8_t u8[2]; } ATTR_ALIAS;
 union alias8 { uint8_t u8; } ATTR_ALIAS;
 
 typedef void (*dav1d_memset_pow2_fn)(void *ptr, int value);
-EXTERN const dav1d_memset_pow2_fn dav1d_memset_pow2[6];
+EXTERN const dav1d_memset_pow2_fn dav1d_memset_pow2[7];
 
 static inline void dav1d_memset_likely_pow2(void *const ptr, const int value, const int n) {
     assert(n >= 1 && n <= 32);
@@ -66,6 +66,9 @@ static inline void dav1d_memset_likely_pow2(void *const ptr, const int value, co
 #define set_ctx32(var, off, val) do { \
         memset(&(var)[off], val, 32); \
     } while (0)
+#define set_ctx64(var, off, val) do { \
+        memset(&(var)[off], val, 64); \
+    } while (0)
 #define case_set(var) \
     switch (var) { \
     case 0: set_ctx(set_ctx1); break; \
@@ -74,6 +77,7 @@ static inline void dav1d_memset_likely_pow2(void *const ptr, const int value, co
     case 3: set_ctx(set_ctx8); break; \
     case 4: set_ctx(set_ctx16); break; \
     case 5: set_ctx(set_ctx32); break; \
+    case 6: set_ctx(set_ctx64); break; \
     default: assert(0); \
     }
 #define case_set_upto16(var) \

@@ -55,11 +55,16 @@ static void memset_w32(void *const ptr, const int value) {
     set_ctx32((uint8_t *) ptr, 0, value);
 }
 
-const dav1d_memset_pow2_fn dav1d_memset_pow2[6] = {
+static void memset_w64(void *const ptr, const int value) {
+    set_ctx64((uint8_t *) ptr, 0, value);
+}
+
+const dav1d_memset_pow2_fn dav1d_memset_pow2[7] = {
     memset_w1,
     memset_w2,
     memset_w4,
     memset_w8,
     memset_w16,
-    memset_w32
+    memset_w32,
+    memset_w64,
 };

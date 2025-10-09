@@ -261,7 +261,7 @@ struct Dav1dFrameContext {
     int ipred_edge_sz;
     pixel *ipred_edge[3];
     ptrdiff_t b4_stride;
-    int w4, h4, bw, bh, sb128w, sb128h, sbh, sb_shift, sb_step, sr_sb128w;
+    int w4, h4, bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
     int ss_ver, ss_hor;
     uint16_t dq[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];
@@ -270,6 +270,7 @@ struct Dav1dFrameContext {
     refmvs_frame rf;
     uint8_t jnt_weights[7][7];
     int bitdepth_max;
+    enum BlockSize root_bs;
 
     struct {
         int next_tile_row[2 /* 0: reconstruction, 1: entropy */];
@@ -403,10 +404,10 @@ struct Dav1dTaskContext {
         int32_t cf_16bpc[32 * 32];
     };
     union {
-        uint8_t  al_pal_8bpc [2 /* a/l */][32 /* bx/y4 */][8 /* palette_idx */];
-        uint16_t al_pal_16bpc[2 /* a/l */][32 /* bx/y4 */][8 /* palette_idx */];
+        uint8_t  al_pal_8bpc [2 /* a/l */][64 /* bx/y4 */][8 /* palette_idx */];
+        uint16_t al_pal_16bpc[2 /* a/l */][64 /* bx/y4 */][8 /* palette_idx */];
     };
-    uint8_t luma_intra_dir_mode_map[32 * 32];
+    uint8_t luma_intra_dir_mode_map[16 * 16];
     ALIGN(union, 64) {
         struct {
             union {
@@ -432,10 +433,10 @@ struct Dav1dTaskContext {
                 };
             };
             union {
-                int16_t ac[32 * 32]; // intra-only
-                uint8_t txtp_map[32 * 32]; // inter-only
+                int16_t ac[64 * 64]; // intra-only
+                uint8_t txtp_map[16 * 16]; // inter-only
             };
-            uint8_t pal_idx_y[32 * 64];
+            uint8_t pal_idx_y[64 * 64];
             union {
                 struct {
                     uint8_t interintra_8bpc[64 * 64];
@@ -454,7 +455,6 @@ struct Dav1dTaskContext {
     Dav1dWarpedMotionParams warpmv;
     Av1Filter *lf_mask;
     int top_pre_cdef_toggle;
-    int8_t *cur_sb_cdef_idx_ptr;
     // for chroma sub8x8, we need to know the filter for all 4 subblocks in
     // a 4x4 area, but the top/left one can go out of cache already, so this
     // keeps it accessible
