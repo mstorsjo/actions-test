@@ -3665,7 +3665,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
             break;
         }
         // Restoration filter
-        const int sbsz = 4 << f->sb_step;
+        const int sbsz = f->sb_step * 4;
         for (int p = 0, ss_ver = 0, ss_hor = 0; p < 3;
              p++, ss_ver = f->ss_ver, ss_hor = f->ss_hor)
         {
