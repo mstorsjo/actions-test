@@ -472,8 +472,8 @@ static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride,
 
     quarter[0] = mat[0][2] * c[2 * stride] + mat[0][6] * c[6 * stride];
     quarter[1] = mat[1][2] * c[2 * stride] + mat[1][6] * c[6 * stride];
-    dc_nyquist[0] = mat[0][0] * c[0 * stride] + mat[0][4] * c[8 * stride];
-    dc_nyquist[1] = mat[1][0] * c[0 * stride] + mat[1][4] * c[8 * stride];
+    dc_nyquist[0] = mat[0][0] * c[0 * stride] + mat[0][4] * c[4 * stride];
+    dc_nyquist[1] = mat[1][0] * c[0 * stride] + mat[1][4] * c[4 * stride];
 
     stage1[0] = dc_nyquist[0] + quarter[0];
     stage1[1] = dc_nyquist[1] + quarter[1];
