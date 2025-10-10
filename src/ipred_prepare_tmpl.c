@@ -65,8 +65,8 @@ static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
     [Z2_PRED]       = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
     [Z3_PRED]       = { .needs_left = 1, .needs_bottomleft = 1,
                         .needs_topleft = 1 },
-    [SMOOTH_PRED]   = { .needs_left = 1, .needs_top = 1, .needs_topright = 1,
-                        .needs_bottomleft= 1 },
+    [SMOOTH_PRED]   = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1,
+                        .needs_topright = 1, .needs_bottomleft= 1 },
     [SMOOTH_V_PRED] = { .needs_left = 1, .needs_top = 1, .needs_bottomleft= 1 },
     [SMOOTH_H_PRED] = { .needs_left = 1, .needs_top = 1, .needs_topright = 1 },
     [PAETH_PRED]    = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
@@ -172,12 +172,10 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         pixel *const top = &topleft_out[1];
 
         if (have_top) {
-#if 0
-            const int px_have = imin(sz, (w - x) << 2);
+            const int px_have = imin(tw, (w - x) << 2);
             pixel_copy(top, dst_top, px_have);
             if (px_have < sz)
                 pixel_set(top + px_have, top[px_have - 1], sz - px_have);
-#endif
         } else {
             pixel_set(top, have_left ? dst[-1] : ((1 << bitdepth) >> 1) - 1, sz);
         }
