@@ -33,9 +33,9 @@
 #include "common/attributes.h"
 #include "common/intops.h"
 
-union alias64 { uint64_t u64; uint8_t u8[8]; } ATTR_ALIAS;
-union alias32 { uint32_t u32; uint8_t u8[4]; } ATTR_ALIAS;
-union alias16 { uint16_t u16; uint8_t u8[2]; } ATTR_ALIAS;
+PACKED(union alias64 { uint64_t u64; uint8_t u8[8]; }) ATTR_ALIAS;
+PACKED(union alias32 { uint32_t u32; uint8_t u8[4]; }) ATTR_ALIAS;
+PACKED(union alias16 { uint16_t u16; uint8_t u8[2]; }) ATTR_ALIAS;
 union alias8 { uint8_t u8; } ATTR_ALIAS;
 
 typedef void (*dav1d_memset_pow2_fn)(void *ptr, int value);

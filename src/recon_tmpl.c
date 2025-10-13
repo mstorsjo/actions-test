@@ -80,7 +80,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         unsigned ca, cl;
 
 #define MERGE_CTX(dir, type, no_val) \
-        c##dir = *(const type *) dir != no_val; \
+        c##dir = ((union alias##type*)dir)->u##type != no_val; \
         break
 
         switch (t_dim->lw) {
@@ -90,21 +90,21 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
          * and will therefore complain about the use of uninitialized variables
          * when compiled in debug mode if we put the default case at the end. */
         default: assert(0); /* fall-through */
-        case TX_4X4:   MERGE_CTX(a, uint8_t,  0x40);
-        case TX_8X8:   MERGE_CTX(a, uint16_t, 0x4040);
-        case TX_16X16: MERGE_CTX(a, uint32_t, 0x40404040U);
-        case TX_32X32: MERGE_CTX(a, uint64_t, 0x4040404040404040ULL);
+        case TX_4X4:   MERGE_CTX(a,  8, 0x40);
+        case TX_8X8:   MERGE_CTX(a, 16, 0x4040);
+        case TX_16X16: MERGE_CTX(a, 32, 0x40404040U);
+        case TX_32X32: MERGE_CTX(a, 64, 0x4040404040404040ULL);
         case TX_64X64: ca = (*(const uint64_t *) a |
                              *(const uint64_t *) &a[8]) != 0x4040404040404040ULL;
         }
         switch (t_dim->lh) {
         default: assert(0); /* fall-through */
-        case TX_4X4:   MERGE_CTX(l, uint8_t,  0x40);
-        case TX_8X8:   MERGE_CTX(l, uint16_t, 0x4040);
-        case TX_16X16: MERGE_CTX(l, uint32_t, 0x40404040U);
-        case TX_32X32: MERGE_CTX(l, uint64_t, 0x4040404040404040ULL);
-        case TX_64X64: cl = (*(const uint64_t *) l |
-                             *(const uint64_t *) &l[8]) != 0x4040404040404040ULL;
+        case TX_4X4:   MERGE_CTX(l,  8, 0x40);
+        case TX_8X8:   MERGE_CTX(l, 16, 0x4040);
+        case TX_16X16: MERGE_CTX(l, 32, 0x40404040U);
+        case TX_32X32: MERGE_CTX(l, 64, 0x4040404040404040ULL);
+        case TX_64X64: cl = (((union alias64*)l)->u64 |
+                             ((union alias64*)&l[8])->u64) != 0x4040404040404040ULL;
         }
 #undef MERGE_CTX
 
@@ -121,31 +121,31 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
 
 #define MERGE_CTX(dir, type, tx) \
         if (tx == TX_64X64) { \
-            uint64_t tmp = *(const uint64_t *) dir; \
-            tmp |= *(const uint64_t *) &dir[8]; \
+            uint64_t tmp = ((union alias64*)dir)->u64; \
+            tmp |= ((union alias64*)&dir[8])->u64; \
             l##dir = (unsigned) (tmp >> 32) | (unsigned) tmp; \
         } else \
-            l##dir = *(const type *) dir; \
-        if (tx == TX_32X32) l##dir |= *(const type *) &dir[sizeof(type)]; \
+            l##dir = ((union alias##type*)dir)->u##type; \
+        if (tx == TX_32X32) l##dir |= ((union alias32*)&dir[4])->u32; \
         if (tx >= TX_16X16) l##dir |= l##dir >> 16; \
         if (tx >= TX_8X8)   l##dir |= l##dir >> 8; \
         break
 
         switch (t_dim->lw) {
         default: assert(0); /* fall-through */
-        case TX_4X4:   MERGE_CTX(a, uint8_t,  TX_4X4);
-        case TX_8X8:   MERGE_CTX(a, uint16_t, TX_8X8);
-        case TX_16X16: MERGE_CTX(a, uint32_t, TX_16X16);
-        case TX_32X32: MERGE_CTX(a, uint32_t, TX_32X32);
-        case TX_64X64: MERGE_CTX(a, uint32_t, TX_64X64);
+        case TX_4X4:   MERGE_CTX(a,  8, TX_4X4);
+        case TX_8X8:   MERGE_CTX(a, 16, TX_8X8);
+        case TX_16X16: MERGE_CTX(a, 32, TX_16X16);
+        case TX_32X32: MERGE_CTX(a, 32, TX_32X32);
+        case TX_64X64: MERGE_CTX(a, 32, TX_64X64);
         }
         switch (t_dim->lh) {
         default: assert(0); /* fall-through */
-        case TX_4X4:   MERGE_CTX(l, uint8_t,  TX_4X4);
-        case TX_8X8:   MERGE_CTX(l, uint16_t, TX_8X8);
-        case TX_16X16: MERGE_CTX(l, uint32_t, TX_16X16);
-        case TX_32X32: MERGE_CTX(l, uint32_t, TX_32X32);
-        case TX_64X64: MERGE_CTX(l, uint32_t, TX_64X64);
+        case TX_4X4:   MERGE_CTX(l,  8, TX_4X4);
+        case TX_8X8:   MERGE_CTX(l, 16, TX_8X8);
+        case TX_16X16: MERGE_CTX(l, 32, TX_16X16);
+        case TX_32X32: MERGE_CTX(l, 32, TX_32X32);
+        case TX_64X64: MERGE_CTX(l, 32, TX_64X64);
         }
 #undef MERGE_CTX
 
@@ -171,19 +171,19 @@ static inline unsigned get_dc_sign_ctx(const TxfmInfo *const t_dim,
         switch(len) {
         default: assert(0); /* fall-through */
         case TX_4X4:
-            t += *(const uint8_t *) edge >> 6;
+            t += *edge >> 6;
             break;
         case TX_8X8:
-            t += (*(const uint16_t *) edge & (uint32_t) mask) >> 6;
+            t += (((union alias16*)edge)->u16 & (uint32_t) mask) >> 6;
             break;
         case TX_16X16:
-            t += (*(const uint32_t *) edge & (uint32_t) mask) >> 6;
+            t += (((union alias32*)edge)->u32 & (uint32_t) mask) >> 6;
             break;
         case TX_64X64:
-            t += (*(const uint64_t *) &edge[8] & mask) >> 6;
+            t += (((union alias64*)&edge[8])->u64 & mask) >> 6;
             // fall-through
         case TX_32X32:
-            t += (*(const uint64_t *) edge & mask) >> 6;
+            t += (((union alias64*)edge)->u64 & mask) >> 6;
             break;
         }
     }
