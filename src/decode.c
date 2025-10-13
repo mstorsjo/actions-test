@@ -3290,7 +3290,9 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     default:
         assert(0);
     }
-    *dir_ptr |= child_dir << 16;
+
+    // Bits can be shifted out, this is intentional as those are unused
+    *dir_ptr |= (unsigned)child_dir << 16;
 
     return 0;
 }
