@@ -2324,8 +2324,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         const int step = 1 << (11 - prec);
                         const int sign = dav1d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.warp_delta_sign);
-                        t->warpmv.matrix[2 + n] = (ctx * 0x10000) +
-                            (sign ? -1 : +1) * (b->matrix[n] * step);
+                        if (sign) b->matrix[n] = -b->matrix[n];
+                        t->warpmv.matrix[2 + n] =
+                            ctx * 0x10000 + b->matrix[n] * step;
                     } else {
                         t->warpmv.matrix[2 + n] = ctx * 0x10000;
                     }
@@ -2335,10 +2336,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     t->warpmv.matrix[4] = -t->warpmv.matrix[3];
                 }
                 DEBUG_BLOCK_printf("%*sPost-warp_param_signal[%d,%d,%d,%d]: r=%d\n",
-                                   depth, "", t->warpmv.matrix[2],
-                                   t->warpmv.matrix[3],
-                                   t->warpmv.matrix[4],
-                                   t->warpmv.matrix[5], ts->msac.rng);
+                                   depth, "", b->matrix[0], b->matrix[1],
+                                   (np == 4) * b->matrix[2],
+                                   (np == 4) * b->matrix[3], ts->msac.rng);
             }
 
             b->warp_ii = 0;
