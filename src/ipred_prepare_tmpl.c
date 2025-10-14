@@ -54,7 +54,7 @@ typedef struct EdgeMask {
 } EdgeMask;
 
 static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
-    [DC_PRED]       = { .needs_top  = 1, .needs_left = 1 },
+    [DC_PRED]       = { .needs_top  = 1, .needs_left = 1, .needs_topleft = 1 },
     [VERT_PRED]     = { .needs_top  = 1 },
     [HOR_PRED]      = { .needs_left = 1 },
     [LEFT_DC_PRED]  = { .needs_left = 1 },
