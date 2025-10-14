@@ -2247,14 +2247,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (mv_prec > 3 && !amvd && f->seq_hdr->flex_mvres &&
                 (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV))
             {
-                const int ctx = (idx < 1 ? 0 : nx[0]->mvprec[xoff[0]]) +
-                                (idx < 2 ? 0 : nx[1]->mvprec[xoff[1]]);
+                const int mvprec1 = idx >= 1 && nx[0]->mvprec[xoff[0]];
+                const int mvprec2 = idx >= 2 && nx[1]->mvprec[xoff[1]];
+                const int ctx1 = mvprec1 + mvprec2;
                 if (!dav1d_msac_decode_bool_adapt(&ts->msac,
-                                                  ts->cdf.m.mvprec_def[ctx]))
+                                                  ts->cdf.m.mvprec_def[ctx1]))
                 {
+                    const int ctx2 = !mvprec1 || !mvprec2;
                     const int idx =
                         dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                            ts->cdf.m.mvprec_rem[!!ctx][mv_prec - 4], 2);
+                            ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
                     static const uint8_t mv_prec_tbl[][3] = {
                         { 3, 1, 0 },
                         { 4, 3, 1 },
@@ -2263,7 +2265,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     mvprec_def = 0;
                 }
                 DEBUG_BLOCK_printf("%*sPost-mv_precision[ctx=%d|%d|%d,%d]: r=%d\n",
-                                   depth, "", ctx, mvprec_def ? -1 : !!ctx,
+                                   depth, "", ctx1,
+                                   mvprec_def ? -1 : !mvprec1 || !mvprec2,
                                    mvprec_def ? -1 :
                                        f->frame_hdr->mv_precision - 1,
                                    mv_prec, ts->msac.rng);
