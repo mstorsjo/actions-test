@@ -2293,7 +2293,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->mv[0].x += diff.x;
                     b->mv[0].y += diff.y;
                     DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
-                                       depth, "", drl_idx, diff.y, diff.x,
+                                       depth, "", 0, diff.y, diff.x,
                                        ts->msac.rng);
                 }
             }
