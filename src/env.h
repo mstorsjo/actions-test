@@ -145,10 +145,10 @@ static inline int get_comp_ctx(const BlockContext *nx[2],
             if (refb2 == -1) {
                 const int refb1 = nx[1]->ref[0][xoff[1]];
                 return refdir[refa1] ^ refdir[refb1];
-            } else return nx[0]->intra[xoff[0]] || refdir[refa1];
+            } else return 2 + (nx[0]->intra[xoff[0]] || refdir[refa1]);
         } else if (refb2 == -1) {
             const int refb1 = nx[1]->ref[0][xoff[1]];
-            return nx[1]->intra[xoff[1]] || refdir[refb1];
+            return 2 + (nx[1]->intra[xoff[1]] || refdir[refb1]);
         } else return 4;
     }
     case 1: {
