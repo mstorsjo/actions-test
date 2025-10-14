@@ -231,7 +231,7 @@ enum MVJoint {
 };
 
 enum InterPredMode {
-    NEARMV,
+    NEARMV = 13,
     GLOBALMV,
     NEWMV,
     WARPMV,
@@ -246,23 +246,19 @@ enum DRL_PROXIMITY {
 };
 
 enum CompInterPredMode {
-    NEARESTMV_NEARESTMV,
-    NEARMV_NEARMV,
-    NEARESTMV_NEWMV,
-    NEWMV_NEARESTMV,
+    NEARMV_NEARMV = 18,
     NEARMV_NEWMV,
     NEWMV_NEARMV,
     GLOBALMV_GLOBALMV,
     NEWMV_NEWMV,
-    N_COMP_INTER_PRED_MODES,
+    JOINT_NEWMV,
 };
 
 enum CompInterType {
     COMP_INTER_NONE,
-    COMP_INTER_WEIGHTED_AVG,
     COMP_INTER_AVG,
-    COMP_INTER_SEG,
     COMP_INTER_WEDGE,
+    COMP_INTER_WEIGHTED_AVG,
 };
 
 typedef union mv {
@@ -304,15 +300,15 @@ typedef struct Av1Block {
             union {
                 struct {
                     union mv mv[2];
-                    int8_t wedge_idx; // -1 for no wedge
-                    uint8_t mask_sign, interintra_mode, morph_pred;
+                    int8_t wedge_idx, wedge_sign; // -1 for no wedge
+                    uint8_t mask_type, interintra_mode, morph_pred;
                 };
                 struct {
                     union mv mv2d;
                     int16_t matrix[4];
                 };
             };
-            uint8_t comp_type, inter_mode, motion_mode, warp_ii, drl_idx;
+            uint8_t comp_type, inter_mode, motion_mode, warp_ii, cwp_idx;
             int8_t ref[2];
             uint8_t bawp[2], filter;
         }; // inter

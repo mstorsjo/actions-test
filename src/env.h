@@ -191,23 +191,31 @@ static inline int get_warp_ctx(const BlockContext *const a,
     return ctx;
 }
 
-static inline int get_sngl_ctx(const BlockContext *const a,
-                               const BlockContext *const l,
-                               const int yb4, const int xb4,
-                               const int have_top, const int have_left,
-                               const int have_top_right, const int have_bottom_left,
-                               const uint8_t *const b_dim, const int ref)
+static inline int get_snglref_ctx(const BlockContext *const a,
+                                  const BlockContext *const l,
+                                  const int yb4, const int xb4,
+                                  const int have_top, const int have_left,
+                                  const int have_top_right,
+                                  const int have_bottom_left,
+                                  const uint8_t *const b_dim, const int ref)
 {
     int row = 0, col = 0, newmv = 0;
 
-#define NEWMV0_MODE_MASK (1 << NEWMV)
+    // FIXME opfl
+#define NEWMV0_MODE_MASK ((1 << NEWMV) | \
+                          (1 << NEWMV_NEARMV) | \
+                          (1 << NEWMV_NEWMV) | \
+                          (1 << JOINT_NEWMV))
+#define NEWMV1_MODE_MASK ((1 << NEARMV_NEWMV) | \
+                          (1 << NEWMV_NEWMV) | \
+                          (1 << JOINT_NEWMV))
 #define add_matching(dir, cnt, idx) do { \
     if (dir->ref[0][idx] == ref) { \
         cnt++; \
         newmv += !!((1 << dir->mode[idx]) & NEWMV0_MODE_MASK); \
     } else if (dir->ref[1][idx] == idx) { \
         cnt++; \
-        newmv += !!((1 << dir->mode[idx]) & 0); \
+        newmv += !!((1 << dir->mode[idx]) & NEWMV1_MODE_MASK); \
     } \
 } while (0)
     if (have_top) {
@@ -220,60 +228,48 @@ static inline int get_sngl_ctx(const BlockContext *const a,
         add_matching(l, row, yb4 + b_dim[1] - 1);
     }
 #undef NEWMV0_MODE_MASK
+#undef NEWMV1_MODE_MASK
 #undef add_matching
 
     return !!row + !!col + 2 * !!newmv;
 }
 
-static inline int get_comp_dir_ctx(const BlockContext *const a,
-                                   const BlockContext *const l,
-                                   const int yb4, const int xb4,
-                                   const int have_top, const int have_left)
+static inline int get_compref_ctx(const BlockContext *const a,
+                                  const BlockContext *const l,
+                                  const int yb4, const int xb4,
+                                  const int have_top, const int have_left,
+                                  const int have_top_right,
+                                  const int have_bottom_left,
+                                  const uint8_t *const b_dim, const int8_t ref[2])
 {
-#define has_uni_comp(edge, off) \
-    ((edge->ref[0][off] < 4) == (edge->ref[1][off] < 4))
+    int row = 0, col = 0, newmv = 0;
 
-    if (have_top && have_left) {
-        const int a_intra = a->intra[xb4], l_intra = l->intra[yb4];
-
-        if (a_intra && l_intra) return 2;
-        if (a_intra || l_intra) {
-            const BlockContext *const edge = a_intra ? l : a;
-            const int off = a_intra ? yb4 : xb4;
-
-            if (edge->comp_type[off] == COMP_INTER_NONE) return 2;
-            return 1 + 2 * has_uni_comp(edge, off);
-        }
-
-        const int a_comp = a->comp_type[xb4] != COMP_INTER_NONE;
-        const int l_comp = l->comp_type[yb4] != COMP_INTER_NONE;
-        const int a_ref0 = a->ref[0][xb4], l_ref0 = l->ref[0][yb4];
-
-        if (!a_comp && !l_comp) {
-            return 1 + 2 * ((a_ref0 >= 4) == (l_ref0 >= 4));
-        } else if (!a_comp || !l_comp) {
-            const BlockContext *const edge = a_comp ? a : l;
-            const int off = a_comp ? xb4 : yb4;
-
-            if (!has_uni_comp(edge, off)) return 1;
-            return 3 + ((a_ref0 >= 4) == (l_ref0 >= 4));
-        } else {
-            const int a_uni = has_uni_comp(a, xb4), l_uni = has_uni_comp(l, yb4);
-
-            if (!a_uni && !l_uni) return 0;
-            if (!a_uni || !l_uni) return 2;
-            return 3 + ((a_ref0 == 4) == (l_ref0 == 4));
-        }
-    } else if (have_top || have_left) {
-        const BlockContext *const edge = have_left ? l : a;
-        const int off = have_left ? yb4 : xb4;
-
-        if (edge->intra[off]) return 2;
-        if (edge->comp_type[off] == COMP_INTER_NONE) return 2;
-        return 4 * has_uni_comp(edge, off);
-    } else {
-        return 2;
+    // FIXME opfl
+#define NEWMV_MODE_MASK ((1 << NEWMV) | \
+                         (1 << NEARMV_NEWMV) | \
+                         (1 << NEWMV_NEARMV) | \
+                         (1 << NEWMV_NEWMV) | \
+                         (1 << JOINT_NEWMV))
+    // FIXME tip
+#define add_matching(dir, cnt, idx) do { \
+    if (dir->ref[0][idx] == ref[0] && dir->ref[1][idx] == ref[1]) { \
+        cnt++; \
+        newmv += !!((1 << dir->mode[idx]) & NEWMV_MODE_MASK); \
+    } \
+} while (0)
+    if (have_top) {
+        add_matching(a, col, xb4);
+        if (have_top_right)
+            add_matching(a, col, xb4 + b_dim[0] - 1);
     }
+    if (have_left) {
+        add_matching(l, row, yb4);
+        add_matching(l, row, yb4 + b_dim[1] - 1);
+    }
+#undef NEWMV_MODE_MASK
+#undef add_matching
+
+    return !!row + !!col + 2 * !!newmv;
 }
 
 static inline int get_poc_diff(const int order_hint_n_bits,
@@ -283,190 +279,6 @@ static inline int get_poc_diff(const int order_hint_n_bits,
     const int mask = 1 << (order_hint_n_bits - 1);
     const int diff = poc0 - poc1;
     return (diff & (mask - 1)) - (diff & mask);
-}
-
-static inline int get_jnt_comp_ctx(const int order_hint_n_bits, const int poc,
-                                   const int ref0poc, const int ref1poc,
-                                   const BlockContext *const a,
-                                   const BlockContext *const l,
-                                   const int yb4, const int xb4)
-{
-    const int d0 = abs(get_poc_diff(order_hint_n_bits, ref0poc, poc));
-    const int d1 = abs(get_poc_diff(order_hint_n_bits, poc, ref1poc));
-    const int offset = d0 == d1;
-    const int a_ctx = a->comp_type[xb4] >= COMP_INTER_AVG ||
-                      a->ref[0][xb4] == 6;
-    const int l_ctx = l->comp_type[yb4] >= COMP_INTER_AVG ||
-                      l->ref[0][yb4] == 6;
-
-    return 3 * offset + a_ctx + l_ctx;
-}
-
-static inline int get_mask_comp_ctx(const BlockContext *const a,
-                                    const BlockContext *const l,
-                                    const int yb4, const int xb4)
-{
-    const int a_ctx = a->comp_type[xb4] >= COMP_INTER_SEG ? 1 :
-                      a->ref[0][xb4] == 6 ? 3 : 0;
-    const int l_ctx = l->comp_type[yb4] >= COMP_INTER_SEG ? 1 :
-                      l->ref[0][yb4] == 6 ? 3 : 0;
-
-    return imin(a_ctx + l_ctx, 5);
-}
-
-#define av1_get_ref_2_ctx av1_get_bwd_ref_ctx
-#define av1_get_ref_3_ctx av1_get_fwd_ref_ctx
-#define av1_get_ref_4_ctx av1_get_fwd_ref_1_ctx
-#define av1_get_ref_5_ctx av1_get_fwd_ref_2_ctx
-#define av1_get_ref_6_ctx av1_get_bwd_ref_1_ctx
-#define av1_get_uni_p_ctx av1_get_ref_ctx
-#define av1_get_uni_p2_ctx av1_get_fwd_ref_2_ctx
-
-static inline int av1_get_ref_ctx(const BlockContext *const a,
-                                  const BlockContext *const l,
-                                  const int yb4, const int xb4,
-                                  int have_top, int have_left)
-{
-    int cnt[2] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        cnt[a->ref[0][xb4] >= 4]++;
-        if (a->comp_type[xb4]) cnt[a->ref[1][xb4] >= 4]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        cnt[l->ref[0][yb4] >= 4]++;
-        if (l->comp_type[yb4]) cnt[l->ref[1][yb4] >= 4]++;
-    }
-
-    return cnt[0] == cnt[1] ? 1 : cnt[0] < cnt[1] ? 0 : 2;
-}
-
-static inline int av1_get_fwd_ref_ctx(const BlockContext *const a,
-                                      const BlockContext *const l,
-                                      const int yb4, const int xb4,
-                                      const int have_top, const int have_left)
-{
-    int cnt[4] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        if (a->ref[0][xb4] < 4) cnt[a->ref[0][xb4]]++;
-        if (a->comp_type[xb4] && a->ref[1][xb4] < 4) cnt[a->ref[1][xb4]]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        if (l->ref[0][yb4] < 4) cnt[l->ref[0][yb4]]++;
-        if (l->comp_type[yb4] && l->ref[1][yb4] < 4) cnt[l->ref[1][yb4]]++;
-    }
-
-    cnt[0] += cnt[1];
-    cnt[2] += cnt[3];
-
-    return cnt[0] == cnt[2] ? 1 : cnt[0] < cnt[2] ? 0 : 2;
-}
-
-static inline int av1_get_fwd_ref_1_ctx(const BlockContext *const a,
-                                        const BlockContext *const l,
-                                        const int yb4, const int xb4,
-                                        const int have_top, const int have_left)
-{
-    int cnt[2] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        if (a->ref[0][xb4] < 2) cnt[a->ref[0][xb4]]++;
-        if (a->comp_type[xb4] && a->ref[1][xb4] < 2) cnt[a->ref[1][xb4]]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        if (l->ref[0][yb4] < 2) cnt[l->ref[0][yb4]]++;
-        if (l->comp_type[yb4] && l->ref[1][yb4] < 2) cnt[l->ref[1][yb4]]++;
-    }
-
-    return cnt[0] == cnt[1] ? 1 : cnt[0] < cnt[1] ? 0 : 2;
-}
-
-static inline int av1_get_fwd_ref_2_ctx(const BlockContext *const a,
-                                        const BlockContext *const l,
-                                        const int yb4, const int xb4,
-                                        const int have_top, const int have_left)
-{
-    int cnt[2] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        if ((a->ref[0][xb4] ^ 2U) < 2) cnt[a->ref[0][xb4] - 2]++;
-        if (a->comp_type[xb4] && (a->ref[1][xb4] ^ 2U) < 2) cnt[a->ref[1][xb4] - 2]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        if ((l->ref[0][yb4] ^ 2U) < 2) cnt[l->ref[0][yb4] - 2]++;
-        if (l->comp_type[yb4] && (l->ref[1][yb4] ^ 2U) < 2) cnt[l->ref[1][yb4] - 2]++;
-    }
-
-    return cnt[0] == cnt[1] ? 1 : cnt[0] < cnt[1] ? 0 : 2;
-}
-
-static inline int av1_get_bwd_ref_ctx(const BlockContext *const a,
-                                      const BlockContext *const l,
-                                      const int yb4, const int xb4,
-                                      const int have_top, const int have_left)
-{
-    int cnt[3] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        if (a->ref[0][xb4] >= 4) cnt[a->ref[0][xb4] - 4]++;
-        if (a->comp_type[xb4] && a->ref[1][xb4] >= 4) cnt[a->ref[1][xb4] - 4]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        if (l->ref[0][yb4] >= 4) cnt[l->ref[0][yb4] - 4]++;
-        if (l->comp_type[yb4] && l->ref[1][yb4] >= 4) cnt[l->ref[1][yb4] - 4]++;
-    }
-
-    cnt[1] += cnt[0];
-
-    return cnt[2] == cnt[1] ? 1 : cnt[1] < cnt[2] ? 0 : 2;
-}
-
-static inline int av1_get_bwd_ref_1_ctx(const BlockContext *const a,
-                                        const BlockContext *const l,
-                                        const int yb4, const int xb4,
-                                        const int have_top, const int have_left)
-{
-    int cnt[3] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        if (a->ref[0][xb4] >= 4) cnt[a->ref[0][xb4] - 4]++;
-        if (a->comp_type[xb4] && a->ref[1][xb4] >= 4) cnt[a->ref[1][xb4] - 4]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        if (l->ref[0][yb4] >= 4) cnt[l->ref[0][yb4] - 4]++;
-        if (l->comp_type[yb4] && l->ref[1][yb4] >= 4) cnt[l->ref[1][yb4] - 4]++;
-    }
-
-    return cnt[0] == cnt[1] ? 1 : cnt[0] < cnt[1] ? 0 : 2;
-}
-
-static inline int av1_get_uni_p1_ctx(const BlockContext *const a,
-                                     const BlockContext *const l,
-                                     const int yb4, const int xb4,
-                                     const int have_top, const int have_left)
-{
-    int cnt[3] = { 0 };
-
-    if (have_top && !a->intra[xb4]) {
-        if (a->ref[0][xb4] - 1U < 3) cnt[a->ref[0][xb4] - 1]++;
-        if (a->comp_type[xb4] && a->ref[1][xb4] - 1U < 3) cnt[a->ref[1][xb4] - 1]++;
-    }
-
-    if (have_left && !l->intra[yb4]) {
-        if (l->ref[0][yb4] - 1U < 3) cnt[l->ref[0][yb4] - 1]++;
-        if (l->comp_type[yb4] && l->ref[1][yb4] - 1U < 3) cnt[l->ref[1][yb4] - 1]++;
-    }
-
-    cnt[1] += cnt[2];
-
-    return cnt[0] == cnt[1] ? 1 : cnt[0] < cnt[1] ? 0 : 2;
 }
 
 static inline int get_drl_context(const refmvs_candidate *const ref_mv_stack,

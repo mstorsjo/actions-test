@@ -198,16 +198,13 @@ const uint8_t av1_mode_to_angle_map[8] = {
 };
 
 const uint8_t /* enum InterPredMode */
-    dav1d_comp_inter_pred_modes[N_COMP_INTER_PRED_MODES][2] =
+    dav1d_comp_inter_pred_modes[][2] =
 {
-    [NEARESTMV_NEARESTMV] = { NEARMV,    NEARMV    },
-    [NEARMV_NEARMV]       = { NEARMV,    NEARMV    },
-    [NEWMV_NEWMV]         = { NEWMV,     NEWMV     },
-    [GLOBALMV_GLOBALMV]   = { GLOBALMV,  GLOBALMV  },
-    [NEWMV_NEARESTMV]     = { NEWMV,     NEARMV    },
-    [NEWMV_NEARMV]        = { NEWMV,     NEARMV    },
-    [NEARESTMV_NEWMV]     = { NEARMV,    NEWMV     },
-    [NEARMV_NEWMV]        = { NEARMV,    NEWMV     },
+    [NEARMV_NEARMV     - NEARMV_NEARMV] = { NEARMV,   NEARMV   },
+    [NEWMV_NEWMV       - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
+    [GLOBALMV_GLOBALMV - NEARMV_NEARMV] = { GLOBALMV, GLOBALMV },
+    [NEWMV_NEARMV      - NEARMV_NEARMV] = { NEWMV,    NEARMV   },
+    [NEARMV_NEWMV      - NEARMV_NEARMV] = { NEARMV,   NEWMV    },
 };
 
 const uint8_t /* enum TxfmType */ dav1d_tx_types_per_set[40] = {

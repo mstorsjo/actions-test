@@ -128,18 +128,14 @@ typedef struct CdfModeContext {
     uint16_t warp_delta_param[2][2][9];
     uint16_t warp_delta_sign[3];
     uint16_t warp_interintra[4][3];
+    uint16_t comp_mode_sameref[5][5];
+    uint16_t comp_mode_joint[2][3];
+    uint16_t comp_mode[5][6];
+    uint16_t comp_type_masked[12][3];
+    uint16_t comp_type_weighted[3];
+    uint16_t cwp_idx[4][3];
     uint16_t filter[8][5];
-    ALIGN(uint16_t wedge_idx[9][16], 32);
-    ALIGN(uint16_t comp_inter_mode[8][N_COMP_INTER_PRED_MODES], 16);
     ALIGN(uint16_t skip_mode[3][2], 4);
-    ALIGN(uint16_t drl_bit[3][2], 4);
-    ALIGN(uint16_t comp_dir[5][2], 4);
-    ALIGN(uint16_t jnt_comp[6][2], 4);
-    ALIGN(uint16_t mask_comp[6][2], 4);
-    ALIGN(uint16_t wedge_comp[9][2], 4);
-    ALIGN(uint16_t comp_fwd_ref[3][3][2], 4);
-    ALIGN(uint16_t comp_bwd_ref[2][3][2], 4);
-    ALIGN(uint16_t comp_uni_ref[3][3][2], 4);
     ALIGN(uint16_t seg_pred[3][2], 4);
 } CdfModeContext;
 

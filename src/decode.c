@@ -519,7 +519,6 @@ static inline void splat_tworef_mv(const Dav1dContext *const c,
                                    const Av1Block *const b,
                                    const int bw4, const int bh4)
 {
-    assert(bw4 >= 2 && bh4 >= 2);
     const enum CompInterPredMode mode = b->inter_mode;
     const refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
         .ref.ref = { b->ref[0] + 1, b->ref[1] + 1 },
@@ -695,9 +694,6 @@ static void read_tx_part(Dav1dTaskContext *const t,
 }
 
 static int read_wedge_idx(Dav1dTileState *const ts) {
-    if (!dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.interintra_wedge))
-        return -1;
-
     static const int8_t wedge_angle_dist2idx[20][4] = {
         { -1, 0, 1, 2 },     // WEDGE_0
         { 3, 4, 5, 6 },      // WEDGE_14
@@ -1862,8 +1858,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->ref[0] = f->frame_hdr->skip_mode_refs[0];
             b->ref[1] = f->frame_hdr->skip_mode_refs[1];
             b->comp_type = COMP_INTER_AVG;
-            b->inter_mode = NEARESTMV_NEARESTMV;
-            b->drl_idx = NEAREST_DRL;
+            b->inter_mode = NEARMV_NEARMV;
             has_subpel_filter = 0;
 
             refmvs_candidate mvstack[8];
@@ -1912,133 +1907,193 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             DEBUG_BLOCK_printf("%*sPost-ref[%d,%d]: r=%d\n",
                                depth, "", b->ref[0], b->ref[1], ts->msac.rng);
 
+            const int have_top_right = t->bx + bw4 <= ts->tiling.col_end;
+            const int have_bottom_left = t->by + bh4 <= ts->tiling.row_end;
+            const int comp_ctx =
+                get_compref_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
+                                have_top_right, have_bottom_left, b_dim, b->ref);
+            if (b->ref[0] == b->ref[1]) {
+                b->inter_mode = NEARMV_NEARMV +
+                    dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        ts->cdf.m.comp_mode_sameref[comp_ctx], 3);
+                b->inter_mode += b->inter_mode > NEARMV_NEWMV; // skip newmv_nearmv
+            } else {
+                const int joint_ctx =
+                    f->refdist[b->ref[0]] == -f->refdist[b->ref[1]];
+                if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                           ts->cdf.m.comp_mode_joint[joint_ctx]))
+                {
+                    b->inter_mode = JOINT_NEWMV;
+                } else {
+                    b->inter_mode = NEARMV_NEARMV +
+                        dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                            ts->cdf.m.comp_mode[comp_ctx], 4);
+                }
+            }
+            // FIXME these conditions can involve tip
+            if (f->frame_hdr->opfl_refine_type == 1 /* switchable */ &&
+                imin(bw4, bh4) >= 2 && f->refdir[b->ref[0]] != f->refdir[b->ref[1]])
+            {
+                printf("optical_flow_refinement\n");
+            }
+            DEBUG_BLOCK_printf("%*sPost-comp_inter_mode[ctx=%d,%d]: r=%d\n",
+                               depth, "", comp_ctx, b->inter_mode, ts->msac.rng);
+
+#define NEWMV_MASK ((1 << NEARMV_NEWMV) | \
+                    (1 << NEWMV_NEARMV) | \
+                    (1 << NEWMV_NEWMV) | \
+                    (1 << JOINT_NEWMV)) // FIXME opfl
+            if (f->seq_hdr->adaptive_mvd && (1 << b->inter_mode) & NEWMV_MASK) {
+#undef NEWMV_MASK
+                static uint8_t amvd_mode_context[] = {
+                    [NEARMV_NEWMV - NEARMV_NEWMV]         = 0,
+                    [NEWMV_NEARMV - NEARMV_NEWMV]         = 1,
+                    //[NEARMV_NEWMV_OPTFLOW - NEARMV_NEWMV] = 2,
+                    //[NEWMV_NEARMV_OPTFLOW - NEARMV_NEWMV] = 3,
+                    [JOINT_NEWMV - NEARMV_NEWMV]          = 5,
+                    //[JOINT_NEWMV_OPTFLOW - NEARMV_NEWMV]  = 6,
+                    [NEWMV_NEWMV - NEARMV_NEWMV]          = 7,
+                    //[NEWMV_NEWMV_OPTFLOW - NEARMV_NEWMV]  = 8,
+                };
+                const int mode_ctx = amvd_mode_context[b->inter_mode - NEARMV_NEWMV];
+                const int ctx = nx[0]->amvd[xoff[0]] + nx[1]->amvd[xoff[1]];
+                amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                    ts->cdf.m.amvd[mode_ctx][ctx]);
+                mvprec_def = !amvd || f->frame_hdr->mv_precision < 3;
+                DEBUG_BLOCK_printf("%*sPost-amvd[ctx=%d|%d,%d]: r=%d\n",
+                                   depth, "", mode_ctx, ctx, amvd, ts->msac.rng);
+            }
+
             refmvs_candidate mvstack[8];
             int n_mvs, ctx;
             dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
                               bs, 0, t->by, t->bx);
-
-            b->inter_mode = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                ts->cdf.m.comp_inter_mode[ctx],
-                                N_COMP_INTER_PRED_MODES - 1);
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-compintermode[%d,ctx=%d,n_mvs=%d]: r=%d\n",
-                       b->inter_mode, ctx, n_mvs, ts->msac.rng);
-
-            const uint8_t *const im = dav1d_comp_inter_pred_modes[b->inter_mode];
-            b->drl_idx = NEAREST_DRL;
-            if (b->inter_mode == NEWMV_NEWMV) {
-                if (n_mvs > 1) { // NEARER, NEAR or NEARISH
-                    const int drl_ctx_v1 = get_drl_context(mvstack, 0);
-                    b->drl_idx += dav1d_msac_decode_bool_adapt(&ts->msac,
-                                      ts->cdf.m.drl_bit[drl_ctx_v1]);
-                    if (b->drl_idx == NEARER_DRL && n_mvs > 2) {
-                        const int drl_ctx_v2 = get_drl_context(mvstack, 1);
-                        b->drl_idx += dav1d_msac_decode_bool_adapt(&ts->msac,
-                                          ts->cdf.m.drl_bit[drl_ctx_v2]);
-                    }
-                    if (DEBUG_BLOCK_INFO)
-                        printf("Post-drlidx[%d,n_mvs=%d]: r=%d\n",
-                               b->drl_idx, n_mvs, ts->msac.rng);
-                }
-            } else if (im[0] == NEARMV || im[1] == NEARMV) {
-                b->drl_idx = NEARER_DRL;
-                if (n_mvs > 2) { // NEAR or NEARISH
-                    const int drl_ctx_v2 = get_drl_context(mvstack, 1);
-                    b->drl_idx += dav1d_msac_decode_bool_adapt(&ts->msac,
-                                      ts->cdf.m.drl_bit[drl_ctx_v2]);
-                    if (b->drl_idx == NEAR_DRL && n_mvs > 3) {
-                        const int drl_ctx_v3 = get_drl_context(mvstack, 2);
-                        b->drl_idx += dav1d_msac_decode_bool_adapt(&ts->msac,
-                                          ts->cdf.m.drl_bit[drl_ctx_v3]);
-                    }
-                    if (DEBUG_BLOCK_INFO)
-                        printf("Post-drlidx[%d,n_mvs=%d]: r=%d\n",
-                               b->drl_idx, n_mvs, ts->msac.rng);
-                }
+#if DEBUG_BLOCK_INFO
+            if (BLOCK_TO_DEBUG) {
+                printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
+                for (int n = 0; n < n_mvs; n++)
+                    printf("%*smv[%d/%d]: y0=%d,x0=%d,y1=%d,x1=%d,w=%d\n",
+                           depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
+                           mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
+                           mvstack[n].mv.mv[1].x, mvstack[n].weight);
             }
-            assert(b->drl_idx >= NEAREST_DRL && b->drl_idx <= NEARISH_DRL);
-
-#define assign_comp_mv(idx) \
-            switch (im[idx]) { \
-            case NEARMV: \
-                b->mv[idx] = mvstack[b->drl_idx].mv.mv[idx]; \
-                fix_mv_precision(f->frame_hdr, &b->mv[idx]); \
-                break; \
-            case GLOBALMV: \
-                has_subpel_filter |= \
-                    f->frame_hdr->gmv[b->ref[idx]].type == DAV1D_WM_TYPE_TRANSLATION; \
-                b->mv[idx] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[idx]], \
-                                        t->bx, t->by, bw4, bh4, f->frame_hdr); \
-                break; \
-            case NEWMV: \
-                b->mv[idx] = mvstack[b->drl_idx].mv.mv[idx]; \
-                read_mv_residual(ts, &b->mv[idx], f->frame_hdr->mv_precision); \
-                break; \
-            }
-            has_subpel_filter = imin(bw4, bh4) == 1 ||
-                                b->inter_mode != GLOBALMV_GLOBALMV;
-            //assign_comp_mv(0);
-            //assign_comp_mv(1);
-#undef assign_comp_mv
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-residual_mv[1:y=%d,x=%d,2:y=%d,x=%d]: r=%d\n",
-                       b->mv[0].y, b->mv[0].x, b->mv[1].y, b->mv[1].x,
-                       ts->msac.rng);
-
-            // jnt_comp vs. seg vs. wedge
-            int is_segwedge = 0;
-            if (f->seq_hdr->masked_compound) {
-                const int mask_ctx = get_mask_comp_ctx(t->a, &t->l, by4, bx4);
-
-                is_segwedge = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                  ts->cdf.m.mask_comp[mask_ctx]);
-                if (DEBUG_BLOCK_INFO)
-                    printf("Post-segwedge_vs_jntavg[%d,ctx=%d]: r=%d\n",
-                           is_segwedge, mask_ctx, ts->msac.rng);
-            }
-
-            if (!is_segwedge) {
-#if 0
-                if (f->seq_hdr->jnt_comp) {
-                    const int jnt_ctx =
-                        get_jnt_comp_ctx(f->seq_hdr->order_hint_n_bits,
-                                         f->cur.frame_hdr->frame_offset,
-                                         f->refp[b->ref[0]].p.frame_hdr->frame_offset,
-                                         f->refp[b->ref[1]].p.frame_hdr->frame_offset,
-                                         t->a, &t->l, by4, bx4);
-                    b->comp_type = COMP_INTER_WEIGHTED_AVG +
-                                   dav1d_msac_decode_bool_adapt(&ts->msac,
-                                       ts->cdf.m.jnt_comp[jnt_ctx]);
-                    if (DEBUG_BLOCK_INFO)
-                        printf("Post-jnt_comp[%d,ctx=%d[ac:%d,ar:%d,lc:%d,lr:%d]]: r=%d\n",
-                               b->comp_type == COMP_INTER_AVG,
-                               jnt_ctx, t->a->comp_type[bx4], t->a->ref[0][bx4],
-                               t->l.comp_type[by4], t->l.ref[0][by4],
-                               ts->msac.rng);
-                } else
 #endif
-                {
-                    b->comp_type = COMP_INTER_AVG;
+
+            // drl
+            int drl_idx[2] = { 0, 0 };
+            if (b->inter_mode != GLOBALMV_GLOBALMV) {
+                const int n_drls = 1 + (b->inter_mode <= NEARMV_NEWMV);
+                const int max_drl_bits = f->frame_hdr->max_drl_bits;
+                for (int r = 0, n = 0, ctx = 0; r < n_drls; r++) {
+                    for (; n < max_drl_bits; n++, ctx += ctx < 2) {
+                        if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                                 ts->cdf.m.drl_idx[ctx][comp_ctx]))
+                        {
+                            break;
+                        }
+                    }
+                    drl_idx[r] = n;
+                    n = b->inter_mode == NEARMV_NEARMV && b->ref[0] == b->ref[1] ?
+                        drl_idx[0] + (drl_idx[0] < max_drl_bits) : 0;
+                    ctx = imin(n, 2);
                 }
-            } else {
-                if (wedge_allowed_mask & (1 << bs)) {
-                    const int ctx = dav1d_wedge_ctx_lut[bs];
-                    b->comp_type = COMP_INTER_WEDGE -
-                                   dav1d_msac_decode_bool_adapt(&ts->msac,
-                                       ts->cdf.m.wedge_comp[ctx]);
-                    if (b->comp_type == COMP_INTER_WEDGE)
-                        b->wedge_idx = dav1d_msac_decode_symbol_adapt16(&ts->msac,
-                                           ts->cdf.m.wedge_idx[ctx], 15);
-                } else {
-                    b->comp_type = COMP_INTER_SEG;
+                if (n_drls == 1) drl_idx[1] = drl_idx[0];
+                DEBUG_BLOCK_printf("%*sPost-drl[%d,%d]: r=%d\n",
+                                   depth, "", drl_idx[0], drl_idx[1], ts->msac.rng);
+            }
+
+            // FIXME a couple of newmv-related symbols [mv_prec, refinemv]?
+
+            if (b->inter_mode != GLOBALMV_GLOBALMV) for (int n = 0; n < 2; n++) {
+                b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
+                const enum InterPredMode m =
+                    dav1d_comp_inter_pred_modes[n][b->inter_mode - NEARMV_NEARMV];
+                if (m != NEWMV) continue;
+
+                const int mv_prec = 6;
+                mv diff;
+                if (amvd) {
+                    read_amvd(ts, &diff);
+                } else
+                    read_mv_residual(ts, &ts->cdf.mv, &diff, mv_prec);
+                if (diff.y) {
+                    const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                    if (s) diff.y = -diff.y;
                 }
-                b->mask_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
-                if (DEBUG_BLOCK_INFO)
-                    printf("Post-seg/wedge[%d,wedge_idx=%d,sign=%d]: r=%d\n",
-                           b->comp_type == COMP_INTER_WEDGE,
-                           b->wedge_idx, b->mask_sign, ts->msac.rng);
+                if (diff.x) {
+                    const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                    if (s) diff.x = -diff.x;
+                }
+                mv_reduce_prec(&b->mv[n], mv_prec);
+                b->mv[n].x += diff.x;
+                b->mv[n].y += diff.y;
+                DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
+                                   depth, "", n, diff.y, diff.x,
+                                   ts->msac.rng);
+            }
+            has_subpel_filter = 1; // FIXME not gmv^2 if not translational
+
+            b->comp_type = COMP_INTER_AVG;
+            if (/* FIXME not opfl && FIXME not refinemv &&*/
+                !(b->inter_mode == JOINT_NEWMV && amvd) &&
+                f->seq_hdr->masked_compound && imin(bw4, bh4) >= 2)
+            {
+                const int ffr = f->furthest_future_refidx;
+#define comptype_ctx(idx) \
+                boff[idx] == -1 ? 0 : nb[idx]->ref[1][boff[idx]] != -1 ? \
+                nb[idx]->comp_type[boff[idx] > COMP_INTER_AVG] : \
+                (nb[idx]->ref[0][boff[idx]] == ffr) * 2
+                const int cctx0 = comptype_ctx(0), cctx1 = comptype_ctx(1);
+#undef comptype_ctx
+                const int ctx = cctx0 + cctx1 + (cctx0 && cctx1) +
+                    (f->refdist[b->ref[0]] == f->refdist[b->ref[1]]) * 6;
+                const int has_mask = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                         ts->cdf.m.comp_type_masked[ctx]);
+                if (has_mask) {
+                    if (imax(bw4, bh4) <= 16 &&
+                        !dav1d_msac_decode_bool_adapt(&ts->msac,
+                             ts->cdf.m.comp_type_weighted))
+                    {
+                        b->comp_type = COMP_INTER_WEDGE;
+                        b->wedge_idx = read_wedge_idx(ts);
+                        b->wedge_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
+                    } else {
+                        b->comp_type = COMP_INTER_WEIGHTED_AVG;
+                        b->mask_type = dav1d_msac_decode_bool_bypass(&ts->msac);
+                    }
+                }
+                DEBUG_BLOCK_printf("%*sPost-comp_inter_type[%d,%c=%d|%d]: r=%d\n",
+                                   depth, "", b->comp_type - 1,
+                                   "?wm"[b->comp_type - 1],
+                                   b->comp_type == COMP_INTER_AVG ? -1 :
+                                   b->comp_type == COMP_INTER_WEDGE ?
+                                       b->wedge_idx : b->mask_type,
+                                   b->comp_type == COMP_INTER_WEDGE ?
+                                       b->wedge_sign : -1, ts->msac.rng);
+            }
+
+            if (/* FIXME no opfl && FIXME no refinemv && FIXME no jmvd &&*/
+                f->seq_hdr->cwp && b->comp_type == COMP_INTER_AVG &&
+                (b->inter_mode == NEARMV_NEARMV || b->inter_mode == JOINT_NEWMV))
+            {
+                int n;
+                for (n = 0; n < 4; n++) {
+                    if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                      ts->cdf.m.cwp_idx[n]))
+                    {
+                        break;
+                    }
+                }
+                static const int8_t cwp_weighting_factor[2][5] = {
+                    { 8, 12, 4, 10, 6 },
+                    { 8, 12, 4, 20, -4 },
+                };
+                b->cwp_idx = cwp_weighting_factor[!(f->refdir[b->ref[0]] ^
+                                                    f->refdir[b->ref[1]])][n];
+                DEBUG_BLOCK_printf("%*sPost-compweightpred_idx[%d]: r=%d\n",
+                                   depth, "", b->cwp_idx, ts->msac.rng);
             }
         } else {
             b->comp_type = COMP_INTER_NONE;
@@ -2063,8 +2118,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int have_top_right = t->bx + bw4 <= ts->tiling.col_end;
             const int have_bottom_left = t->by + bh4 <= ts->tiling.row_end;
             const int sngl_ctx =
-                get_sngl_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
-                             have_top_right, have_bottom_left, b_dim, b->ref[0]);
+                get_snglref_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
+                                have_top_right, have_bottom_left, b_dim, b->ref[0]);
             const int is_sb_boundary = !(t->by & (f->sb_step - 1));
 
             if (seg && (seg->globalmv || seg->skip)) {
@@ -2087,12 +2142,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                     !dav1d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.warp_newmv) ? WARPNEWMV : WARPMV;
                 } else {
-                    b->inter_mode = dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                                        ts->cdf.m.inter_mode[sngl_ctx], 2);
+                    b->inter_mode = NEARMV +
+                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                            ts->cdf.m.inter_mode[sngl_ctx], 2);
                 }
                 DEBUG_BLOCK_printf("%*sPost-single_inter_mode[ctx=%d,%d]: r=%d\n",
                                    depth, "", sngl_ctx,
-                                   b->inter_mode + 13, ts->msac.rng);
+                                   b->inter_mode, ts->msac.rng);
             }
 
             if (f->seq_hdr->adaptive_mvd && b->inter_mode == NEWMV) {
@@ -2157,7 +2213,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         b->motion_mode = MM_INTERINTRA;
                         b->interintra_mode = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                 ts->cdf.m.interintra_mode[ctx], 3);
-                        b->wedge_idx = read_wedge_idx(ts);
+                        b->wedge_idx = dav1d_msac_decode_bool_adapt(&ts->msac,
+                            ts->cdf.m.interintra_wedge) ? read_wedge_idx(ts) : -1;
                     }
                     DEBUG_BLOCK_printf("%*sPost-interintra[%d,%d,%d]: r=%d\n",
                                        depth, "", b->motion_mode,
@@ -2227,10 +2284,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // drl
             int drl_idx = 0;
             if (b->inter_mode != WARPMV && b->inter_mode != GLOBALMV) {
-                int n, ctx = 0;
-                for (n = 0; n < f->frame_hdr->max_drl_bits;
-                     n++, ctx += ctx < 2)
-                {
+                const int max_drl_bits = f->frame_hdr->max_drl_bits;
+                int n = 0;
+                for (int ctx = 0; n < max_drl_bits; n++, ctx += ctx < 2) {
                     if (!dav1d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.drl_idx[ctx][sngl_ctx]))
                     {
@@ -2272,9 +2328,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    mv_prec, ts->msac.rng);
             }
 
-            if (b->inter_mode == GLOBALMV) {
-                printf("FIXME: gmv\n");
-            } else {
+            if (b->inter_mode != GLOBALMV) {
                 b->mv[0] = mvstack[drl_idx].mv.mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
@@ -2352,7 +2406,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->warp_ii = 1;
                     b->interintra_mode = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.interintra_mode[ctx], 3);
-                    b->wedge_idx = read_wedge_idx(ts);
+                    b->wedge_idx = dav1d_msac_decode_bool_adapt(&ts->msac,
+                        ts->cdf.m.interintra_wedge) ? read_wedge_idx(ts) : -1;
                 }
                 DEBUG_BLOCK_printf("%*sPost-warp_ii[%d,%d,%d]: r=%d\n",
                                    depth, "", b->warp_ii,
@@ -4538,11 +4593,19 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         f->mvs = f->mvs_ref->data;
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
             const int poc = f->cur.frame_hdr->frame_offset;
+            int furthest_future_refidx = -1;
             for (int i = 0; i < 7; i++) {
                 f->refpoc[i] = f->refp[i].p.frame_hdr->frame_offset;
-                f->refdir[i] = get_poc_diff(f->seq_hdr->order_hint_n_bits,
-                                            f->refpoc[i], poc) > 0;
+                const int delta = f->refdist[i] =
+                    get_poc_diff(f->seq_hdr->order_hint_n_bits, f->refpoc[i], poc);
+                f->refdir[i] = delta > 0;
+                if (delta > 0 && (furthest_future_refidx == -1 ||
+                                  f->refdist[furthest_future_refidx] < delta))
+                {
+                    furthest_future_refidx = i;
+                }
             }
+            f->furthest_future_refidx = furthest_future_refidx;
         } else {
             memset(f->refpoc, 0, sizeof(f->refpoc));
         }
