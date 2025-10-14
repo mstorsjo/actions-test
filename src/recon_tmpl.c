@@ -1426,14 +1426,28 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                  4 * f->bw - 4 * t->bx,
                                  4 * f->bh - 4 * t->by
                                  HIGHBD_CALL_SUFFIX);
+
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
-            if (eob != -1)
-                coef_dump(cf, imin(t_dim->h, 8) * 4,
-                          imin(t_dim->w, 8) * 4, 3, "dq");
+        }
+
+        const int has_orip =
+            m == VERT_PRED ? t_dim->w < 8 : m == HOR_PRED ? t_dim->h < 8 :
+                m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8;
+        if (has_orip) {
+            const unsigned th_mask = ((m == VERT_PRED) << 1) | m == HOR_PRED;
+            dsp->ipred.orip(dst, PXSTRIDE(f->cur.stride[0]), edge, th_mask,
+                            tw, th HIGHBD_CALL_SUFFIX);
+
+            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                hex_dump(dst, f->cur.stride[0], tw, th, "orip");
         }
 
         if (eob != -1) {
+            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                coef_dump(cf, imin(t_dim->h, 8) * 4,
+                          imin(t_dim->w, 8) * 4, 3, "dq");
+            }
             if (stx) {
                 const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
                                  (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);

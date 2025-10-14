@@ -753,6 +753,107 @@ static void pal_pred_c(pixel *dst, const ptrdiff_t stride,
     }
 }
 
+static const int8_t orip_taps_4x4[16][9] = {
+    { 4, 16,  4,  0,  0,  0,  0,  4, 16 },
+    { 2,  4, 16,  4,  0,  0,  0,  2,  8 },
+    { 1,  0,  4, 16,  4,  0,  0,  1,  4 },
+    { 0,  0,  2,  4, 16,  0,  0,  0,  2 },
+    { 2,  8,  2,  0,  0,  0,  4, 16,  4 },
+    { 0,  2,  8,  2,  0,  0,  2,  8,  2 },
+    { 0,  0,  2,  8,  2,  0,  1,  4,  1 },
+    { 0,  0,  0,  2,  8,  0,  0,  2,  1 },
+    { 0,  4,  0,  0,  0,  4, 16,  4,  0 },
+    { 0,  0,  4,  0,  0,  2,  8,  2,  0 },
+    { 0,  0,  1,  4,  1,  1,  4,  1,  0 },
+    { 0,  0,  0,  2,  4,  0,  4,  0,  0 },
+    { 0,  0,  1,  0,  0, 16,  4,  2,  0 },
+    { 0,  0,  0,  1,  0,  8,  2,  1,  0 },
+    { 0,  0,  1,  2,  1,  4,  1,  0,  0 },
+    { 0,  0,  0,  1,  2,  2,  1,  0,  0 },
+};
+
+static void orip_c(pixel *dst, const ptrdiff_t stride,
+                   const pixel *const edge,
+                   const unsigned th_mask,
+                   const int width, const int height
+                   HIGHBD_DECL_SUFFIX)
+{
+    assert(width >= 4 && height >= 4);
+    assert(th_mask < 3);
+
+    const ptrdiff_t s = PXSTRIDE(stride);
+    const int w_th = (th_mask & 0x1U) ? 0 : imin(width >> 2, 4);
+    const int h_th = (th_mask & 0x2U) ? 0 : imin(height >> 2, 4);
+
+    // [0..4]: Row above
+    // [5..8]: Column to the left
+    pixel topleft[9];
+    pixel_copy(&topleft[5], &edge[-4], 4);
+
+    // Carry the last row of first 4x4 for the block below it
+    pixel top[4];
+    pixel_copy(top, &dst[3 * s], 4);
+
+    // First row of 4x4 blocks
+    for (int bx = 0; bx < width; bx += 4) {
+        pixel_copy(topleft, &edge[bx], 5); // Top edge
+
+        // Carry the last col for the next block
+        const pixel left[4] = {
+            dst[3 * s + bx + 3],
+            dst[2 * s + bx + 3],
+            dst[1 * s + bx + 3],
+            dst[0 * s + bx + 3],
+        };
+
+        for (int y = 0, i = 0; y < 4; y++) {
+            for (int x = bx; x < bx + 4; x++, i++) {
+                if (x >= w_th && y >= h_th)
+                    continue;
+
+                const ptrdiff_t p = y * s + x;
+                const int v = dst[p];
+                int off = 0;
+                for (int tap = 0; tap < 9; tap++)
+                    off += orip_taps_4x4[i][tap] * (topleft[tap] - v);
+
+                off = (off + 32) >> 6;
+                dst[p] = iclip_pixel(v + off);
+            }
+        }
+
+        pixel_copy(&topleft[5], left, 4);
+    }
+
+    pixel_copy(&topleft[1], top, 4);
+
+    // Column of 4x4 blocks
+    for (int by = 4; by < height; by += 4) {
+        // Left edge
+        topleft[0] = edge[-by];
+        pixel_copy(&topleft[5], &edge[-(by + 4)], 4);
+
+        // Carry last row for the next block
+        pixel_copy(top, &dst[(by + 3) * s], 4);
+
+        for (int y = by, i = 0; y < by + 4; y++) {
+            for (int x = 0; x < w_th; x++, i++) {
+                const ptrdiff_t p = y * s + x;
+                const int v = dst[p];
+                int off = 0;
+                for (int tap = 0; tap < 9; tap++)
+                    off += orip_taps_4x4[i][tap] * (topleft[tap] - v);
+
+                off = (off + 32) >> 6;
+                dst[p] = iclip_pixel(v + off);
+            }
+            i += 4 - w_th; // skip unprocessed column taps
+        }
+
+        pixel_copy(&topleft[1], top, 4);
+    }
+}
+
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/ipred.h"
@@ -791,6 +892,7 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
     c->cfl_pred[LEFT_DC_PRED] = ipred_cfl_left_c;
 
     c->pal_pred = pal_pred_c;
+    c->orip = orip_c;
 
 #if 0
 #if HAVE_ASM
