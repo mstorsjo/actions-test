@@ -744,12 +744,38 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
         if (seqhdr->lf_sub_pu)
             hdr->loopfilter.lf_sub_pu = dav1d_get_bit(gb);
         if (seqhdr->tip && active_ref_frames > 1 && hdr->use_ref_frame_mvs) {
-            printf("FIXME tip\n");
+            hdr->tip.frame_mode = dav1d_get_bit(gb) ? 2 /* output */ :
+                                  dav1d_get_bit(gb); // 1: ref, or 0: disabled
+            if (hdr->tip.frame_mode) {
+                if (seqhdr->tip_hole_fill)
+                    hdr->tip.hole_fill = dav1d_get_bit(gb);
+                if (/* do not have both-sides-refs || */
+                    (!seqhdr->opfl_refine && !seqhdr->refine_mv))
+                {
+                    hdr->tip.global_wtd_idx = dav1d_get_bits(gb, 3);
+                }
+                if (hdr->tip.frame_mode == 2) {
+                    if (hdr->loopfilter.lf_sub_pu)
+                        hdr->tip.filter_level = dav1d_get_bit(gb);
+                    if (!dav1d_get_bit(gb)) {
+                        hdr->tip.gmv.y = dav1d_get_bits(gb, 4);
+                        hdr->tip.gmv.x = dav1d_get_bits(gb, 4);
+                        if (hdr->tip.gmv.y && dav1d_get_bit(gb))
+                            hdr->tip.gmv.y = -hdr->tip.gmv.y;
+                        if (hdr->tip.gmv.x && dav1d_get_bit(gb))
+                            hdr->tip.gmv.x = -hdr->tip.gmv.x;
+                    }
+                    hdr->tip.subpel_filter =
+                        dav1d_get_bit(gb) ? DAV1D_FILTER_8TAP_SHARP :
+                        dav1d_get_bit(gb) ? DAV1D_FILTER_8TAP_REGULAR :
+                                            DAV1D_FILTER_8TAP_SMOOTH;
+                }
+            }
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-tip[refmvs:%d,tmvp:%d,lfsubpu:%d,tip:%d]: off=%td\n",
                hdr->use_ref_frame_mvs, hdr->tmvp_sample_step,
-               hdr->loopfilter.lf_sub_pu, 0,
+               hdr->loopfilter.lf_sub_pu, hdr->tip.frame_mode,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }

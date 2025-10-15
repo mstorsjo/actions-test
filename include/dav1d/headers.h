@@ -396,6 +396,13 @@ typedef struct Dav1dFrameHeader {
     uint8_t opfl_refine_type;
     struct {
         uint8_t frame_mode;
+        uint8_t hole_fill;
+        uint8_t global_wtd_idx;
+        uint8_t filter_level;
+        struct {
+            int8_t y, x;
+        } gmv;
+        uint8_t subpel_filter;
     } tip;
     uint8_t refresh_context;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
