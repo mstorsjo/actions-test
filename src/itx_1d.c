@@ -434,11 +434,7 @@ static const int8_t adst_kernel_sz16[16][16] = {
     {  17, -33,  48, -62,  73, -81,  87, -89,  88, -84,  77, -67,  55, -41,  25,  -8 }
 };
 
-#define CLIP(a) iclip(a, min, max)
-
-static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride,
-                          const int min, const int max)
-{
+static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     int odd[2], stage1[2];
     const int8_t (*mat)[4] = tx_kernel_dct2_size4;
@@ -454,9 +450,7 @@ static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride,
     c[3 * stride] = stage1[0] - odd[0];
 }
 
-static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride,
-                          const int min, const int max)
-{
+static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     int odd[4], quarter[2];
     int stage1[4], dc_nyquist[2];
@@ -486,9 +480,7 @@ static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride,
     }
 }
 
-static NOINLINE void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride,
-                                    const int min, const int max)
-{
+static NOINLINE void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     int odd[8], quarter[4], eighth[2];
     int stage2[8], stage1[4], dc_nyquist[2];
@@ -531,9 +523,7 @@ static NOINLINE void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride,
     }
 }
 
-static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride,
-                           const int min, const int max)
-{
+static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride) {
     int odd[16], quarter[8], eighth[4], sixteenth[2];
     int stage3[16], stage2[8], stage1[4], dc_nyquist[2];
     const int8_t (*mat)[32] = tx_kernel_dct2_size32;
@@ -588,9 +578,7 @@ static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride,
     }
 }
 
-static void inv_dct64_1d_c(int32_t *const c, const ptrdiff_t stride,
-                           const int min, const int max)
-{
+static void inv_dct64_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     int odd[32], quarter[16], eighth[8], sixteenth[4], thirtysecond[2];
     int stage4[32], stage3[16], stage2[8], stage1[4], dc[2];
@@ -656,7 +644,6 @@ static void inv_dct64_1d_c(int32_t *const c, const ptrdiff_t stride,
 
 static NOINLINE void
 inv_adst4_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
-                        const int min, const int max,
                         int32_t *const out, const ptrdiff_t out_s)
 {
     assert(in_s > 0 && out_s != 0);
@@ -676,7 +663,6 @@ inv_adst4_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
 
 static NOINLINE void
 inv_adst8_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
-                        const int min, const int max,
                         int32_t *const out, const ptrdiff_t out_s)
 {
     assert(in_s > 0 && out_s != 0);
@@ -696,7 +682,6 @@ inv_adst8_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
 
 static NOINLINE void
 inv_adst16_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
-                         const int min, const int max,
                          int32_t *const out, const ptrdiff_t out_s)
 {
     assert(in_s > 0 && out_s != 0);
@@ -715,16 +700,11 @@ inv_adst16_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
 }
 
 #define inv_adst_1d(sz) \
-static void inv_adst##sz##_1d_c(int32_t *const c, const ptrdiff_t stride, \
-                                const int min, const int max) \
-{ \
-    inv_adst##sz##_1d_internal_c(c, stride, min, max, c, stride); \
+static void inv_adst##sz##_1d_c(int32_t *const c, const ptrdiff_t stride) { \
+    inv_adst##sz##_1d_internal_c(c, stride, c, stride); \
 } \
-static void inv_flipadst##sz##_1d_c(int32_t *const c, const ptrdiff_t stride, \
-                                          const int min, const int max) \
-{ \
-    inv_adst##sz##_1d_internal_c(c, stride, min, max, \
-                                 &c[(sz - 1) * stride], -stride); \
+static void inv_flipadst##sz##_1d_c(int32_t *const c, const ptrdiff_t stride) { \
+    inv_adst##sz##_1d_internal_c(c, stride, &c[(sz - 1) * stride], -stride); \
 }
 
 inv_adst_1d( 4)
@@ -733,9 +713,7 @@ inv_adst_1d(16)
 
 #undef inv_adst_1d
 
-static void inv_identity4_1d_c(int32_t *const c, const ptrdiff_t stride,
-                               const int min, const int max)
-{
+static void inv_identity4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 4; i++) {
         const int in = c[stride * i];
@@ -743,17 +721,13 @@ static void inv_identity4_1d_c(int32_t *const c, const ptrdiff_t stride,
     }
 }
 
-static void inv_identity8_1d_c(int32_t *const c, const ptrdiff_t stride,
-                               const int min, const int max)
-{
+static void inv_identity8_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 8; i++)
         c[stride * i] *= 2;
 }
 
-static void inv_identity16_1d_c(int32_t *const c, const ptrdiff_t stride,
-                                const int min, const int max)
-{
+static void inv_identity16_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 16; i++) {
         const int in = c[stride * i];
@@ -761,9 +735,7 @@ static void inv_identity16_1d_c(int32_t *const c, const ptrdiff_t stride,
     }
 }
 
-static void inv_identity32_1d_c(int32_t *const c, const ptrdiff_t stride,
-                                const int min, const int max)
-{
+static void inv_identity32_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 32; i++)
         c[stride * i] *= 4;

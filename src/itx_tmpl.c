@@ -134,7 +134,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
         else
             for (int x = 0; x < sw; x++)
                 c[x] = coeff[y + x * sh];
-        first_1d_fn(c, 1, 0, 0);
+        first_1d_fn(c, 1);
     }
 
 #if 0
@@ -148,7 +148,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
         tmp[i] = iclip((tmp[i] + rnd) >> new_shift, row_clip_min, row_clip_max);
 
     for (int x = 0; x < w; x++)
-        second_1d_fn(&tmp[x], w, 0, 0);
+        second_1d_fn(&tmp[x], w);
 
     new_shift = dav1d_tx_shift[tx][1];
     rnd = (1 << new_shift) >> 1;
