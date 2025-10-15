@@ -34,7 +34,6 @@
 
 #include "src/levels.h"
 
-EXTERN const uint8_t dav1d_al_part_ctx[2][N_BL_LEVELS][N_PARTITIONS];
 // width, height (in 4px blocks), log2 versions of these two
 EXTERN const uint8_t dav1d_block_dimensions[N_BS_SIZES][4];
 typedef struct TxfmInfo {
@@ -52,55 +51,8 @@ EXTERN const uint8_t av1_mode_to_angle_map[8];
 EXTERN const uint8_t /* enum InterPredMode */
                      dav1d_comp_inter_pred_modes[][2];
 
-EXTERN const uint8_t /* enum TxfmType */ dav1d_tx_types_per_set[40];
-
-EXTERN const uint8_t dav1d_filter_mode_to_y_mode[5];
-EXTERN const uint8_t dav1d_ymode_size_context[N_BS_SIZES];
-EXTERN const uint8_t dav1d_lo_ctx_offsets[3][5][5];
-EXTERN const uint8_t dav1d_skip_ctx[5][5];
 EXTERN const uint8_t /* enum TxClass */
                      dav1d_tx_type_class[N_TX_TYPES_PLUS_LL];
-EXTERN const uint8_t /* enum Filter2d */
-                     dav1d_filter_2d[DAV1D_N_FILTERS /* h */][DAV1D_N_FILTERS /* v */];
-EXTERN const uint8_t /* enum Dav1dFilterMode */ dav1d_filter_dir[N_2D_FILTERS][2];
-EXTERN const uint8_t dav1d_intra_mode_context[N_INTRA_PRED_MODES];
-EXTERN const uint8_t dav1d_wedge_ctx_lut[N_BS_SIZES];
-
-static const unsigned cfl_allowed_mask =
-    (1 << BS_32x32) |
-    (1 << BS_32x16) |
-    (1 << BS_32x8) |
-    (1 << BS_16x32) |
-    (1 << BS_16x16) |
-    (1 << BS_16x8) |
-    (1 << BS_16x4) |
-    (1 << BS_8x32) |
-    (1 << BS_8x16) |
-    (1 << BS_8x8) |
-    (1 << BS_8x4) |
-    (1 << BS_4x16) |
-    (1 << BS_4x8) |
-    (1 << BS_4x4);
-
-static const unsigned wedge_allowed_mask =
-    (1 << BS_32x32) |
-    (1 << BS_32x16) |
-    (1 << BS_32x8) |
-    (1 << BS_16x32) |
-    (1 << BS_16x16) |
-    (1 << BS_16x8) |
-    (1 << BS_8x32) |
-    (1 << BS_8x16) |
-    (1 << BS_8x8);
-
-static const unsigned interintra_allowed_mask =
-    (1 << BS_32x32) |
-    (1 << BS_32x16) |
-    (1 << BS_16x32) |
-    (1 << BS_16x16) |
-    (1 << BS_16x8) |
-    (1 << BS_8x16) |
-    (1 << BS_8x8);
 
 EXTERN const Dav1dWarpedMotionParams dav1d_default_wm_params;
 

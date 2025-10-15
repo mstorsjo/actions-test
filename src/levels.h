@@ -50,15 +50,6 @@ enum TxfmSize {
     N_TX_SIZES,
 };
 
-enum BlockLevel {
-    BL_128X128,
-    BL_64X64,
-    BL_32X32,
-    BL_16X16,
-    BL_8X8,
-    N_BL_LEVELS,
-};
-
 enum RectTxfmSize {
     RTX_4X8 = N_TX_SIZES,
     RTX_8X4,
@@ -222,27 +213,12 @@ enum Filter2d { // order is horizontal, vertical
     N_2D_FILTERS,
 };
 
-enum MVJoint {
-    MV_JOINT_ZERO,
-    MV_JOINT_H,
-    MV_JOINT_V,
-    MV_JOINT_HV,
-    N_MV_JOINTS,
-};
-
 enum InterPredMode {
     NEARMV = 13,
     GLOBALMV,
     NEWMV,
     WARPMV,
     WARPNEWMV,
-};
-
-enum DRL_PROXIMITY {
-    NEAREST_DRL,
-    NEARER_DRL,
-    NEAR_DRL,
-    NEARISH_DRL
 };
 
 enum CompInterPredMode {
@@ -281,8 +257,6 @@ enum CflType {
     CFL_IMPLICIT,
     CFL_MHCCP,
 };
-
-#define QINDEX_RANGE 256
 
 typedef struct Av1Block {
     uint8_t bl, bs, bp;

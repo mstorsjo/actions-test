@@ -281,15 +281,6 @@ static inline int get_poc_diff(const int order_hint_n_bits,
     return (diff & (mask - 1)) - (diff & mask);
 }
 
-static inline int get_drl_context(const refmvs_candidate *const ref_mv_stack,
-                                  const int ref_idx)
-{
-    if (ref_mv_stack[ref_idx].weight >= 640)
-        return ref_mv_stack[ref_idx + 1].weight < 640;
-
-    return ref_mv_stack[ref_idx + 1].weight < 640 ? 2 : 0;
-}
-
 static inline unsigned get_cur_frame_segid(const int by, const int bx,
                                            const int have_top,
                                            const int have_left,

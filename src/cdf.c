@@ -1271,14 +1271,6 @@ static const CdfDefaultContext default_cdf = {
             { CDF2(8963, 32500), 6 },
             { CDF2(370, 693), 75 },
             { CDF2(25697, 27654), 31 },
-        }, .txpart = {
-            { { CDF1(28581) }, { CDF1(23846) }, { CDF1(20847) } },
-            { { CDF1(24315) }, { CDF1(18196) }, { CDF1(12133) } },
-            { { CDF1(18791) }, { CDF1(10887) }, { CDF1(11005) } },
-            { { CDF1(27179) }, { CDF1(20004) }, { CDF1(11281) } },
-            { { CDF1(26549) }, { CDF1(19308) }, { CDF1(14224) } },
-            { { CDF1(28015) }, { CDF1(21546) }, { CDF1(14400) } },
-            { { CDF1(28165) }, { CDF1(22401) }, { CDF1(16088) } },
         }, .skip_mode = {
             { CDF1(32621) }, { CDF1(20708) }, { CDF1( 8127) },
         }, .seg_pred = {
@@ -6345,7 +6337,6 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(3, DAV1D_MAX_SEGMENTS - 1, m.seg_id);
     update_cdf_1d(3, m.delta_q);
     update_cdf_2d(5, 3, m.delta_lf);
-    update_cdf_3d(7, 3, 1, m.txpart);
 
 #define update_mv_cdfs(name) \
     update_cdf_1d(1, name.shell_set); \

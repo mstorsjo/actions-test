@@ -40,7 +40,6 @@
 
 #include "src/ctx.h"
 #include "src/decode.h"
-#include "src/dequant_tables.h"
 #include "src/env.h"
 #include "src/filmgrain.h"
 #include "src/log.h"
@@ -764,7 +763,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     if (t->frame_thread.pass == 2) {
         if (b->intra) {
-            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
+            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
 
             const enum IntraPredMode y_mode_nofilt =
                 b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
@@ -827,7 +826,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #undef signabs
                 }
             }
-            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
+            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
 
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
@@ -1606,7 +1605,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
+            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
         }
 
         if (f->frame_hdr->loopfilter.level_y[0] ||
@@ -1797,7 +1796,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.read_coef_blocks(t, bs, b);
             b->filter = DAV1D_FILTER_BILINEAR;
         } else {
-            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
+            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
         }
 
         if (has_luma) {
@@ -2504,7 +2503,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            f->bd_fn.recon_b_intra(t, DB_ONLY(depth) lbs, cbs, 0, b);
+            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
         }
 
         if (f->frame_hdr->loopfilter.level_y[0] ||
@@ -4447,7 +4446,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     }
 
 #define assign_bitdepth_case(bd) \
-        f->bd_fn.recon_b_intra = dav1d_recon_b_intra_##bd##bpc; \
+        f->bd_fn.recon_b = dav1d_recon_b_##bd##bpc; \
         f->bd_fn.filter_sbrow = dav1d_filter_sbrow_##bd##bpc; \
         f->bd_fn.filter_sbrow_deblock_cols = dav1d_filter_sbrow_deblock_cols_##bd##bpc; \
         f->bd_fn.filter_sbrow_deblock_rows = dav1d_filter_sbrow_deblock_rows_##bd##bpc; \

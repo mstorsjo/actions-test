@@ -34,24 +34,6 @@
 #include "src/levels.h"
 #include "src/tables.h"
 
-const uint8_t dav1d_al_part_ctx[2][N_BL_LEVELS][N_PARTITIONS] = {
-    {
-        // partitions:
-        // none,  h,    v, split,  tts,  tbs,  tls,  trs,   h4,   v4
-        { 0x00, 0x00, 0x10,   -1, 0x00, 0x10, 0x10, 0x10,   -1,   -1 }, // bl128
-        { 0x10, 0x10, 0x18,   -1, 0x10, 0x18, 0x18, 0x18, 0x10, 0x1c }, // bl64
-        { 0x18, 0x18, 0x1c,   -1, 0x18, 0x1c, 0x1c, 0x1c, 0x18, 0x1e }, // bl32
-        { 0x1c, 0x1c, 0x1e,   -1, 0x1c, 0x1e, 0x1e, 0x1e, 0x1c, 0x1f }, // bl16
-        { 0x1e, 0x1e, 0x1f, 0x1f,   -1,   -1,   -1,   -1,   -1,   -1 }, // bl8
-    }, {
-        { 0x00, 0x10, 0x00,   -1, 0x10, 0x10, 0x00, 0x10,   -1,   -1 }, // bl128
-        { 0x10, 0x18, 0x10,   -1, 0x18, 0x18, 0x10, 0x18, 0x1c, 0x10 }, // bl64
-        { 0x18, 0x1c, 0x18,   -1, 0x1c, 0x1c, 0x18, 0x1c, 0x1e, 0x18 }, // bl32
-        { 0x1c, 0x1e, 0x1c,   -1, 0x1e, 0x1e, 0x1c, 0x1e, 0x1f, 0x1c }, // bl16
-        { 0x1e, 0x1f, 0x1e, 0x1f,   -1,   -1,   -1,   -1,   -1,   -1 }, // bl8
-    }
-};
-
 const uint8_t dav1d_block_dimensions[N_BS_SIZES][4] = {
     [BS_256x256] = { 64, 64, 6, 6 },
     [BS_256x128] = { 64, 32, 6, 5 },
@@ -207,76 +189,6 @@ const uint8_t /* enum InterPredMode */
     [NEARMV_NEWMV      - NEARMV_NEARMV] = { NEARMV,   NEWMV    },
 };
 
-const uint8_t /* enum TxfmType */ dav1d_tx_types_per_set[40] = {
-    /* Intra2 */
-    IDTX, DCT_DCT, ADST_ADST, ADST_DCT, DCT_ADST,
-    /* Intra1 */
-    IDTX, DCT_DCT, V_DCT, H_DCT, ADST_ADST, ADST_DCT, DCT_ADST,
-    /* Inter2 */
-    IDTX, V_DCT, H_DCT, DCT_DCT, ADST_DCT, DCT_ADST, FLIPADST_DCT,
-    DCT_FLIPADST, ADST_ADST, FLIPADST_FLIPADST, ADST_FLIPADST, FLIPADST_ADST,
-    /* Inter1 */
-    IDTX, V_DCT, H_DCT, V_ADST, H_ADST, V_FLIPADST, H_FLIPADST,
-    DCT_DCT, ADST_DCT, DCT_ADST, FLIPADST_DCT, DCT_FLIPADST,
-    ADST_ADST, FLIPADST_FLIPADST, ADST_FLIPADST, FLIPADST_ADST,
-};
-
-const uint8_t dav1d_ymode_size_context[N_BS_SIZES] = {
-    [BS_128x128] = 3,
-    [BS_128x64]  = 3,
-    [BS_64x128]  = 3,
-    [BS_64x64]   = 3,
-    [BS_64x32]   = 3,
-    [BS_64x16]   = 2,
-    [BS_32x64]   = 3,
-    [BS_32x32]   = 3,
-    [BS_32x16]   = 2,
-    [BS_32x8 ]   = 1,
-    [BS_16x64]   = 2,
-    [BS_16x32]   = 2,
-    [BS_16x16]   = 2,
-    [BS_16x8 ]   = 1,
-    [BS_16x4 ]   = 0,
-    [BS_8x32 ]   = 1,
-    [BS_8x16 ]   = 1,
-    [BS_8x8  ]   = 1,
-    [BS_8x4  ]   = 0,
-    [BS_4x16 ]   = 0,
-    [BS_4x8  ]   = 0,
-    [BS_4x4  ]   = 0,
-};
-
-const uint8_t dav1d_lo_ctx_offsets[3][5][5] = {
-    { /* w == h */
-        {  0,  1,  6,  6, 21 },
-        {  1,  6,  6, 21, 21 },
-        {  6,  6, 21, 21, 21 },
-        {  6, 21, 21, 21, 21 },
-        { 21, 21, 21, 21, 21 },
-    }, { /* w > h */
-        {  0, 16,  6,  6, 21 },
-        { 16, 16,  6, 21, 21 },
-        { 16, 16, 21, 21, 21 },
-        { 16, 16, 21, 21, 21 },
-        { 16, 16, 21, 21, 21 },
-    }, { /* w < h */
-        {  0, 11, 11, 11, 11 },
-        { 11, 11, 11, 11, 11 },
-        {  6,  6, 21, 21, 21 },
-        {  6, 21, 21, 21, 21 },
-        { 21, 21, 21, 21, 21 },
-    },
-};
-
-// [a][b] == (a+b+3)>>1
-const uint8_t dav1d_skip_ctx[5][5] = {
-    { 1, 2, 2, 3, 3 },
-    { 2, 2, 3, 3, 4 },
-    { 2, 3, 3, 4, 4 },
-    { 3, 3, 4, 4, 5 },
-    { 3, 4, 4, 5, 5 },
-};
-
 const uint8_t /* enum TxClass */ dav1d_tx_type_class[N_TX_TYPES_PLUS_LL] = {
     [DCT_DCT]           = TX_CLASS_2D,
     [ADST_DCT]          = TX_CLASS_2D,
@@ -295,69 +207,6 @@ const uint8_t /* enum TxClass */ dav1d_tx_type_class[N_TX_TYPES_PLUS_LL] = {
     [V_FLIPADST]        = TX_CLASS_V,
     [H_FLIPADST]        = TX_CLASS_H,
     [WHT_WHT]           = TX_CLASS_2D,
-};
-
-const uint8_t /* enum Filter2d */ dav1d_filter_2d[DAV1D_N_FILTERS][DAV1D_N_FILTERS] = {
-    [DAV1D_FILTER_8TAP_REGULAR] = {
-        [DAV1D_FILTER_8TAP_REGULAR] = FILTER_2D_8TAP_REGULAR,
-        [DAV1D_FILTER_8TAP_SHARP]   = FILTER_2D_8TAP_REGULAR_SHARP,
-        [DAV1D_FILTER_8TAP_SMOOTH]  = FILTER_2D_8TAP_REGULAR_SMOOTH,
-    }, [DAV1D_FILTER_8TAP_SHARP] = {
-        [DAV1D_FILTER_8TAP_REGULAR] = FILTER_2D_8TAP_SHARP_REGULAR,
-        [DAV1D_FILTER_8TAP_SHARP]   = FILTER_2D_8TAP_SHARP,
-        [DAV1D_FILTER_8TAP_SMOOTH]  = FILTER_2D_8TAP_SHARP_SMOOTH,
-    }, [DAV1D_FILTER_8TAP_SMOOTH] = {
-        [DAV1D_FILTER_8TAP_REGULAR] = FILTER_2D_8TAP_SMOOTH_REGULAR,
-        [DAV1D_FILTER_8TAP_SHARP]   = FILTER_2D_8TAP_SMOOTH_SHARP,
-        [DAV1D_FILTER_8TAP_SMOOTH]  = FILTER_2D_8TAP_SMOOTH,
-    }, [DAV1D_FILTER_BILINEAR] = {
-        [DAV1D_FILTER_BILINEAR]     = FILTER_2D_BILINEAR,
-    }
-};
-
-const uint8_t /* enum Dav1dFilterMode */ dav1d_filter_dir[N_2D_FILTERS][2] = {
-    [FILTER_2D_8TAP_REGULAR]        = { DAV1D_FILTER_8TAP_REGULAR, DAV1D_FILTER_8TAP_REGULAR },
-    [FILTER_2D_8TAP_REGULAR_SMOOTH] = { DAV1D_FILTER_8TAP_SMOOTH,  DAV1D_FILTER_8TAP_REGULAR },
-    [FILTER_2D_8TAP_REGULAR_SHARP]  = { DAV1D_FILTER_8TAP_SHARP,   DAV1D_FILTER_8TAP_REGULAR },
-    [FILTER_2D_8TAP_SHARP_REGULAR]  = { DAV1D_FILTER_8TAP_REGULAR, DAV1D_FILTER_8TAP_SHARP   },
-    [FILTER_2D_8TAP_SHARP_SMOOTH]   = { DAV1D_FILTER_8TAP_SMOOTH,  DAV1D_FILTER_8TAP_SHARP   },
-    [FILTER_2D_8TAP_SHARP]          = { DAV1D_FILTER_8TAP_SHARP,   DAV1D_FILTER_8TAP_SHARP   },
-    [FILTER_2D_8TAP_SMOOTH_REGULAR] = { DAV1D_FILTER_8TAP_REGULAR, DAV1D_FILTER_8TAP_SMOOTH  },
-    [FILTER_2D_8TAP_SMOOTH]         = { DAV1D_FILTER_8TAP_SMOOTH,  DAV1D_FILTER_8TAP_SMOOTH  },
-    [FILTER_2D_8TAP_SMOOTH_SHARP]   = { DAV1D_FILTER_8TAP_SHARP,   DAV1D_FILTER_8TAP_SMOOTH  },
-    [FILTER_2D_BILINEAR]            = { DAV1D_FILTER_BILINEAR,     DAV1D_FILTER_BILINEAR     },
-};
-
-const uint8_t dav1d_filter_mode_to_y_mode[5] = {
-    DC_PRED, VERT_PRED, HOR_PRED, HOR_DOWN_PRED, DC_PRED
-};
-
-const uint8_t dav1d_intra_mode_context[N_INTRA_PRED_MODES] = {
-    [DC_PRED]              = 0,
-    [VERT_PRED]            = 1,
-    [HOR_PRED]             = 2,
-    [DIAG_DOWN_LEFT_PRED]  = 3,
-    [DIAG_DOWN_RIGHT_PRED] = 4,
-    [VERT_RIGHT_PRED]      = 4,
-    [HOR_DOWN_PRED]        = 4,
-    [HOR_UP_PRED]          = 4,
-    [VERT_LEFT_PRED]       = 3,
-    [SMOOTH_PRED]          = 0,
-    [SMOOTH_V_PRED]        = 1,
-    [SMOOTH_H_PRED]        = 2,
-    [PAETH_PRED]           = 0,
-};
-
-const uint8_t dav1d_wedge_ctx_lut[N_BS_SIZES] = {
-    [BS_32x32] = 6,
-    [BS_32x16] = 5,
-    [BS_32x8]  = 8,
-    [BS_16x32] = 4,
-    [BS_16x16] = 3,
-    [BS_16x8]  = 2,
-    [BS_8x32]  = 7,
-    [BS_8x16]  = 1,
-    [BS_8x8]   = 0,
 };
 
 const Dav1dWarpedMotionParams dav1d_default_wm_params = {

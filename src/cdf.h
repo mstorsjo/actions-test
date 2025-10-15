@@ -96,7 +96,6 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS], 16);
     ALIGN(uint16_t delta_q[4], 8);
     ALIGN(uint16_t delta_lf[5][4], 8);
-    ALIGN(uint16_t txpart[7][3][2], 4);
 
     /* inter/switch */
     uint16_t intra[4][3];

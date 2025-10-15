@@ -246,7 +246,7 @@ struct Dav1dFrameContext {
     int n_ts;
     const Dav1dDSPContext *dsp;
     struct {
-        recon_b_intra_fn recon_b_intra;
+        recon_b_fn recon_b;
         filter_sbrow_fn filter_sbrow;
         filter_sbrow_fn filter_sbrow_deblock_cols;
         filter_sbrow_fn filter_sbrow_deblock_rows;

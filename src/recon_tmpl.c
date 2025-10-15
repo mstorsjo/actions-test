@@ -149,7 +149,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         }
 #undef MERGE_CTX
 
-        return dav1d_skip_ctx[umin(la & 0x3F, 4)][umin(ll & 0x3F, 4)];
+        return (umin(la & 0x3F, 4) + umin(ll & 0x3F, 4) + 3) >> 1;
     }
 }
 
@@ -1355,8 +1355,8 @@ static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
     return mode;
 }
 
-static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
-                             const enum RectTxfmSize tx, Av1Block *const b)
+static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+                            const enum RectTxfmSize tx, Av1Block *const b)
 {
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
@@ -1455,12 +1455,11 @@ static void recon_b_intra_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     b->y_mode = orig_y_mode;
 }
 
-void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
-                                 DB_ONLY(const int depth)
-                                 const enum BlockSize lbs,
-                                 const enum BlockSize cbs,
-                                 const enum EdgeFlags intra_edge_flags,
-                                 Av1Block *const b)
+void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
+                           DB_ONLY(const int depth)
+                           const enum BlockSize lbs,
+                           const enum BlockSize cbs,
+                           Av1Block *const b)
 {
 #if 1
     const Dav1dFrameContext *const f = t->f;
@@ -1485,11 +1484,10 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
                 // FIXME it's possible we can call directly into a sub-function
                 // here that manages one transform-block, since tx_part=none
                 // (at least if not lossless)
-                bytefn(dav1d_recon_b_intra)(t, DB_ONLY(depth)
+                bytefn(dav1d_recon_b)(t, DB_ONLY(depth)
                     lbs == BS_INVALID ? BS_INVALID : BS_64x64,
                     cbs == BS_INVALID || y & ss_ver || x & ss_hor ?
-                                        BS_INVALID : csplit[cbs][ss_hor + ss_ver],
-                    intra_edge_flags, b);
+                        BS_INVALID : csplit[cbs][ss_hor + ss_ver], b);
                 // FIXME this may be correct only for luma, whereas chroma may
                 // have to be dealt with at 64x64 *subsampled* pixels (i.e.
                 // 128x128 luma pixels for 4:2:0), b/c of chroma-large-tx
@@ -1559,24 +1557,24 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
     const enum RectTxfmSize tx = tp[b->tx_part];
     switch (b->tx_part) {
     case TX_PARTITION_NONE:
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         break;
     case TX_PARTITION_SPLIT: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int tw4 = t_dim->w, th4 = t_dim->h;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         const int have_v_split = t->bx + tw4 < f->bw;
         if (have_v_split) {
             t->bx += tw4;
-            recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4;
         }
         if (t->by + th4 >= f->bh) break;
         t->by += th4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (have_v_split) {
             t->bx += tw4;
-            recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4;
         }
         t->by -= th4;
@@ -1585,52 +1583,52 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
     case TX_PARTITION_H: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int th4 = t_dim->h;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->by + th4 >= f->bh) break;
         t->by += th4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         t->by -= th4;
         break;
     }
     case TX_PARTITION_V: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int tw4 = t_dim->w;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->bx + tw4 >= f->bw) break;
         t->bx += tw4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         t->bx -= tw4;
         break;
     }
     case TX_PARTITION_H4: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int th4 = t_dim->h;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->by + th4 >= f->bh) break;
         t->by += th4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->by + th4 >= f->bh) { t->by -= th4; break; }
         t->by += th4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->by + th4 >= f->bh) { t->by -= 2 * th4; break; }
         t->by += th4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         t->by -= 3 * th4;
         break;
     }
     case TX_PARTITION_V4: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int tw4 = t_dim->w;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->bx + tw4 >= f->bw) break;
         t->bx += tw4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->bx + tw4 >= f->bw) { t->bx -= tw4; break; }
         t->bx += tw4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (t->bx + tw4 >= f->bw) { t->bx -= 2 * tw4; break; }
         t->bx += tw4;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         t->bx -= 3 * tw4;
         break;
     }
@@ -1640,22 +1638,22 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
                        *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
         const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
         const int th4_big = t_dim_big->h;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         const int have_v_split = t->bx + tw4_small < f->bw;
         if (have_v_split) {
             t->bx += tw4_small;
-            recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4_small;
         }
         if (t->by + th4_small >= f->bh) break;
         t->by += th4_small;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx_big, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx_big, b);
         if (t->by + th4_big >= f->bh) { t->by -= th4_small; break; }
         t->by += th4_big;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (have_v_split) {
             t->bx += tw4_small;
-            recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4_small;
         }
         t->by -= th4_small + th4_big;
@@ -1667,22 +1665,22 @@ void bytefn(dav1d_recon_b_intra)(Dav1dTaskContext *const t,
                        *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
         const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
         const int tw4_big = t_dim_big->w;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         const int have_h_split = t->by + th4_small < f->bh;
         if (have_h_split) {
             t->by += th4_small;
-            recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->by -= th4_small;
         }
         if (t->bx + tw4_small >= f->bw) break;
         t->bx += tw4_small;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx_big, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx_big, b);
         if (t->bx + tw4_big >= f->bw) { t->bx -= tw4_small; break; }
         t->bx += tw4_big;
-        recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (have_h_split) {
             t->by += th4_small;
-            recon_b_intra_tx(t, DB_ONLY(depth) tx, b);
+            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->by -= th4_small;
         }
         t->bx -= tw4_small + tw4_big;

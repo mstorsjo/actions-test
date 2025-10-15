@@ -32,11 +32,10 @@
 #include "src/internal.h"
 #include "src/levels.h"
 
-#define decl_recon_b_intra_fn(name) \
+#define decl_recon_b_fn(name) \
 void (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
-            enum BlockSize bs, enum BlockSize cbs, \
-            enum EdgeFlags intra_edge_flags, Av1Block *b)
-typedef decl_recon_b_intra_fn(*recon_b_intra_fn);
+            enum BlockSize bs, enum BlockSize cbs, Av1Block *b)
+typedef decl_recon_b_fn(*recon_b_fn);
 
 #define decl_filter_sbrow_fn(name) \
 void (name)(Dav1dFrameContext *f, int sby)
@@ -59,8 +58,8 @@ void (name)(DB_ONLY(const int depth) Dav1dTaskContext *t, \
                     Av1Block *b, int bx4, int by4)
 typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 
-decl_recon_b_intra_fn(dav1d_recon_b_intra_8bpc);
-decl_recon_b_intra_fn(dav1d_recon_b_intra_16bpc);
+decl_recon_b_fn(dav1d_recon_b_8bpc);
+decl_recon_b_fn(dav1d_recon_b_16bpc);
 
 decl_filter_sbrow_fn(dav1d_filter_sbrow_8bpc);
 decl_filter_sbrow_fn(dav1d_filter_sbrow_16bpc);
