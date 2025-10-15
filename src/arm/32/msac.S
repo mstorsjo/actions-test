@@ -213,16 +213,10 @@ function msac_decode_symbol_adapt4_neon, export=1
 
         vmov            d21, d20
         vld1_align_n    q12, q12, q13, r8,  \n
-.if \n == 16
-        vmov            q11, q10
-.endif
 
         vcge_n          q2,  q2,  q3,  q10, q10, q11, q8,  q8,  q9,  \n // c >= v
 
         vand_n          q10, q10, q11, q2,  q2,  q3,  q12, q12, q13, \n // One bit per halfword set in the mask
-.if \n == 16
-        vadd.i16        q10, q10, q11
-.endif
         vadd.i16        d20, d20, d21                                   // Aggregate mask bits
         ldr             r4,  [r0, #ALLOW_UPDATE_CDF]
         vpadd.i16       d20, d20, d20
@@ -237,20 +231,12 @@ function msac_decode_symbol_adapt4_neon, export=1
         // update_cdf
         ldrh            r3,  [r1, r10]                                  // count = cdf[n_symbols]
         vmov.i8         q10, #0xff
-.if \n == 16
-        mov             r4,  #-5
-.else
         mvn             r12, r2
         mov             r4,  #-4
         cmn             r12, #3                                         // set C if n_symbols <= 2
-.endif
         vrhadd_n        d16, q8,  q9,  d20, q10, q10, d4,  q2,  q3,  \n // i >= val ? -1 : 32768
-.if \n == 16
-        sub             r4,  r4,  r3, lsr #4                            // -((count >> 4) + 5)
-.else
         lsr             r12, r3,  #4                                    // count >> 4
         sbc             r4,  r4,  r12                                   // -((count >> 4) + (n_symbols > 2) + 4)
-.endif
         vsub_n          d16, q8,  q9,  d16, q8,  q9,  d0,  q0,  q1,  \n // (32768 - cdf[i]) or (-1 - cdf[i])
 .if \n == 4
         vdup.16         d20, r4                                         // -rate
@@ -344,11 +330,6 @@ endfunc
 
 function msac_decode_symbol_adapt8_neon, export=1
         decode_update   8
-        b               L(renorm)
-endfunc
-
-function msac_decode_symbol_adapt16_neon, export=1
-        decode_update   16
         b               L(renorm)
 endfunc
 

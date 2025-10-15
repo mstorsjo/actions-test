@@ -122,9 +122,6 @@ endconst
 
 function msac_decode_symbol_adapt4_neon, export=1
 .macro decode_update sz, szb, n
-.if \n == 16
-        sub             sp,  sp,  #48
-.endif
         add             x8,  x0,  #RNG
         ld1_n           v0,  v1,  x1,  \sz, \n                    // cdf
         ld1r            {v29\sz}, [x8]                            // rng
@@ -133,9 +130,6 @@ function msac_decode_symbol_adapt4_neon, export=1
         sub             x10, x9,  x2, lsl #1
         mvni            v30\sz, #0x3f                             // 0xffc0
         and             v7\szb, v29\szb, v31\szb                  // rng & 0x7f00
-.if \n == 16
-        str             h29, [sp, #14]                            // store original u = s->rng
-.endif
         and_n           v2,  v3,  v0,  v1,  v30, v30, \szb, \n    // cdf & 0xffc0
 
         ld1_n           v4,  v5,  x10, \sz, \n                    // EC_MIN_PROB * (n_symbols - ret)
@@ -148,8 +142,6 @@ function msac_decode_symbol_adapt4_neon, export=1
         dup             v30\sz, v28.h[3]                          // dif >> (EC_WIN_SIZE - 16)
 .if \n == 8
         ldur            q31, [x9, #MASKS8_OFFSET]
-.elseif \n == 16
-        str_n           q4,  q5,  sp, #16, \n                     // store v values to allow indexed access
 .endif
 
         // After the condition starts being true it continues, such that the vector looks like:
@@ -177,21 +169,13 @@ function msac_decode_symbol_adapt4_neon, export=1
         sub             v30\sz, v30\sz, v4\sz                     // (dif >> 48) - v
         smov            w15, v31.b[0]                             // 2*ret
         sub             v29\sz, v29\sz, v4\sz                     // rng = u-v
-.elseif \n == 16
-        add             v6\sz,  v2\sz,  v3\sz
-        addv            h31, v6\sz                                // -n + ret
-        ldr             w4,  [x0, #ALLOW_UPDATE_CDF]
-        smov            w15, v31.h[0]
 .endif
 
         cbz             w4,  0f
 
         // update_cdf
         ldrh            w3,  [x1, x2, lsl #1]                     // count = cdf[n_symbols]
-.if \n == 16
-        // 16 case has a lower bound that guarantees n_symbols > 2
-        mov             w4,  #-5
-.elseif \n == 8
+.if \n == 8
         mvn             w14, w2
         mov             w4,  #-4
         cmn             w14, #3                                   // set C if n_symbols <= 2
@@ -202,12 +186,7 @@ function msac_decode_symbol_adapt4_neon, export=1
 .endif
         sub_n           v16, v17, v0,  v1,  v2,  v3,  \sz, \n     // cdf + (i >= val ? 1 : 0)
         orr             v2\sz, #0x80, lsl #8
-.if \n == 16
-        orr             v3\sz, #0x80, lsl #8
-.endif
-.if \n == 16
-        sub             w4,  w4,  w3, lsr #4                      // -((count >> 4) + 5)
-.elseif \n == 8
+.if \n == 8
         lsr             w14, w3,  #4                              // count >> 4
         sbc             w4,  w4,  w14                             // -((count >> 4) + (n_symbols > 2) + 4)
 .else
@@ -276,29 +255,6 @@ function msac_decode_symbol_adapt4_neon, export=1
         lsr             w15, w15, #1           // ret
         mov             x7, v28.d[0]
         b L(refill)
-.elseif \n == 16
-        add             x8,  sp,  w15, sxtw #1
-        ldrh            w3,  [x8, #48]         // v
-        ldurh           w4,  [x8, #46]         // u
-        ldr             w6,  [x0, #CNT]
-        ldr             x7,  [x0, #DIF]
-        sub             w4,  w4,  w3           // rng = u - v
-        clz             w5,  w4                // clz(rng)
-        eor             w5,  w5,  #16          // d = clz(rng) ^ 16
-        sub             x7,  x7,  x3, lsl #48  // dif - (v << 48)
-        lsl             w4,  w4,  w5           // rng << d
-        subs            w6,  w6,  w5           // cnt -= d
-        lsl             x7,  x7,  x5           // (dif - (v << 48)) << d
-        str             w4,  [x0, #RNG]
-        add             sp,  sp,  #48
-        b.lo            1f
-        str             w6,  [x0, #CNT]
-        str             x7,  [x0, #DIF]
-        add             w0,  w15, #\n          // ret
-        ret
-1:
-        add             w15, w15, #\n          // ret
-        b L(refill)
 .endif
 .endm
 
@@ -360,10 +316,6 @@ endfunc
 
 function msac_decode_symbol_adapt8_neon, export=1
         decode_update   .8h, .16b, 8
-endfunc
-
-function msac_decode_symbol_adapt16_neon, export=1
-        decode_update   .8h, .16b, 16
 endfunc
 
 function msac_decode_hi_tok_neon, export=1

@@ -42,10 +42,6 @@ typedef struct MsacContext {
     unsigned rng;
     int cnt;
     int allow_update_cdf;
-
-#if ARCH_X86_64 && HAVE_ASM
-    unsigned (*symbol_adapt16)(struct MsacContext *s, uint16_t *cdf, size_t n_symbols);
-#endif
 } MsacContext;
 
 #if HAVE_ASM
@@ -68,15 +64,12 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, int max_bits);
 int dav1d_msac_decode_subexp(MsacContext *s, int ref, int n, unsigned k);
 int dav1d_msac_decode_4way(MsacContext *s, int ref, uint16_t *cdf, int n_bits);
 
-/* Supported n_symbols ranges: adapt4: 1-3, adapt8: 1-7, adapt16: 3-15 */
+/* Supported n_symbols ranges: adapt4: 1-3, adapt8: 1-7 */
 #ifndef dav1d_msac_decode_symbol_adapt4
 #define dav1d_msac_decode_symbol_adapt4  dav1d_msac_decode_symbol_adapt_c
 #endif
 #ifndef dav1d_msac_decode_symbol_adapt8
 #define dav1d_msac_decode_symbol_adapt8  dav1d_msac_decode_symbol_adapt_c
-#endif
-#ifndef dav1d_msac_decode_symbol_adapt16
-#define dav1d_msac_decode_symbol_adapt16 dav1d_msac_decode_symbol_adapt_c
 #endif
 #ifndef dav1d_msac_decode_bool_adapt
 #define dav1d_msac_decode_bool_adapt     dav1d_msac_decode_bool_adapt_c

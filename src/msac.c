@@ -299,10 +299,4 @@ void dav1d_msac_init(MsacContext *const s, const uint8_t *const data,
     s->cnt = -15;
     s->allow_update_cdf = !disable_cdf_update_flag;
     ctx_refill(s);
-
-#if ARCH_X86_64 && HAVE_ASM
-    s->symbol_adapt16 = dav1d_msac_decode_symbol_adapt_c;
-
-    msac_init_x86(s);
-#endif
 }

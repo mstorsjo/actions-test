@@ -1532,13 +1532,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         assert(sign_u == sign / 3);
                         if (sign_u) {
                             const int ctx = (sign_u == 2) * 3 + sign_v;
-                            b->cfl_alpha[0] = dav1d_msac_decode_symbol_adapt16(&ts->msac,
+                            b->cfl_alpha[0] = dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                     ts->cdf.m.cfl_alpha[ctx], 7) + 1;
                             if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
                         }
                         if (sign_v) {
                             const int ctx = (sign_v == 2) * 3 + sign_u;
-                            b->cfl_alpha[1] = dav1d_msac_decode_symbol_adapt16(&ts->msac,
+                            b->cfl_alpha[1] = dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                     ts->cdf.m.cfl_alpha[ctx], 7) + 1;
                             if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
                         }

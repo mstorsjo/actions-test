@@ -42,9 +42,6 @@ endconst
     vldrepl.h       vr0,     a0,      24   //rng
     fst.s           f0,      sp,      0    //val==0
     vld             vr1,     a1,      0    //cdf
-.if \w == 16
-    vld             vr11,    a1,      16
-.endif
     vldrepl.d       vr2,     a0,      16   //dif
     ld.w            t1,      a0,      32   //allow_update_cdf
     la.local        t2,      min_prob
@@ -52,53 +49,27 @@ endconst
     slli.w          t3,      a2,      1
     sub.d           t2,      t2,      t3
     vld             vr3,     t2,      0    //min_prob
-.if \w == 16
-    vld             vr13,    t2,      16
-.endif
     vsrli.h         vr4,     vr0,     8    //r = s->rng >> 8
     vslli.h         vr4,     vr4,     8    //r << 8
     vsrli.h         vr5,     vr1,     6
     vslli.h         vr5,     vr5,     7
-.if \w == 16
-    vsrli.h         vr15,    vr11,    6
-    vslli.h         vr15,    vr15,    7
-.endif
     vmuh.hu         vr5,     vr4,     vr5
     vadd.h          vr5,     vr5,     vr3  //v
-.if \w == 16
-    vmuh.hu         vr15,    vr4,     vr15
-    vadd.h          vr15,    vr15,    vr13
-.endif
     addi.d          t8,      sp,      2
     vst             vr5,     t8,      0    //store v
-.if \w == 16
-    vst             vr15,    t8,      16
-.endif
     vreplvei.h      vr20,    vr2,     3    //c
     vsle.hu         vr6,     vr5,     vr20
-.if \w == 16
-    vsle.hu         vr16,    vr15,    vr20
-    vpickev.b       vr21,    vr16,    vr6
-.endif
-.if \w <= 8
     vmskltz.h       vr10,    vr6
-.else
-    vmskltz.b       vr10,    vr21
-.endif
     beqz            t1,      .renorm\()\w
 
     // update_cdf
     alsl.d          t1,      a2,      a1,   1
     ld.h            t2,      t1,      0    //count
     srli.w          t3,      t2,      4    //count >> 4
-.if \w == 16
-    addi.w          t3,      t3,      5    //rate
-.else
     addi.w          t3,      t3,      4
     li.w            t5,      2
     sltu            t5,      t5,      a2
     add.w           t3,      t3,      t5   //rate
-.endif
     sltui           t5,      t2,      32
     add.w           t2,      t2,      t5   //count + (count < 32)
     vreplgr2vr.h    vr9,     t3
@@ -106,22 +77,12 @@ endconst
     vavgr.hu        vr5,     vr6,     vr7  //i >= val ? -1 : 32768
     vsub.h          vr5,     vr5,     vr1
     vsub.h          vr8,     vr1,     vr6
-.if \w == 16
-    vavgr.hu        vr15,    vr16,    vr7
-    vsub.h          vr15,    vr15,    vr11
-    vsub.h          vr18,    vr11,    vr16
-.endif
     vsra.h          vr5,     vr5,     vr9
     vadd.h          vr8,     vr8,     vr5
 .if \w == 4
     fst.d           f8,      a1,      0
 .else
     vst             vr8,     a1,      0
-.endif
-.if \w == 16
-    vsra.h          vr15,    vr15,    vr9
-    vadd.h          vr18,    vr18,    vr15
-    vst             vr18,    a1,      16
 .endif
     st.h            t2,      t1,      0
 
@@ -199,10 +160,6 @@ endfunc
 
 function msac_decode_symbol_adapt8_lsx
     decode_symbol_adapt 8
-endfunc
-
-function msac_decode_symbol_adapt16_lsx
-    decode_symbol_adapt 16
 endfunc
 
 function msac_decode_bool_lsx
