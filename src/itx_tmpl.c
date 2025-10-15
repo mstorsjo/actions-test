@@ -70,7 +70,7 @@ static const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2] = {
 
 static NOINLINE void
 inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
-               const int eob, const /*enum RectTxfmSize*/ int tx, const int shift,
+               const int eob, const /*enum RectTxfmSize*/ int tx,
                const enum TxfmType txtp HIGHBD_DECL_SUFFIX)
 {
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
@@ -158,7 +158,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
             dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> new_shift));
 }
 
-#define inv_txfm_fn(type1, type2, type, pfx, w, h, shift) \
+#define inv_txfm_fn(type1, type2, type, pfx, w, h) \
 static void \
 inv_txfm_add_##type1##_##type2##_##w##x##h##_c(pixel *dst, \
                                                const ptrdiff_t stride, \
@@ -166,88 +166,88 @@ inv_txfm_add_##type1##_##type2##_##w##x##h##_c(pixel *dst, \
                                                const int eob \
                                                HIGHBD_DECL_SUFFIX) \
 { \
-    inv_txfm_add_c(dst, stride, coeff, eob, pfx##TX_##w##X##h, shift, type \
+    inv_txfm_add_c(dst, stride, coeff, eob, pfx##TX_##w##X##h, type \
                    HIGHBD_TAIL_SUFFIX); \
 }
 
-#define inv_txfm_fn64(pfx, w, h, shift) \
-inv_txfm_fn(dct, dct, DCT_DCT, pfx, w, h, shift)
+#define inv_txfm_fn64(pfx, w, h) \
+inv_txfm_fn(dct, dct, DCT_DCT, pfx, w, h)
 
-#define inv_txfm_hl64(pfx, w, h, shift) \
-inv_txfm_fn64(pfx, w, h, shift) \
-inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx,  w, h, shift) \
-inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h, shift) \
-inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h, shift)
+#define inv_txfm_hl64(pfx, w, h) \
+inv_txfm_fn64(pfx, w, h) \
+inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx, w, h) \
+inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h) \
+inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h)
 
-#define inv_txfm_vl64(pfx, w, h, shift) \
-inv_txfm_fn64(pfx, w, h, shift) \
-inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h, shift) \
-inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h, shift) \
-inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h, shift) \
+#define inv_txfm_vl64(pfx, w, h) \
+inv_txfm_fn64(pfx, w, h) \
+inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h) \
+inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h) \
+inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h) \
 
-#define inv_txfm_fn32(pfx, w, h, shift) \
-inv_txfm_fn64(pfx, w, h, shift) \
-inv_txfm_fn(identity, identity, IDTX, pfx, w, h, shift)
+#define inv_txfm_fn32(pfx, w, h) \
+inv_txfm_fn64(pfx, w, h) \
+inv_txfm_fn(identity, identity, IDTX, pfx, w, h)
 
-#define inv_txfm_hl32(pfx, w, h, shift) \
-inv_txfm_hl64(pfx, w, h, shift) \
-inv_txfm_fn(dct,      identity, V_DCT,      pfx, w, h, shift) \
-inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h, shift) \
-inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h, shift) \
-inv_txfm_fn(identity, identity, IDTX,       pfx, w, h, shift)
+#define inv_txfm_hl32(pfx, w, h) \
+inv_txfm_hl64(pfx, w, h) \
+inv_txfm_fn(dct,      identity, V_DCT,      pfx, w, h) \
+inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h) \
+inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h) \
+inv_txfm_fn(identity, identity, IDTX,       pfx, w, h)
 
-#define inv_txfm_vl32(pfx, w, h, shift) \
-inv_txfm_vl64(pfx, w, h, shift) \
-inv_txfm_fn(identity, dct,      H_DCT,      pfx, w, h, shift) \
-inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h, shift) \
-inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h, shift) \
-inv_txfm_fn(identity, identity, IDTX,       pfx, w, h, shift)
+#define inv_txfm_vl32(pfx, w, h) \
+inv_txfm_vl64(pfx, w, h) \
+inv_txfm_fn(identity, dct,      H_DCT,      pfx, w, h) \
+inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h) \
+inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h) \
+inv_txfm_fn(identity, identity, IDTX,       pfx, w, h)
 
-#define inv_txfm_fn16(pfx, w, h, shift) \
-inv_txfm_fn32(pfx, w, h, shift) \
-inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx, w, h, shift) \
-inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h, shift) \
-inv_txfm_fn(adst,     adst,     ADST_ADST,         pfx, w, h, shift) \
-inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h, shift) \
-inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h, shift) \
-inv_txfm_fn(adst,     flipadst, ADST_FLIPADST,     pfx, w, h, shift) \
-inv_txfm_fn(flipadst, adst,     FLIPADST_ADST,     pfx, w, h, shift) \
-inv_txfm_fn(flipadst, flipadst, FLIPADST_FLIPADST, pfx, w, h, shift) \
-inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h, shift) \
-inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h, shift) \
+#define inv_txfm_fn16(pfx, w, h) \
+inv_txfm_fn32(pfx, w, h) \
+inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx, w, h) \
+inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h) \
+inv_txfm_fn(adst,     adst,     ADST_ADST,         pfx, w, h) \
+inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h) \
+inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h) \
+inv_txfm_fn(adst,     flipadst, ADST_FLIPADST,     pfx, w, h) \
+inv_txfm_fn(flipadst, adst,     FLIPADST_ADST,     pfx, w, h) \
+inv_txfm_fn(flipadst, flipadst, FLIPADST_FLIPADST, pfx, w, h) \
+inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h) \
+inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h) \
 
-#define inv_txfm_fn84(pfx, w, h, shift) \
-inv_txfm_fn16(pfx, w, h, shift) \
-inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h, shift) \
-inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h, shift) \
-inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h, shift) \
-inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h, shift) \
+#define inv_txfm_fn84(pfx, w, h) \
+inv_txfm_fn16(pfx, w, h) \
+inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h) \
+inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h) \
+inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h) \
+inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h) \
 
-inv_txfm_fn84( ,  4,  4, 0)
-inv_txfm_fn84(R,  4,  8, 0)
-inv_txfm_fn84(R,  4, 16, 1)
-inv_txfm_vl32(R,  4, 32, 1)
-inv_txfm_vl64(R,  4, 64, 1)
-inv_txfm_fn84(R,  8,  4, 0)
-inv_txfm_fn84( ,  8,  8, 1)
-inv_txfm_fn84(R,  8, 16, 1)
-inv_txfm_vl32(R,  8, 32, 2)
-inv_txfm_vl64(R,  8, 64, 2)
-inv_txfm_fn84(R, 16,  4, 1)
-inv_txfm_fn84(R, 16,  8, 1)
-inv_txfm_fn16( , 16, 16, 2)
-inv_txfm_vl32(R, 16, 32, 1)
-inv_txfm_vl64(R, 16, 64, 2)
-inv_txfm_hl32(R, 32,  4, 2)
-inv_txfm_hl32(R, 32,  8, 2)
-inv_txfm_hl32(R, 32, 16, 1)
-inv_txfm_fn32( , 32, 32, 2)
-inv_txfm_fn64(R, 32, 64, 1)
-inv_txfm_hl64(R, 64,  4, 2)
-inv_txfm_hl64(R, 64,  8, 2)
-inv_txfm_hl64(R, 64, 16, 2)
-inv_txfm_fn64(R, 64, 32, 1)
-inv_txfm_fn64( , 64, 64, 2)
+inv_txfm_fn84( ,  4,  4)
+inv_txfm_fn84(R,  4,  8)
+inv_txfm_fn84(R,  4, 16)
+inv_txfm_vl32(R,  4, 32)
+inv_txfm_vl64(R,  4, 64)
+inv_txfm_fn84(R,  8,  4)
+inv_txfm_fn84( ,  8,  8)
+inv_txfm_fn84(R,  8, 16)
+inv_txfm_vl32(R,  8, 32)
+inv_txfm_vl64(R,  8, 64)
+inv_txfm_fn84(R, 16,  4)
+inv_txfm_fn84(R, 16,  8)
+inv_txfm_fn16( , 16, 16)
+inv_txfm_vl32(R, 16, 32)
+inv_txfm_vl64(R, 16, 64)
+inv_txfm_hl32(R, 32,  4)
+inv_txfm_hl32(R, 32,  8)
+inv_txfm_hl32(R, 32, 16)
+inv_txfm_fn32( , 32, 32)
+inv_txfm_fn64(R, 32, 64)
+inv_txfm_hl64(R, 64,  4)
+inv_txfm_hl64(R, 64,  8)
+inv_txfm_hl64(R, 64, 16)
+inv_txfm_fn64(R, 64, 32)
+inv_txfm_fn64( , 64, 64)
 
 #if !(HAVE_ASM && TRIM_DSP_FUNCTIONS && ( \
   ARCH_AARCH64 || \
