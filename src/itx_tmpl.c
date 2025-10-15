@@ -104,13 +104,10 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     const int sh = imin(h, 32), sw = imin(w, 32);
 #if BITDEPTH == 8
     const int row_clip_min = INT16_MIN;
-    const int col_clip_min = INT16_MIN;
 #else
     const int row_clip_min = (int) ((unsigned) ~bitdepth_max << 7);
-    const int col_clip_min = (int) ((unsigned) ~bitdepth_max << 5);
 #endif
     const int row_clip_max = ~row_clip_min;
-    const int col_clip_max = ~col_clip_min;
 
     int32_t tmp[64 * 64], *c = tmp;
 #if 0
