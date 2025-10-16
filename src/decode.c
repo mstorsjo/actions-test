@@ -1884,32 +1884,55 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                        b->mv[0].y, b->mv[0].x, b->mv[1].y, b->mv[1].x,
                        b->ref[0], b->ref[1]);
         } else if (is_comp) {
-            const int same_refs = f->seq_hdr->num_same_ref_comp;
             const int n_refs = f->frame_hdr->n_ref_frames;
-            int n = 0;
-            for (int i = 0, maybe_same_ref = !!same_refs;
-                 i < n_refs + n - 2 + maybe_same_ref; i++)
-            {
-                int bit;
-                if (!n && (i == 2 || (i >= n_refs - 2 && i + 1 >= same_refs))) {
-                    bit = 1;
-                } else {
-                    bit = 0;
-                    printf("FIXME: comp_ref\n");
-                    printf("Post-comp_ref[type=%d,nbits=%d,ctx=%d|%d|%d,n=%d/%d,implicit=%d,mhscr=%d,%d]: r=%d,d=%lx\n",
-                           -1, n, 0, -1, i, i, n, 0, maybe_same_ref, bit,
-                           ts->msac.rng, ts->msac.dif >> 48);
+            if (n_refs > 1) {
+                const int same_refs = f->seq_hdr->num_same_ref_comp;
+                int n = 0;
+                uint8_t cnt[9] = { 0 };
+                if (idx > 0) {
+                    cnt[nx[0]->ref[0][xoff[0]] + 1]++;
+                    cnt[nx[0]->ref[1][xoff[0]] + 1]++;
+                    if (idx > 1) {
+                        cnt[nx[1]->ref[0][xoff[1]] + 1]++;
+                        cnt[nx[1]->ref[1][xoff[1]] + 1]++;
+                    }
                 }
-                if (bit) b->ref[n++] = i;
-                if (maybe_same_ref) {
-                    assert(i < same_refs);
-                    maybe_same_ref = !bit && i + 1 < same_refs;
-                    i -= bit;
+                int cnt_rem = idx * 2 - cnt[0] - cnt[8];
+                for (int i = 0, maybe_same_ref = !!same_refs, dir;
+                     i < n_refs + n - 2 + maybe_same_ref; i++)
+                {
+                    int bit;
+                    const int cnt_cur = cnt[i + 1];
+                    cnt_rem -= cnt_cur;
+                    if (!n && (i == 2 || (i >= n_refs - 2 && i + 1 >= same_refs))) {
+                        bit = 1;
+                    } else {
+                        const int ctx = iclip(cnt_cur - cnt_rem + 1, 0, 2);
+                        uint16_t *const cdf =
+                            n == 0 ? ts->cdf.m.comp0_ref[ctx][i] :
+                            ts->cdf.m.comp1_ref[ctx][dir ^ f->refdir[i]][i];
+                        bit = dav1d_msac_decode_bool_adapt(&ts->msac, cdf);
+                    }
+                    if (bit) {
+                        b->ref[n++] = i;
+                        if (n == 2) break;
+                        dir = f->refdir[i];
+                    }
+                    if (maybe_same_ref) {
+                        assert(i < same_refs);
+                        maybe_same_ref = !bit && i + 1 < same_refs;
+                        if (bit) {
+                            i--;
+                            cnt_rem += cnt_cur;
+                        }
+                    }
                 }
-            }
-            if (n < 2) {
-                b->ref[1] = n_refs - 1;
-                if (!n) b->ref[0] = n_refs - 1 - (same_refs < n_refs);
+                if (n < 2) {
+                    b->ref[1] = n_refs - 1;
+                    if (!n) b->ref[0] = n_refs - 1 - (same_refs < n_refs);
+                }
+            } else {
+                b->ref[0] = b->ref[1] = 0;
             }
             DEBUG_BLOCK_printf("%*sPost-ref[%d,%d]: r=%d\n",
                                depth, "", b->ref[0], b->ref[1], ts->msac.rng);

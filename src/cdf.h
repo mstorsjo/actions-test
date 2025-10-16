@@ -103,6 +103,8 @@ typedef struct CdfModeContext {
     uint16_t tip[3][3];
     uint16_t comp[5][3];
     uint16_t single_ref[3][6][3];
+    uint16_t comp0_ref[3][6][3];
+    uint16_t comp1_ref[3][2][6][3];
     uint16_t tip_mode[3];
     uint16_t warp[5][3];
     uint16_t warp_newmv[3];
