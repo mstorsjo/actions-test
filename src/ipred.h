@@ -86,7 +86,7 @@ typedef decl_pal_pred_fn(*pal_pred_fn);
  */
 #define decl_orip_fn(name) \
 void (name)(pixel *dst, ptrdiff_t stride, const pixel *topleft, \
-            int th_mask, int width, int height HIGHBD_DECL_SUFFIX)
+            unsigned th_mask, int width, int height HIGHBD_DECL_SUFFIX)
 typedef decl_orip_fn(*orip_fn);
 
 typedef struct Dav1dIntraPredDSPContext {

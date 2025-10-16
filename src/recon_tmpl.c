@@ -1398,8 +1398,6 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xf;
 
     if (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED) {
-        int n_pel_left = th + 3;
-        int n_pel_above = tw + th;
         pixel *const edge = bitfn(t->scratch.edge) + 128;
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
@@ -1435,7 +1433,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             m == VERT_PRED ? t_dim->w < 8 : m == HOR_PRED ? t_dim->h < 8 :
                 m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8;
         if (has_orip) {
-            const unsigned th_mask = ((m == VERT_PRED) << 1) | m == HOR_PRED;
+            const unsigned th_mask = ((m == VERT_PRED) << 1) | (m == HOR_PRED);
             dsp->ipred.orip(dst, PXSTRIDE(f->cur.stride[0]), edge, th_mask,
                             tw, th HIGHBD_CALL_SUFFIX);
 
