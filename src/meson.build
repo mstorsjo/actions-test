@@ -34,6 +34,7 @@ libdav1d_sources = files(
     'data.c',
     'decode.c',
     'getbits.c',
+    'ibp.c',
     'itx_1d.c',
     'lf_mask.c',
     'lib.c',

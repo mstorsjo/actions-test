@@ -1397,19 +1397,23 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->h, f->bh - t->by));
     t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xf;
 
-    if (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED) {
+    if (b->y_mode == HOR_UP_PRED ||
+        (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED))
+    {
         pixel *const edge = bitfn(t->scratch.edge) + 128;
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
         const enum EdgeFlags edge_flags = 0;
-        int angle = 0;
+        int angle = b->y_angle;
         const pixel *top_sb_edge = NULL;
         if (!(t->by & (f->sb_step - 1))) {
             top_sb_edge = f->ipred_edge[0];
             const int sby = t->by >> f->sb_shift;
             top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
+        const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4;
+
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             t->bx, t->bx > ts->tiling.col_start,
@@ -1417,10 +1421,17 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ts->tiling.col_end, ts->tiling.row_end, edge_flags, dst,
             f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
             t_dim->w, t_dim->h, f->seq_hdr->intra_edge_filter,
+            apply_ibp,
             edge HIGHBD_CALL_SUFFIX);
 
+        const int intra_edge_filter_flag = f->seq_hdr->intra_edge_filter << 10;
+        const int intra_ibp_flag = apply_ibp << 11;
+        const int intra_flags =
+            sm_flag(t->a, bx4) | sm_flag(&t->l, by4) | intra_edge_filter_flag |
+            intra_ibp_flag;
+
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
-                                 edge, tw, th, angle,
+                                 edge, tw, th, angle | intra_flags,
                                  4 * f->bw - 4 * t->bx,
                                  4 * f->bh - 4 * t->by
                                  HIGHBD_CALL_SUFFIX);

@@ -42,6 +42,7 @@
 
 #include "src/cpu.h"
 #include "src/fg_apply.h"
+#include "src/ibp.h"
 #include "src/internal.h"
 #include "src/log.h"
 #include "src/obu.h"
@@ -52,6 +53,7 @@
 
 static COLD void init_internal(void) {
     dav1d_init_cpu();
+    dav1d_init_ibp_weights();
     dav1d_init_ii_wedge_masks();
     dav1d_init_qm_tables();
     dav1d_init_thread();

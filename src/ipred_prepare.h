@@ -83,6 +83,7 @@ enum IntraPredMode
                                       const pixel *prefilter_toplevel_sb_edge,
                                       enum IntraPredMode mode, int *angle,
                                       int tw, int th, int filter_edge,
+                                      const int apply_ibp,
                                       pixel *topleft_out HIGHBD_DECL_SUFFIX);
 
 // These flags are OR'd with the angle argument into intra predictors.
@@ -90,6 +91,7 @@ enum IntraPredMode
 // with a filter before using them to predict values in a block.
 // ANGLE_SMOOTH_EDGE_FLAG means that edges are smooth and should use
 // reduced filter strength.
+#define ANGLE_IBP_FLAG             2048
 #define ANGLE_USE_EDGE_FILTER_FLAG 1024
 #define ANGLE_SMOOTH_EDGE_FLAG      512
 

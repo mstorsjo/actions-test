@@ -48,6 +48,9 @@ EXTERN const uint8_t /* enum TxfmType */
 
 EXTERN const uint8_t av1_mode_to_angle_map[8];
 
+EXTERN const uint8_t av1_angle_to_mode_index_z1[22];
+EXTERN const uint8_t av1_angle_to_mode_index_z3[14];
+
 EXTERN const uint8_t /* enum InterPredMode */
                      dav1d_comp_inter_pred_modes[][2];
 
@@ -70,6 +73,7 @@ EXTERN const int8_t dav1d_resize_filter[64][8];
 
 EXTERN const uint8_t dav1d_avm_sm_weights[3][64];
 EXTERN const uint16_t dav1d_dr_intra_derivative[44];
+EXTERN const int16_t dr_intra_derivative[90];
 EXTERN const int8_t dav1d_filter_intra_taps[5][64];
 
 EXTERN const uint8_t dav1d_obmc_masks[64];

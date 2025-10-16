@@ -84,10 +84,12 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                   const pixel *prefilter_toplevel_sb_edge,
                                   enum IntraPredMode mode, int *const angle,
                                   const int tw4, const int th4, const int filter_edge,
+                                  const int apply_ibp,
                                   pixel *const topleft_out HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth = bitdepth_from_max(bitdepth_max);
     assert(y < h && x < w);
+    int is_dir = 0;
 
     switch (mode) {
     case VERT_PRED:
@@ -98,6 +100,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     case HOR_DOWN_PRED:
     case HOR_UP_PRED:
     case VERT_LEFT_PRED: {
+        is_dir = 1;
         *angle = av1_mode_to_angle_map[mode - VERT_PRED] + 3 * *angle;
 
         if (*angle <= 90)
@@ -117,7 +120,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     }
 
     // FIXME SMOOTH predictors don't need all of the edge pixels
-    const EdgeMask e = intra_prediction_edges[mode];
+    EdgeMask e = intra_prediction_edges[mode];
     const pixel *dst_top;
     if (have_top &&
         (e.needs_top || e.needs_topleft || (e.needs_left && !have_left)))
@@ -127,6 +130,12 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         } else {
             dst_top = &dst[-PXSTRIDE(stride)];
         }
+    }
+
+    if (is_dir && apply_ibp) {
+        e.needs_top = 1;
+        e.needs_left = 1;
+        e.needs_topleft = 1;
     }
 
     const int tw = tw4 << 2, th = th4 << 2;
@@ -168,7 +177,10 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     }
 
     if (e.needs_top) {
-        const int sz = tw + (e.needs_topright ? th : 3);
+        if (is_dir) {
+            e.needs_topright = apply_ibp ? *angle < 90 || *angle > 180 : *angle < 90;
+        }
+        const int sz = tw + (e.needs_topright ? th : 0);
         pixel *const top = &topleft_out[1];
 
         if (have_top) {
@@ -216,6 +228,17 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         if (print_dbg)
             hex_dump(topleft_out, 1, 1, 1, "tl");
 #endif
+    }
+
+    if (apply_ibp) {
+        const int max_base = tw + th;
+        if (*angle <= 90) {
+            topleft_out[-(max_base + 1)] = topleft_out[-max_base];
+            topleft_out[-(max_base + 2)] = topleft_out[-max_base];
+        } else if (*angle > 180) {
+            topleft_out[max_base + 1] = topleft_out[max_base];
+            topleft_out[max_base + 2] = topleft_out[max_base];
+        }
     }
 
     return mode;
