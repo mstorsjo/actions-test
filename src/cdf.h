@@ -100,7 +100,9 @@ typedef struct CdfModeContext {
 
     /* inter/switch */
     uint16_t intra[4][3];
+    uint16_t tip[3][3];
     uint16_t comp[5][3];
+    uint16_t tip_mode[3];
     uint16_t warp[5][3];
     uint16_t warp_newmv[3];
     uint16_t inter_mode[5][4];
@@ -117,6 +119,7 @@ typedef struct CdfModeContext {
     uint16_t wedge_angle[4][6];
     uint16_t wedge_dist2[4];
     uint16_t wedge_dist[5];
+    uint16_t tip_drl_idx[3][3];
     uint16_t drl_idx[3][5][3];
     uint16_t mvprec_def[3][3];
     uint16_t mvprec_rem[2][3][4];

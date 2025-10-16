@@ -817,12 +817,18 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(19186), 50 },
             { CDF1(16483), 1 },
             { CDF1(8242), 95 },
+        }, .tip = {
+            { CDF1(31852), 118 },
+            { CDF1(18438), 90 },
+            { CDF1(8752), 90 },
         }, .comp = {
             { CDF1(27078), 75 },
             { CDF1(22913), 1 },
             { CDF1(15254), 1 },
             { CDF1(13473), 1 },
             { CDF1(5765), 0 },
+        }, .tip_mode = {
+            CDF1(29069), 0
         }, .warp = {
             { CDF1(31021), 118 },
             { CDF1(25430), 76 },
@@ -888,6 +894,10 @@ static const CdfDefaultContext default_cdf = {
             CDF3(5746, 15860, 20435), 75
         }, .wedge_dist2 = {
             CDF2(11164, 18454), 90
+        }, .tip_drl_idx = {
+            { CDF1(31561) },
+            { CDF1(27203) },
+            { CDF1(21916) }
         }, .drl_idx = {
             {
                 { CDF1(20581), 118 },
@@ -6358,7 +6368,9 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(4, 1, m.region_type);
     update_cdf_2d(3, 1, m.skip_mode);
     update_cdf_2d(4, 1, m.intra);
+    update_cdf_2d(3, 1, m.tip);
     update_cdf_2d(5, 1, m.comp);
+    update_cdf_1d(1, m.tip_mode);
     update_cdf_2d(5, 1, m.warp);
     update_cdf_1d(1, m.warp_newmv);
     update_cdf_2d(5, 2, m.inter_mode);
@@ -6375,6 +6387,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(4, 4, m.wedge_angle);
     update_cdf_1d(3, m.wedge_dist);
     update_cdf_1d(2, m.wedge_dist2);
+    update_cdf_2d(3, 1, m.tip_drl_idx);
     update_cdf_3d(3, 5, 1, m.drl_idx);
     update_cdf_2d(3, 1, m.mvprec_def);
     update_cdf_3d(2, 3, 2, m.mvprec_rem);

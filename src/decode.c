@@ -1834,15 +1834,22 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     } else {
         // inter-specific mode/mv coding
-        int is_comp, has_subpel_filter;
+        int is_comp, has_subpel_filter, is_tip = 0;
+
+        if (!b->skip_mode && f->frame_hdr->tip.frame_mode &&
+            cbs == lbs && imax(bw4, bh4) >= 2)
+        {
+            const int ctx = (idx < 1 ? 0 : nx[0]->ref[0][xoff[0]] == 36) +
+                            (idx < 2 ? 0 : nx[1]->ref[0][xoff[1]] == 36);
+            is_tip = dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip[ctx]);
+            DEBUG_BLOCK_printf("%*sPost-tip[ctx=%d,%d]: r=%d\n",
+                               depth, "", ctx, is_tip, ts->msac.rng);
+        }
 
         if (b->skip_mode) {
             is_comp = 1;
-        } else if (f->frame_hdr->tip.frame_mode &&
-                   cbs == lbs && imax(bw4, bh4) >= 2)
-        {
-            printf("FIXME: tip\n");
-        } else if ((!seg || (seg->ref == -1 && !seg->globalmv && !seg->skip)) &&
+        } else if (!is_tip &&
+                   (!seg || (seg->ref == -1 && !seg->globalmv && !seg->skip)) &&
                    f->frame_hdr->switchable_comp_refs && bw4 * bh4 >= 4)
         {
             const int ctx = get_comp_ctx(nb, boff, idx, f->refdir);
@@ -2103,12 +2110,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else if (seg && (seg->globalmv || seg->skip)) {
                 b->ref[0] = 0;
             } else {
-                const int n_refs = f->frame_hdr->n_ref_frames;
-                int i;
-                for (i = 0; i < n_refs - 1; i++) {
-                    printf("FIXME: single_ref\n");
+                if (is_tip) {
+                    b->ref[0] = 36;
+                } else {
+                    const int n_refs = f->frame_hdr->n_ref_frames;
+                    int i;
+                    for (i = 0; i < n_refs - 1; i++) {
+                        printf("FIXME: single_ref\n");
+                    }
+                    b->ref[0] = i;
                 }
-                b->ref[0] = i;
                 DEBUG_BLOCK_printf("%*sPost-ref[%d,-1]: r=%d\n",
                                    depth, "", b->ref[0], ts->msac.rng);
             }
@@ -2123,9 +2134,14 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             if (seg && (seg->globalmv || seg->skip)) {
                 b->inter_mode = GLOBALMV;
+            } else if (is_tip) {
+                b->inter_mode = NEARMV +
+                    2 * dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip_mode);
+                DEBUG_BLOCK_printf("%*sPost-tip_mode[%d]: r=%d\n",
+                                   depth, "", b->inter_mode, ts->msac.rng);
             } else {
                 int allow_warp = 0;
-                if (imin(bw4, bh4) >= 2 && /* FIXME: no tip */
+                if (imin(bw4, bh4) >= 2 &&
                     f->frame_hdr->motion_modes & (1 << MM_WARP_DELTA) &&
                     f->frame_hdr->warp_motion)
                 {
@@ -2175,9 +2191,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #endif
 
             int warp_ref_idx = 0, warpmv_with_mvd = 0;
-            if (b->inter_mode <= NEWMV) {
+            if (is_tip) {
+                /* do nothing */
+            } else if (b->inter_mode <= NEWMV) {
                 // block-adaptive weighted prediction
-                if (f->frame_hdr->bawp && /* FIXME: not tip */
+                if (f->frame_hdr->bawp &&
                     b->inter_mode != GLOBALMV &&
                     imin(bw4, bh4) >= 2 && !f->svc[b->ref[0]][0].scale)
                 {
@@ -2287,7 +2305,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 int n = 0;
                 for (int ctx = 0; n < max_drl_bits; n++, ctx += ctx < 2) {
                     if (!dav1d_msac_decode_bool_adapt(&ts->msac,
-                             ts->cdf.m.drl_idx[ctx][sngl_ctx]))
+                             is_tip ? ts->cdf.m.tip_drl_idx[ctx] :
+                                      ts->cdf.m.drl_idx[ctx][sngl_ctx]))
                     {
                         break;
                     }
@@ -2414,7 +2433,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    b->warp_ii ? b->wedge_idx : -1, ts->msac.rng);
             }
 
-            has_subpel_filter = b->inter_mode <= NEWMV &&
+            has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
                 (b->inter_mode != GLOBALMV ||
                  f->frame_hdr->gmv[b->ref[0]].type != DAV1D_WM_TYPE_TRANSLATION);
 

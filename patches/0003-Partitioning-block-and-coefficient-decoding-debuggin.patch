@@ -1,4 +1,4 @@
-From 233b283a1c6ed790022d5a6b9f51b1bf0eb4d258 Mon Sep 17 00:00:00 2001
+From 8d18418e7f3a8b77f41eec637ebd666d1e6258a2 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
@@ -692,7 +692,7 @@ index 24617f5bb3..ebead96794 100644
             features->enable_bawp,
             features->allow_warpmv_mode,
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..1945883816 100644
+index 47abeeb4ef..df0946d327 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -830,8 +830,8 @@ index 47abeeb4ef..1945883816 100644
    if (is_tip_ref_frame(mbmi->ref_frame[0])) {
      const int tip_pred_index = aom_read_symbol(
          r, ec_ctx->tip_pred_mode_cdf, TIP_PRED_MODES, ACCT_INFO("tip_mode"));
-+      DEBUG_BLOCK_printf("%*sPost-single_inter_mode[ctx=%d,%d]: r=%d\n",
-+                         depth, "", ctx, tip_pred_index_to_mode[tip_pred_index],
++      DEBUG_BLOCK_printf("%*sPost-tip_mode[%d]: r=%d\n",
++                         depth, "", tip_pred_index_to_mode[tip_pred_index],
 +                         r->ec.rng);
      return tip_pred_index_to_mode[tip_pred_index];
    }
@@ -1844,8 +1844,8 @@ index 47abeeb4ef..1945883816 100644
                          ACCT_INFO("tip_cdf"))) {
        ref_frame[0] = TIP_FRAME;
      }
-+      DEBUG_BLOCK_printf("Post-tip[ctx=%d,%d]: r=%d\n",
-+                         tip_ctx, is_tip_ref_frame(ref_frame[0]),
++      DEBUG_BLOCK_printf("%*sPost-tip[ctx=%d,%d]: r=%d\n",
++                         depth, "", tip_ctx, is_tip_ref_frame(ref_frame[0]),
 +                         r->ec.rng);
    }
  
