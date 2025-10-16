@@ -3638,9 +3638,6 @@ static void read_restoration_info(Dav1dTaskContext *const t,
             const int bidx = bank->bank_idx[n] = (1 + bank->bank_idx[n]) & 3;
             memcpy(bank->filter[bidx][n], filter, sizeof(*filter) * (16 + 2 * !!p));
             bank->bank_size[n] += bank->bank_size[n] < 4;
-            if (f->frame_hdr->frame_offset)
-                printf("p=%d post-class[%d]: r=%d,d=%lx\n",
-                       p, n, ts->msac.rng, ts->msac.dif);
         }
     }
 }
