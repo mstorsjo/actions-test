@@ -3529,7 +3529,7 @@ static void read_restoration_info(Dav1dTaskContext *const t,
             35, 6,  22, 53, 63, 25, 41, 47, 1,  59, 0,  28, 40, 55, 48, 8,
             5,  51, 9,  46, 56, 60, 15, 2,  13, 14, 57, 29, 3,  20, 39, 10
         };
-        static const int8_t zero[16] = { 0 };
+        static const int8_t zero[18] = { 0 };
         for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
             const int r = filter_refs[n];
             // FIXME this cast isn't very pretty
