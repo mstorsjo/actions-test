@@ -63,8 +63,8 @@ jobs:
       run: |
         cd avm
         sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' aom/debug.h
-        sed -i 's|mi_row < 16|mi_row < 3|' aom/debug.h
-        sed -i 's|mi_col < 16|mi_col < 11|' aom/debug.h
+        sed -i 's|mi_row < 16|mi_row < 1|' aom/debug.h
+        sed -i 's|mi_col < 16|mi_col < 12|' aom/debug.h
         git diff
         cd x86-64
         make -j$(nproc) aomdec
@@ -72,8 +72,8 @@ jobs:
     - name: build dav2d (with reconstruction validation)
       run: |
         sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
-        sed -i 's|t->by < 16|t->by < 3|' src/debug.h
-        sed -i 's|t->bx < 16|t->bx < 11|' src/debug.h
+        sed -i 's|t->by < 16|t->by < 1|' src/debug.h
+        sed -i 's|t->bx < 16|t->bx < 12|' src/debug.h
         git diff
         cd build
         ninja

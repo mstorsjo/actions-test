@@ -434,6 +434,43 @@ static const int8_t adst_kernel_sz16[16][16] = {
     {  17, -33,  48, -62,  73, -81,  87, -89,  88, -84,  77, -67,  55, -41,  25,  -8 }
 };
 
+static const int8_t flipadst_kernel_sz4[4][4] = {
+    {  89,  75,  50,  18 },
+    {  75, -18, -89, -50 },
+    {  50, -89,  18,  75 },
+    {  18, -50,  75, -89 }
+};
+
+static const int8_t flipadst_kernel_sz8[8][8] = {
+    {  89,  86,  79,  70,  58,  44,  28,  11 },
+    { -86, -58, -12,  39,  76,  89,  74,  34 },
+    {  79,  12, -66, -87, -34,  48,  89,  54 },
+    { -70,  38,  87,   1, -86, -41,  68,  71 },
+    {  58, -75, -35,  86,  10, -89,  17,  84 },
+    { -44,  88, -44, -44,  88, -44, -44,  88 },
+    {  29, -74,  86, -59,   6,  50, -83,  79 },
+    { -14,  40, -62,  78, -84,  81, -69,  50 }
+};
+
+static const int8_t flipadst_kernel_sz16[16][16] = {
+    {  89,  88,  87,  84,  81,  77,  73,  67,  62,  55,  48,  41,  33,  25,  17,   8 },
+    {  88,  81,  67,  48,  25,   0, -25, -48, -67, -81, -88, -88, -81, -67, -48, -25 },
+    {  87,  67,  33,  -8, -48, -77, -89, -81, -55, -17,  25,  62,  84,  88,  73,  41 },
+    {  84,  48,  -8, -62, -88, -77, -33,  25,  73,  89,  67,  17, -41, -81, -87, -55 },
+    {  81,  25, -48, -88, -67,   0,  67,  88,  48, -25, -81, -81, -25,  48,  88,  67 },
+    {  77,   0, -77, -77,   0,  77,  77,   0, -77, -77,   0,  77,  77,   0, -77, -77 },
+    {  73, -25, -89, -33,  67,  77, -17, -88, -41,  62,  81,  -8, -87, -48,  55,  84 },
+    {  67, -48, -81,  25,  88,   0, -88, -25,  81,  48, -67, -67,  48,  81, -25, -88 },
+    {  62, -67, -55,  73,  48, -77, -41,  81,  33, -84, -25,  87,  17, -88,  -8,  89 },
+    {  55, -81, -17,  89, -25, -77,  62,  48, -84,  -8,  88, -33, -73,  67,  41, -87 },
+    {  48, -88,  25,  67, -81,   0,  81, -67, -25,  88, -48, -48,  88, -25, -67,  81 },
+    {  41, -88,  62,  17, -81,  77,  -8, -67,  87, -33, -48,  89, -55, -25,  84, -73 },
+    {  33, -81,  84, -41, -25,  77, -87,  48,  17, -73,  88, -55, -8,   67, -89,  62 },
+    {  25, -67,  88, -81,  48,   0, -48,  81, -88,  67, -25, -25,  67, -88,  81, -48 },
+    {  17, -48,  73, -87,  88, -77,  55, -25,  -8,  41, -67,  84, -89,  81, -62,  33 },
+    {   8, -25,  41, -55,  67, -77,  84, -88,  89, -87,  81, -73,  62, -48,  33, -17 }
+};
+
 static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     int odd[2], stage1[2];
@@ -643,68 +680,65 @@ static void inv_dct64_1d_c(int32_t *const c, const ptrdiff_t stride) {
 }
 
 static NOINLINE void
-inv_adst4_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
-                        int32_t *const out, const ptrdiff_t out_s)
+inv_dst4_1d(int32_t *const c, const ptrdiff_t stride,
+            const int8_t (*mat)[4])
 {
-    assert(in_s > 0 && out_s != 0);
-    const int8_t (*mat)[4] = adst_kernel_sz4;
+    assert(stride > 0);
     int sums[4];
     for (int i = 0; i < 4; i++) {
         int sum = 0;
         for (int j = 0; j < 4; j++) {
-            sum += mat[j][i] * in[j * in_s];
+            sum += mat[j][i] * c[j * stride];
         }
         sums[i] = sum;
     }
     for (int i = 0; i < 4; i++) {
-        out[i * out_s] = sums[i];
+        c[i * stride] = sums[i];
     }
 }
 
 static NOINLINE void
-inv_adst8_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
-                        int32_t *const out, const ptrdiff_t out_s)
+inv_dst8_1d(int32_t *const c, const ptrdiff_t stride,
+            const int8_t (*mat)[8])
 {
-    assert(in_s > 0 && out_s != 0);
-    const int8_t (*mat)[8] = adst_kernel_sz8;
+    assert(stride > 0);
     int sums[8];
     for (int i = 0; i < 8; i++) {
         int sum = 0;
         for (int j = 0; j < 8; j++) {
-            sum += mat[j][i] * in[j * in_s];
+            sum += mat[j][i] * c[j * stride];
         }
         sums[i] = sum;
     }
     for (int i = 0; i < 8; i++) {
-        out[i * out_s] = sums[i];
+        c[i * stride] = sums[i];
     }
 }
 
 static NOINLINE void
-inv_adst16_1d_internal_c(const int32_t *const in, const ptrdiff_t in_s,
-                         int32_t *const out, const ptrdiff_t out_s)
+inv_dst16_1d(int32_t *const c, const ptrdiff_t stride,
+             const int8_t (*mat)[16])
 {
-    assert(in_s > 0 && out_s != 0);
-    const int8_t (*mat)[16] = adst_kernel_sz16;
+    assert(stride > 0);
     int sums[16];
     for (int i = 0; i < 16; i++) {
         int sum = 0;
         for (int j = 0; j < 16; j++) {
-            sum += mat[j][i] * in[j * in_s];
+            sum += mat[j][i] * c[j * stride];
         }
         sums[i] = sum;
     }
     for (int i = 0; i < 16; i++) {
-        out[i * out_s] = sums[i];
+        c[i * stride] = sums[i];
     }
 }
 
 #define inv_adst_1d(sz) \
 static void inv_adst##sz##_1d_c(int32_t *const c, const ptrdiff_t stride) { \
-    inv_adst##sz##_1d_internal_c(c, stride, c, stride); \
+    inv_dst##sz##_1d(c, stride, adst_kernel_sz##sz); \
 } \
 static void inv_flipadst##sz##_1d_c(int32_t *const c, const ptrdiff_t stride) { \
-    inv_adst##sz##_1d_internal_c(c, stride, &c[(sz - 1) * stride], -stride); \
+    inv_dst##sz##_1d(c, stride, flipadst_kernel_sz##sz); \
 }
 
 inv_adst_1d( 4)
