@@ -1860,6 +1860,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         int mvprec_def = 1, amvd = 0;
+        b->motion_mode = MM_TRANSLATION;
         if (b->skip_mode) {
             b->ref[0] = f->frame_hdr->skip_mode_refs[0];
             b->ref[1] = f->frame_hdr->skip_mode_refs[1];
@@ -2191,6 +2192,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #endif
 
             int warp_ref_idx = 0, warpmv_with_mvd = 0;
+            b->bawp[0] = 0;
             if (is_tip) {
                 /* do nothing */
             } else if (b->inter_mode <= NEWMV) {
@@ -2218,7 +2220,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
 
                 // inter-intra (motion-mode)
-                b->motion_mode = MM_TRANSLATION;
                 if (f->frame_hdr->motion_modes & (1 << MM_INTERINTRA) &&
                     !b->bawp[0] && bw4 * bh4 > 2 && imax(bw4, bh4) <= 16 &&
                     b->inter_mode >= NEARMV && b->inter_mode <= NEWMV)
@@ -2409,8 +2410,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 DEBUG_BLOCK_printf("%*sPost-warp_param_signal[%d,%d,%d,%d]: r=%d\n",
                                    depth, "", b->matrix[0], b->matrix[1],
-                                   (np == 4) * b->matrix[2],
-                                   (np == 4) * b->matrix[3], ts->msac.rng);
+                                   (np == 4) ? b->matrix[2] : 0,
+                                   (np == 4) ? b->matrix[3] : 0, ts->msac.rng);
             }
 
             b->warp_ii = 0;
