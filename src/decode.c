@@ -979,11 +979,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if ((!seg || (!seg->globalmv && seg->ref == -1 && !seg->skip)) &&
         f->frame_hdr->skip_mode_enabled && imin(bw4, bh4) > 1)
     {
-        const int smctx = t->a->skip_mode[bx4] + t->l.skip_mode[by4];
+        const int ctx = nx[0]->skip_mode[xoff[0]] + nx[1]->skip_mode[xoff[1]];
         b->skip_mode = dav1d_msac_decode_bool_adapt(&ts->msac,
-                           ts->cdf.m.skip_mode[smctx]);
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-skipmode[%d]: r=%d\n", b->skip_mode, ts->msac.rng);
+                           ts->cdf.m.skip_mode[ctx]);
+        DEBUG_BLOCK_printf("%*sPost-skip_mode[ctx=%d,%d]: r=%d\n",
+                           depth, "", ctx, b->skip_mode, ts->msac.rng);
     } else {
         b->skip_mode = 0;
     }

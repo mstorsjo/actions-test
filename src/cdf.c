@@ -630,6 +630,10 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(8192), 0 },
             { CDF1(8192), 0 },
             { CDF1(8192), 0 },
+        }, .skip_mode = {
+            { CDF1(31439), 0 },
+            { CDF1(22696), 0 },
+            { CDF1(12045), 0 },
         }, .intra = {
             { CDF1(2375), 75 },
             { CDF1(16902), 75 },
@@ -1271,8 +1275,6 @@ static const CdfDefaultContext default_cdf = {
             { CDF2(8963, 32500), 6 },
             { CDF2(370, 693), 75 },
             { CDF2(25697, 27654), 31 },
-        }, .skip_mode = {
-            { CDF1(32621) }, { CDF1(20708) }, { CDF1( 8127) },
         }, .seg_pred = {
             { CDF1(16384) }, { CDF1(16384) }, { CDF1(16384) },
         }, .seg_id = {
@@ -6354,6 +6356,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
         return;
 
     update_cdf_2d(4, 1, m.region_type);
+    update_cdf_2d(3, 1, m.skip_mode);
     update_cdf_2d(4, 1, m.intra);
     update_cdf_2d(5, 1, m.comp);
     update_cdf_2d(5, 1, m.warp);
