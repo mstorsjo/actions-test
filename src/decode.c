@@ -4515,10 +4515,11 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     }
 
     // setup entropy
-    if (f->frame_hdr->primary_ref_frame == DAV1D_PRIMARY_REF_NONE) {
+    const int p_ref_idx = f->frame_hdr->primary_ref_frame;
+    if (p_ref_idx == DAV1D_PRIMARY_REF_NONE) {
         dav1d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac);
     } else {
-        const int pri_ref = f->frame_hdr->refidx[f->frame_hdr->primary_ref_frame];
+        const int pri_ref = f->frame_hdr->refidx[p_ref_idx];
         dav1d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
     }
     if (f->frame_hdr->refresh_context) {

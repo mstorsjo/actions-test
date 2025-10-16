@@ -6239,7 +6239,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
 {
 #define update_cdf_1d(n1d, name) \
     do { \
-        dst->name[n1d] = 0; \
+        dst->name[n1d] = (dst->name[n1d] * 3) >> 2; \
     } while (0)
 #define update_cdf_2d(n1d, n2d, name) \
     for (int j = 0; j < (n1d); j++) update_cdf_1d(n2d, name[j])

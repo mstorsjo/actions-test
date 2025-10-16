@@ -389,6 +389,9 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
         hdr->avg_cdf_type = dav1d_get_bit(gb);
     hdr->explicit_ref_frame_map = dav1d_get_bit(gb);
     hdr->ref_frames = dav1d_get_bit(gb) ? dav1d_get_bits(gb, 4) + 1 : 8;
+    hdr->ref_frames_log2 = hdr->ref_frames <= 2 ? hdr->ref_frames - 1 :
+                           1 + ulog2(hdr->ref_frames - 1);
+
     hdr->def_max_drl_bits = dav1d_get_uniform(gb, 5) + 1;
     hdr->allow_frame_max_drl_bits = dav1d_get_bit(gb);
     hdr->def_max_bvp_drl_bits = dav1d_get_uniform(gb, 3) + 1;
@@ -544,27 +547,25 @@ int dav1d_parse_sequence_header(Dav1dSequenceHeader *const out,
     return res;
 }
 
-static int read_frame_size(Dav1dContext *const c, GetBits *const gb,
-                           const int use_ref)
-{
-    const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
+static int read_frame_size(Dav1dContext *const c, GetBits *const gb) {
     Dav1dFrameHeader *const hdr = c->frame_hdr;
 
-    if (use_ref) {
-        for (int i = 0; i < 7; i++) {
+    if (hdr->frame_size_override && IS_INTER_OR_SWITCH(hdr)) {
+        for (int i = 0; i < hdr->n_ref_frames; i++) {
             if (dav1d_get_bit(gb)) {
-                const Dav1dThreadPicture *const ref =
-                    &c->refs[c->frame_hdr->refidx[i]].p;
+                const Dav1dThreadPicture *const ref = &c->refs[hdr->refidx[i]].p;
                 if (!ref->p.frame_hdr) return -1;
-                hdr->width = ref->p.frame_hdr->width;
-                hdr->height = ref->p.frame_hdr->height;
-                hdr->render_width = ref->p.frame_hdr->render_width;
-                hdr->render_height = ref->p.frame_hdr->render_height;
+                const Dav1dFrameHeader *const refhdr = ref->p.frame_hdr;
+                hdr->width = refhdr->width;
+                hdr->height = refhdr->height;
+                hdr->render_width = refhdr->render_width;
+                hdr->render_height = refhdr->render_height;
                 return 0;
             }
         }
     }
 
+    const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
     if (hdr->frame_size_override) {
         hdr->width = dav1d_get_bits(gb, seqhdr->width_n_bits) + 1;
         hdr->height = dav1d_get_bits(gb, seqhdr->height_n_bits) + 1;
@@ -589,9 +590,141 @@ static inline int tile_log2(const int sz, const int tgt) {
     return k;
 }
 
-static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
-                           const int active_ref_frames)
-{
+static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
+    const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
+    Dav1dFrameHeader *const hdr = c->frame_hdr;
+    struct Score {
+        int score;
+        uint8_t poc;
+        int8_t pocdiff;
+        uint16_t qidx;
+        uint8_t mlayer;
+        int8_t res_ratio_log2;
+    } ref_info[8];
+    uint8_t sort_idx[8];
+    int n_refs = 0, have_fwd_refs = 0;
+    const unsigned poc = hdr->frame_offset;
+    for (int n = 0; n < 8 && !have_fwd_refs; n++) {
+        if (!c->refs[n].p.p.frame_hdr) continue;
+        have_fwd_refs = get_poc_diff(seqhdr->order_hint_n_bits, poc,
+                                     c->refs[n].p.p.frame_hdr->frame_offset) < 0;
+    }
+    const int mlayer = hdr->mlayer_id, tlayer = hdr->tlayer_id;
+    const int w = hdr->width, h = hdr->height;
+    int minq = 512, maxq = -1;
+    const Dav1dFrameHeader *last_refhdr = NULL;
+    for (int n = 0; n < 8; n++) {
+        struct Score *const r = &ref_info[n];
+        const Dav1dFrameHeader *const refhdr = c->refs[n].p.p.frame_hdr;
+        if (!refhdr || refhdr == last_refhdr) continue;
+        if (seqhdr->tlayer_dependency_present) {
+            if (!(seqhdr->tlayer_dependencies[tlayer] & (1 << refhdr->tlayer_id)))
+                continue;
+        } else {
+            if (tlayer < refhdr->tlayer_id) continue;
+        }
+        r->mlayer = refhdr->mlayer_id;
+        if (seqhdr->mlayer_dependency_present) {
+            if (!(seqhdr->mlayer_dependencies[mlayer] & (1 << r->mlayer)))
+                continue;
+        } else {
+            if (mlayer < r->mlayer) continue;
+        }
+        if (have_resolution &&
+            (2 * w < refhdr->width || 2 * h < refhdr->height ||
+             w > 16 * refhdr->width || h > 16 * refhdr->height))
+        {
+            continue;
+        }
+        r->res_ratio_log2 = -ulog2(refhdr->width * refhdr->height);
+        r->poc = refhdr->frame_offset;
+        r->pocdiff = get_poc_diff(seqhdr->order_hint_n_bits, poc, r->poc);
+        r->qidx = refhdr->quant.yac;
+        maxq = imax(r->qidx, maxq);
+        minq = imin(r->qidx, minq);
+        const unsigned tdist = abs(r->pocdiff) + mlayer - r->mlayer;
+        r->score = have_fwd_refs ? (tdist << 6) :
+                   128 - (128 >> (imin(tdist, 6))) + imax(tdist - 6, 0);
+        r->score += r->res_ratio_log2 * (1 << 5) + r->qidx;
+        int m;
+        for (m = 0; m < n_refs; m++) {
+            const struct Score *const r2 = &ref_info[sort_idx[m]];
+            if (r->score == r2->score && r->poc == r2->poc &&
+                r->mlayer == r2->mlayer)
+            {
+                break;
+            }
+        }
+        if (m < n_refs) continue; // ref already exists
+        for (; m > 0; m--) {
+            const int idx = sort_idx[m - 1];
+            const struct Score *const r2 = &ref_info[idx];
+            if (r2->score <= r->score) break;
+            sort_idx[m] = idx;
+        }
+        sort_idx[m] = n;
+        n_refs++;
+        last_refhdr = refhdr;
+    }
+
+    if (n_refs == 8) {
+        const int q_thr = (maxq + minq + 1) >> 1;
+        int maxpocdiff[2] = { 0, 0 }, num[2] = { 0, 0 }, furthest_idx[2];
+        for (int n = 0; n < 8; n++) {
+            const struct Score *const r = &ref_info[sort_idx[n]];
+            if (r->qidx < q_thr) continue;
+            if (r->pocdiff > 0) {
+                if (r->pocdiff > maxpocdiff[0]) {
+                    maxpocdiff[0] = r->pocdiff;
+                    furthest_idx[0] = n;
+                }
+                num[0]++;
+            } else if (r->pocdiff < 0) {
+                if (r->pocdiff < maxpocdiff[1]) {
+                    maxpocdiff[1] = r->pocdiff;
+                    furthest_idx[1] = n;
+                }
+                num[1]++;
+            }
+        }
+        const int idx = num[0] > num[1] ? furthest_idx[0] :
+                        num[0] < num[1] ? furthest_idx[1] :
+                        furthest_idx[maxpocdiff[0] < maxpocdiff[1]];
+        if (idx < 7) {
+            memcpy(&sort_idx[idx], &sort_idx[idx + 1], 7 - idx);
+            sort_idx[7] = idx;
+        }
+    }
+
+    for (int n = 0; n < 7; n++)
+        hdr->refidx[n] = sort_idx[n < n_refs ? n : 0];
+
+    return imin(7, n_refs);
+}
+
+static inline int derive_primary_ref(const Dav1dContext *const c) {
+    const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
+    const Dav1dFrameHeader *const hdr = c->frame_hdr;
+    int best_idx = DAV1D_PRIMARY_REF_NONE, best_qdiff, best_pocdiff;
+    const int qidx = hdr->quant.yac, poc = hdr->frame_offset;
+    for (int i = 0; i < hdr->n_ref_frames; i++) {
+        const Dav1dFrameHeader *const refhdr = c->refs[hdr->refidx[i]].p.p.frame_hdr;
+        if (!refhdr || IS_KEY_OR_INTRA(refhdr)) continue;
+        const int ref_qidx = refhdr->quant.yac, qdiff = abs(ref_qidx - qidx);
+        const int ref_poc = refhdr->frame_offset, pocdiff =
+            abs(get_poc_diff(seqhdr->order_hint_n_bits, poc, ref_poc));
+        if (best_idx == DAV1D_PRIMARY_REF_NONE || qdiff < best_qdiff ||
+            (qdiff == best_qdiff && pocdiff < best_pocdiff))
+        {
+            best_idx = i;
+            best_pocdiff = pocdiff;
+            best_qdiff = qdiff;
+        }
+    }
+    return best_idx;
+}
+
+static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 #define DEBUG_FRAME_HDR 0
 
 #if DEBUG_FRAME_HDR
@@ -657,6 +790,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
             (did_signal_pri_ref = dav1d_get_bit(gb)))
         {
             hdr->primary_ref_frame = dav1d_get_bits(gb, 3);
+            hdr->primary_ref_signaled = 1;
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-frame_size_override_flag[%d,poc=%d,p_ref=%d|%d]: off=%td\n",
@@ -693,9 +827,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
     } else if (seqhdr->short_refresh_frame_flags) {
         const int refresh = dav1d_get_bit(gb);
         if (refresh) {
-            const int b = seqhdr->ref_frames <= 2 ? seqhdr->ref_frames - 1 :
-                          1 + ulog2(seqhdr->ref_frames - 1);
-            const int refresh_idx = dav1d_get_bits(gb, b);
+            const int refresh_idx = dav1d_get_bits(gb, seqhdr->ref_frames_log2);
             if (refresh_idx >= seqhdr->ref_frames) goto error;
             hdr->refresh_frame_flags = 1 << refresh_idx;
         }
@@ -726,8 +858,24 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
-    // FIXME inter frames use refs instead of "0"
-    if (read_frame_size(c, gb, 0) < 0) goto error;
+    if (IS_INTER_OR_SWITCH(hdr)) {
+        if (hdr->frame_type == DAV1D_FRAME_TYPE_SWITCH ||
+            hdr->error_resilient_mode || seqhdr->explicit_ref_frame_map)
+        {
+            // explicit ref frame signaling
+            hdr->n_ref_frames = dav1d_get_bits(gb, 3);
+            if (hdr->n_ref_frames > imin(7, seqhdr->ref_frames)) goto error;
+            for (int n = 0; n < hdr->n_ref_frames; n++) {
+                hdr->refidx[n] = dav1d_get_bits(gb, seqhdr->ref_frames_log2);
+                if (hdr->refidx[n] >= seqhdr->ref_frames) goto error;
+            }
+        } else {
+            // implicit ref frame scoring (this will fill hdr->refidx[])
+            hdr->n_ref_frames = get_ref_frames(c, 0);
+        }
+    }
+
+    if (read_frame_size(c, gb) < 0) goto error;
 #if DEBUG_FRAME_HDR
     printf("HDR: post-framesize[%dx%d]: off=%td\n",
            hdr->width, hdr->height,
@@ -735,15 +883,24 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
 #endif
 
     if (IS_INTER_OR_SWITCH(hdr)) {
+        if (hdr->frame_type != DAV1D_FRAME_TYPE_SWITCH &&
+            !hdr->error_resilient_mode && !seqhdr->explicit_ref_frame_map)
+        {
+            // this includes resolution constraints
+            hdr->n_ref_frames = get_ref_frames(c, 1);
+            if (!hdr->primary_ref_signaled)
+                hdr->primary_ref_frame = derive_primary_ref(c);
+        }
+
         // FIXME bru
 
         if (!hdr->error_resilient_mode && seqhdr->ref_frame_mvs)
             hdr->use_ref_frame_mvs = dav1d_get_bit(gb);
         hdr->tmvp_sample_step = 1 +
-            (hdr->use_ref_frame_mvs && active_ref_frames > 1 && dav1d_get_bit(gb));
+            (hdr->use_ref_frame_mvs && hdr->n_ref_frames > 1 && dav1d_get_bit(gb));
         if (seqhdr->lf_sub_pu)
             hdr->loopfilter.lf_sub_pu = dav1d_get_bit(gb);
-        if (seqhdr->tip && active_ref_frames > 1 && hdr->use_ref_frame_mvs) {
+        if (seqhdr->tip && hdr->n_ref_frames > 1 && hdr->use_ref_frame_mvs) {
             hdr->tip.frame_mode = dav1d_get_bit(gb) ? 2 /* output */ :
                                   dav1d_get_bit(gb); // 1: ref, or 0: disabled
             if (hdr->tip.frame_mode) {
@@ -1580,19 +1737,10 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
         c->frame_hdr->tlayer_id = tlayer_id;
         c->frame_hdr->mlayer_id = mlayer_id;
         c->frame_hdr->xlayer_id = xlayer_id;
-        int n_ref_frames = 0;
-        for (int n = 0; n < (int) ARRAY_SIZE(c->refs); n++) {
-            if (!c->refs[n].p.p.data[0]) continue;
-            int m;
-            for (m = n - 1; m >= 0; m--)
-                if (c->refs[n].p.p.data[0] == c->refs[m].p.p.data[0]) break;
-            n_ref_frames += m == -1;
-        }
-        if ((res = parse_frame_hdr(c, &gb, n_ref_frames)) < 0) {
+        if ((res = parse_frame_hdr(c, &gb)) < 0) {
             c->frame_hdr = NULL;
             goto error;
         }
-        c->frame_hdr->n_ref_frames = n_ref_frames;
         for (int n = 0; n < c->n_tile_data; n++)
             dav1d_data_unref_internal(&c->tile[n].data);
         c->n_tile_data = 0;

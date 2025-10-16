@@ -289,7 +289,8 @@ typedef struct Dav1dSequenceHeader {
     enum Dav1dAdaptiveBoolean cdef_on_skiptx;
     uint8_t avg_cdf, avg_cdf_type;
     uint8_t explicit_ref_frame_map;
-    uint8_t ref_frames, def_max_drl_bits, allow_frame_max_drl_bits;
+    uint8_t ref_frames, ref_frames_log2;
+    uint8_t def_max_drl_bits, allow_frame_max_drl_bits;
     uint8_t def_max_bvp_drl_bits, allow_max_bvp_drl_bits;
     uint8_t num_same_ref_comp, sdp, ext_sdp, ist[2 /* intra, inter */];
     uint8_t chroma_dctonly, tx64_resample, inter_ddt, reduced_tx_part_set;
@@ -376,7 +377,7 @@ typedef struct Dav1dFrameHeader {
     uint8_t allow_screen_content_tools;
     uint8_t force_integer_mv;
     uint8_t frame_size_override;
-    uint8_t primary_ref_frame;
+    uint8_t primary_ref_signaled, primary_ref_frame;
     uint8_t n_ref_frames;
     uint8_t buffer_removal_time_present;
     struct Dav1dFrameHeaderOperatingPoint {
