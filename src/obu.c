@@ -916,7 +916,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
 #endif
 
     // quant data
-    hdr->quant.yac = dav1d_get_bits(gb, 8 + seqhdr->hbd);
+    hdr->quant.yac = dav1d_get_bits(gb, 8 + !!seqhdr->hbd);
     if (seqhdr->ydc_dq_enabled && dav1d_get_bit(gb))
         hdr->quant.ydc_delta = dav1d_get_sbits(gb, 7);
     if (!seqhdr->monochrome && (seqhdr->uvdc_dq_enabled ||
