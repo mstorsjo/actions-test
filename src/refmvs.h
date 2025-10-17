@@ -159,6 +159,8 @@ static inline void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *const dsp
                    col_end8, row_end8, col_start8, row_start8);
 }
 
+mv mv_projection(const union mv mv, const int num, const int den);
+
 // initialize tile boundaries and refmvs_block pointers for one tile/sbrow
 void dav1d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,
                                   int tile_col_start4, int tile_col_end4,

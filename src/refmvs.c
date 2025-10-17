@@ -172,7 +172,7 @@ static int scan_col(refmvs_candidate *const mvstack, int *const cnt,
     }
 }
 
-static inline union mv mv_projection(const union mv mv, const int num, const int den) {
+mv mv_projection(const union mv mv, const int num, const int den) {
     static const uint16_t div_mult[32] = {
            0, 16384, 8192, 5461, 4096, 3276, 2730, 2340,
         2048,  1820, 1638, 1489, 1365, 1260, 1170, 1092,

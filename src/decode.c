@@ -725,6 +725,34 @@ static int read_wedge_idx(Dav1dTileState *const ts) {
     return wedge_angle_dist2idx[angle][dist];
 }
 
+static inline void jmvd_scale(union mv *const mv, const int amvd,
+                              const int jmvd_scale_mode)
+{
+    if (amvd) {
+        switch (jmvd_scale_mode) {
+        default: assert(0);
+        case 0: break;
+        case 1:
+            mv->y *= 2;
+            mv->x *= 2;
+            break;
+        case 2:
+            mv->y /= 2;
+            mv->x /= 2;
+            break;
+        }
+    } else {
+        switch (jmvd_scale_mode) {
+        default: assert(0);
+        case 0: break;
+        case 1: mv->y *= 2; break;
+        case 2: mv->x *= 2; break;
+        case 3: mv->y /= 2; break;
+        case 4: mv->x /= 2; break;
+        }
+    }
+}
+
 static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const enum BlockSize lbs, const enum BlockSize cbs)
 {
@@ -2017,6 +2045,17 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 #endif
 
+            int jmvd_scale_mode;
+            if (b->inter_mode == JOINT_NEWMV || b->inter_mode == OPFL_JOINT_NEWMV) {
+                jmvd_scale_mode = amvd ?
+                    dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        ts->cdf.m.jmvd_amvd_scale_mode, 2) :
+                    dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                        ts->cdf.m.jmvd_scale_mode, 4);
+                DEBUG_BLOCK_printf("%*sPost-jmvd_scale_mode[%d]: r=%d\n",
+                                   depth, "", jmvd_scale_mode, ts->msac.rng);
+            }
+
             // drl
             int drl_idx[2] = { 0, 0 };
             if (b->inter_mode != GLOBALMV_GLOBALMV) {
@@ -2042,32 +2081,59 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             // FIXME a couple of newmv-related symbols [mv_prec, refinemv]?
 
-            if (b->inter_mode != GLOBALMV_GLOBALMV) for (int n = 0; n < 2; n++) {
-                b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
-                const enum InterPredMode m =
-                    dav1d_comp_inter_pred_modes[n][b->inter_mode - NEARMV_NEARMV];
-                if (m != NEWMV) continue;
-
-                const int mv_prec = 6;
+            if (b->inter_mode != GLOBALMV_GLOBALMV) {
+                int start = 0, end = 2;
+                int refdist[2];
+                if (b->inter_mode == JOINT_NEWMV ||
+                    b->inter_mode == OPFL_JOINT_NEWMV)
+                {
+                    refdist[0] = f->absrefdist[b->ref[0]];
+                    refdist[1] = f->absrefdist[b->ref[1]];
+                    start = refdist[0] < refdist[1];
+                    if (f->refdir[b->ref[0]] ^ f->refdir[b->ref[1]])
+                        refdist[1] = -refdist[1];
+                    end = start + 1;
+                }
                 mv diff;
-                if (amvd) {
-                    read_amvd(ts, &diff);
-                } else
-                    read_mv_residual(ts, &ts->cdf.mv, &diff, mv_prec);
-                if (diff.y) {
-                    const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
-                    if (s) diff.y = -diff.y;
+                int n;
+                const int mv_prec = 6; // FIXME isn't this supposed to be coded?
+                for (n = start; n < end; n++) {
+                    b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
+                    const enum InterPredMode m =
+                        dav1d_comp_inter_pred_modes[b->inter_mode -
+                                                    NEARMV_NEARMV][n];
+                    if (m != NEWMV) continue;
+
+                    if (amvd) {
+                        read_amvd(ts, &diff);
+                    } else
+                        read_mv_residual(ts, &ts->cdf.mv, &diff, mv_prec);
+                    if (diff.y) {
+                        const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        if (s) diff.y = -diff.y;
+                    }
+                    if (diff.x) {
+                        const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        if (s) diff.x = -diff.x;
+                    }
+                    mv_reduce_prec(&b->mv[n], mv_prec);
+                    b->mv[n].x += diff.x;
+                    b->mv[n].y += diff.y;
+                    DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
+                                       depth, "", n, diff.y, diff.x,
+                                       ts->msac.rng);
                 }
-                if (diff.x) {
-                    const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
-                    if (s) diff.x = -diff.x;
+                if (b->inter_mode == JOINT_NEWMV ||
+                    b->inter_mode == OPFL_JOINT_NEWMV)
+                {
+                    n &= 1; // "the one not handled above"
+                    diff = mv_projection(diff, refdist[1], refdist[0]);
+                    jmvd_scale(&diff, amvd, jmvd_scale_mode);
+                    b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
+                    mv_reduce_prec(&b->mv[n], mv_prec);
+                    b->mv[n].x += diff.x;
+                    b->mv[n].y += diff.y;
                 }
-                mv_reduce_prec(&b->mv[n], mv_prec);
-                b->mv[n].x += diff.x;
-                b->mv[n].y += diff.y;
-                DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
-                                   depth, "", n, diff.y, diff.x,
-                                   ts->msac.rng);
             }
             // FIXME not gmv^2 if not translational
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */;
@@ -2085,7 +2151,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int cctx0 = comptype_ctx(0), cctx1 = comptype_ctx(1);
 #undef comptype_ctx
                 const int ctx = cctx0 + cctx1 + (cctx0 && cctx1) +
-                    (abs(f->refdist[b->ref[0]]) == abs(f->refdist[b->ref[1]])) * 6;
+                    (f->absrefdist[b->ref[0]] == f->absrefdist[b->ref[1]]) * 6;
                 const int has_mask = dav1d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.comp_type_masked[ctx]);
                 if (has_mask) {
@@ -4667,6 +4733,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                 f->refpoc[i] = f->refp[i].p.frame_hdr->frame_offset;
                 const int delta = f->refdist[i] =
                     get_poc_diff(f->seq_hdr->order_hint_n_bits, f->refpoc[i], poc);
+                f->absrefdist[i] = abs(delta);
                 f->refdir[i] = delta > 0;
                 if (delta > 0 && (furthest_future_refidx < 0 ||
                                   f->refdist[furthest_future_refidx] < delta))

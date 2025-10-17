@@ -123,6 +123,8 @@ typedef struct CdfModeContext {
     uint16_t wedge_dist2[4];
     uint16_t wedge_dist[5];
     uint16_t tip_drl_idx[3][3];
+    uint16_t jmvd_amvd_scale_mode[4];
+    uint16_t jmvd_scale_mode[6];
     uint16_t drl_idx[3][5][3];
     uint16_t mvprec_def[3][3];
     uint16_t mvprec_rem[2][3][4];

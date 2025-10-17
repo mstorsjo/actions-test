@@ -994,6 +994,10 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(31561) },
             { CDF1(27203) },
             { CDF1(21916) }
+        }, .jmvd_amvd_scale_mode = {
+            CDF2(24903, 28074), 75
+        }, .jmvd_scale_mode = {
+            CDF4(18498, 21150, 23573, 28129), 1
         }, .drl_idx = {
             {
                 { CDF1(20581), 118 },
@@ -6490,6 +6494,8 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_1d(3, m.wedge_dist);
     update_cdf_1d(2, m.wedge_dist2);
     update_cdf_2d(3, 1, m.tip_drl_idx);
+    update_cdf_1d(2, m.jmvd_amvd_scale_mode);
+    update_cdf_1d(4, m.jmvd_scale_mode);
     update_cdf_3d(3, 5, 1, m.drl_idx);
     update_cdf_2d(3, 1, m.mvprec_def);
     update_cdf_3d(2, 3, 2, m.mvprec_rem);
