@@ -213,7 +213,7 @@ static inline int get_snglref_ctx(const BlockContext *const a,
     if (dir->ref[0][idx] == ref) { \
         cnt++; \
         newmv += !!((1 << dir->mode[idx]) & NEWMV0_MODE_MASK); \
-    } else if (dir->ref[1][idx] == idx) { \
+    } else if (dir->ref[1][idx] == ref) { \
         cnt++; \
         newmv += !!((1 << dir->mode[idx]) & NEWMV1_MODE_MASK); \
     } \
