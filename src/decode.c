@@ -2115,9 +2115,28 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->ref[0] = TIP_FRAME;
                 } else {
                     const int n_refs = f->frame_hdr->n_ref_frames;
-                    int i;
-                    for (i = 0; i < n_refs - 1; i++) {
-                        printf("FIXME: single_ref\n");
+                    int i = 0;
+                    if (n_refs > 1) {
+                        uint8_t cnt[9] = { 0 };
+                        if (idx > 0) {
+                            cnt[nx[0]->ref[0][xoff[0]] + 1]++;
+                            cnt[nx[0]->ref[1][xoff[0]] + 1]++;
+                            if (idx > 1) {
+                                cnt[nx[1]->ref[0][xoff[1]] + 1]++;
+                                cnt[nx[1]->ref[1][xoff[1]] + 1]++;
+                            }
+                        }
+                        int cnt_rem = idx * 2 - cnt[0] - cnt[8];
+                        do {
+                            const int cnt_cur = cnt[i + 1];
+                            cnt_rem -= cnt_cur;
+                            const int ctx = iclip(cnt_cur - cnt_rem + 1, 0, 2);
+                            if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                                    ts->cdf.m.single_ref[ctx][i]))
+                            {
+                                break;
+                            }
+                        } while (++i < n_refs - 1);
                     }
                     b->ref[0] = i;
                 }

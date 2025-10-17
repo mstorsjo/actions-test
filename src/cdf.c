@@ -827,6 +827,29 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(15254), 1 },
             { CDF1(13473), 1 },
             { CDF1(5765), 0 },
+        }, .single_ref = {
+            {
+                { CDF1(27505), 0 },
+                { CDF1(26743), 0 },
+                { CDF1(29193), 75 },
+                { CDF1(29517), 0 },
+                { CDF1(30241), 0 },
+                { CDF1(30024), 1 },
+            }, {
+                { CDF1(17869), 1 },
+                { CDF1(16112), 6 },
+                { CDF1(19968), 6 },
+                { CDF1(17247), 31 },
+                { CDF1(17293), 32 },
+                { CDF1(11155), 32 },
+            }, {
+                { CDF1(6276), 0 },
+                { CDF1(5153), 0 },
+                { CDF1(6631), 1 },
+                { CDF1(4257), 6 },
+                { CDF1(3798), 1 },
+                { CDF1(1983), 0 },
+            },
         }, .tip_mode = {
             CDF1(29069), 0
         }, .warp = {
@@ -6370,6 +6393,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(4, 1, m.intra);
     update_cdf_2d(3, 1, m.tip);
     update_cdf_2d(5, 1, m.comp);
+    update_cdf_3d(3, 6, 1, m.single_ref);
     update_cdf_1d(1, m.tip_mode);
     update_cdf_2d(5, 1, m.warp);
     update_cdf_1d(1, m.warp_newmv);
