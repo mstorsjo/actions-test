@@ -702,10 +702,11 @@ static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
     return imin(7, n_refs);
 }
 
-static inline int derive_primary_ref(const Dav1dContext *const c) {
+static void derive_pri_sec_ref(const Dav1dContext *const c, int refs[2]) {
     const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
     const Dav1dFrameHeader *const hdr = c->frame_hdr;
-    int best_idx = DAV1D_PRIMARY_REF_NONE, best_qdiff, best_pocdiff;
+    refs[0] = DAV1D_PRIMARY_REF_NONE;
+    int best_qdiff[2], best_pocdiff[2], best = 0;
     const int qidx = hdr->quant.yac, poc = hdr->frame_offset;
     for (int i = 0; i < hdr->n_ref_frames; i++) {
         const Dav1dFrameHeader *const refhdr = c->refs[hdr->refidx[i]].p.p.frame_hdr;
@@ -713,15 +714,23 @@ static inline int derive_primary_ref(const Dav1dContext *const c) {
         const int ref_qidx = refhdr->quant.yac, qdiff = abs(ref_qidx - qidx);
         const int ref_poc = refhdr->frame_offset, pocdiff =
             abs(get_poc_diff(seqhdr->order_hint_n_bits, poc, ref_poc));
-        if (best_idx == DAV1D_PRIMARY_REF_NONE || qdiff < best_qdiff ||
-            (qdiff == best_qdiff && pocdiff < best_pocdiff))
-        {
-            best_idx = i;
-            best_pocdiff = pocdiff;
-            best_qdiff = qdiff;
+        for (int n = 0, m = best; n < 2; n++, m = !m) {
+            if (refs[m] == DAV1D_PRIMARY_REF_NONE || qdiff < best_qdiff[m] ||
+                (qdiff == best_qdiff[m] && pocdiff < best_pocdiff[m]))
+            {
+                refs[!best] = i;
+                best_pocdiff[!best] = pocdiff;
+                best_qdiff[!best] = qdiff;
+                if (!n) best = !best;
+                break;
+            }
         }
     }
-    return best_idx;
+    if (best) {
+        const int tmp = refs[0];
+        refs[0] = refs[1];
+        refs[1] = tmp;
+    }
 }
 
 static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
@@ -883,13 +892,11 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
 #endif
 
     if (IS_INTER_OR_SWITCH(hdr)) {
-        if (hdr->frame_type != DAV1D_FRAME_TYPE_SWITCH &&
+        if (hdr->frame_type == DAV1D_FRAME_TYPE_INTER &&
             !hdr->error_resilient_mode && !seqhdr->explicit_ref_frame_map)
         {
-            // this includes resolution constraints
+            // include resolution constraints
             hdr->n_ref_frames = get_ref_frames(c, 1);
-            if (!hdr->primary_ref_signaled)
-                hdr->primary_ref_frame = derive_primary_ref(c);
         }
 
         // FIXME bru
@@ -1097,6 +1104,17 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
             hdr->quant.vac_delta = hdr->quant.uac_delta;
         }
     }
+
+    hdr->secondary_ref_frame = DAV1D_PRIMARY_REF_NONE;
+    if (IS_INTER_OR_SWITCH(hdr) && !hdr->error_resilient_mode) {
+        int refs[2];
+        derive_pri_sec_ref(c, refs);
+        if (!hdr->primary_ref_signaled)
+            hdr->primary_ref_frame = refs[0];
+        if (hdr->primary_ref_frame != DAV1D_PRIMARY_REF_NONE)
+            hdr->secondary_ref_frame = refs[refs[0] == hdr->primary_ref_frame];
+    }
+
 #if DEBUG_FRAME_HDR
     printf("HDR: post-quant[yac:%d,deltas=ydc:%d,uac:%d/dc:%d,vac:%d/dc:%d]: off=%td\n",
            hdr->quant.yac, hdr->quant.ydc_delta,

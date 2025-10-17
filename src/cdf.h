@@ -93,9 +93,9 @@ typedef struct CdfModeContext {
     uint16_t stx_set_adst[5];
     uint16_t stx_set[8];
     uint16_t cctx[8];
-    ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS], 16);
-    ALIGN(uint16_t delta_q[4], 8);
-    ALIGN(uint16_t delta_lf[5][4], 8);
+    ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS + 1], 16);
+    ALIGN(uint16_t delta_q[4 + 1], 8);
+    ALIGN(uint16_t delta_lf[5][4 + 1], 8);
 
     /* inter/switch */
     uint16_t skip_mode[3][3];
@@ -146,7 +146,7 @@ typedef struct CdfModeContext {
     uint16_t comp_type_weighted[3];
     uint16_t cwp_idx[4][3];
     uint16_t filter[8][5];
-    ALIGN(uint16_t seg_pred[3][2], 4);
+    ALIGN(uint16_t seg_pred[3][2 + 1], 4);
 } CdfModeContext;
 
 typedef struct CdfCoefContext {
@@ -205,13 +205,16 @@ typedef struct CdfThreadContext {
     atomic_uint *progress;
 } CdfThreadContext;
 
+void dav1d_cdf_reset_count(const Dav1dFrameHeader *hdr, CdfContext *dst,
+                           const CdfContext *src);
+void dav1d_cdf_pri_sec_average(const Dav1dFrameHeader *hdr, CdfContext *dst,
+                               const CdfThreadContext *src1,
+                               const CdfThreadContext *src2);
 void dav1d_cdf_thread_init_static(CdfThreadContext *cdf, unsigned qidx);
 int dav1d_cdf_thread_alloc(Dav1dContext *c, CdfThreadContext *cdf,
                            const int have_frame_mt);
 void dav1d_cdf_thread_copy(CdfContext *dst, const CdfThreadContext *src);
 void dav1d_cdf_thread_ref(CdfThreadContext *dst, CdfThreadContext *src);
 void dav1d_cdf_thread_unref(CdfThreadContext *cdf);
-void dav1d_cdf_thread_update(const Dav1dFrameHeader *hdr, CdfContext *dst,
-                             const CdfContext *src);
 
 #endif /* DAV1D_SRC_CDF_H */

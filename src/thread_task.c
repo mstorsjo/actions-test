@@ -580,8 +580,18 @@ void *dav1d_worker_task(void *data) {
                     // We will need to set init_done before adding to the
                     // pending Q, so maybe return the tasks, set init_done,
                     // and add to pending Q only then.
-                    const int p1 = f->in_cdf.progress ?
-                        atomic_load(f->in_cdf.progress) : 1;
+                    int p1;
+                    const Dav1dFrameHeader *const hdr = f->frame_hdr;
+                    if (hdr->secondary_ref_frame == DAV1D_PRIMARY_REF_NONE) {
+                        p1 = f->in_cdf.progress ?
+                             atomic_load(f->in_cdf.progress) : 1;
+                    } else {
+                        p1 = f->src_cdf[0].progress ?
+                             atomic_load(f->src_cdf[0].progress) : 1;
+                        if (p1 == 1)
+                            p1 = f->src_cdf[1].progress ?
+                                 atomic_load(f->src_cdf[1].progress) : 1;
+                    }
                     if (p1) {
                         atomic_fetch_or(&f->task_thread.error, p1 == TILE_ERROR);
                         goto found;
@@ -692,7 +702,17 @@ void *dav1d_worker_task(void *data) {
         case DAV1D_TASK_TYPE_INIT: {
             assert(c->n_fc > 1);
             int res = dav1d_decode_frame_init(f);
-            int p1 = f->in_cdf.progress ? atomic_load(f->in_cdf.progress) : 1;
+            int p1;
+            const Dav1dFrameHeader *const hdr = f->frame_hdr;
+            if (hdr->secondary_ref_frame == DAV1D_PRIMARY_REF_NONE) {
+                p1 = f->in_cdf.progress ? atomic_load(f->in_cdf.progress) : 1;
+            } else {
+                p1 = f->src_cdf[0].progress ?
+                     atomic_load(f->src_cdf[0].progress) : 1;
+                if (p1 == 1)
+                    p1 = f->src_cdf[1].progress ?
+                         atomic_load(f->src_cdf[1].progress) : 1;
+            }
             if (res || p1 == TILE_ERROR) {
                 pthread_mutex_lock(&ttd->lock);
                 abort_frame(f, res ? res : DAV1D_ERR(EINVAL));
@@ -784,8 +804,8 @@ void *dav1d_worker_task(void *data) {
                     f->frame_hdr->tiling.update == tile_idx)
                 {
                     if (!error)
-                        dav1d_cdf_thread_update(f->frame_hdr, f->out_cdf.data.cdf,
-                                                &f->ts[f->frame_hdr->tiling.update].cdf);
+                        dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf,
+                                              &f->ts[f->frame_hdr->tiling.update].cdf);
                     if (c->n_fc > 1)
                         atomic_store(f->out_cdf.progress, error ? TILE_ERROR : 1);
                 }

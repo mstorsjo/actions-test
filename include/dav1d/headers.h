@@ -377,7 +377,7 @@ typedef struct Dav1dFrameHeader {
     uint8_t allow_screen_content_tools;
     uint8_t force_integer_mv;
     uint8_t frame_size_override;
-    uint8_t primary_ref_signaled, primary_ref_frame;
+    uint8_t primary_ref_signaled, primary_ref_frame, secondary_ref_frame;
     uint8_t n_ref_frames;
     uint8_t buffer_removal_time_present;
     struct Dav1dFrameHeaderOperatingPoint {

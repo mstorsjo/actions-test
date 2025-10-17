@@ -6364,179 +6364,221 @@ static const CdfCoefContext default_coef_cdf[4] = {
     }
 };
 
-void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
-                             CdfContext *const dst,
-                             const CdfContext *const src)
+#define update_cdf_1d(n1d, type, name, op) op(n1d, type, name)
+#define update_cdf_2d(n1d, n2d, type, name, op) \
+    for (int j = 0; j < (n1d); j++) update_cdf_1d(n2d, type, name[j], op)
+#define update_cdf_3d(n1d, n2d, n3d, type, name, op) \
+    for (int k = 0; k < (n1d); k++) update_cdf_2d(n2d, n3d, type, name[k], op)
+#define update_cdf_4d(n1d, n2d, n3d, n4d, type, name, op) \
+    for (int l = 0; l < (n1d); l++) update_cdf_3d(n2d, n3d, n4d, type, name[l], op)
+
+#define update_mv_cdfs(type, op) \
+    update_cdf_1d(1, type, shell_set, op); \
+    update_cdf_2d(7, 7, type, shell_lower, op); \
+    update_cdf_2d(7, 7, type, shell_upper, op); \
+    update_cdf_2d(2, 1, type, shell_offset_low, op); \
+    update_cdf_1d(1, type, shell_offset_cl2, op); \
+    update_cdf_2d(16, 1, type, shell_offset_hi, op); \
+    update_cdf_2d(2, 1, type, col_component, op); \
+    update_cdf_2d(4, 1, type, col_index, op)
+
+#define update_cdfs(op, may_ret_on_kf) \
+    update_cdf_2d(2, 1, m, rst_switchable, op); \
+    update_cdf_1d(1, m, rst_ns_wiener, op); \
+    update_cdf_1d(1, m, rst_pc_wiener, op); \
+    update_cdf_2d(2, 1, m, wiener_ns_len, op); \
+    update_cdf_1d(1, m, wiener_ns_sym, op); \
+    update_cdf_1d(3, m, wiener_ns_cf, op); \
+    update_cdf_3d(2, 64, 1, m, part_split, op); \
+    update_cdf_2d(8, 1, m, part_square, op); \
+    update_cdf_3d(2, 64, 1, m, part_dir, op); \
+    update_cdf_3d(2, 64, 1, m, part_ext, op); \
+    update_cdf_3d(2, 64, 1, m, part_4way, op); \
+    update_cdf_2d(3, 1, m, intrabc, op); \
+    update_cdf_1d(1, m, gdf, op); \
+    update_cdf_2d(4, 1, m, cdef_idx0, op); \
+    update_cdf_2d(6, 1 + j, m, cdef_idx, op); \
+    update_cdf_3d(3, 4, 1, m, ccso, op); \
+    update_cdf_2d(6, 1, m, skip_txfm, op); \
+    update_cdf_1d(3, m, intra_y_set, op); \
+    update_cdf_2d(3, 7, m, intra_y_idx0, op); \
+    update_cdf_2d(3, 5, m, intra_y_idx1, op); \
+    update_cdf_3d(4, 6, 1, m, fsc, op); \
+    update_cdf_2d(3, 3, m, mrl_index, op); \
+    update_cdf_2d(3, 1, m, multi_mrl, op); \
+    update_cdf_1d(1, m, pal_y, op); \
+    update_cdf_1d(6, m, pal_sz, op); \
+    update_cdf_1d(5, m, dip_mode, op); \
+    update_cdf_2d(3, 1, m, cfl, op); \
+    update_cdf_2d(2, 7, m, intra_uv_mode, op); \
+    update_cdf_1d(1, m, mhccp, op); \
+    update_cdf_2d(4, 2, m, mhccp_filter_dir, op); \
+    update_cdf_1d(1, m, cfl_type, op); \
+    update_cdf_1d(7, m, cfl_sign, op); \
+    update_cdf_2d(6, 7, m, cfl_alpha, op); \
+    update_cdf_2d(4, 2, m, pal_idx_identity, op); \
+    update_cdf_3d(7, 5, k + 1, m, pal_idx, op); \
+    update_cdf_1d(1, m, intrabc_mode, op); \
+    update_cdf_1d(1, m, intrabc_precision, op); \
+    update_cdf_2d(3, 1, m, morph_pred, op); \
+    update_cdf_4d(2, 2, 9, 1, m, tx_split, op); \
+    update_cdf_4d(2, 2, 14, 6, m, tx_part_2d, op); \
+    update_cdf_4d(2, 2, 2, 1, m, tx_part_1d, op); \
+    update_cdf_2d(2, 1, m, txtp_long32_dct, op); \
+    update_cdf_2d(4, 3, m, txtp_intra_short_1d, op); \
+    update_cdf_3d(3, 4, 3, m, txtp_inter_short_1d, op); \
+    update_cdf_2d(4, 6, m, txtp_ext, op); \
+    update_cdf_2d(4, 1, m, txtp_ext_reduced, op); \
+    update_cdf_4d(2, 3, 4, 1, m, txtp_inter_tx_set, op); \
+    update_cdf_3d(2, 3, 7, m, txtp_inter_set0, op); \
+    update_cdf_2d(3, 7, m, txtp_inter_set1, op); \
+    update_cdf_2d(3, 3, m, txtp_inter_set2, op); \
+    update_cdf_3d(3, 4, 1, m, txtp_inter_dct_idtx, op); \
+    update_cdf_3d(2, 5, 3, m, stx, op); \
+    update_cdf_1d(3, m, stx_set_adst, op); \
+    update_cdf_1d(6, m, stx_set, op); \
+    update_cdf_1d(6, m, cctx, op); \
+\
+    update_cdf_4d(2, N_TX_SIZES, 20, 1, coef, skip, op); \
+    update_cdf_2d(3, 4, coef, eob_bin_16, op); \
+    update_cdf_2d(3, 5, coef, eob_bin_32, op); \
+    update_cdf_2d(3, 6, coef, eob_bin_64, op); \
+    update_cdf_2d(3, 7, coef, eob_bin_128, op); \
+    update_cdf_2d(3, 7, coef, eob_bin_256, op); \
+    update_cdf_2d(3, 7, coef, eob_bin_512, op); \
+    update_cdf_2d(3, 7, coef, eob_bin_1024, op); \
+    update_cdf_1d(1, coef, eob_hi_bit, op); \
+    update_cdf_3d(5, 4, 2, coef, eob_base_y_tok_hf, op); \
+    update_cdf_4d(5, 20, 2, 3, coef, base_y_tok_hf, op); \
+    update_cdf_2d(7, 3, coef, br_y_tok_hf, op); \
+    update_cdf_3d(5, 4, 4, coef, eob_base_y_tok_lf, op); \
+    update_cdf_4d(5, 33, 2, 5, coef, base_y_tok_lf, op); \
+    update_cdf_2d(14, 3, coef, br_y_tok_lf, op); \
+    update_cdf_4d(2, 2, 3, 1, coef, dc_sign, op); \
+    update_cdf_3d(3, 3, 2, coef, bob_base_y_tok, op); \
+    update_cdf_3d(3, 7, 3, coef, br_y_tok_idtx, op); \
+    update_cdf_3d(3, 7, 3, coef, base_y_tok_idtx, op); \
+    update_cdf_3d(3, 9, 1, coef, sign_idtx, op); \
+    update_cdf_2d(3, 1, coef, dip, op); \
+    update_cdf_2d(12, 1, coef, skip_v, op); \
+    update_cdf_2d(4, 2, coef, eob_base_uv_tok_hf, op); \
+    update_cdf_2d(12, 3, coef, base_uv_tok_hf, op); \
+    update_cdf_2d(4, 3, coef, br_uv_tok_hf, op); \
+    update_cdf_2d(4, 4, coef, eob_base_uv_tok_lf, op); \
+    update_cdf_2d(12, 5, coef, base_uv_tok_lf, op); \
+\
+    update_cdf_2d(3, DAV1D_MAX_SEGMENTS - 1, m, seg_id, op); \
+    update_cdf_1d(3, m, delta_q, op); \
+    update_cdf_2d(5, 3, m, delta_lf, op); \
+ \
+    update_mv_cdfs(dmv, op); \
+ \
+    if (may_ret_on_kf && IS_KEY_OR_INTRA(hdr)) \
+        return; \
+ \
+    update_cdf_2d(4, 1, m, region_type, op); \
+    update_cdf_2d(3, 1, m, skip_mode, op); \
+    update_cdf_2d(3, 1, m, skip_mode_drl_idx, op); \
+    update_cdf_2d(4, 1, m, intra, op); \
+    update_cdf_2d(3, 1, m, tip, op); \
+    update_cdf_2d(5, 1, m, comp, op); \
+    update_cdf_3d(3, 6, 1, m, single_ref, op); \
+    update_cdf_3d(3, 6, 1, m, comp0_ref, op); \
+    update_cdf_4d(3, 2, 6, 1, m, comp1_ref, op); \
+    update_cdf_1d(1, m, tip_mode, op); \
+    update_cdf_2d(5, 1, m, warp, op); \
+    update_cdf_1d(1, m, warp_newmv, op); \
+    update_cdf_2d(5, 2, m, inter_mode, op); \
+    update_cdf_3d(9, 3, 1, m, amvd, op); \
+    update_cdf_2d(2, 1, m, bawp, op); \
+    update_cdf_2d(3, 1, m, bawp_explicit, op); \
+    update_cdf_1d(1, m, bawp_explicit_scale, op); \
+    update_cdf_2d(3, 1, m, warp_extend, op); \
+    update_cdf_2d(4, 1, m, warp_causal, op); \
+    update_cdf_2d(4, 1, m, interintra, op); \
+    update_cdf_2d(4, 3, m, interintra_mode, op); \
+    update_cdf_1d(1, m, interintra_wedge, op); \
+    update_cdf_1d(3, m, wedge_quad, op); \
+    update_cdf_2d(4, 4, m, wedge_angle, op); \
+    update_cdf_1d(3, m, wedge_dist, op); \
+    update_cdf_1d(2, m, wedge_dist2, op); \
+    update_cdf_2d(3, 1, m, tip_drl_idx, op); \
+    update_cdf_1d(2, m, jmvd_amvd_scale_mode, op); \
+    update_cdf_1d(4, m, jmvd_scale_mode, op); \
+    update_cdf_3d(3, 5, 1, m, drl_idx, op); \
+    update_cdf_2d(3, 1, m, mvprec_def, op); \
+    update_cdf_3d(2, 3, 2, m, mvprec_rem, op); \
+    update_cdf_2d(3, 1, m, warp_ref_idx, op); \
+    update_cdf_1d(3, m, amvd_joint, op); \
+    update_cdf_2d(2, 7, m, amvd_index, op); \
+    update_cdf_1d(1, m, warpmv_with_mvd, op); \
+    update_cdf_2d(N_BS_SIZES, 1, m, warp_delta_prec, op); \
+    update_cdf_3d(2, 2, 7, m, warp_delta_param, op); \
+    update_cdf_1d(1, m, warp_delta_sign, op); \
+    update_cdf_2d(4, 1, m, warp_interintra, op); \
+    update_cdf_2d(5, 3, m, comp_mode_sameref, op); \
+    update_cdf_2d(2, 1, m, comp_mode_joint, op); \
+    update_cdf_2d(5, 4, m, comp_mode, op); \
+    update_cdf_2d(2, 1, m, opfl, op); \
+    update_cdf_2d(11, 1, m, refine_mv, op); \
+    update_cdf_2d(12, 1, m, comp_type_masked, op); \
+    update_cdf_1d(1, m, comp_type_weighted, op); \
+    update_cdf_2d(4, 1, m, cwp_idx, op); \
+    update_cdf_2d(8, 2, m, filter, op); \
+\
+    update_cdf_2d(3, 1, m, seg_pred, op); \
+\
+    update_mv_cdfs(mv, op)
+
+void dav1d_cdf_reset_count(const Dav1dFrameHeader *const hdr,
+                           CdfContext *const dst,
+                           const CdfContext *const src)
 {
-#define update_cdf_1d(n1d, name) \
+#define reset_count(n1d, type, name) \
     do { \
-        dst->name[n1d] = (dst->name[n1d] * 3) >> 2; \
+        dst->type.name[n1d] = (dst->type.name[n1d] * 3) >> 2; \
     } while (0)
-#define update_cdf_2d(n1d, n2d, name) \
-    for (int j = 0; j < (n1d); j++) update_cdf_1d(n2d, name[j])
-#define update_cdf_3d(n1d, n2d, n3d, name) \
-    for (int k = 0; k < (n1d); k++) update_cdf_2d(n2d, n3d, name[k])
-#define update_cdf_4d(n1d, n2d, n3d, n4d, name) \
-    for (int l = 0; l < (n1d); l++) update_cdf_3d(n2d, n3d, n4d, name[l])
 
     memcpy(dst, src, sizeof(CdfContext));
+    update_cdfs(reset_count, 1);
+#undef reset_count
+}
 
-    update_cdf_2d(2, 1, m.rst_switchable);
-    update_cdf_1d(1, m.rst_ns_wiener);
-    update_cdf_1d(1, m.rst_pc_wiener);
-    update_cdf_2d(2, 1, m.wiener_ns_len);
-    update_cdf_1d(1, m.wiener_ns_sym);
-    update_cdf_1d(3, m.wiener_ns_cf);
-    update_cdf_3d(2, 64, 1, m.part_split);
-    update_cdf_2d(8, 1, m.part_square);
-    update_cdf_3d(2, 64, 1, m.part_dir);
-    update_cdf_3d(2, 64, 1, m.part_ext);
-    update_cdf_3d(2, 64, 1, m.part_4way);
-    update_cdf_2d(3, 1, m.intrabc);
-    update_cdf_1d(1, m.gdf);
-    update_cdf_2d(4, 1, m.cdef_idx0);
-    update_cdf_2d(6, 1 + j, m.cdef_idx);
-    update_cdf_3d(3, 4, 1, m.ccso);
-    update_cdf_2d(6, 1, m.skip_txfm);
-    update_cdf_1d(3, m.intra_y_set);
-    update_cdf_2d(3, 7, m.intra_y_idx0);
-    update_cdf_2d(3, 5, m.intra_y_idx1);
-    update_cdf_3d(4, 6, 1, m.fsc);
-    update_cdf_2d(3, 3, m.mrl_index);
-    update_cdf_2d(3, 1, m.multi_mrl);
-    update_cdf_1d(1, m.pal_y);
-    update_cdf_1d(6, m.pal_sz);
-    update_cdf_1d(5, m.dip_mode);
-    update_cdf_2d(3, 1, m.cfl);
-    update_cdf_2d(2, 7, m.intra_uv_mode);
-    update_cdf_1d(1, m.mhccp);
-    update_cdf_2d(4, 2, m.mhccp_filter_dir);
-    update_cdf_1d(1, m.cfl_type);
-    update_cdf_1d(7, m.cfl_sign);
-    update_cdf_2d(6, 7, m.cfl_alpha);
-    update_cdf_2d(4, 2, m.pal_idx_identity);
-    update_cdf_3d(7, 5, k + 1, m.pal_idx);
-    update_cdf_1d(1, m.intrabc_mode);
-    update_cdf_1d(1, m.intrabc_precision);
-    update_cdf_2d(3, 1, m.morph_pred);
-    update_cdf_4d(2, 2, 9, 1, m.tx_split);
-    update_cdf_4d(2, 2, 14, 6, m.tx_part_2d);
-    update_cdf_4d(2, 2, 2, 1, m.tx_part_1d);
-    update_cdf_2d(2, 1, m.txtp_long32_dct);
-    update_cdf_2d(4, 3, m.txtp_intra_short_1d);
-    update_cdf_3d(3, 4, 3, m.txtp_inter_short_1d);
-    update_cdf_2d(4, 6, m.txtp_ext);
-    update_cdf_2d(4, 1, m.txtp_ext_reduced);
-    update_cdf_4d(2, 3, 4, 1, m.txtp_inter_tx_set);
-    update_cdf_3d(2, 3, 7, m.txtp_inter_set0);
-    update_cdf_2d(3, 7, m.txtp_inter_set1);
-    update_cdf_2d(3, 3, m.txtp_inter_set2);
-    update_cdf_3d(3, 4, 1, m.txtp_inter_dct_idtx);
-    update_cdf_3d(2, 5, 3, m.stx);
-    update_cdf_1d(3, m.stx_set_adst);
-    update_cdf_1d(6, m.stx_set);
-    update_cdf_1d(6, m.cctx);
+void dav1d_cdf_pri_sec_average(const Dav1dFrameHeader *const hdr,
+                               CdfContext *const dst,
+                               const CdfThreadContext *const src1,
+                               const CdfThreadContext *const src2)
+{
+#define pri_sec_average(n1d, type, name) \
+    do { \
+        for (int n = 0; n <= n1d; n++) { \
+            dst->type.name[n] = (src1##type->name[n] * 7 + \
+                                 src2##type->name[n] * 1 + 4) >> 3; \
+        } \
+        assert(src1##type->name[n1d + 1] == src2##type->name[n1d + 1]); \
+        dst->type.name[n1d + 1] = src1##type->name[n1d + 1]; \
+    } while (0)
 
-    update_cdf_4d(2, N_TX_SIZES, 20, 1, coef.skip);
-    update_cdf_2d(3, 4, coef.eob_bin_16);
-    update_cdf_2d(3, 5, coef.eob_bin_32);
-    update_cdf_2d(3, 6, coef.eob_bin_64);
-    update_cdf_2d(3, 7, coef.eob_bin_128);
-    update_cdf_2d(3, 7, coef.eob_bin_256);
-    update_cdf_2d(3, 7, coef.eob_bin_512);
-    update_cdf_2d(3, 7, coef.eob_bin_1024);
-    update_cdf_1d(1, coef.eob_hi_bit);
-    update_cdf_3d(5, 4, 2, coef.eob_base_y_tok_hf);
-    update_cdf_4d(5, 20, 2, 3, coef.base_y_tok_hf);
-    update_cdf_2d(7, 3, coef.br_y_tok_hf);
-    update_cdf_3d(5, 4, 4, coef.eob_base_y_tok_lf);
-    update_cdf_4d(5, 33, 2, 5, coef.base_y_tok_lf);
-    update_cdf_2d(14, 3, coef.br_y_tok_lf);
-    update_cdf_4d(2, 2, 3, 1, coef.dc_sign);
-    update_cdf_3d(3, 3, 2, coef.bob_base_y_tok);
-    update_cdf_3d(3, 7, 3, coef.br_y_tok_idtx);
-    update_cdf_3d(3, 7, 3, coef.base_y_tok_idtx);
-    update_cdf_3d(3, 9, 1, coef.sign_idtx);
-    update_cdf_2d(3, 1, coef.dip);
-    update_cdf_2d(12, 1, coef.skip_v);
-    update_cdf_2d(4, 2, coef.eob_base_uv_tok_hf);
-    update_cdf_2d(12, 3, coef.base_uv_tok_hf);
-    update_cdf_2d(4, 3, coef.br_uv_tok_hf);
-    update_cdf_2d(4, 4, coef.eob_base_uv_tok_lf);
-    update_cdf_2d(12, 5, coef.base_uv_tok_lf);
+    const CdfModeContext *src1m, *src2m;
+    const CdfMvContext *src1mv, *src1dmv, *src2mv, *src2dmv;
+    const CdfCoefContext *src1coef, *src2coef;
 
-    update_cdf_2d(3, DAV1D_MAX_SEGMENTS - 1, m.seg_id);
-    update_cdf_1d(3, m.delta_q);
-    update_cdf_2d(5, 3, m.delta_lf);
-
-#define update_mv_cdfs(name) \
-    update_cdf_1d(1, name.shell_set); \
-    update_cdf_2d(7, 7, name.shell_lower); \
-    update_cdf_2d(7, 7, name.shell_upper); \
-    update_cdf_2d(2, 1, name.shell_offset_low); \
-    update_cdf_1d(1, name.shell_offset_cl2); \
-    update_cdf_2d(16, 1, name.shell_offset_hi); \
-    update_cdf_2d(2, 1, name.col_component); \
-    update_cdf_2d(4, 1, name.col_index)
-
-    update_mv_cdfs(dmv);
-
-    if (IS_KEY_OR_INTRA(hdr))
-        return;
-
-    update_cdf_2d(4, 1, m.region_type);
-    update_cdf_2d(3, 1, m.skip_mode);
-    update_cdf_2d(3, 1, m.skip_mode_drl_idx);
-    update_cdf_2d(4, 1, m.intra);
-    update_cdf_2d(3, 1, m.tip);
-    update_cdf_2d(5, 1, m.comp);
-    update_cdf_3d(3, 6, 1, m.single_ref);
-    update_cdf_3d(3, 6, 1, m.comp0_ref);
-    update_cdf_4d(3, 2, 6, 1, m.comp1_ref);
-    update_cdf_1d(1, m.tip_mode);
-    update_cdf_2d(5, 1, m.warp);
-    update_cdf_1d(1, m.warp_newmv);
-    update_cdf_2d(5, 2, m.inter_mode);
-    update_cdf_3d(9, 3, 1, m.amvd);
-    update_cdf_2d(2, 1, m.bawp);
-    update_cdf_2d(3, 1, m.bawp_explicit);
-    update_cdf_1d(1, m.bawp_explicit_scale);
-    update_cdf_2d(3, 1, m.warp_extend);
-    update_cdf_2d(4, 1, m.warp_causal);
-    update_cdf_2d(4, 1, m.interintra);
-    update_cdf_2d(4, 3, m.interintra_mode);
-    update_cdf_1d(1, m.interintra_wedge);
-    update_cdf_1d(3, m.wedge_quad);
-    update_cdf_2d(4, 4, m.wedge_angle);
-    update_cdf_1d(3, m.wedge_dist);
-    update_cdf_1d(2, m.wedge_dist2);
-    update_cdf_2d(3, 1, m.tip_drl_idx);
-    update_cdf_1d(2, m.jmvd_amvd_scale_mode);
-    update_cdf_1d(4, m.jmvd_scale_mode);
-    update_cdf_3d(3, 5, 1, m.drl_idx);
-    update_cdf_2d(3, 1, m.mvprec_def);
-    update_cdf_3d(2, 3, 2, m.mvprec_rem);
-    update_cdf_2d(3, 1, m.warp_ref_idx);
-    update_cdf_1d(3, m.amvd_joint);
-    update_cdf_2d(2, 7, m.amvd_index);
-    update_cdf_1d(1, m.warpmv_with_mvd);
-    update_cdf_2d(N_BS_SIZES, 1, m.warp_delta_prec);
-    update_cdf_3d(2, 2, 7, m.warp_delta_param);
-    update_cdf_1d(1, m.warp_delta_sign);
-    update_cdf_2d(4, 1, m.warp_interintra);
-    update_cdf_2d(5, 3, m.comp_mode_sameref);
-    update_cdf_2d(2, 1, m.comp_mode_joint);
-    update_cdf_2d(5, 4, m.comp_mode);
-    update_cdf_2d(2, 1, m.opfl);
-    update_cdf_2d(11, 1, m.refine_mv);
-    update_cdf_2d(12, 1, m.comp_type_masked);
-    update_cdf_1d(1, m.comp_type_weighted);
-    update_cdf_2d(4, 1, m.cwp_idx);
-    update_cdf_2d(8, 2, m.filter);
-
-    update_cdf_2d(3, 1, m.seg_pred);
-
-    update_mv_cdfs(mv);
+#define assign_src(num) \
+    if (src##num->ref) { \
+        src##num##m = &src##num->data.cdf->m; \
+        src##num##mv = &src##num->data.cdf->mv; \
+        src##num##dmv = &src##num->data.cdf->dmv; \
+        src##num##coef = &src##num->data.cdf->coef; \
+    } else { \
+        src##num##m = &default_cdf.m; \
+        src##num##mv = src##num##dmv = &default_cdf.mv; \
+        src##num##coef = &default_coef_cdf[src##num->data.qcat]; \
+    }
+    assign_src(1);
+    assign_src(2);
+#undef assign_src
+    update_cdfs(pri_sec_average, 0);
+#undef pri_sec_average
 }
 
 /*

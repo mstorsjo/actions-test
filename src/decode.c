@@ -4394,6 +4394,10 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
     const Dav1dContext *const c = f->c;
     int retval = DAV1D_ERR(EINVAL);
 
+    if (f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE) {
+        dav1d_cdf_pri_sec_average(f->frame_hdr, f->in_cdf.data.cdf,
+                                  &f->src_cdf[0], &f->src_cdf[1]);
+    }
     if (f->frame_hdr->refresh_context)
         dav1d_cdf_thread_copy(f->out_cdf.data.cdf, &f->in_cdf);
 
@@ -4517,6 +4521,12 @@ void dav1d_decode_frame_exit(Dav1dFrameContext *const f, int retval) {
     dav1d_picture_unref_internal(&f->cur);
     dav1d_thread_picture_unref(&f->sr_cur);
     dav1d_cdf_thread_unref(&f->in_cdf);
+    if (f->frame_hdr &&
+        f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE)
+    {
+        dav1d_cdf_thread_unref(&f->src_cdf[0]);
+        dav1d_cdf_thread_unref(&f->src_cdf[1]);
+    }
     if (f->frame_hdr && f->frame_hdr->refresh_context) {
         if (f->out_cdf.progress)
             atomic_store(f->out_cdf.progress, retval == 0 ? 1 : TILE_ERROR);
@@ -4558,8 +4568,8 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
         } else {
             res = dav1d_decode_frame_main(f);
             if (!res && f->frame_hdr->refresh_context && f->task_thread.update_set) {
-                dav1d_cdf_thread_update(f->frame_hdr, f->out_cdf.data.cdf,
-                                        &f->ts[f->frame_hdr->tiling.update].cdf);
+                dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf,
+                                      &f->ts[f->frame_hdr->tiling.update].cdf);
             }
         }
     }
@@ -4685,13 +4695,6 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 
     int ref_coded_width[7];
     if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
-        if (f->frame_hdr->primary_ref_frame != DAV1D_PRIMARY_REF_NONE) {
-            const int pri_ref = f->frame_hdr->refidx[f->frame_hdr->primary_ref_frame];
-            if (!c->refs[pri_ref].p.p.data[0]) {
-                res = DAV1D_ERR(EINVAL);
-                goto error;
-            }
-        }
         for (int i = 0; i < 7; i++) {
             const int refidx = f->frame_hdr->refidx[i];
             if (!c->refs[refidx].p.p.data[0] ||
@@ -4735,8 +4738,17 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     if (p_ref_idx == DAV1D_PRIMARY_REF_NONE) {
         dav1d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac);
     } else {
+        const int s_ref_idx = f->frame_hdr->secondary_ref_frame;
         const int pri_ref = f->frame_hdr->refidx[p_ref_idx];
-        dav1d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
+        if (s_ref_idx == DAV1D_PRIMARY_REF_NONE) {
+            dav1d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
+        } else {
+            const int sec_ref = f->frame_hdr->refidx[s_ref_idx];
+            res = dav1d_cdf_thread_alloc(c, &f->in_cdf, c->n_fc > 1);
+            if (res < 0) goto error;
+            dav1d_cdf_thread_ref(&f->src_cdf[0], &c->cdf[pri_ref]);
+            dav1d_cdf_thread_ref(&f->src_cdf[1], &c->cdf[sec_ref]);
+        }
     }
     if (f->frame_hdr->refresh_context) {
         res = dav1d_cdf_thread_alloc(c, &f->out_cdf, c->n_fc > 1);
@@ -4999,6 +5011,10 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 error:
     atomic_init(&f->task_thread.error, 1);
     dav1d_cdf_thread_unref(&f->in_cdf);
+    if (f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE) {
+        dav1d_cdf_thread_unref(&f->src_cdf[0]);
+        dav1d_cdf_thread_unref(&f->src_cdf[1]);
+    }
     if (f->frame_hdr->refresh_context)
         dav1d_cdf_thread_unref(&f->out_cdf);
     for (int i = 0; i < 7; i++) {
