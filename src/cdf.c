@@ -1363,6 +1363,18 @@ static const CdfDefaultContext default_cdf = {
         }, .opfl = {
             { CDF1(16384) },
             { CDF1(16384) },
+        }, .refine_mv = {
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
+            { CDF1(16384), 0 },
         }, .comp_type_masked = {
             { CDF1(9916), 0 },
             { CDF1(7647), 0 },
@@ -6516,6 +6528,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(2, 1, m.comp_mode_joint);
     update_cdf_2d(5, 4, m.comp_mode);
     update_cdf_2d(2, 1, m.opfl);
+    update_cdf_2d(11, 1, m.refine_mv);
     update_cdf_2d(12, 1, m.comp_type_masked);
     update_cdf_1d(1, m.comp_type_weighted);
     update_cdf_2d(4, 1, m.cwp_idx);

@@ -1894,6 +1894,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
         int mvprec_def = 1, amvd = 0;
         b->motion_mode = MM_TRANSLATION;
+        b->refine_mv = 0;
         if (b->skip_mode) {
             const int max_drl_bits = f->frame_hdr->max_drl_bits;
             int drl_idx = 0;
@@ -2114,8 +2115,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", drl_idx[0], drl_idx[1], ts->msac.rng);
             }
 
-            // FIXME a couple of newmv-related symbols [refinemv]?
-
             // mv precision
             int mv_prec = 3 + f->frame_hdr->mv_precision;
             if (mv_prec > 3 && !amvd && f->seq_hdr->flex_mvres && is_newmv_mode) {
@@ -2193,8 +2192,35 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->mv[n].y += diff.y;
                 }
             }
+
+            if (f->seq_hdr->refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
+                b->inter_mode != GLOBALMV_GLOBALMV &&
+                f->refdist[b->ref[0]] == -f->refdist[b->ref[1]] &&
+                !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale &&
+                (f->frame_hdr->opfl_refine_type != 1 /* switchable */ ||
+                 !((1 << b->inter_mode) & ((1 << NEARMV_NEWMV) |
+                                           (1 << NEWMV_NEARMV) |
+                                           (1 << NEWMV_NEWMV) |
+                                           (1 << JOINT_NEWMV)))))
+            {
+                if ((1 << b->inter_mode) & ((1 << NEARMV_NEARMV) |
+                                            (1 << OPFL_NEARMV_NEARMV) |
+                                            (1 << OPFL_JOINT_NEWMV)))
+                {
+                    b->refine_mv = 1;
+                } else {
+                    const int ctx = b->inter_mode - NEARMV_NEARMV;
+                    b->refine_mv = dav1d_msac_decode_bool_adapt(&ts->msac,
+                                       ts->cdf.m.refine_mv[ctx]);
+                    DEBUG_BLOCK_printf("%*sPost-refinemv[ctx=%d,%d]: r=%d\n",
+                                       depth, "", ctx + 1, b->refine_mv,
+                                       ts->msac.rng);
+                }
+            }
+
             // FIXME not gmv^2 if not translational
-            has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */;
+            has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
+                                !b->refine_mv;
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
@@ -2672,7 +2698,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         // subpel filter
-        if (b->skip_mode || b->ref[0] == TIP_FRAME ||
+        if (b->skip_mode || b->ref[0] == TIP_FRAME || b->refine_mv ||
             b->inter_mode >= OPFL_NEARMV_NEARMV)
         {
             assert(!has_subpel_filter);
