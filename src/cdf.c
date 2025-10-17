@@ -634,6 +634,10 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(31439), 0 },
             { CDF1(22696), 0 },
             { CDF1(12045), 0 },
+        }, .skip_mode_drl_idx = {
+            { CDF1(25396), 0 },
+            { CDF1(23881), 0 },
+            { CDF1(21508), 0 }
         }, .intra = {
             { CDF1(2375), 75 },
             { CDF1(16902), 75 },
@@ -6470,6 +6474,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
 
     update_cdf_2d(4, 1, m.region_type);
     update_cdf_2d(3, 1, m.skip_mode);
+    update_cdf_2d(3, 1, m.skip_mode_drl_idx);
     update_cdf_2d(4, 1, m.intra);
     update_cdf_2d(3, 1, m.tip);
     update_cdf_2d(5, 1, m.comp);

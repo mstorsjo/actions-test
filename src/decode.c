@@ -1084,7 +1084,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // skip_txfm
-    if (b->skip_mode || (seg && seg->skip)) {
+    if ((seg && seg->skip)) {
         b->skip_txfm = 1;
     } else if (b->intra && !b->intrabc) {
         b->skip_txfm = 0;
@@ -1895,8 +1895,31 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         int mvprec_def = 1, amvd = 0;
         b->motion_mode = MM_TRANSLATION;
         if (b->skip_mode) {
-            b->ref[0] = f->frame_hdr->skip_mode_refs[0];
-            b->ref[1] = f->frame_hdr->skip_mode_refs[1];
+            const int max_drl_bits = f->frame_hdr->max_drl_bits;
+            int drl_idx = 0;
+            for (int ctx = 0; drl_idx < max_drl_bits; drl_idx++, ctx += ctx < 2) {
+                if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                         ts->cdf.m.skip_mode_drl_idx[ctx]))
+                {
+                    break;
+                }
+            }
+            DEBUG_BLOCK_printf("%*sPost-drl[%d,%d]: r=%d\n",
+                               depth, "", drl_idx, drl_idx, ts->msac.rng);
+
+            b->ref[0] = f->skip_mode_refs[0];
+            b->ref[1] = f->skip_mode_refs[1];
+            for (int n = 0; n < idx; n++) {
+                if (nx[n]->ref[0][xoff[0]] == 7) {
+                    b->ref[0] = imin(f->tip_refs[0], f->tip_refs[1]);
+                    b->ref[1] = imax(f->tip_refs[0], f->tip_refs[1]);
+                    break;
+                } else if (nx[n]->ref[1][xoff[0]] != -1) {
+                    b->ref[0] = nx[n]->ref[0][xoff[0]];
+                    b->ref[1] = nx[n]->ref[1][xoff[0]];
+                    break;
+                }
+            }
             b->comp_type = COMP_INTER_AVG;
             b->inter_mode = NEARMV_NEARMV;
             has_subpel_filter = 0;
@@ -1907,15 +1930,21 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
                               bs, 0, t->by, t->bx);
+#if DEBUG_BLOCK_INFO
+            if (BLOCK_TO_DEBUG) {
+                printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
+                for (int n = 0; n < n_mvs; n++)
+                    printf("%*smv[%d/%d]: y0=%d,x0=%d,y1=%d,x1=%d,w=%d\n",
+                           depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
+                           mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
+                           mvstack[n].mv.mv[1].x, mvstack[n].weight);
+            }
+#endif
 
-            b->mv[0] = mvstack[0].mv.mv[0];
-            b->mv[1] = mvstack[0].mv.mv[1];
-            fix_mv_precision(f->frame_hdr, &b->mv[0]);
-            fix_mv_precision(f->frame_hdr, &b->mv[1]);
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-skipmodeblock[mv=1:y=%d,x=%d,2:y=%d,x=%d,refs=%d+%d\n",
-                       b->mv[0].y, b->mv[0].x, b->mv[1].y, b->mv[1].x,
-                       b->ref[0], b->ref[1]);
+            b->mv[0] = mvstack[drl_idx].mv.mv[0];
+            b->mv[1] = mvstack[drl_idx].mv.mv[1];
+            mv_reduce_prec(&b->mv[0], 3 + f->frame_hdr->mv_precision);
+            mv_reduce_prec(&b->mv[0], 3 + f->frame_hdr->mv_precision);
         } else if (is_comp) {
             const int n_refs = f->frame_hdr->n_ref_frames;
             if (n_refs > 1) {
@@ -2643,7 +2672,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         // subpel filter
-        if (b->ref[0] == TIP_FRAME || b->inter_mode >= OPFL_NEARMV_NEARMV) {
+        if (b->skip_mode || b->ref[0] == TIP_FRAME ||
+            b->inter_mode >= OPFL_NEARMV_NEARMV)
+        {
             assert(!has_subpel_filter);
             b->filter = DAV1D_FILTER_8TAP_SHARP;
         } else if (f->frame_hdr->subpel_filter_mode == DAV1D_FILTER_SWITCHABLE) {
@@ -4852,6 +4883,12 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         f->cur_segmap_ref = NULL;
         f->prev_segmap_ref = NULL;
     }
+
+    // skipmode
+    f->skip_mode_refs[0] = 0;
+    f->skip_mode_refs[1] = f->frame_hdr->skip_mode_enabled &&
+                           f->frame_hdr->n_ref_frames > 1 &&
+                           abs(f->absrefdist[0] - f->absrefdist[1]) <= 1;
 
     // tip
     if (f->frame_hdr->tip.frame_mode) {

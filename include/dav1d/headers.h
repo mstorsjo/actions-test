@@ -483,7 +483,6 @@ typedef struct Dav1dFrameHeader {
     enum Dav1dTxfmMode txfm_mode;
     uint8_t switchable_comp_refs;
     uint8_t skip_mode_enabled;
-    int8_t skip_mode_refs[2];
     uint8_t bawp;
     uint8_t warp_motion;
     uint8_t reduced_txtp_set;

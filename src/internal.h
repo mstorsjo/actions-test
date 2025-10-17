@@ -231,7 +231,7 @@ struct Dav1dFrameContext {
     int8_t furthest_future_refidx;
     uint8_t absrefdist[7];
     int8_t refdist[7];
-    uint8_t tip_refs[2];
+    uint8_t skip_mode_refs[2], tip_refs[2];
     uint8_t gmv_warp_allowed[7];
     CdfThreadContext in_cdf, out_cdf;
     struct Dav1dTileGroup *tile;
