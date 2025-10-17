@@ -2312,7 +2312,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     }
                 }
                 drl_idx = n;
-                DEBUG_BLOCK_printf("%*sPost-drl[%d,0]: r=%d\n",
+                DEBUG_BLOCK_printf("%*sPost-drl[%d,-1]: r=%d\n",
                                    depth, "", drl_idx, ts->msac.rng);
             }
 

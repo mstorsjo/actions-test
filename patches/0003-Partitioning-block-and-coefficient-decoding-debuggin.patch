@@ -1,4 +1,4 @@
-From 8d18418e7f3a8b77f41eec637ebd666d1e6258a2 Mon Sep 17 00:00:00 2001
+From 8f7ac5d3f2fa510401f0eef78a8895bdaa237be7 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
@@ -7,7 +7,7 @@ Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
 ---
  aom/debug.h               |  16 +
  av1/decoder/decodeframe.c | 262 ++++++++++----
- av1/decoder/decodemv.c    | 723 ++++++++++++++++++++++++++++++--------
+ av1/decoder/decodemv.c    | 724 ++++++++++++++++++++++++++++++--------
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.c     |   5 +-
  av1/decoder/decoder.h     |  12 +-
@@ -15,7 +15,7 @@ Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
  av1/decoder/decodetxb.h   |  14 +-
  av1/decoder/detokenize.c  |   8 +-
  av1/decoder/detokenize.h  |   3 +-
- 10 files changed, 1008 insertions(+), 272 deletions(-)
+ 10 files changed, 1009 insertions(+), 272 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -692,7 +692,7 @@ index 24617f5bb3..ebead96794 100644
             features->enable_bawp,
             features->allow_warpmv_mode,
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4ef..df0946d327 100644
+index 47abeeb4ef..619893ccd9 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -2118,7 +2118,7 @@ index 47abeeb4ef..df0946d327 100644
                   ec_ctx, mbmi, r);
 +      DEBUG_BLOCK_printf("%*sPost-drl[%d,%d]: r=%d\n",
 +                         depth, "", mbmi->ref_mv_idx[0],
-+                         mbmi->ref_mv_idx[1], r->ec.rng);
++                         mbmi->ref_mv_idx[0], r->ec.rng);
  
      av1_find_mv_refs(cm, xd, mbmi, ref_frame, dcb->ref_mv_count,
                       xd->ref_mv_stack, xd->weight, ref_mvs, /*global_mvs=*/NULL,
@@ -2215,7 +2215,7 @@ index 47abeeb4ef..df0946d327 100644
        int is_warpmv_warp_causal =
            ((mbmi->motion_mode == WARP_CAUSAL) && mbmi->mode == WARPMV);
        if (mbmi->motion_mode == WARP_DELTA || is_warpmv_warp_causal) {
-@@ -3589,27 +3990,38 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3589,27 +3990,39 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
              xd->valid_num_warp_candidates[av1_ref_frame_type(mbmi->ref_frame)],
              NULL);
  
@@ -2243,7 +2243,8 @@ index 47abeeb4ef..df0946d327 100644
                       ec_ctx, mbmi, r);
 +          DEBUG_BLOCK_printf("%*sPost-drl[%d,%d]: r=%d\n",
 +                             depth, "", mbmi->ref_mv_idx[0],
-+                             mbmi->ref_mv_idx[1], r->ec.rng);
++                             !has_second_ref(mbmi) ? -1 :
++                                 mbmi->ref_mv_idx[has_second_drl(mbmi)], r->ec.rng);
 +      }
        set_mv_precision(mbmi, mbmi->max_mv_precision);
        if (is_pb_mv_precision_active(cm, mbmi, bsize)) {
@@ -2258,7 +2259,7 @@ index 47abeeb4ef..df0946d327 100644
        }
        if (enable_adaptive_mvd_resolution(cm, mbmi))
          set_amvd_mv_precision(mbmi, mbmi->max_mv_precision);
-@@ -3674,7 +4086,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3674,7 +4087,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
    }
  
    const int mv_corrupted_flag =
@@ -2268,7 +2269,7 @@ index 47abeeb4ef..df0946d327 100644
                   is_compound, mbmi->pb_mv_precision, r);
  
    aom_merge_corrupted_flag(&dcb->corrupted, mv_corrupted_flag);
-@@ -3685,7 +4098,7 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3685,7 +4099,7 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
                       mbmi->mode < SINGLE_INTER_MODE_END));
  #endif  // !CONFIG_COMPOUND_WARP_CAUSAL
    if (mbmi->motion_mode == WARP_DELTA) {
@@ -2277,7 +2278,7 @@ index 47abeeb4ef..df0946d327 100644
    }
  
    mbmi->warp_inter_intra = 0;
-@@ -3720,10 +4133,15 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3720,10 +4134,15 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          }
        }
      }  // if (mbmi->warp_inter_intra)
@@ -2294,7 +2295,7 @@ index 47abeeb4ef..df0946d327 100644
    }
  
    // init
-@@ -3786,11 +4204,27 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3786,11 +4205,27 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
              aom_read_literal(r, MAX_DIFFWTD_MASK_BITS, ACCT_INFO("mask_type"));
        }
      }
@@ -2323,7 +2324,7 @@ index 47abeeb4ef..df0946d327 100644
      if (is_cwp_allowed(mbmi) && mbmi->skip_mode)
        mbmi->cwp_idx =
            xd->skip_mvp_candidate_list.ref_mv_stack[mbmi->ref_mv_idx[0]].cwp_idx;
-@@ -3799,10 +4233,13 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3799,10 +4234,13 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      mbmi->refinemv_flag = 0;
    }
  
@@ -2338,7 +2339,7 @@ index 47abeeb4ef..df0946d327 100644
  
    if (mbmi->motion_mode == WARP_CAUSAL) {
      mbmi->wm_params[0].wmtype = DEFAULT_WMTYPE;
-@@ -3954,7 +4391,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3954,7 +4392,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
  #endif  // DEC_MISMATCH_DEBUG
  }
  
@@ -2348,7 +2349,7 @@ index 47abeeb4ef..df0946d327 100644
                                         DecoderCodingBlock *dcb, aom_reader *r) {
    AV1_COMMON *const cm = &pbi->common;
    MACROBLOCKD *const xd = &dcb->xd;
-@@ -3983,9 +4421,13 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3983,9 +4422,13 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->refinemv_flag = 0;
  
    if (xd->tree_type != CHROMA_PART)
@@ -2364,7 +2365,7 @@ index 47abeeb4ef..df0946d327 100644
  
    mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
  
-@@ -4002,7 +4444,8 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4002,7 +4445,8 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    }
  
    if (!mbmi->skip_mode) {
@@ -2374,7 +2375,7 @@ index 47abeeb4ef..df0946d327 100644
    }
  
    if (!inter_block &&
-@@ -4015,11 +4458,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4015,11 +4459,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          aom_read_symbol(r, xd->tile_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -2392,7 +2393,7 @@ index 47abeeb4ef..df0946d327 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -4035,16 +4483,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4035,16 +4484,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->warp_inter_intra = 0;
  
    if (!cm->seg.segid_preskip && xd->tree_type != CHROMA_PART)
@@ -2414,7 +2415,7 @@ index 47abeeb4ef..df0946d327 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -4059,7 +4507,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4059,7 +4508,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->ref_frame[1] = NONE_FRAME;
      mbmi->palette_mode_info.palette_size[0] = 0;
      mbmi->palette_mode_info.palette_size[1] = 0;
@@ -2423,7 +2424,7 @@ index 47abeeb4ef..df0946d327 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -4068,9 +4516,9 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -4068,9 +4517,9 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      }
    }
    if (inter_block)
@@ -2435,7 +2436,7 @@ index 47abeeb4ef..df0946d327 100644
  }
  
  static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
-@@ -4096,7 +4544,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
+@@ -4096,7 +4545,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
    }
  }
  
@@ -2445,7 +2446,7 @@ index 47abeeb4ef..df0946d327 100644
                          aom_reader *r, int x_inside_boundary,
                          int y_inside_boundary) {
    AV1_COMMON *const cm = &pbi->common;
-@@ -4108,7 +4557,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -4108,7 +4558,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
      mi->sb_type[PLANE_TYPE_UV] = mi->sb_type[PLANE_TYPE_Y];
  
    if (frame_is_intra_only(cm)) {
@@ -2454,7 +2455,7 @@ index 47abeeb4ef..df0946d327 100644
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_intrabc_block(mbmi, xd->tree_type)) {
-@@ -4121,7 +4570,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -4121,7 +4571,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
        intra_copy_frame_mvs(cm, xd->mi_row, xd->mi_col, x_inside_boundary,
                             y_inside_boundary);
    } else {
