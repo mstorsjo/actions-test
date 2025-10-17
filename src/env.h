@@ -241,7 +241,8 @@ static inline int get_compref_ctx(const BlockContext *const a,
                                   const int have_top, const int have_left,
                                   const int have_top_right,
                                   const int have_bottom_left,
-                                  const uint8_t *const b_dim, const int8_t ref[2])
+                                  const uint8_t *const b_dim,
+                                  const int8_t ref[2], const uint8_t tipref[2])
 {
     int row = 0, col = 0, newmv = 0;
 
@@ -251,9 +252,13 @@ static inline int get_compref_ctx(const BlockContext *const a,
                          (1 << NEWMV_NEARMV) | \
                          (1 << NEWMV_NEWMV) | \
                          (1 << JOINT_NEWMV))
-    // FIXME tip
 #define add_matching(dir, cnt, idx) do { \
-    if (dir->ref[0][idx] == ref[0] && dir->ref[1][idx] == ref[1]) { \
+    if (dir->ref[0][idx] == TIP_FRAME && \
+        tipref[0] == ref[0] && tipref[1] == ref[1]) \
+    { \
+        cnt++; \
+        newmv += dir->mode[idx] == NEWMV; \
+    } else if (dir->ref[0][idx] == ref[0] && dir->ref[1][idx] == ref[1]) { \
         cnt++; \
         newmv += !!((1 << dir->mode[idx]) & NEWMV_MODE_MASK); \
     } \

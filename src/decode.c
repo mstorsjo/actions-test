@@ -1918,7 +1918,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int have_bottom_left = t->by + bh4 <= ts->tiling.row_end;
             const int comp_ctx =
                 get_compref_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
-                                have_top_right, have_bottom_left, b_dim, b->ref);
+                                have_top_right, have_bottom_left, b_dim,
+                                b->ref, f->tip_refs);
             if (b->ref[0] == b->ref[1]) {
                 b->inter_mode = NEARMV_NEARMV +
                     dav1d_msac_decode_symbol_adapt4(&ts->msac,
@@ -4725,6 +4726,37 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         f->cur_segmap = NULL;
         f->cur_segmap_ref = NULL;
         f->prev_segmap_ref = NULL;
+    }
+
+    // tip
+    if (f->frame_hdr->tip.frame_mode) {
+        const int n_refs = f->frame_hdr->n_ref_frames;
+        if (n_refs > 1) {
+            uint8_t order[7];
+            for (int n = 0; n < f->frame_hdr->n_ref_frames; n++) {
+                const int dist = f->refdist[n];
+                int m;
+                for (m = n; m > 0 && f->refdist[order[m]] > dist; m--)
+                    order[m] = order[m - 1];
+                order[m] = n;
+            }
+            if (f->furthest_future_refidx == -1) {
+                f->tip_refs[0] = order[n_refs - 1];
+                f->tip_refs[1] = order[n_refs - 2];
+            } else if (f->refdir[order[0]]) {
+                f->tip_refs[0] = order[0];
+                f->tip_refs[1] = order[1];
+            } else {
+                int n;
+                for (n = 1; n < n_refs - 1; n++)
+                    if (!f->refdist[order[n]])
+                        break;
+                f->tip_refs[0] = order[n - 1];
+                f->tip_refs[1] = order[n];
+            }
+        } else {
+            f->tip_refs[0] = f->tip_refs[1] = 0;
+        }
     }
 
     // update references etc.
