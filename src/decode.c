@@ -977,7 +977,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // skip_mode
     if ((!seg || (!seg->globalmv && seg->ref == -1 && !seg->skip)) &&
-        f->frame_hdr->skip_mode_enabled && imin(bw4, bh4) > 1)
+        f->frame_hdr->skip_mode_enabled && bw4 * bh4 > 2)
     {
         const int ctx = nx[0]->skip_mode[xoff[0]] + nx[1]->skip_mode[xoff[1]];
         b->skip_mode = dav1d_msac_decode_bool_adapt(&ts->msac,
