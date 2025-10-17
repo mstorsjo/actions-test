@@ -2055,7 +2055,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int cctx0 = comptype_ctx(0), cctx1 = comptype_ctx(1);
 #undef comptype_ctx
                 const int ctx = cctx0 + cctx1 + (cctx0 && cctx1) +
-                    (f->refdist[b->ref[0]] == f->refdist[b->ref[1]]) * 6;
+                    (abs(f->refdist[b->ref[0]]) == abs(f->refdist[b->ref[1]])) * 6;
                 const int has_mask = dav1d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.comp_type_masked[ctx]);
                 if (has_mask) {
