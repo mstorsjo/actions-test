@@ -228,6 +228,11 @@ enum CompInterPredMode {
     GLOBALMV_GLOBALMV,
     NEWMV_NEWMV,
     JOINT_NEWMV,
+    OPFL_NEARMV_NEARMV,
+    OPFL_NEARMV_NEWMV,
+    OPFL_NEWMV_NEARMV,
+    OPFL_NEWMV_NEWMV,
+    OPFL_JOINT_NEWMV,
 };
 
 enum CompInterType {

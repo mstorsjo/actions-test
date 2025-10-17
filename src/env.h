@@ -194,14 +194,19 @@ static inline int get_snglref_ctx(const BlockContext *const a,
 {
     int row = 0, col = 0, newmv = 0;
 
-    // FIXME opfl
 #define NEWMV0_MODE_MASK ((1 << NEWMV) | \
                           (1 << NEWMV_NEARMV) | \
                           (1 << NEWMV_NEWMV) | \
-                          (1 << JOINT_NEWMV))
+                          (1 << JOINT_NEWMV) | \
+                          (1 << OPFL_NEWMV_NEARMV) | \
+                          (1 << OPFL_NEWMV_NEWMV) | \
+                          (1 << OPFL_JOINT_NEWMV))
+    // the joint_newmv modes are missing in NEWMV1_MODE_MASK,
+    // see compound_ref1_mode() in AVM
 #define NEWMV1_MODE_MASK ((1 << NEARMV_NEWMV) | \
                           (1 << NEWMV_NEWMV) | \
-                          (1 << JOINT_NEWMV))
+                          (1 << OPFL_NEARMV_NEWMV) | \
+                          (1 << OPFL_NEWMV_NEWMV))
 #define add_matching(dir, cnt, idx) do { \
     if (dir->ref[0][idx] == ref) { \
         cnt++; \
@@ -239,12 +244,15 @@ static inline int get_compref_ctx(const BlockContext *const a,
 {
     int row = 0, col = 0, newmv = 0;
 
-    // FIXME opfl
 #define NEWMV_MODE_MASK ((1 << NEWMV) | \
                          (1 << NEARMV_NEWMV) | \
                          (1 << NEWMV_NEARMV) | \
                          (1 << NEWMV_NEWMV) | \
-                         (1 << JOINT_NEWMV))
+                         (1 << JOINT_NEWMV) | \
+                         (1 << OPFL_NEARMV_NEWMV) | \
+                         (1 << OPFL_NEWMV_NEARMV) | \
+                         (1 << OPFL_NEWMV_NEWMV) | \
+                         (1 << OPFL_JOINT_NEWMV))
 #define add_matching(dir, cnt, idx) do { \
     if (dir->ref[0][idx] == TIP_FRAME && \
         tipref[0] == ref[0] && tipref[1] == ref[1]) \

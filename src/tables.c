@@ -188,11 +188,17 @@ const uint8_t av1_angle_to_mode_index_z3[14] =
 const uint8_t /* enum InterPredMode */
     dav1d_comp_inter_pred_modes[][2] =
 {
-    [NEARMV_NEARMV     - NEARMV_NEARMV] = { NEARMV,   NEARMV   },
-    [NEWMV_NEWMV       - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
-    [GLOBALMV_GLOBALMV - NEARMV_NEARMV] = { GLOBALMV, GLOBALMV },
-    [NEWMV_NEARMV      - NEARMV_NEARMV] = { NEWMV,    NEARMV   },
-    [NEARMV_NEWMV      - NEARMV_NEARMV] = { NEARMV,   NEWMV    },
+    [NEARMV_NEARMV      - NEARMV_NEARMV] = { NEARMV,   NEARMV   },
+    [NEWMV_NEARMV       - NEARMV_NEARMV] = { NEWMV,    NEARMV   },
+    [NEARMV_NEWMV       - NEARMV_NEARMV] = { NEARMV,   NEWMV    },
+    [GLOBALMV_GLOBALMV  - NEARMV_NEARMV] = { GLOBALMV, GLOBALMV },
+    [NEWMV_NEWMV        - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
+    [JOINT_NEWMV        - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
+    [OPFL_NEARMV_NEARMV - NEARMV_NEARMV] = { NEARMV,   NEARMV   },
+    [OPFL_NEWMV_NEARMV  - NEARMV_NEARMV] = { NEWMV,    NEARMV   },
+    [OPFL_NEARMV_NEWMV  - NEARMV_NEARMV] = { NEARMV,   NEWMV    },
+    [OPFL_NEWMV_NEWMV   - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
+    [OPFL_JOINT_NEWMV   - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
 };
 
 const uint8_t /* enum TxClass */ dav1d_tx_type_class[N_TX_TYPES_PLUS_LL] = {

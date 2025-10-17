@@ -1938,11 +1938,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             ts->cdf.m.comp_mode[comp_ctx], 4);
                 }
             }
-            // FIXME these conditions can involve tip
             if (f->frame_hdr->opfl_refine_type == 1 /* switchable */ &&
                 imin(bw4, bh4) >= 2 && f->refdir[b->ref[0]] != f->refdir[b->ref[1]])
             {
-                printf("optical_flow_refinement\n");
+                const int ctx = b->inter_mode > NEARMV_NEARMV;
+                if (dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
+                    b->inter_mode += 6 - (b->inter_mode >= GLOBALMV_GLOBALMV);
             }
             DEBUG_BLOCK_printf("%*sPost-comp_inter_mode[ctx=%d,%d]: r=%d\n",
                                depth, "", comp_ctx, b->inter_mode, ts->msac.rng);
@@ -1950,18 +1951,22 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #define NEWMV_MASK ((1 << NEARMV_NEWMV) | \
                     (1 << NEWMV_NEARMV) | \
                     (1 << NEWMV_NEWMV) | \
-                    (1 << JOINT_NEWMV)) // FIXME opfl
+                    (1 << JOINT_NEWMV) | \
+                    (1 << OPFL_NEARMV_NEWMV) | \
+                    (1 << OPFL_NEWMV_NEARMV) | \
+                    (1 << OPFL_NEWMV_NEWMV) | \
+                    (1 << OPFL_JOINT_NEWMV))
             if (f->seq_hdr->adaptive_mvd && (1 << b->inter_mode) & NEWMV_MASK) {
 #undef NEWMV_MASK
                 static uint8_t amvd_mode_context[] = {
-                    [NEARMV_NEWMV - NEARMV_NEWMV]         = 0,
-                    [NEWMV_NEARMV - NEARMV_NEWMV]         = 1,
-                    //[NEARMV_NEWMV_OPTFLOW - NEARMV_NEWMV] = 2,
-                    //[NEWMV_NEARMV_OPTFLOW - NEARMV_NEWMV] = 3,
-                    [JOINT_NEWMV - NEARMV_NEWMV]          = 5,
-                    //[JOINT_NEWMV_OPTFLOW - NEARMV_NEWMV]  = 6,
-                    [NEWMV_NEWMV - NEARMV_NEWMV]          = 7,
-                    //[NEWMV_NEWMV_OPTFLOW - NEARMV_NEWMV]  = 8,
+                    [NEARMV_NEWMV      - NEARMV_NEWMV] = 0,
+                    [NEWMV_NEARMV      - NEARMV_NEWMV] = 1,
+                    [OPFL_NEARMV_NEWMV - NEARMV_NEWMV] = 2,
+                    [OPFL_NEWMV_NEARMV - NEARMV_NEWMV] = 3,
+                    [JOINT_NEWMV       - NEARMV_NEWMV] = 5,
+                    [OPFL_JOINT_NEWMV  - NEARMV_NEWMV] = 6,
+                    [NEWMV_NEWMV       - NEARMV_NEWMV] = 7,
+                    [OPFL_NEWMV_NEWMV  - NEARMV_NEWMV] = 8,
                 };
                 const int mode_ctx = amvd_mode_context[b->inter_mode - NEARMV_NEWMV];
                 const int ctx = nx[0]->amvd[xoff[0]] + nx[1]->amvd[xoff[1]];
@@ -2041,10 +2046,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", n, diff.y, diff.x,
                                    ts->msac.rng);
             }
-            has_subpel_filter = 1; // FIXME not gmv^2 if not translational
+            // FIXME not gmv^2 if not translational
+            has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */;
 
             b->comp_type = COMP_INTER_AVG;
-            if (/* FIXME not opfl && FIXME not refinemv &&*/
+            if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
                 !(b->inter_mode == JOINT_NEWMV && amvd) &&
                 f->seq_hdr->masked_compound && imin(bw4, bh4) >= 2)
             {
@@ -2082,7 +2088,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        b->wedge_sign : -1, ts->msac.rng);
             }
 
-            if (/* FIXME no opfl && FIXME no refinemv && FIXME no jmvd &&*/
+            if (/* FIXME no refinemv && FIXME no jmvd &&*/
                 f->seq_hdr->cwp && b->comp_type == COMP_INTER_AVG &&
                 (b->inter_mode == NEARMV_NEARMV || b->inter_mode == JOINT_NEWMV))
             {
@@ -2523,7 +2529,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         // subpel filter
-        if (b->ref[0] == TIP_FRAME) {
+        if (b->ref[0] == TIP_FRAME || b->inter_mode >= OPFL_NEARMV_NEARMV) {
             assert(!has_subpel_filter);
             b->filter = DAV1D_FILTER_8TAP_SHARP;
         } else if (f->frame_hdr->subpel_filter_mode == DAV1D_FILTER_SWITCHABLE) {

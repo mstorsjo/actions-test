@@ -135,6 +135,7 @@ typedef struct CdfModeContext {
     uint16_t comp_mode_sameref[5][5];
     uint16_t comp_mode_joint[2][3];
     uint16_t comp_mode[5][6];
+    uint16_t opfl[2][3];
     uint16_t comp_type_masked[12][3];
     uint16_t comp_type_weighted[3];
     uint16_t cwp_idx[4][3];

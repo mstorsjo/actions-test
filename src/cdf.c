@@ -1279,6 +1279,9 @@ static const CdfDefaultContext default_cdf = {
             { CDF4(25873, 28046, 30292, 31275) },
             { CDF4(17660, 22114, 26307, 27200) },
             { CDF4(21832, 24917, 28451, 28996) }
+        }, .opfl = {
+            { CDF1(16384) },
+            { CDF1(16384) },
         }, .comp_type_masked = {
             { CDF1(9916), 0 },
             { CDF1(7647), 0 },
@@ -6426,6 +6429,7 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(5, 3, m.comp_mode_sameref);
     update_cdf_2d(2, 1, m.comp_mode_joint);
     update_cdf_2d(5, 4, m.comp_mode);
+    update_cdf_2d(2, 1, m.opfl);
     update_cdf_2d(12, 1, m.comp_type_masked);
     update_cdf_1d(1, m.comp_type_weighted);
     update_cdf_2d(4, 1, m.cwp_idx);
