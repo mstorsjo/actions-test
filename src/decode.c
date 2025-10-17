@@ -1887,6 +1887,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             is_comp = 0;
         }
 
+        static const uint8_t mv_prec_tbl[][3] = {
+            { 3, 1, 0 },
+            { 4, 3, 1 },
+        };
+
         int mvprec_def = 1, amvd = 0;
         b->motion_mode = MM_TRANSLATION;
         if (b->skip_mode) {
@@ -2007,8 +2012,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     (1 << OPFL_NEWMV_NEARMV) | \
                     (1 << OPFL_NEWMV_NEWMV) | \
                     (1 << OPFL_JOINT_NEWMV))
-            if (f->seq_hdr->adaptive_mvd && (1 << b->inter_mode) & NEWMV_MASK) {
+            const int is_newmv_mode = (1 << b->inter_mode) & NEWMV_MASK;
 #undef NEWMV_MASK
+            if (f->seq_hdr->adaptive_mvd && is_newmv_mode) {
                 static uint8_t amvd_mode_context[] = {
                     [NEARMV_NEWMV      - NEARMV_NEWMV] = 0,
                     [NEWMV_NEARMV      - NEARMV_NEWMV] = 1,
@@ -2079,7 +2085,31 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", drl_idx[0], drl_idx[1], ts->msac.rng);
             }
 
-            // FIXME a couple of newmv-related symbols [mv_prec, refinemv]?
+            // FIXME a couple of newmv-related symbols [refinemv]?
+
+            // mv precision
+            int mv_prec = 3 + f->frame_hdr->mv_precision;
+            if (mv_prec > 3 && !amvd && f->seq_hdr->flex_mvres && is_newmv_mode) {
+                const int mvprec1 = idx >= 1 && nx[0]->mvprec[xoff[0]];
+                const int mvprec2 = idx >= 2 && nx[1]->mvprec[xoff[1]];
+                const int ctx1 = mvprec1 + mvprec2;
+                if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                  ts->cdf.m.mvprec_def[ctx1]))
+                {
+                    const int ctx2 = !mvprec1 || !mvprec2;
+                    const int idx =
+                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                            ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
+                    mv_prec = mv_prec_tbl[mv_prec == 6][idx];
+                    mvprec_def = 0;
+                }
+                DEBUG_BLOCK_printf("%*sPost-mv_precision[ctx=%d|%d|%d,%d]: r=%d\n",
+                                   depth, "", ctx1,
+                                   mvprec_def ? -1 : !mvprec1 || !mvprec2,
+                                   mvprec_def ? -1 :
+                                       f->frame_hdr->mv_precision - 1,
+                                   mv_prec, ts->msac.rng);
+            }
 
             if (b->inter_mode != GLOBALMV_GLOBALMV) {
                 int start = 0, end = 2;
@@ -2096,7 +2126,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 mv diff;
                 int n;
-                const int mv_prec = 6; // FIXME isn't this supposed to be coded?
                 for (n = start; n < end; n++) {
                     b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
                     const enum InterPredMode m =
@@ -2446,10 +2475,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const int idx =
                         dav1d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
-                    static const uint8_t mv_prec_tbl[][3] = {
-                        { 3, 1, 0 },
-                        { 4, 3, 1 },
-                    };
                     mv_prec = mv_prec_tbl[mv_prec == 6][idx];
                     mvprec_def = 0;
                 }
