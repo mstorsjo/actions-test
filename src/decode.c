@@ -2142,10 +2142,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", b->inter_mode, ts->msac.rng);
             } else {
                 int allow_warp = 0;
-                if (imin(bw4, bh4) >= 2 &&
-                    f->frame_hdr->motion_modes & (1 << MM_WARP_DELTA) &&
-                    f->frame_hdr->warp_motion)
-                {
+                if (imin(bw4, bh4) >= 2 && f->frame_hdr->warp_motion) {
                     const int ctx =
                         get_warp_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
                                      have_top_right, have_bottom_left,
