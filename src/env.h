@@ -225,7 +225,8 @@ static inline int get_snglref_ctx(const BlockContext *const a,
     }
     if (have_left) {
         add_matching(l, row, yb4);
-        add_matching(l, row, yb4 + b_dim[1] - 1);
+        if (have_bottom_left)
+            add_matching(l, row, yb4 + b_dim[1] - 1);
     }
 #undef NEWMV0_MODE_MASK
 #undef NEWMV1_MODE_MASK
@@ -264,7 +265,8 @@ static inline int get_compref_ctx(const BlockContext *const a,
     }
     if (have_left) {
         add_matching(l, row, yb4);
-        add_matching(l, row, yb4 + b_dim[1] - 1);
+        if (have_bottom_left)
+            add_matching(l, row, yb4 + b_dim[1] - 1);
     }
 #undef NEWMV_MODE_MASK
 #undef add_matching
