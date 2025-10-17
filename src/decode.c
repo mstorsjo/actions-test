@@ -1926,7 +1926,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->inter_mode += b->inter_mode > NEARMV_NEWMV; // skip newmv_nearmv
             } else {
                 const int joint_ctx =
-                    f->refdist[b->ref[0]] == -f->refdist[b->ref[1]];
+                    f->refdist[b->ref[0]] != -f->refdist[b->ref[1]];
                 if (dav1d_msac_decode_bool_adapt(&ts->msac,
                            ts->cdf.m.comp_mode_joint[joint_ctx]))
                 {
