@@ -258,6 +258,8 @@ enum CflType {
     CFL_MHCCP,
 };
 
+#define TIP_FRAME 7
+
 typedef struct Av1Block {
     uint8_t bl, bs, bp;
     uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, uvtx, fsc;

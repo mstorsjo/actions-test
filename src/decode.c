@@ -1839,8 +1839,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (!b->skip_mode && f->frame_hdr->tip.frame_mode &&
             cbs == lbs && imax(bw4, bh4) >= 2)
         {
-            const int ctx = (idx < 1 ? 0 : nx[0]->ref[0][xoff[0]] == 36) +
-                            (idx < 2 ? 0 : nx[1]->ref[0][xoff[1]] == 36);
+            const int ctx = (idx < 1 ? 0 : nx[0]->ref[0][xoff[0]] == TIP_FRAME) +
+                            (idx < 2 ? 0 : nx[1]->ref[0][xoff[1]] == TIP_FRAME);
             is_tip = dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip[ctx]);
             DEBUG_BLOCK_printf("%*sPost-tip[ctx=%d,%d]: r=%d\n",
                                depth, "", ctx, is_tip, ts->msac.rng);
@@ -2112,7 +2112,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->ref[0] = 0;
             } else {
                 if (is_tip) {
-                    b->ref[0] = 36;
+                    b->ref[0] = TIP_FRAME;
                 } else {
                     const int n_refs = f->frame_hdr->n_ref_frames;
                     int i;
