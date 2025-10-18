@@ -52,7 +52,7 @@ typedef struct Av1Filter {
     uint8_t gdf[4];
     int8_t cdef_idx[16]; // -1 means "unset"
     uint8_t ccso[3];
-    uint16_t noskip_mask[16][4]; // for 8x8 blocks, but stored on a 4x8 basis
+    uint16_t noskip_mask[32][4]; // for 8x8 blocks, but stored on a 4x8 basis
 } Av1Filter;
 
 // each struct describes one 256x256 area (1 or 4 SBs)
