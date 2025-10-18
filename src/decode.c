@@ -2523,7 +2523,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         // subpel filter
-        if (f->frame_hdr->subpel_filter_mode == DAV1D_FILTER_SWITCHABLE) {
+        if (b->ref[0] == TIP_FRAME) {
+            assert(!has_subpel_filter);
+            b->filter = DAV1D_FILTER_8TAP_SHARP;
+        } else if (f->frame_hdr->subpel_filter_mode == DAV1D_FILTER_SWITCHABLE) {
             if (has_subpel_filter) {
                 const int ctx = get_filter_ctx(nb, boff, b->ref);
                 b->filter = dav1d_msac_decode_symbol_adapt4(&ts->msac,
