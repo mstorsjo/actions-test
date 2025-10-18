@@ -6407,7 +6407,6 @@ void dav1d_cdf_thread_update(const Dav1dFrameHeader *const hdr,
     update_cdf_2d(4, 1, m.cwp_idx);
     update_cdf_2d(8, 2, m.filter);
 
-    update_cdf_2d(3, 1, m.skip_mode);
     update_cdf_2d(3, 1, m.seg_pred);
 
     update_mv_cdfs(mv);
