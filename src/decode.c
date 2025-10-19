@@ -1852,7 +1852,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                    (!seg || (seg->ref == -1 && !seg->globalmv && !seg->skip)) &&
                    f->frame_hdr->switchable_comp_refs && bw4 * bh4 >= 4)
         {
-            const int ctx = get_comp_ctx(nb, boff, idx, f->refdir);
+            const int ctx = get_comp_ctx(nx, xoff, idx, f->refdir);
             is_comp = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                    ts->cdf.m.comp[ctx]);
         } else {
