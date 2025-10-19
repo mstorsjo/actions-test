@@ -40,6 +40,7 @@
 #include "src/cdef_apply.h"
 #include "src/ctx.h"
 #include "src/ipred_prepare.h"
+#include "src/itx_1d.h"
 #include "src/lf_apply.h"
 #include "src/lr_apply.h"
 #include "src/recon.h"
@@ -421,16 +422,13 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         assert(t_dim->max == TX_4X4);
         *txtp = WHT_WHT;
     } else if (chroma) {
-        static const uint8_t txsz_trunc[][2 /* h>=32 */][2 /* w>=32 */] = {
-            [DCT_DCT]   = { { DCT_DCT,   DCT_DCT   }, { DCT_DCT,   DCT_DCT } },
-            [ADST_DCT]  = { { ADST_DCT,  ADST_DCT  }, { DCT_DCT,   DCT_DCT } },
-            [DCT_ADST]  = { { DCT_ADST,  DCT_DCT   }, { DCT_ADST,  DCT_DCT } },
-            [ADST_ADST] = { { ADST_ADST, DCT_DCT   }, { DCT_DCT,   DCT_DCT } },
-        };
         // inferred from either the luma txtp (inter) or a LUT (intra)
-        *txtp = intra ? txsz_trunc[dav1d_txtp_from_uvmode[b->uv_mode]]
-                                  [t_dim->h >= 8][t_dim->w >= 8] :
-                        get_uv_inter_txtp(t_dim, *txtp);
+        if (intra) *txtp = dav1d_txtp_from_uvmode[b->uv_mode];
+        if ((t_dim->w >= 8 && dav1d_tx1d_types[*txtp][1] & 1) ||
+            (t_dim->h >= 8 && dav1d_tx1d_types[*txtp][0] & 1))
+        {
+            *txtp = DCT_DCT;
+        }
     } else if (intra) {
         if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
             *txtp = DCT_DCT;

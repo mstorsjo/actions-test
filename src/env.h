@@ -101,21 +101,6 @@ static inline int get_partition2_ctx(const BlockContext *const a,
     }
 }
 
-static inline enum TxfmType get_uv_inter_txtp(const TxfmInfo *const uvt_dim,
-                                              const enum TxfmType ytxtp)
-{
-    if (uvt_dim->max == TX_32X32)
-        return ytxtp == IDTX ? IDTX : DCT_DCT;
-    if (uvt_dim->min == TX_16X16 &&
-        ((1 << ytxtp) & ((1 << H_FLIPADST) | (1 << V_FLIPADST) |
-                         (1 << H_ADST) | (1 << V_ADST))))
-    {
-        return DCT_DCT;
-    }
-
-    return ytxtp;
-}
-
 static inline int get_filter_ctx(const BlockContext *nb[2],
                                  const int boff[2], const int8_t refs[2])
 {
