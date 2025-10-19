@@ -117,18 +117,21 @@ static inline enum TxfmType get_uv_inter_txtp(const TxfmInfo *const uvt_dim,
 static inline int get_filter_ctx(const BlockContext *nb[2],
                                  const int boff[2], const int8_t refs[2])
 {
-    const int ref = refs[0];
-    const enum Dav1dFilterMode flt[2] = {
-        (boff[0] != -1 && (nb[0]->ref[0][boff[0]] == ref ||
-                           nb[0]->ref[1][boff[0]] == ref)) ?
-        nb[0]->filter[boff[0]] : DAV1D_N_SWITCHABLE_FILTERS,
-        (boff[1] != -1 && (nb[1]->ref[0][boff[1]] == ref ||
-                           nb[1]->ref[1][boff[1]] == ref)) ?
-        nb[1]->filter[boff[1]] : DAV1D_N_SWITCHABLE_FILTERS,
-    };
+    const int ref = refs[0], comp = refs[1] != -1;
+    const int flt0 = (boff[0] != -1 && (nb[0]->ref[0][boff[0]] == ref ||
+                                        nb[0]->ref[1][boff[0]] == ref)) ?
+                     nb[0]->filter[boff[0]] : DAV1D_N_SWITCHABLE_FILTERS;
+    const int flt1 = (boff[1] != -1 && (nb[1]->ref[0][boff[1]] == ref ||
+                                        nb[1]->ref[1][boff[1]] == ref)) ?
+                     nb[1]->filter[boff[1]] : DAV1D_N_SWITCHABLE_FILTERS;
 
-    return (refs[1] != -1) * 4 + flt[flt[0] == flt[1] ||
-                                     flt[0] == DAV1D_N_SWITCHABLE_FILTERS];
+    if (flt0 == flt1 || flt1 == DAV1D_N_SWITCHABLE_FILTERS) {
+        return comp * 4 + flt0;
+    } else if (flt0 == DAV1D_N_SWITCHABLE_FILTERS) {
+        return comp * 4 + flt1;
+    } else {
+        return comp * 4 + DAV1D_N_SWITCHABLE_FILTERS;
+    }
 }
 
 static inline int get_comp_ctx(const BlockContext *nx[2],
