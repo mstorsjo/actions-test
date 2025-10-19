@@ -68,7 +68,9 @@ static inline int get_intra_ctx(const BlockContext *nx[2],
                                 const int xoff[2], const int n_ctx)
 {
     if (!n_ctx) return 0;
-    const int sum = nx[0]->intra[xoff[0]] + nx[n_ctx - 1]->intra[xoff[n_ctx - 1]];
+    const int i = n_ctx - 1;
+    const int sum = (nx[0]->intra[xoff[0]] && !nx[0]->intrabc[xoff[0]]) +
+                    (nx[i]->intra[xoff[i]] && !nx[i]->intrabc[xoff[i]]);
     return sum + (sum == n_ctx);
 }
 
