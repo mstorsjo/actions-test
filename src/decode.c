@@ -2072,8 +2072,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         b->mask_type = dav1d_msac_decode_bool_bypass(&ts->msac);
                     }
                 }
-                DEBUG_BLOCK_printf("%*sPost-comp_inter_type[%d,%c=%d|%d]: r=%d\n",
-                                   depth, "", b->comp_type - 1,
+                DEBUG_BLOCK_printf("%*sPost-comp_inter_type[ctx=%d,%d,%c=%d|%d]: r=%d\n",
+                                   depth, "", ctx, b->comp_type - 1,
                                    "?wm"[b->comp_type - 1],
                                    b->comp_type == COMP_INTER_AVG ? -1 :
                                    b->comp_type == COMP_INTER_WEDGE ?
@@ -4632,13 +4632,14 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         f->mvs = f->mvs_ref->data;
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
             const int poc = f->cur.frame_hdr->frame_offset;
-            int furthest_future_refidx = -1;
+            // we use -2 here so it doesn't match b->ref==-1, which means intra
+            int furthest_future_refidx = -2;
             for (int i = 0; i < 7; i++) {
                 f->refpoc[i] = f->refp[i].p.frame_hdr->frame_offset;
                 const int delta = f->refdist[i] =
                     get_poc_diff(f->seq_hdr->order_hint_n_bits, f->refpoc[i], poc);
                 f->refdir[i] = delta > 0;
-                if (delta > 0 && (furthest_future_refidx == -1 ||
+                if (delta > 0 && (furthest_future_refidx < 0 ||
                                   f->refdist[furthest_future_refidx] < delta))
                 {
                     furthest_future_refidx = i;
@@ -4743,7 +4744,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                     order[m] = order[m - 1];
                 order[m] = n;
             }
-            if (f->furthest_future_refidx == -1) {
+            if (f->furthest_future_refidx < 0) {
                 f->tip_refs[0] = order[n_refs - 1];
                 f->tip_refs[1] = order[n_refs - 2];
             } else if (f->refdir[order[0]]) {
