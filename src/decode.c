@@ -2152,44 +2152,75 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         refdist[1] = -refdist[1];
                     end = start + 1;
                 }
-                mv diff;
+                mv diff[2];
+                enum InterPredMode m[2];
                 int n;
+                int sum_mvd = 0, nnzc = 0;
                 for (n = start; n < end; n++) {
                     b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
-                    const enum InterPredMode m =
-                        dav1d_comp_inter_pred_modes[b->inter_mode -
-                                                    NEARMV_NEARMV][n];
-                    if (m != NEWMV) continue;
+                    m[n] = dav1d_comp_inter_pred_modes[b->inter_mode -
+                                                       NEARMV_NEARMV][n];
+                    if (m[n] != NEWMV) continue;
 
                     if (amvd) {
-                        read_amvd(ts, &diff);
-                    } else
-                        read_mv_residual(ts, &ts->cdf.mv, &diff, mv_prec);
-                    if (diff.y) {
-                        const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
-                        if (s) diff.y = -diff.y;
+                        read_amvd(ts, &diff[n]);
+                        // nnzc remains zero if amvd=1, so mvd_sign_derive=>0
+                    } else {
+                        read_mv_residual(ts, &ts->cdf.mv, &diff[n], mv_prec);
+                        sum_mvd += diff[n].y + diff[n].x;
+                        nnzc += !!diff[n].y + !!diff[n].x;
                     }
-                    if (diff.x) {
-                        const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
-                        if (s) diff.x = -diff.x;
-                    }
-                    mv_reduce_prec(&b->mv[n], mv_prec);
-                    b->mv[n].x += diff.x;
-                    b->mv[n].y += diff.y;
-                    DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
-                                       depth, "", n, diff.y, diff.x,
-                                       ts->msac.rng);
                 }
-                if (b->inter_mode == JOINT_NEWMV ||
-                    b->inter_mode == OPFL_JOINT_NEWMV)
+                if (b->inter_mode != NEARMV_NEARMV &&
+                    b->inter_mode != OPFL_NEARMV_NEARMV)
                 {
-                    n &= 1; // "the one not handled above"
-                    diff = mv_projection(diff, refdist[1], refdist[0]);
-                    jmvd_scale(&diff, amvd, jmvd_scale_mode);
-                    b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
-                    mv_reduce_prec(&b->mv[n], mv_prec);
-                    b->mv[n].x += diff.x;
-                    b->mv[n].y += diff.y;
+#define BIDIR_NEWMV_MASK ((1 << NEWMV_NEWMV) | \
+                          (1 << OPFL_NEWMV_NEWMV) | \
+                          (1 << JOINT_NEWMV) | \
+                          (1 << OPFL_JOINT_NEWMV))
+                    if (!f->seq_hdr->mvd_sign_derive || drl_idx[0] ||
+                        drl_idx[1] || nnzc < 3 * (end - start) - 2 ||
+                        f->frame_hdr->allow_screen_content_tools ||
+                        f->frame_hdr->mv_precision == 3 || mv_prec >= 5 ||
+                        !((1 << b->inter_mode) & BIDIR_NEWMV_MASK))
+                    {
+                        // this means nnzc2 never reaches nnzc below, so the
+                        // sign-derive condition is never invoked
+                        nnzc = 5;
+                    }
+#undef BIDIR_NEWMV_MASK
+                    sum_mvd >>= (6 - mv_prec);
+                    int nnzc2 = 0;
+                    for (n = start; n < end; n++) {
+                        if (m[n] != NEWMV) continue;
+                        if (diff[n].y) {
+                            const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
+                                          dav1d_msac_decode_bool_bypass(&ts->msac);
+                            if (s) diff[n].y = -diff[n].y;
+                        }
+                        if (diff[n].x) {
+                            const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
+                                          dav1d_msac_decode_bool_bypass(&ts->msac);
+                            if (s) diff[n].x = -diff[n].x;
+                        }
+                        mv_reduce_prec(&b->mv[n], mv_prec);
+                        b->mv[n].x += diff[n].x;
+                        b->mv[n].y += diff[n].y;
+                        DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
+                                           depth, "", n, diff[n].y, diff[n].x,
+                                           ts->msac.rng);
+                    }
+                    if (b->inter_mode == JOINT_NEWMV ||
+                        b->inter_mode == OPFL_JOINT_NEWMV)
+                    {
+                        n &= 1; // "the one not handled above"
+                        diff[n] = mv_projection(diff[!n], refdist[1], refdist[0]);
+                        jmvd_scale(&diff[n], amvd, jmvd_scale_mode);
+                        b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
+                        mv_reduce_prec(&b->mv[n], mv_prec);
+                        b->mv[n].x += diff[n].x;
+                        b->mv[n].y += diff[n].y;
+                    }
                 }
             }
 
@@ -2547,16 +2578,33 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
                 {
                     mv diff;
+                    int nnzc, nnzc2 = 0, sum_mvd;
                     if (amvd) {
                         read_amvd(ts, &diff);
-                    } else
+                        nnzc = 3; // see comment a few lines down
+                    } else {
                         read_mv_residual(ts, &ts->cdf.mv, &diff, mv_prec);
+                        nnzc = !!diff.x + !!diff.y;
+                        sum_mvd = (diff.x + diff.y) >> (6 - mv_prec);
+                        if (b->inter_mode == WARPMV || !nnzc ||
+                            !f->seq_hdr->mvd_sign_derive ||
+                            b->motion_mode != MM_TRANSLATION ||
+                            f->frame_hdr->allow_screen_content_tools ||
+                            f->frame_hdr->mv_precision == 3 || mv_prec >= 5)
+                        {
+                            // this means nnzc2 never reaches nnzc below, so the
+                            // sign-derive condition is never invoked
+                            nnzc = 3;
+                        }
+                    }
                     if (diff.y) {
-                        const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
+                                      dav1d_msac_decode_bool_bypass(&ts->msac);
                         if (s) diff.y = -diff.y;
                     }
                     if (diff.x) {
-                        const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
+                                      dav1d_msac_decode_bool_bypass(&ts->msac);
                         if (s) diff.x = -diff.x;
                     }
                     mv_reduce_prec(&b->mv[0], mv_prec);
