@@ -2049,10 +2049,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 f->seq_hdr->masked_compound && imin(bw4, bh4) >= 2)
             {
                 const int ffr = f->furthest_future_refidx;
-#define comptype_ctx(idx) \
-                boff[idx] == -1 ? 0 : nb[idx]->ref[1][boff[idx]] != -1 ? \
-                nb[idx]->comp_type[boff[idx]] > COMP_INTER_AVG : \
-                (nb[idx]->ref[0][boff[idx]] == ffr) * 2
+#define comptype_ctx(num) \
+                num >= idx ? 0 : nx[num]->ref[1][xoff[num]] != -1 ? \
+                nx[num]->comp_type[xoff[num]] > COMP_INTER_AVG : \
+                (nx[num]->ref[0][xoff[num]] == ffr) * 2
                 const int cctx0 = comptype_ctx(0), cctx1 = comptype_ctx(1);
 #undef comptype_ctx
                 const int ctx = cctx0 + cctx1 + (cctx0 && cctx1) +
