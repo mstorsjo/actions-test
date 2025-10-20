@@ -39,40 +39,34 @@
 typedef unsigned (*decode_symbol_adapt_fn)(MsacContext *s, uint16_t *cdf,
                                            size_t n_symbols);
 typedef unsigned (*decode_adapt_fn)(MsacContext *s, uint16_t *cdf);
-typedef unsigned (*decode_bool_equi_fn)(MsacContext *s);
-typedef unsigned (*decode_bool_fn)(MsacContext *s, unsigned f);
+typedef unsigned (*decode_bool_bypass_fn)(MsacContext *s);
+typedef unsigned (*decode_bools_bypass_fn)(MsacContext *s, unsigned n);
+typedef unsigned (*decode_unary_bypass_fn)(MsacContext *s, int max_bits);
 
 typedef struct {
     decode_symbol_adapt_fn decode_symbol_adapt4;
     decode_symbol_adapt_fn decode_symbol_adapt8;
     decode_adapt_fn        decode_bool_adapt;
-    decode_bool_equi_fn    decode_bool_equi;
-    decode_bool_fn         decode_bool;
-    decode_adapt_fn        decode_hi_tok;
+    decode_bool_bypass_fn  decode_bool_bypass;
+    decode_bools_bypass_fn decode_bools_bypass;
+    decode_unary_bypass_fn decode_unary_bypass;
 } MsacDSPContext;
 
-static void randomize_cdf(uint16_t *const cdf, const int n) {
-    int i;
-    for (i = 15; i > n; i--)
-        cdf[i] = 0; // padding
-    cdf[i] = 0;     // count
+static void randomize_cdf(uint16_t *const cdf, int n) {
+    for (int i = n + 2; i < 9; i++)
+        cdf[i] = 0;           // padding
+    cdf[n + 1] = rnd() % 125;
+    cdf[n + 0] = 0;           // count
     do {
-        cdf[i - 1] = cdf[i] + rnd() % (32768 - cdf[i] - i) + 1;
-    } while (--i > 0);
+        cdf[n - 1] = cdf[n] + rnd() % (32768 - cdf[n] - n) + 1;
+    } while (--n > 0);
 }
 
 /* memcmp() on structs can have weird behavior due to padding etc. */
 static int msac_cmp(const MsacContext *const a, const MsacContext *const b) {
-    if (a->buf_pos != b->buf_pos || a->buf_end != b->buf_end ||
-        a->rng != b->rng || a->cnt != b->cnt ||
-        a->allow_update_cdf != b->allow_update_cdf)
-    {
-        return 1;
-    }
-
-    /* Only check valid dif bits, ignoring partial bytes at the end */
-    const ec_win dif_mask = ~((~(ec_win)0) >> (imax(a->cnt, 0) + 16));
-    return !!((a->dif ^ b->dif) & dif_mask);
+    return a->buf_pos != b->buf_pos || a->buf_end != b->buf_end ||
+           a->dif != b->dif || a->rng != b->rng || a->cnt != b->cnt ||
+           a->allow_update_cdf != b->allow_update_cdf;
 }
 
 static void msac_dump(unsigned c_res, unsigned a_res,
@@ -95,7 +89,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
     if (a->allow_update_cdf != b->allow_update_cdf)
         fprintf(stderr, "allow_update_cdf %d vs %d\n",
                 a->allow_update_cdf, b->allow_update_cdf);
-    if (num_cdf && memcmp(cdf_a, cdf_b, sizeof(*cdf_a) * (num_cdf + 1))) {
+    if (num_cdf && memcmp(cdf_a, cdf_b, sizeof(*cdf_a) * (num_cdf + 2))) {
         fprintf(stderr, "cdf:\n");
         for (int i = 0; i <= num_cdf; i++)
             fprintf(stderr, " %5u", cdf_a[i]);
@@ -109,12 +103,12 @@ static void msac_dump(unsigned c_res, unsigned a_res,
     }
 }
 
-#define CHECK_SYMBOL_ADAPT(n, n_min, n_max) do {                           \
+#define CHECK_SYMBOL_ADAPT(n) do {                                         \
     if (check_func(c->decode_symbol_adapt##n,                              \
                    "msac_decode_symbol_adapt%d", n))                       \
     {                                                                      \
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {          \
-            for (int ns = n_min; ns <= n_max; ns++) {                      \
+            for (int ns = 1; ns < n; ns++) {                               \
                 dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);         \
                 s_a = s_c;                                                 \
                 randomize_cdf(cdf[0], ns);                                 \
@@ -123,7 +117,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
                     unsigned c_res = call_ref(&s_c, cdf[0], ns);           \
                     unsigned a_res = call_new(&s_a, cdf[1], ns);           \
                     if (c_res != a_res || msac_cmp(&s_c, &s_a) ||          \
-                        memcmp(cdf[0], cdf[1], sizeof(**cdf) * (ns + 1)))  \
+                        memcmp(cdf[0], cdf[1], sizeof(**cdf) * (ns + 2)))  \
                     {                                                      \
                         if (fail())                                        \
                             msac_dump(c_res, a_res, &s_c, &s_a,            \
@@ -138,14 +132,13 @@ static void msac_dump(unsigned c_res, unsigned a_res,
     }                                                                      \
 } while (0)
 
-static void check_decode_symbol(MsacDSPContext *const c, uint8_t *const buf) {
-    ALIGN_STK_32(uint16_t, cdf, 2, [8]);
+static void check_decode_symbol_adapt(MsacDSPContext *const c, uint8_t *const buf) {
+    ALIGN_STK_16(uint16_t, cdf, 2, [9]);
     MsacContext s_c, s_a;
 
     declare_func(unsigned, MsacContext *s, uint16_t *cdf, size_t n_symbols);
-    CHECK_SYMBOL_ADAPT( 4, 1,  3);
-    CHECK_SYMBOL_ADAPT( 8, 1,  7);
-    report("decode_symbol");
+    CHECK_SYMBOL_ADAPT(4);
+    CHECK_SYMBOL_ADAPT(8);
 }
 
 static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf) {
@@ -153,12 +146,13 @@ static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf)
 
     declare_func(unsigned, MsacContext *s, uint16_t *cdf);
     if (check_func(c->decode_bool_adapt, "msac_decode_bool_adapt")) {
-        uint16_t cdf[2][2];
+        uint16_t cdf[2][3];
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {
             dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);
             s_a = s_c;
             cdf[0][0] = cdf[1][0] = rnd() % 32767 + 1;
             cdf[0][1] = cdf[1][1] = 0;
+            cdf[0][2] = cdf[1][2] = rnd() % 125;
             while (s_c.cnt >= 0) {
                 unsigned c_res = call_ref(&s_c, cdf[0]);
                 unsigned a_res = call_new(&s_a, cdf[1]);
@@ -175,11 +169,11 @@ static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf)
     }
 }
 
-static void check_decode_bool_equi(MsacDSPContext *const c, uint8_t *const buf) {
+static void check_decode_bool_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
     declare_func(unsigned, MsacContext *s);
-    if (check_func(c->decode_bool_equi, "msac_decode_bool_equi")) {
+    if (check_func(c->decode_bool_bypass, "msac_decode_bool_bypass")) {
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
@@ -194,61 +188,57 @@ static void check_decode_bool_equi(MsacDSPContext *const c, uint8_t *const buf) 
     }
 }
 
-static void check_decode_bool(MsacDSPContext *const c, uint8_t *const buf) {
+static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
     declare_func(unsigned, MsacContext *s, unsigned f);
-    if (check_func(c->decode_bool, "msac_decode_bool")) {
+    if (check_func(c->decode_bools_bypass, "msac_decode_bools_bypass")) {
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
-            const unsigned f = rnd() & 0x7fff;
-            unsigned c_res = call_ref(&s_c, f);
-            unsigned a_res = call_new(&s_a, f);
+            const int n_bits = 1 + (rnd() & 15);
+            unsigned c_res = call_ref(&s_c, n_bits);
+            unsigned a_res = call_new(&s_a, n_bits);
             if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
                 if (fail())
                     msac_dump(c_res, a_res, &s_c, &s_a, NULL, NULL, 0);
             }
         }
-        bench_new(alternate(&s_c, &s_a), 16384);
+        bench_new(alternate(&s_c, &s_a), 8);
     }
-
 }
 
-static void check_decode_bool_funcs(MsacDSPContext *const c, uint8_t *const buf) {
-    check_decode_bool_adapt(c, buf);
-    check_decode_bool_equi(c, buf);
-    check_decode_bool(c, buf);
-    report("decode_bool");
-}
-
-static void check_decode_hi_tok(MsacDSPContext *const c, uint8_t *const buf) {
-    ALIGN_STK_16(uint16_t, cdf, 2, [16]);
+static void check_decode_unary_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
-    declare_func(unsigned, MsacContext *s, uint16_t *cdf);
-    if (check_func(c->decode_hi_tok, "msac_decode_hi_tok")) {
-        for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {
-            dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);
-            s_a = s_c;
-            randomize_cdf(cdf[0], 3);
-            memcpy(cdf[1], cdf[0], sizeof(*cdf));
-            while (s_c.cnt >= 0) {
-                unsigned c_res = call_ref(&s_c, cdf[0]);
-                unsigned a_res = call_new(&s_a, cdf[1]);
-                if (c_res != a_res || msac_cmp(&s_c, &s_a) ||
-                    memcmp(cdf[0], cdf[1], sizeof(*cdf)))
-                {
-                    if (fail())
-                        msac_dump(c_res, a_res, &s_c, &s_a, cdf[0], cdf[1], 3);
-                    break;
-                }
+    declare_func(unsigned, MsacContext *s, unsigned f);
+    if (check_func(c->decode_unary_bypass, "msac_decode_unary_bypass")) {
+        dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
+        s_a = s_c;
+        while (s_c.cnt >= 0) {
+            const int max_bits = 1 + (rnd() & 31);
+            unsigned c_res = call_ref(&s_c, max_bits);
+            unsigned a_res = call_new(&s_a, max_bits);
+            if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
+                if (fail())
+                    msac_dump(c_res, a_res, &s_c, &s_a, NULL, NULL, 0);
             }
-            if (cdf_update)
-                bench_new(alternate(&s_c, &s_a), alternate(cdf[0], cdf[1]));
         }
+        bench_new(alternate(&s_c, &s_a), 16);
     }
-    report("decode_hi_tok");
+}
+
+static void check_decode_adapt(MsacDSPContext *const c, uint8_t *const buf) {
+    check_decode_symbol_adapt(c, buf);
+    check_decode_bool_adapt(c, buf);
+    report("decode_adapt");
+}
+
+static void check_decode_unary(MsacDSPContext *const c, uint8_t *const buf) {
+    check_decode_bool_bypass(c, buf);
+    check_decode_bools_bypass(c, buf);
+    check_decode_unary_bypass(c, buf);
+    report("decode_unary");
 }
 
 void checkasm_check_msac(void) {
@@ -256,36 +246,15 @@ void checkasm_check_msac(void) {
     c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt_c;
     c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt_c;
     c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_c;
-    c.decode_bool_equi      = dav1d_msac_decode_bool_equi_c;
-    c.decode_bool           = dav1d_msac_decode_bool_c;
-    c.decode_hi_tok         = dav1d_msac_decode_hi_tok_c;
+    c.decode_bool_bypass    = dav1d_msac_decode_bool_bypass_c;
+    c.decode_bools_bypass   = dav1d_msac_decode_bools_bypass_c;
+    c.decode_unary_bypass   = dav1d_msac_decode_unary_bypass_c;
 
-#if (ARCH_AARCH64 || ARCH_ARM) && HAVE_ASM
-    if (dav1d_get_cpu_flags() & DAV1D_ARM_CPU_FLAG_NEON) {
-        c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt4_neon;
-        c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt8_neon;
-        c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_neon;
-        c.decode_bool_equi      = dav1d_msac_decode_bool_equi_neon;
-        c.decode_bool           = dav1d_msac_decode_bool_neon;
-        c.decode_hi_tok         = dav1d_msac_decode_hi_tok_neon;
-    }
-#elif ARCH_LOONGARCH64 && HAVE_ASM
-    if (dav1d_get_cpu_flags() & DAV1D_LOONGARCH_CPU_FLAG_LSX) {
-        c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt4_lsx;
-        c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt8_lsx;
-        c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_lsx;
-        c.decode_bool           = dav1d_msac_decode_bool_lsx;
-        c.decode_bool_equi      = dav1d_msac_decode_bool_equi_lsx;
-        c.decode_hi_tok         = dav1d_msac_decode_hi_tok_lsx;
-    }
-#elif ARCH_X86 && HAVE_ASM
+#if ARCH_X86 && HAVE_ASM && 0
     if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_SSE2) {
         c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt4_sse2;
         c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt8_sse2;
         c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_sse2;
-        c.decode_bool_equi      = dav1d_msac_decode_bool_equi_sse2;
-        c.decode_bool           = dav1d_msac_decode_bool_sse2;
-        c.decode_hi_tok         = dav1d_msac_decode_hi_tok_sse2;
     }
 #endif
 
@@ -293,7 +262,6 @@ void checkasm_check_msac(void) {
     for (int i = 0; i < BUF_SIZE; i++)
         buf[i] = rnd();
 
-    check_decode_symbol(&c, buf);
-    check_decode_bool_funcs(&c, buf);
-    check_decode_hi_tok(&c, buf);
+    check_decode_adapt(&c, buf);
+    check_decode_unary(&c, buf);
 }
