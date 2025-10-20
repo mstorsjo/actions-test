@@ -840,12 +840,12 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int tcq = (tcq_state & 2) >> 1; \
             tok = dav1d_msac_decode_symbol_adapt4(&ts->msac, \
                       &lo_cdf[(ctx * (2 - chroma) + tcq) * (lim + 2)], lim); \
-            if (tok == lim) { \
+            if (tok == lim && hi_cdf) { \
                 tok += dav1d_msac_decode_symbol_adapt4(&ts->msac, hi_cdf[hr_ctx], 3); \
             } \
             DEBUG_CF_printf("%*sPost-tok[pos=%d,ctx=%d|%d|%d|%d,freq=%s,plane=%s,%d]: r=%d\n", \
                             depth, "", i, t_dim->ctx, ctx, tcq, \
-                            tok < lim ? -1 : hr_ctx, \
+                            tok < lim || !hi_cdf ? -1 : hr_ctx, \
                             lim == 5 ? "lo" : "hi", \
                             chroma ? "uv" : "y", tok, ts->msac.rng); \
             tcq_state = tcq_next_state(tcq_state, tok); \
