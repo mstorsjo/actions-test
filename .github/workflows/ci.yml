@@ -46,12 +46,13 @@ jobs:
         sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
         sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/debug.h
         git diff
-        meson build -Denable_tests=false
+        meson build -Dtrim_dsp=false
         cd build
         ninja
         cd ..
     - name: run tests
       run: |
+        meson test -v -C build
         for sdp in 0 1; do
             file="media/avm-v11.0.0-sdp${sdp}.ivf"
             avm/x86-64/aomdec $file -o /dev/null > avm.sdp${sdp}.log
