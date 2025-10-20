@@ -1,4 +1,4 @@
-From 47c584e95d79429ad1b9dfdc3bab63ce71a075bf Mon Sep 17 00:00:00 2001
+From e40fb222b4da4cc93d07027027724136a64f058a Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
@@ -85,7 +85,7 @@ index b203c56cf..9fcfc55c6 100644
  #define DB_ONLY(x...)
  #define BLOCK_TO_DEBUG 0
 diff --git a/av1/common/idct.c b/av1/common/idct.c
-index a99da9bf7..6b1b40954 100644
+index a99da9bf7..d786218a5 100644
 --- a/av1/common/idct.c
 +++ b/av1/common/idct.c
 @@ -1278,7 +1278,8 @@ static void av1_highbd_inv_txfm_add_master(const tran_low_t *input,
@@ -123,7 +123,7 @@ index a99da9bf7..6b1b40954 100644
      }
 +#if DEBUG_BLOCK_INFO
 +    if (print) {
-+      coef_dump(buf0, width, height, 3, "dq");
++      coef_dump(buf0, 8, 8, 3, "dq");
 +    }
 +#endif
 +

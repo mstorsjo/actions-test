@@ -1451,11 +1451,10 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (eob != -1) {
-            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                coef_dump(cf, imin(t_dim->h, 8) * 4,
-                          imin(t_dim->w, 8) * 4, 3, "dq");
-            }
             if (stx) {
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    coef_dump(cf, 8, 8, 3, "dq");
+                }
                 const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
                                  (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
                 const int transpose = !((mask >> m) & 1);
@@ -1463,6 +1462,11 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                     coef_dump(cf, imin(t_dim->h, 8) * 4,
                               imin(t_dim->w, 8) * 4, 3, "stx");
+                }
+            } else {
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    coef_dump(cf, imin(t_dim->h, 8) * 4,
+                              imin(t_dim->w, 8) * 4, 3, "dq");
                 }
             }
             dsp->itx.itxfm_add[tx][txtp](dst, f->cur.stride[0],
