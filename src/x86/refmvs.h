@@ -28,7 +28,7 @@
 #include "src/cpu.h"
 #include "src/refmvs.h"
 
-decl_load_tmvs_fn(dav1d_load_tmvs_sse4);
+//decl_load_tmvs_fn(dav1d_load_tmvs_sse4);
 
 decl_save_tmvs_fn(dav1d_save_tmvs_ssse3);
 decl_save_tmvs_fn(dav1d_save_tmvs_avx2);
@@ -51,7 +51,7 @@ static ALWAYS_INLINE void refmvs_dsp_init_x86(Dav1dRefmvsDSPContext *const c) {
 
     if (!(flags & DAV1D_X86_CPU_FLAG_SSE41)) return;
 #if ARCH_X86_64
-    c->load_tmvs = dav1d_load_tmvs_sse4;
+    //c->load_tmvs = dav1d_load_tmvs_sse4;
 
     if (!(flags & DAV1D_X86_CPU_FLAG_AVX2)) return;
 

@@ -60,8 +60,8 @@ static inline int apply_sign(const int v, const int s) {
     return s < 0 ? -v : v;
 }
 
-static inline int apply_sign64(const int v, const int64_t s) {
-    return s < 0 ? -v : v;
+static inline int apply_sign64(const int64_t v, const int64_t s) {
+    return s < 0 ? -(int)v : (int)v;
 }
 
 static inline int ulog2(const unsigned v) {

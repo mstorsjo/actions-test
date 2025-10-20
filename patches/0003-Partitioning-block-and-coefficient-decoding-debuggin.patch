@@ -1,4 +1,4 @@
-From 51a5abdc72b9db79668e3ebc393445c778951157 Mon Sep 17 00:00:00 2001
+From ddcd2d5be5ad3a6c0b74a1e6ce8ecfb373db6f54 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -6,8 +6,9 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
 
 ---
  aom/debug.h               |  16 +
- av1/decoder/decodeframe.c | 282 +++++++++++----
- av1/decoder/decodemv.c    | 729 +++++++++++++++++++++++++++++++-------
+ av1/common/mvref_common.c | 558 ++++++++++++++++++++++++++-
+ av1/decoder/decodeframe.c | 282 ++++++++++----
+ av1/decoder/decodemv.c    | 791 +++++++++++++++++++++++++++++++-------
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.c     |   5 +-
  av1/decoder/decoder.h     |  12 +-
@@ -15,7 +16,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  av1/decoder/decodetxb.h   |  14 +-
  av1/decoder/detokenize.c  |   8 +-
  av1/decoder/detokenize.h  |   3 +-
- 10 files changed, 1029 insertions(+), 272 deletions(-)
+ 11 files changed, 1633 insertions(+), 288 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -43,6 +44,1264 @@ index 8c8847f1eb..b203c56cfa 100644
 +#endif
  
  #endif /* AOM_DEBUG_H */
+diff --git a/av1/common/mvref_common.c b/av1/common/mvref_common.c
+index b50cd22ed5..728698a71e 100644
+--- a/av1/common/mvref_common.c
++++ b/av1/common/mvref_common.c
+@@ -12,6 +12,8 @@
+ 
+ #include <stdlib.h>
+ 
++#include "aom/debug.h"
++
+ #include "av1/common/mv.h"
+ #include "av1/common/mvref_common.h"
+ #include "av1/common/reconintra.h"
+@@ -53,6 +55,21 @@ enum {
+ #define TIP_MFMV_STACK_SIZE 3  // The limit for original TMVP w/ TIP.
+ #define MFMV_STACK_SIZE 4      // The total limit of motion field candidates.
+ 
++#define DEBUG_REFMV 0
++
++#if DEBUG_BLOCK_INFO && DEBUG_REFMV
++#define RDB_ONLY(x...) x
++#define DB_ARGS(x...) x,
++#define DEBUG_REFMV_printf(fmt...) \
++    if (BLOCK_TO_DEBUG) { \
++        printf(fmt); \
++    }
++#else
++#define RDB_ONLY(x...)
++#define DB_ARGS(x...)
++#define DEBUG_REFMV_printf(fmt...) do {} while (0)
++#endif
++
+ // Check and make sure that the MVs are stored to the correct slots.
+ static INLINE void check_frame_mv_slot(const AV1_COMMON *const cm, MV_REF *mv) {
+   if (mv->ref_frame[0] != NONE_FRAME && mv->ref_frame[1] == NONE_FRAME) {
+@@ -639,6 +656,7 @@ void av1_copy_frame_mvs(const AV1_COMMON *const cm, const MACROBLOCKD *const xd,
+ // Fetch MVP candidates from derived SMVP into MVP candidate list
+ // when there is no enough MVP candidates.
+ static AOM_INLINE void fill_mvp_from_derived_smvp(
++    DB_ARGS(const AV1_COMMON *cm, int mi_row, int mi_col)
+     const MV_REFERENCE_FRAME rf[2], CANDIDATE_MV *ref_mv_stack,
+     uint16_t *ref_mv_weight, uint8_t *refmv_count,
+     CANDIDATE_MV *derived_mv_stack, uint8_t derived_mv_count,
+@@ -653,6 +671,11 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+           ++(*drl_pr_count);
+           if (ref_mv_stack[index].this_mv.as_int ==
+               derived_mv_stack[derived_idx].this_mv.as_int) {
++              DEBUG_REFMV_printf("derived[%d:%d]: increasing[%d] y=%d,x=%d,w+=0 "
++                                 "at offset y=0,x=0\n",
++                                 derived_idx, *drl_pr_count, index,
++                                 derived_mv_stack[derived_idx].this_mv.as_mv.row,
++                                 derived_mv_stack[derived_idx].this_mv.as_mv.col);
+             break;
+           }
+         }
+@@ -664,6 +687,12 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+           ref_mv_stack[index].col_offset = OFFSET_NONSPATIAL;
+           ref_mv_stack[index].cwp_idx = CWP_EQUAL;
+           ref_mv_weight[index] = REF_CAT_LEVEL;
++            DEBUG_REFMV_printf("derived[%d:%d]: adding[%d] y=%d,x=%d,w=%d,"
++                               "y_off=0,x_off=0 at offset y=0,x=0\n",
++                               derived_idx, *drl_pr_count, index,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.row,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.col,
++                               REF_CAT_LEVEL);
+           ++(*refmv_count);
+         }
+       } else {
+@@ -674,6 +703,12 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+           ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+           ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+           ref_mv_weight[*refmv_count] = REF_CAT_LEVEL;
++            DEBUG_REFMV_printf("derived[%d:%d]: tailing[%d] y=%d,x=%d,w=%d,"
++                               "y_off=0,x_off=0 at offset y=0,x=0\n",
++                               derived_idx, *drl_pr_count, *refmv_count,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.row,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.col,
++                               REF_CAT_LEVEL);
+           ++(*refmv_count);
+         }
+       }
+@@ -687,6 +722,13 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+                derived_mv_stack[derived_idx].this_mv.as_int) &&
+               (ref_mv_stack[index].comp_mv.as_int ==
+                derived_mv_stack[derived_idx].comp_mv.as_int)) {
++              DEBUG_REFMV_printf("derived-c[%d]: increasing[%d] y=%d,x=%d,"
++                                 "y2=%d,x2=%d,w+=0 at offset y=0,x=0\n",
++                                 *drl_pr_count, index,
++                                 derived_mv_stack[derived_idx].this_mv.as_mv.row,
++                                 derived_mv_stack[derived_idx].this_mv.as_mv.col,
++                                 derived_mv_stack[derived_idx].comp_mv.as_mv.row,
++                                 derived_mv_stack[derived_idx].comp_mv.as_mv.col);
+             break;
+           }
+         }
+@@ -699,6 +741,14 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+           ref_mv_stack[index].col_offset = OFFSET_NONSPATIAL;
+           ref_mv_stack[index].cwp_idx = CWP_EQUAL;
+           ref_mv_weight[index] = REF_CAT_LEVEL;
++            DEBUG_REFMV_printf("derived-c[%d]: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                               "w=%d at offset y=0,x=0\n",
++                               *drl_pr_count, index,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.row,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.col,
++                               derived_mv_stack[derived_idx].comp_mv.as_mv.row,
++                               derived_mv_stack[derived_idx].comp_mv.as_mv.col,
++                               REF_CAT_LEVEL);
+           ++(*refmv_count);
+         }
+       } else {
+@@ -711,6 +761,14 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+           ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+           ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+           ref_mv_weight[*refmv_count] = REF_CAT_LEVEL;
++            DEBUG_REFMV_printf("derived-c[%d]: tailing[%d] y=%d,x=%d,"
++                               "y2=%d,x2=%d,w=%d\n",
++                               *drl_pr_count, *refmv_count,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.row,
++                               derived_mv_stack[derived_idx].this_mv.as_mv.col,
++                               derived_mv_stack[derived_idx].comp_mv.as_mv.row,
++                               derived_mv_stack[derived_idx].comp_mv.as_mv.col,
++                               REF_CAT_LEVEL);
+           ++(*refmv_count);
+         }
+       }
+@@ -719,6 +777,7 @@ static AOM_INLINE void fill_mvp_from_derived_smvp(
+ }
+ 
+ static AOM_INLINE void derive_ref_mv_candidate_from_tip_mode(
++    DB_ARGS(int mi_row, int mi_col)
+     const AV1_COMMON *cm, int mi_row_cand, int mi_col_cand,
+     const MB_MODE_INFO *const candidate, uint8_t *refmv_count,
+     uint8_t *ref_match_count, uint8_t *newmv_count, CANDIDATE_MV *ref_mv_stack,
+@@ -737,6 +796,12 @@ static AOM_INLINE void derive_ref_mv_candidate_from_tip_mode(
+       if ((ref_mv_stack[index].this_mv.as_int == ref_mv[0].as_int) &&
+           (ref_mv_stack[index].comp_mv.as_int == ref_mv[1].as_int)) {
+         ref_mv_weight[index] += weight;
++          DEBUG_REFMV_printf("tip-spc-c[%d]: increasing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                             "w+=%d at offset y=%d,x=%d\n",
++                             *drl_pr_count, index,
++                             ref_mv[0].as_mv.row, ref_mv[0].as_mv.col,
++                             ref_mv[1].as_mv.row, ref_mv[1].as_mv.col, weight,
++                             mi_row_cand - mi_row, mi_col_cand - mi_col);
+         break;
+       }
+     }
+@@ -750,6 +815,12 @@ static AOM_INLINE void derive_ref_mv_candidate_from_tip_mode(
+       ref_mv_stack[index].col_offset = OFFSET_NONSPATIAL;
+       ref_mv_stack[index].cwp_idx = CWP_EQUAL;
+       ++(*refmv_count);
++        DEBUG_REFMV_printf("tip-spc-c[%d]: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                           "w=%d at offset y=%d,x=%d\n",
++                           *drl_pr_count, index,
++                           ref_mv[0].as_mv.row, ref_mv[0].as_mv.col,
++                           ref_mv[1].as_mv.row, ref_mv[1].as_mv.col, weight,
++                           mi_row_cand - mi_row, mi_col_cand - mi_col);
+     }
+   } else {
+     if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
+@@ -759,6 +830,12 @@ static AOM_INLINE void derive_ref_mv_candidate_from_tip_mode(
+       ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
+       ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+       ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
++        DEBUG_REFMV_printf("tip-spc-c[%d]: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                           "w=%d at offset y=%d,x=%d\n",
++                           *drl_pr_count, *refmv_count,
++                           ref_mv[0].as_mv.row, ref_mv[0].as_mv.col,
++                           ref_mv[1].as_mv.row, ref_mv[1].as_mv.col, weight,
++                           mi_row_cand - mi_row, mi_col_cand - mi_col);
+       ++(*refmv_count);
+     }
+   }
+@@ -862,6 +939,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ++(*drl_pr_count);
+             if (ref_mv_stack[index].this_mv.as_int == this_refmv.as_int) {
+               ref_mv_weight[index] += weight;
++                DEBUG_REFMV_printf("spc[%d:%d]: increasing[%d] y=%d,x=%d,w+=%d "
++                                   "at offset y=%d,x=%d\n",
++                                   ref, *drl_pr_count, index,
++                                   this_refmv.as_mv.row, this_refmv.as_mv.col,
++                                   weight,
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               break;
+             }
+           }
+@@ -874,6 +957,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ref_mv_stack[index].cwp_idx = CWP_EQUAL;
+             ref_mv_weight[index] = weight;
+             ++(*refmv_count);
++              DEBUG_REFMV_printf("spc[%d:%d]: adding[%d] y=%d,x=%d,w=%d,"
++                                 "y_off=%d,x_off=%d at offset y=%d,x=%d\n",
++                                 ref, *drl_pr_count, index,
++                                 this_refmv.as_mv.row, this_refmv.as_mv.col, weight,
++                                 row_offset, col_offset,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+           }
+         } else {
+           if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
+@@ -882,6 +971,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ref_mv_stack[*refmv_count].col_offset = col_offset;
+             ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+             ref_mv_weight[*refmv_count] = weight;
++              DEBUG_REFMV_printf("spc[%d:%d]: tailing[%d] y=%d,x=%d,w=%d,"
++                                 "y_off=%d,x_off=%d at offset y=%d,x=%d\n",
++                                 ref, *drl_pr_count, *refmv_count,
++                                 this_refmv.as_mv.row, this_refmv.as_mv.col, weight,
++                                 row_offset, col_offset,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+             ++(*refmv_count);
+           }
+         }
+@@ -906,6 +1001,11 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ++(*drl_pr_count);
+             if (ref_mv_stack[index].this_mv.as_int == this_refmv.as_int) {
+               ref_mv_weight[index] += weight;
++                DEBUG_REFMV_printf("tip-spc[%d:%d]: increasing[%d] y=%d,x=%d,"
++                                   "w+=%d at offset y=%d,x=%d\n",
++                                   ref, *drl_pr_count, index,
++                                   this_refmv.as_mv.row, this_refmv.as_mv.col, weight,
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               break;
+             }
+           }
+@@ -918,6 +1018,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ref_mv_stack[index].cwp_idx = CWP_EQUAL;
+             ref_mv_weight[index] = weight;
+             ++(*refmv_count);
++              DEBUG_REFMV_printf("tip-spc[%d:%d]: adding[%d] y=%d,x=%d,"
++                                 "w=%d,y_off=%d,x_off=%d at offset y=%d,x=%d\n",
++                                 ref, *drl_pr_count, index,
++                                 this_refmv.as_mv.row, this_refmv.as_mv.col,
++                                 weight, row_offset, col_offset,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+           }
+         } else {
+           if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
+@@ -926,6 +1032,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ref_mv_stack[*refmv_count].col_offset = col_offset;
+             ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+             ref_mv_weight[*refmv_count] = weight;
++              DEBUG_REFMV_printf("tip-spc[%d:%d]: tailing[%d] y=%d,x=%d,"
++                                 "w=%d,y_off=%d,x_off=%d at offset y=%d,x=%d\n",
++                                 ref, *drl_pr_count, *refmv_count,
++                                 this_refmv.as_mv.row, this_refmv.as_mv.col,
++                                 weight, row_offset, col_offset,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+             ++(*refmv_count);
+           }
+         }
+@@ -967,6 +1079,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ++(*drl_dr_pr_count);
+             if (derived_mv_stack[index].this_mv.as_int == derived_mv.as_int) {
+               derived_mv_weight[index] += weight;
++                DEBUG_REFMV_printf("tip2-spc[%d:%d]: increasing[%d] y=%d,x=%d,"
++                                   "w+=%d at offset y=%d,x=%d\n",
++                                   ref, *drl_dr_pr_count, index,
++                                   derived_mv.as_mv.row, derived_mv.as_mv.col,
++                                   weight,
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               break;
+             }
+           }
+@@ -982,6 +1100,11 @@ static AOM_INLINE void add_ref_mv_candidate(
+             derived_mv_weight[index] = weight;
+             derived_mv_stack[index].cwp_idx = CWP_EQUAL;
+             ++(*derived_mv_count);
++              DEBUG_REFMV_printf("tip2-spc[%d:%d]: adding[%d] y=%d,x=%d,w=%d,"
++                                 "y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                                 ref, *drl_dr_pr_count, index,
++                                 derived_mv.as_mv.row, derived_mv.as_mv.col, weight,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+           }
+         } else {
+           if (
+@@ -994,6 +1117,11 @@ static AOM_INLINE void add_ref_mv_candidate(
+             derived_mv_stack[*derived_mv_count].this_mv = derived_mv;
+             derived_mv_weight[*derived_mv_count] = weight;
+             derived_mv_stack[*derived_mv_count].cwp_idx = CWP_EQUAL;
++              DEBUG_REFMV_printf("tip2-spc[%d:%d]: tailing[%d] y=%d,x=%d,w=%d,"
++                                 "y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                                 ref, *drl_dr_pr_count, *derived_mv_count,
++                                 derived_mv.as_mv.row, derived_mv.as_mv.col, weight,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+             ++(*derived_mv_count);
+           }
+         }
+@@ -1041,6 +1169,11 @@ static AOM_INLINE void add_ref_mv_candidate(
+               ++(*drl_dr_pr_count);
+               if (derived_mv_stack[index].this_mv.as_int == derived_mv.as_int) {
+                 derived_mv_weight[index] += weight;
++                  DEBUG_REFMV_printf("mvtj-spc[%d:%d]: increasing[%d] y=%d,x=%d,"
++                                     "w+=%d at offset y=%d,x=%d\n",
++                                     ref, *drl_dr_pr_count, index,
++                                     derived_mv.as_mv.row, derived_mv.as_mv.col, weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+                 break;
+               }
+             }
+@@ -1055,6 +1188,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+               derived_mv_stack[index].this_mv = derived_mv;
+               derived_mv_weight[index] = weight;
+               derived_mv_stack[index].cwp_idx = CWP_EQUAL;
++                DEBUG_REFMV_printf("mvtj-spc[%d:%d]: adding[%d] y=%d,x=%d,w=%d,"
++                                   "y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                                   ref, *drl_dr_pr_count, index,
++                                   derived_mv.as_mv.row, derived_mv.as_mv.col,
++                                   weight,
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               ++(*derived_mv_count);
+             }
+           } else {
+@@ -1068,6 +1207,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+               derived_mv_stack[*derived_mv_count].this_mv = derived_mv;
+               derived_mv_weight[*derived_mv_count] = weight;
+               derived_mv_stack[*derived_mv_count].cwp_idx = CWP_EQUAL;
++                DEBUG_REFMV_printf("mvtj-spc[%d:%d]: tailing[%d] y=%d,x=%d,w=%d,"
++                                   "y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                                   ref, *drl_dr_pr_count, *derived_mv_count,
++                                   derived_mv.as_mv.row, derived_mv.as_mv.col,
++                                   weight,
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               ++(*derived_mv_count);
+             }
+           }
+@@ -1094,6 +1239,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 if (derived_mv_stack[index].this_mv.as_int ==
+                     this_refmv.as_int) {
+                   derived_mv_weight[index] += weight;
++                    DEBUG_REFMV_printf("lnr-spc[%d:%d]: increasing[%d] y=%d,x=%d,"
++                                       "w+=%d at offset y=%d,x=%d\n",
++                                       ref, *drl_dr_pr_count, index,
++                                       this_refmv.as_mv.row, this_refmv.as_mv.col,
++                                       weight,
++                                       mi_row_cand - mi_row, mi_col_cand - mi_col);
+                   break;
+                 }
+               }
+@@ -1110,6 +1261,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 derived_mv_weight[index] = weight;
+                 derived_mv_stack[index].cwp_idx = CWP_EQUAL;
+                 ++(*derived_mv_count);
++                  DEBUG_REFMV_printf("lnr-spc[%d:%d]: adding[%d] y=%d,x=%d,"
++                                     "w=%d,y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                                     ref, *drl_dr_pr_count, index,
++                                     this_refmv.as_mv.row, this_refmv.as_mv.col,
++                                     weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+               }
+             } else {
+               if (
+@@ -1122,6 +1279,12 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 derived_mv_stack[*derived_mv_count].this_mv = this_refmv;
+                 derived_mv_weight[*derived_mv_count] = weight;
+                 derived_mv_stack[*derived_mv_count].cwp_idx = CWP_EQUAL;
++                  DEBUG_REFMV_printf("lnr-spc[%d:%d]: tailing[%d] y=%d,x=%d,"
++                                     "w=%d,y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                                     ref, *drl_dr_pr_count, *derived_mv_count,
++                                     this_refmv.as_mv.row, this_refmv.as_mv.col,
++                                     weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+                 ++(*derived_mv_count);
+               }
+             }
+@@ -1134,7 +1297,7 @@ static AOM_INLINE void add_ref_mv_candidate(
+         candidate->ref_frame[1] == NONE_FRAME &&
+         rf[0] == tip_ref->ref_frame[0] && rf[1] == tip_ref->ref_frame[1] &&
+         cm->features.tip_frame_mode) {
+-      derive_ref_mv_candidate_from_tip_mode(
++      derive_ref_mv_candidate_from_tip_mode(DB_ARGS(mi_row, mi_col)
+           cm, mi_row_cand, mi_col_cand, candidate, refmv_count, ref_match_count,
+           newmv_count, ref_mv_stack, ref_mv_weight, weight, drl_pr_count);
+     } else {
+@@ -1156,6 +1319,13 @@ static AOM_INLINE void add_ref_mv_candidate(
+             if ((ref_mv_stack[index].this_mv.as_int == this_refmv[0].as_int) &&
+                 (ref_mv_stack[index].comp_mv.as_int == this_refmv[1].as_int)) {
+               ref_mv_weight[index] += weight;
++                DEBUG_REFMV_printf("spc-c[%d]: increasing[%d] y=%d,x=%d,y2=%d,"
++                                   "x2=%d,w+=%d at offset y=%d,x=%d\n",
++                                   *drl_pr_count, index,
++                                   this_refmv[0].as_mv.row, this_refmv[0].as_mv.col,
++                                   this_refmv[1].as_mv.row, this_refmv[1].as_mv.col,
++                                   weight,
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               break;
+             }
+           }
+@@ -1168,6 +1338,13 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ref_mv_stack[index].row_offset = OFFSET_NONSPATIAL;
+             ref_mv_stack[index].col_offset = OFFSET_NONSPATIAL;
+             ref_mv_stack[index].cwp_idx = candidate->cwp_idx;
++              DEBUG_REFMV_printf("spc-c[%d]: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                                 "w=%d at offset y=%d,x=%d\n",
++                                 *drl_pr_count, index,
++                                 this_refmv[0].as_mv.row, this_refmv[0].as_mv.col,
++                                 this_refmv[1].as_mv.row, this_refmv[1].as_mv.col,
++                                 weight,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+             ++(*refmv_count);
+           }
+         } else {
+@@ -1178,6 +1355,13 @@ static AOM_INLINE void add_ref_mv_candidate(
+             ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
+             ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+             ref_mv_stack[*refmv_count].cwp_idx = candidate->cwp_idx;
++              DEBUG_REFMV_printf("spc-c[%d]: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                                 "w=%d at offset y=%d,x=%d\n",
++                                 *drl_pr_count, *refmv_count,
++                                 this_refmv[0].as_mv.row, this_refmv[0].as_mv.col,
++                                 this_refmv[1].as_mv.row, this_refmv[1].as_mv.col,
++                                 weight,
++                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
+             ++(*refmv_count);
+           }
+         }
+@@ -1236,6 +1420,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+                     (derived_mv_stack[index].comp_mv.as_int ==
+                      this_refmv[1].as_int)) {
+                   derived_mv_weight[index] += weight;
++                    DEBUG_REFMV_printf("mvtj-spc-c[%d]: increasing[%d] y=%d,x=%d,"
++                                       "y2=%d,x2=%d,w+=%d at offset y=%d,x=%d\n",
++                                       *drl_dr_pr_count, index,
++                                       this_refmv[0].as_mv.row,
++                                       this_refmv[0].as_mv.col,
++                                       this_refmv[1].as_mv.row,
++                                       this_refmv[1].as_mv.col, weight,
++                                       mi_row_cand - mi_row, mi_col_cand - mi_col);
+                   break;
+                 }
+               }
+@@ -1252,6 +1444,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 derived_mv_stack[index].comp_mv = this_refmv[1];
+                 derived_mv_weight[index] = weight;
+                 derived_mv_stack[index].cwp_idx = CWP_EQUAL;
++                  DEBUG_REFMV_printf("mvtj-spc-c[%d]: adding[%d] y=%d,x=%d,"
++                                     "y2=%d,x2=%d,w=%d at offset y=%d,x=%d\n",
++                                     *drl_dr_pr_count, *derived_mv_count,
++                                     this_refmv[0].as_mv.row,
++                                     this_refmv[0].as_mv.col,
++                                     this_refmv[1].as_mv.row,
++                                     this_refmv[1].as_mv.col, weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+                 ++(*derived_mv_count);
+               }
+             } else {
+@@ -1266,6 +1466,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 derived_mv_stack[*derived_mv_count].comp_mv = this_refmv[1];
+                 derived_mv_weight[*derived_mv_count] = weight;
+                 derived_mv_stack[*derived_mv_count].cwp_idx = CWP_EQUAL;
++                  DEBUG_REFMV_printf("mvtj-spc-c[%d]: tailing[%d] y=%d,x=%d,"
++                                     "y2=%d,x2=%d,w=%d at offset y=%d,x=%d\n",
++                                     *drl_dr_pr_count, *derived_mv_count,
++                                     this_refmv[0].as_mv.row,
++                                     this_refmv[0].as_mv.col,
++                                     this_refmv[1].as_mv.row,
++                                     this_refmv[1].as_mv.col, weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+                 ++(*derived_mv_count);
+               }
+             }
+@@ -1316,6 +1524,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+                     (derived_mv_stack[index].comp_mv.as_int ==
+                      this_refmv[1].as_int)) {
+                   derived_mv_weight[index] += weight;
++                    DEBUG_REFMV_printf("mvxp-spc-c[%d]: increasing[%d] y=%d,x=%d,"
++                                       "y2=%d,x2=%d,w+=%d at offset y=%d,x=%d\n",
++                                       *drl_dr_pr_count, index,
++                                       this_refmv[0].as_mv.row,
++                                       this_refmv[0].as_mv.col,
++                                       this_refmv[1].as_mv.row,
++                                       this_refmv[1].as_mv.col, weight,
++                                       mi_row_cand - mi_row, mi_col_cand - mi_col);
+                   break;
+                 }
+               }
+@@ -1333,6 +1549,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 derived_mv_weight[index] = weight;
+                 derived_mv_stack[index].cwp_idx = CWP_EQUAL;
+                 ++(*derived_mv_count);
++                  DEBUG_REFMV_printf("mvxp-spc-c[%d]: adding[%d] y=%d,x=%d,"
++                                     "y2=%d,x2=%d,w=%d at offset y=%d,x=%d\n",
++                                     *drl_dr_pr_count, index,
++                                     this_refmv[0].as_mv.row,
++                                     this_refmv[0].as_mv.col,
++                                     this_refmv[1].as_mv.row,
++                                     this_refmv[1].as_mv.col, weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+               }
+             } else {
+               if (
+@@ -1346,6 +1570,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+                 derived_mv_stack[*derived_mv_count].comp_mv = this_refmv[1];
+                 derived_mv_weight[*derived_mv_count] = weight;
+                 derived_mv_stack[*derived_mv_count].cwp_idx = CWP_EQUAL;
++                  DEBUG_REFMV_printf("mvxp-spc-c[%d]: tailing[%d] y=%d,x=%d,"
++                                     "y2=%d,x2=%d,w=%d at offset y=%d,x=%d\n",
++                                     *drl_dr_pr_count, *derived_mv_count,
++                                     this_refmv[0].as_mv.row,
++                                     this_refmv[0].as_mv.col,
++                                     this_refmv[1].as_mv.row,
++                                     this_refmv[1].as_mv.col, weight,
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+                 ++(*derived_mv_count);
+               }
+             }
+@@ -1358,6 +1590,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+               if (single_mv[cand_idx].ref_frame == rf[candidate_ref_idx0] &&
+                   (single_mv[cand_idx].mv.as_int ==
+                    this_refmv[candidate_ref_idx0].as_int)) {
++                  DEBUG_REFMV_printf("sngl-c[%d:%d]: skipping[%d] y=%d,x=%d,"
++                                     "r=%d at offset y=%d,x=%d\n",
++                                     candidate_ref_idx0, *drl_dr_single_pr_count,
++                                     cand_idx,
++                                     this_refmv[candidate_ref_idx0].as_mv.row,
++                                     this_refmv[candidate_ref_idx0].as_mv.col,
++                                     1 + rf[candidate_ref_idx0],
++                                     mi_row_cand - mi_row, mi_col_cand - mi_col);
+                 break;
+               }
+             }
+@@ -1372,6 +1612,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+               single_mv[cand_idx].mv.as_int =
+                   this_refmv[candidate_ref_idx0].as_int;
+               single_mv[cand_idx].ref_frame = rf[candidate_ref_idx0];
++                DEBUG_REFMV_printf("sngl-c[%d:%d]: adding[%d] y=%d,x=%d,r=%d "
++                                   "at offset y=%d,x=%d\n",
++                                   candidate_ref_idx0, *drl_dr_single_pr_count,
++                                   *single_mv_count,
++                                   this_refmv[candidate_ref_idx0].as_mv.row,
++                                   this_refmv[candidate_ref_idx0].as_mv.col,
++                                   1 + rf[candidate_ref_idx0],
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               ++(*single_mv_count);
+             }
+           } else {
+@@ -1385,6 +1633,14 @@ static AOM_INLINE void add_ref_mv_candidate(
+               single_mv[*single_mv_count].mv.as_int =
+                   this_refmv[candidate_ref_idx0].as_int;
+               single_mv[*single_mv_count].ref_frame = rf[candidate_ref_idx0];
++                DEBUG_REFMV_printf("sngl-c[%d:%d]: tailing[%d] y=%d,x=%d,r=%d "
++                                   "at offset y=%d,x=%d\n",
++                                   candidate_ref_idx0, *drl_dr_single_pr_count,
++                                   *single_mv_count,
++                                   this_refmv[candidate_ref_idx0].as_mv.row,
++                                   this_refmv[candidate_ref_idx0].as_mv.col,
++                                   1 + rf[candidate_ref_idx0],
++                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
+               ++(*single_mv_count);
+             }
+           }
+@@ -1728,7 +1984,13 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+         if (this_refmv.as_int == ref_mv_stack[idx].this_mv.as_int) break;
+       }
+ 
+-      if (idx < *refmv_count) ref_mv_weight[idx] += weight;
++      if (idx < *refmv_count) {
++          ref_mv_weight[idx] += weight;
++          DEBUG_REFMV_printf("tpl[0:%d]: increasing[%d] y=%d,x=%d,w+=%d "
++                             "at offset y=%d,x=%d\n",
++                             *drl_pr_count, idx, this_refmv.as_mv.row,
++                             this_refmv.as_mv.col, weight, tpl_row, tpl_col);
++      }
+ 
+       if (idx == *refmv_count && *refmv_count < MAX_REF_MV_STACK_SIZE) {
+         ref_mv_stack[idx].this_mv.as_int = this_refmv.as_int;
+@@ -1738,6 +2000,11 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+         ref_mv_weight[idx] = weight;
+         ++(*refmv_count);
+         ++(*added_tmvp_cnt);
++          DEBUG_REFMV_printf("tpl[0:%d]: adding[%d] y=%d,x=%d,w=%d,"
++                             "y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                             *drl_pr_count, idx,
++                             this_refmv.as_mv.row, this_refmv.as_mv.col, weight,
++                             tpl_row, tpl_col);
+       }
+     } else {
+       if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
+@@ -1746,6 +2013,11 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+         ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+         ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+         ref_mv_weight[*refmv_count] = weight;
++          DEBUG_REFMV_printf("tpl[0:%d]: tailing[%d] y=%d,x=%d,w=%d,"
++                             "y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                             *drl_pr_count, *refmv_count,
++                             this_refmv.as_mv.row, this_refmv.as_mv.col, weight,
++                             tpl_row, tpl_col);
+         ++(*refmv_count);
+         ++(*added_tmvp_cnt);
+       }
+@@ -1773,7 +2045,15 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+           break;
+       }
+ 
+-      if (idx < *refmv_count) ref_mv_weight[idx] += weight;
++      if (idx < *refmv_count) {
++            ref_mv_weight[idx] += weight;
++          DEBUG_REFMV_printf("tpl-c[%d]: increasing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                             "w+=%d at offset y=%d,x=%d\n",
++                             *drl_pr_count, idx,
++                             this_refmv.as_mv.row, this_refmv.as_mv.col,
++                             comp_refmv.as_mv.row, comp_refmv.as_mv.col, weight,
++                             tpl_row, tpl_col);
++      }
+ 
+       if (idx == *refmv_count && *refmv_count < MAX_REF_MV_STACK_SIZE) {
+         ref_mv_stack[idx].this_mv.as_int = this_refmv.as_int;
+@@ -1784,6 +2064,12 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+         ref_mv_weight[idx] = weight;
+         ++(*refmv_count);
+         ++(*added_tmvp_cnt);
++          DEBUG_REFMV_printf("tpl-c[%d]: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                             "w=%d at offset y=%d,x=%d\n",
++                             *drl_pr_count, idx,
++                             this_refmv.as_mv.row, this_refmv.as_mv.col,
++                             comp_refmv.as_mv.row, comp_refmv.as_mv.col, weight,
++                             tpl_row, tpl_col);
+       }
+     } else {
+       if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
+@@ -1793,6 +2079,12 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+         ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+         ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+         ref_mv_weight[*refmv_count] = weight;
++          DEBUG_REFMV_printf("tpl-c[%d]: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                             "w=%d at offset y=%d,x=%d\n",
++                             *drl_pr_count, *refmv_count,
++                             this_refmv.as_mv.row, this_refmv.as_mv.col,
++                             comp_refmv.as_mv.row, comp_refmv.as_mv.col, weight,
++                             tpl_row, tpl_col);
+         ++(*refmv_count);
+         ++(*added_tmvp_cnt);
+       }
+@@ -1835,16 +2127,24 @@ static AOM_INLINE int get_rmb_list_index(const MV_REFERENCE_FRAME ref_frame) {
+ }
+ 
+ static AOM_INLINE bool check_rmb_cand(
++    DB_ARGS(const AV1_COMMON *cm, int bank_idx, int bank_count)
+     CANDIDATE_MV cand_mv, CANDIDATE_MV *ref_mv_stack, uint16_t *ref_mv_weight,
+     uint8_t *refmv_count, int is_comp, int mi_row, int mi_col, int block_width,
+     int block_height, int frame_width, int frame_height, int *drl_pr_count) {
+   // Check if the MV candidate is already existing in the ref MV stack.
++    RDB_ONLY(int did_check = 0);
+   if (*drl_pr_count < MAX_PR_NUM) {
++      RDB_ONLY(did_check = 1);
+     for (int i = 0; i < *refmv_count; ++i) {
+       ++(*drl_pr_count);
+       if (ref_mv_stack[i].this_mv.as_int == cand_mv.this_mv.as_int &&
+           (!is_comp ||
+            ref_mv_stack[i].comp_mv.as_int == cand_mv.comp_mv.as_int)) {
++          DEBUG_REFMV_printf("insert_bank[%d/%d:%d]: skipping[%d] "
++                             "y=%d,x=%d,y2=%d,x2=%d\n",
++                             bank_idx, bank_count, *drl_pr_count, i,
++                             cand_mv.this_mv.as_mv.row, cand_mv.this_mv.as_mv.col,
++                             cand_mv.comp_mv.as_mv.row, cand_mv.comp_mv.as_mv.col);
+         return false;
+       }
+     }
+@@ -1869,6 +2169,12 @@ static AOM_INLINE bool check_rmb_cand(
+   ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
+   ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+   ref_mv_stack[*refmv_count].cwp_idx = cand_mv.cwp_idx;
++    DEBUG_REFMV_printf("insert_bank[%d/%d:%d]: %s[%d] y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
++                       bank_idx, bank_count, *drl_pr_count,
++                       did_check ? "adding" : "tailing",
++                       *refmv_count, cand_mv.this_mv.as_mv.row,
++                       cand_mv.this_mv.as_mv.col, cand_mv.comp_mv.as_mv.row,
++                       cand_mv.comp_mv.as_mv.col, REF_CAT_LEVEL);
+   ++*refmv_count;
+ 
+   return true;
+@@ -1962,7 +2268,8 @@ static AOM_INLINE void add_derived_smvp_candidates(
+           ? AOMMIN(cm->features.max_bvp_drl_bits + 1, MAX_REF_BV_STACK_SIZE)
+           : AOMMIN(cm->features.max_drl_bits + 1, MAX_REF_MV_STACK_SIZE);
+   if (*refmv_count < max_ref_mv_count && derived_mv_count > 0) {
+-    fill_mvp_from_derived_smvp(rf, ref_mv_stack, ref_mv_weight, refmv_count,
++    fill_mvp_from_derived_smvp(DB_ARGS(cm, xd->mi_row, xd->mi_col)
++                               rf, ref_mv_stack, ref_mv_weight, refmv_count,
+                                derived_mv_stack, derived_mv_count,
+                                max_ref_mv_count, drl_pr_count);
+   }
+@@ -1996,7 +2303,8 @@ static AOM_INLINE void add_ref_mv_bank_candidates(
+           rmb_ref_frame[idx] != ref_frame)
+         continue;
+ 
+-      check_rmb_cand(cand_mv, ref_mv_stack, ref_mv_weight, refmv_count, is_comp,
++      check_rmb_cand(DB_ARGS(cm, idx_bank, count)
++                     cand_mv, ref_mv_stack, ref_mv_weight, refmv_count, is_comp,
+                      xd->mi_row, xd->mi_col, block_width, block_height,
+                      xd->plane[0].dst.width, xd->plane[0].dst.height,
+                      drl_pr_count);
+@@ -2221,7 +2529,6 @@ static AOM_INLINE int generate_points_from_corners(
+       valid_points++;
+     }
+   }
+-
+   assert(valid_points <= 3);
+   return valid_points;
+ }
+@@ -2291,6 +2598,7 @@ static AOM_INLINE int generate_points_from_corners(
+ #endif  // CONFIG_WRL_CORNER_MVS
+ 
+ static int insert_mvp_candidate(
++    DB_ARGS(const AV1_COMMON *cm, int mi_row, int mi_col, int cidx)
+     MV_REFERENCE_FRAME rf[2], CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
+     uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
+     MV_COMP_DATA_TYPE this_mv_col, MV_COMP_DATA_TYPE this_mv_row,
+@@ -2322,6 +2630,12 @@ static int insert_mvp_candidate(
+       ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
+       ref_mv_weight[idx] = weight;
+       ++(*refmv_count);
++        DEBUG_REFMV_printf("insert_cand: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                           "w=%d at mix_idx=%d\n",
++                           idx,
++                           ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                           ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
++                           weight, cidx);
+       return 1;
+     }
+     return 0;
+@@ -2333,6 +2647,12 @@ static int insert_mvp_candidate(
+       ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+       ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+       ref_mv_weight[*refmv_count] = weight;
++        DEBUG_REFMV_printf("insert_cand: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                           "w=%d at mix_idx=%d\n",
++                           *refmv_count,
++                           ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                           ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
++                           weight, cidx);
+       ++(*refmv_count);
+       return 1;
+     }
+@@ -2342,8 +2662,8 @@ static int insert_mvp_candidate(
+ }
+ 
+ static AOM_INLINE void setup_ref_mv_list(
+-    const AV1_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME ref_frame,
+-    uint8_t *const refmv_count,
++    const AV1_COMMON *cm, const MACROBLOCKD *xd, MB_MODE_INFO *mbmi,
++    MV_REFERENCE_FRAME ref_frame, uint8_t *const refmv_count,
+     CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
+     uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
+     int_mv mv_ref_list[MAX_MV_REF_CANDIDATES], int_mv *gm_mv_candidates,
+@@ -2360,6 +2680,21 @@ static AOM_INLINE void setup_ref_mv_list(
+   av1_set_ref_frame(rf, ref_frame);
+   *refmv_count = 0;
+ 
++    DEBUG_REFMV_printf("setup_ref_mv_list(%d,%d) for y=%d,x=%d\n",
++                       rf[0] == TIP_FRAME ? 7 :
++                       rf[0] == INTRA_FRAME ? -1 : rf[0],
++                       rf[1], mi_row, mi_col);
++    if (rf[1] != NONE_FRAME && rf[1] != INTRA_FRAME) {
++        DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d, y2=%d,x2=%d\n",
++                           gm_mv_candidates[0].as_mv.row,
++                           gm_mv_candidates[0].as_mv.col,
++                           gm_mv_candidates[1].as_mv.row,
++                           gm_mv_candidates[1].as_mv.col);
++    } else if (rf[0] != INTRA_FRAME && rf[0] != NONE_FRAME) {
++        DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d\n",
++                           gm_mv_candidates[0].as_mv.row,
++                           gm_mv_candidates[0].as_mv.col);
++    }
+   int drl_pr_count = 0;
+   int drl_dr_pr_count = 0;
+   int drl_dr_single_pr_count = 0;
+@@ -2387,9 +2722,14 @@ static AOM_INLINE void setup_ref_mv_list(
+   MVP_UNIT_STATUS row_smvp_state[4] = { 0 };
+   get_row_smvp_states(cm, xd, row_smvp_state);
+ 
++    int have_warp = 0;
+   // derive a warp model from the 3 corner MVs
+   if (warp_param_stack && valid_num_warp_candidates &&
+       *valid_num_warp_candidates < max_num_of_warp_candidates) {
++      have_warp = mbmi->mode > NEWMV;
++      if (have_warp)
++          DEBUG_REFMV_printf("Warp corners [%d|%d]\n", *refmv_count,
++                             *valid_num_warp_candidates);
+ #if CONFIG_WRL_CORNER_MVS
+ // 0: top_left, top_right, bottom_left
+ // 1: top, top_right_next, bottom_left
+@@ -2488,10 +2828,14 @@ static AOM_INLINE void setup_ref_mv_list(
+ 
+   const int is_tmvp_high_priority = assign_tmvp_high_priority(cm, rf);
+   if (is_tmvp_high_priority) {
++      DEBUG_REFMV_printf("High-priority TMVP [%d|%d]\n", *refmv_count,
++                         have_warp ? *valid_num_warp_candidates : 0);
+     add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
+                        ref_mv_weight, mi_row, mi_col, &drl_pr_count);
+   }
+ 
++    DEBUG_REFMV_printf("Spatial MVP [%d|%d]\n", *refmv_count,
++                       have_warp ? *valid_num_warp_candidates : 0);
+   if (xd->left_available) {
+     scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
+                   ref_mv_stack, ref_mv_weight, &col_match_count, &newmv_count,
+@@ -2555,10 +2899,14 @@ static AOM_INLINE void setup_ref_mv_list(
+   }
+ 
+   if (!is_tmvp_high_priority) {
++      DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *refmv_count,
++                         have_warp ? *valid_num_warp_candidates : 0);
+     add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
+                        ref_mv_weight, mi_row, mi_col, &drl_pr_count);
+   }
+ 
++    DEBUG_REFMV_printf("Extra Spatial MVP [%d|%d]\n", *refmv_count,
++                       have_warp ? *valid_num_warp_candidates : 0);
+   if (row_smvp_state[3].is_available) {
+     uint8_t dummy_ref_match_count = 0;
+     uint8_t dummy_new_mv_count = 0;
+@@ -2575,6 +2923,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   const uint8_t nearest_refmv_count = *refmv_count;
+ 
+   if (xd->left_available) {
++      DEBUG_REFMV_printf("Spatial Ext [left] MVP [%d|%d]\n", *refmv_count,
++                         have_warp ? *valid_num_warp_candidates : 0);
+     for (int idx = 2; idx <= MVREF_COLS; ++idx) {
+       const int col_offset = -(idx << 1) + 1 + col_adj;
+       const MVP_UNIT_STATUS col_units_status[SMVP_COL_SEARCH_COUNT] = {
+@@ -2628,6 +2978,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   }
+ 
+   const int is_compound = is_inter_ref_frame(rf[1]);
++    DEBUG_REFMV_printf("Derived Spatial MVP & refbank [%d|%d]\n", *refmv_count,
++                       have_warp ? *valid_num_warp_candidates : 0);
+   if (is_compound) {
+     add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
+                                 ref_mv_weight, derived_mv_stack,
+@@ -2653,6 +3005,8 @@ static AOM_INLINE void setup_ref_mv_list(
+     }
+   }
+ 
++    DEBUG_REFMV_printf("GMVs [%d|%d]\n", *refmv_count,
++                       have_warp ? *valid_num_warp_candidates : 0);
+   if (rf[1] == NONE_FRAME && mv_ref_list != NULL) {
+     for (int idx = *refmv_count; idx < MAX_MV_REF_CANDIDATES; ++idx) {
+       mv_ref_list[idx].as_int = gm_mv_candidates[0].as_int;
+@@ -2676,6 +3030,13 @@ static AOM_INLINE void setup_ref_mv_list(
+             (rf[1] == NONE_FRAME ||
+              (rf[1] > NONE_FRAME && ref_mv_stack[idx].comp_mv.as_int ==
+                                         gm_mv_candidates[1].as_int))) {
++            DEBUG_REFMV_printf("gmv_add[%d]: skipping[%d] y=%d,x=%d,"
++                               "y2=%d,x2=%d from GMV\n",
++                               drl_pr_count, idx,
++                               gm_mv_candidates[0].as_mv.row,
++                               gm_mv_candidates[0].as_mv.col,
++                               gm_mv_candidates[1].as_mv.row,
++                               gm_mv_candidates[1].as_mv.col);
+           break;
+         }
+       }
+@@ -2688,6 +3049,13 @@ static AOM_INLINE void setup_ref_mv_list(
+         ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
+         ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
+         ref_mv_weight[idx] = REF_CAT_LEVEL;
++          DEBUG_REFMV_printf("gmv_add[%d]: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                             "w=%d from GMV\n",
++                             drl_pr_count, idx,
++                             gm_mv_candidates[0].as_mv.row,
++                             gm_mv_candidates[0].as_mv.col,
++                             gm_mv_candidates[1].as_mv.row,
++                             gm_mv_candidates[1].as_mv.col, REF_CAT_LEVEL);
+         ++(*refmv_count);
+       }
+     } else {
+@@ -2698,6 +3066,13 @@ static AOM_INLINE void setup_ref_mv_list(
+         ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
+         ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
+         ref_mv_weight[*refmv_count] = REF_CAT_LEVEL;
++          DEBUG_REFMV_printf("gmv_add[%d]: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                             "w=%d from GMV\n",
++                             drl_pr_count, *refmv_count,
++                             gm_mv_candidates[0].as_mv.row,
++                             gm_mv_candidates[0].as_mv.col,
++                             gm_mv_candidates[1].as_mv.row,
++                             gm_mv_candidates[1].as_mv.col, REF_CAT_LEVEL);
+         ++(*refmv_count);
+       }
+     }
+@@ -2710,6 +3085,8 @@ static AOM_INLINE void setup_ref_mv_list(
+       max_ext_stack_size = 6;
+ 
+     if (max_ext_stack_size) {
++        DEBUG_REFMV_printf("Ext MVP candidates [%d|%d]\n", *refmv_count,
++                           have_warp ? *valid_num_warp_candidates : 0);
+       MV_COMP_DATA_TYPE row = 0;
+       MV_COMP_DATA_TYPE col = 0;
+       MV_COMP_DATA_TYPE comp_mv_row = 0;
+@@ -2724,6 +3101,7 @@ static AOM_INLINE void setup_ref_mv_list(
+         comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
+         curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
+         added_ext_cnt += insert_mvp_candidate(
++            DB_ARGS(cm, mi_row, mi_col, 0)
+             rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
+             curr_mv_weight, refmv_count, &drl_pr_count);
+         if (*refmv_count < MAX_REF_MV_STACK_SIZE &&
+@@ -2735,6 +3113,7 @@ static AOM_INLINE void setup_ref_mv_list(
+           comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
+           curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
+           added_ext_cnt += insert_mvp_candidate(
++              DB_ARGS(cm, mi_row, mi_col, 1)
+               rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
+               comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
+         }
+@@ -2748,6 +3127,7 @@ static AOM_INLINE void setup_ref_mv_list(
+         comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
+         curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
+         added_ext_cnt += insert_mvp_candidate(
++            DB_ARGS(cm, mi_row, mi_col, 2)
+             rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
+             curr_mv_weight, refmv_count, &drl_pr_count);
+ 
+@@ -2760,6 +3140,7 @@ static AOM_INLINE void setup_ref_mv_list(
+           comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
+           curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
+           added_ext_cnt += insert_mvp_candidate(
++              DB_ARGS(cm, mi_row, mi_col, 3)
+               rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
+               comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
+         }
+@@ -2773,6 +3154,7 @@ static AOM_INLINE void setup_ref_mv_list(
+           comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
+           curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
+           added_ext_cnt += insert_mvp_candidate(
++              DB_ARGS(cm, mi_row, mi_col, 4)
+               rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
+               comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
+         }
+@@ -2785,6 +3167,7 @@ static AOM_INLINE void setup_ref_mv_list(
+           comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
+           curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
+           added_ext_cnt += insert_mvp_candidate(
++              DB_ARGS(cm, mi_row, mi_col, 5)
+               rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
+               comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
+           (void)added_ext_cnt;
+@@ -2795,6 +3178,9 @@ static AOM_INLINE void setup_ref_mv_list(
+ 
+   if (warp_param_stack && valid_num_warp_candidates &&
+       *valid_num_warp_candidates < max_num_of_warp_candidates) {
++      if (have_warp)
++          DEBUG_REFMV_printf("Warp bank [%d|%d]\n", *refmv_count,
++                             *valid_num_warp_candidates);
+     // Insert warp parameters from the bank
+ #if WARP_CU_BANK
+     const WARP_PARAM_BANK *warp_param_bank = &xd->warp_param_bank;
+@@ -2821,6 +3207,9 @@ static AOM_INLINE void setup_ref_mv_list(
+       }
+     }
+ 
++      if (have_warp)
++          DEBUG_REFMV_printf("Warp gmv [%d|%d]\n", *refmv_count,
++                             *valid_num_warp_candidates);
+     // Insert Global motion of the current
+     if (*valid_num_warp_candidates < max_num_of_warp_candidates) {
+       if (!xd->global_motion[ref_frame].invalid &&
+@@ -2834,6 +3223,9 @@ static AOM_INLINE void setup_ref_mv_list(
+       }
+     }
+ 
++      if (have_warp)
++          DEBUG_REFMV_printf("Warp defaults [%d|%d]\n", *refmv_count,
++                             *valid_num_warp_candidates);
+     // Filled with default values( currently all params are zeros)
+     int max_num_of_default_allowed = AOMMIN(2, max_num_of_warp_candidates);
+     int current_number_of_defaults = 0;
+@@ -2852,6 +3244,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   // If there are open slots in reference BV candidate list
+   // fetch reference BVs from the default BVPs
+   if (xd->mi[0]->use_intrabc[xd->tree_type == CHROMA_PART]) {
++      DEBUG_REFMV_printf("Intrabc defaults [%d|%d]\n", *refmv_count,
++                         have_warp ? *valid_num_warp_candidates : 0);
+     const int w = xd->width * MI_SIZE;
+     const int h = xd->height * MI_SIZE;
+     const int sb_width = block_size_wide[cm->sb_size];
+@@ -2874,6 +3268,8 @@ static AOM_INLINE void setup_ref_mv_list(
+       add_to_ref_bv_list(tmp_mv, ref_mv_stack, ref_mv_weight, refmv_count);
+     }
+   }
++    DEBUG_REFMV_printf("Final [%d|%d]\n", *refmv_count,
++                       have_warp ? *valid_num_warp_candidates : 0);
+ }
+ 
+ void get_skip_mode_ref_offsets(const AV1_COMMON *cm, int ref_order_hint[2]) {
+@@ -3001,7 +3397,7 @@ void av1_find_mv_refs(
+         (SKIP_MODE_MVP_LIST *)&(xd->skip_mvp_candidate_list);
+     av1_initialize_ref_mv_stack(skip_list->ref_mv_stack,
+                                 USABLE_REF_MV_STACK_SIZE);
+-    setup_ref_mv_list(cm, xd, ref_frame, &(skip_list->ref_mv_count),
++    setup_ref_mv_list(cm, xd, mi, ref_frame, &(skip_list->ref_mv_count),
+                       skip_list->ref_mv_stack, skip_list->weight,
+                       mv_ref_list ? mv_ref_list[ref_frame] : NULL, gm_mv,
+                       mi_row, mi_col, NULL, 0, NULL);
+@@ -3023,14 +3419,14 @@ void av1_find_mv_refs(
+     } else {
+       av1_initialize_ref_mv_stack(ref_mv_stack[rf[0]], MAX_REF_MV_STACK_SIZE);
+     }
+-    setup_ref_mv_list(cm, xd, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
++    setup_ref_mv_list(cm, xd, mi, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
+                       ref_mv_weight[rf[0]],
+                       mv_ref_list ? mv_ref_list[rf[0]] : NULL, gm_mv, mi_row,
+                       mi_col, derive_wrl ? warp_param_stack[rf[0]] : NULL,
+                       derive_wrl ? max_num_of_warp_candidates : 0,
+                       derive_wrl ? &valid_num_warp_candidates[rf[0]] : NULL);
+ 
+-    if (has_second_drl(mi)) {
++    if (has_second_drl(mi) && mi->ref_frame[0] != mi->ref_frame[1]) {
+       assert(rf[0] == mi->ref_frame[0]);
+       assert(rf[1] == mi->ref_frame[1]);
+       const BLOCK_SIZE bsize = mi->sb_type[PLANE_TYPE_Y];
+@@ -3040,7 +3436,7 @@ void av1_find_mv_refs(
+       gm_mv[1].as_int = 0;
+ 
+       av1_initialize_ref_mv_stack(ref_mv_stack[rf[1]], MAX_REF_MV_STACK_SIZE);
+-      setup_ref_mv_list(cm, xd, rf[1], &ref_mv_count[rf[1]],
++      setup_ref_mv_list(cm, xd, mi, rf[1], &ref_mv_count[rf[1]],
+                         ref_mv_stack[rf[1]], ref_mv_weight[rf[1]],
+                         mv_ref_list ? mv_ref_list[rf[1]] : NULL, gm_mv, mi_row,
+                         mi_col, derive_wrl ? warp_param_stack[rf[1]] : NULL,
+@@ -4690,6 +5086,9 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
+   if (xd->tree_type == CHROMA_PART) return;
+   const int mi_sb_size = cm->mib_size;
+   const int mi_sb_size_log2 = cm->mib_size_log2;
++#if DEBUG_BLOCK_INFO && DEBUG_REFMV
++    const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++#endif
+   const int mi_row_in_sb = xd->mi_row % mi_sb_size;
+   const int mi_col_in_sb = xd->mi_col % mi_sb_size;
+   const int rmb_unit_mi_size_log2 = mi_sb_size_log2 - SB_TO_RMB_UNITS_LOG2;
+@@ -4704,23 +5103,79 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
+     xd->ref_mv_bank.remain_hits =
+         AOMMAX(rmb_units_count, BANK_1ST_UNIT_UPDATE_COUNT);
+     xd->ref_mv_bank.rmb_unit_hits = 0;
++      if (cm->current_frame.frame_type & 1 ||
++          cm->features.allow_intrabc)
++      {
++          DEBUG_REFMV_printf("Resetting refbank: remain=%d|hits=%d|%d\n",
++                             xd->ref_mv_bank.remain_hits,
++                             xd->ref_mv_bank.rmb_unit_hits,
++                             xd->ref_mv_bank.rmb_sb_hits);
++      }
+   } else if (((mi_row_in_sb % rmb_unit_mi_size) == 0) &&
+              ((mi_col_in_sb % rmb_unit_mi_size) == 0)) {
+     xd->ref_mv_bank.remain_hits += rmb_units_count;
+     xd->ref_mv_bank.rmb_unit_hits = 0;
++      if (cm->current_frame.frame_type & 1 ||
++          cm->features.allow_intrabc)
++      {
++          DEBUG_REFMV_printf("Updating refbank availability: remain=%d|hits=%d|%d\n",
++                             xd->ref_mv_bank.remain_hits,
++                             xd->ref_mv_bank.rmb_unit_hits,
++                             xd->ref_mv_bank.rmb_sb_hits);
++      }
+   }
+ }
+ 
++#if DEBUG_BLOCK_INFO && DEBUG_REFMV
++static void debug_refbank(const AV1_COMMON *cm, const int mi_row, const int mi_col,
++                          REF_MV_BANK *ref_mv_bank, const int rmb_list_index)
++{
++    CANDIDATE_MV *queue = ref_mv_bank->rmb_buffer[rmb_list_index];
++    MV_REFERENCE_FRAME *rmb_ref_frame = ref_mv_bank->rmb_ref_frame;
++    const int start_idx = ref_mv_bank->rmb_start_idx[rmb_list_index];
++    const int count = ref_mv_bank->rmb_count[rmb_list_index];
++    for (int i = 0; i < count; ++i) {
++        const int idx = (start_idx + count - i - 1) % REF_MV_BANK_SIZE;
++        MV_REFERENCE_FRAME rf[2];
++        av1_set_ref_frame(rf, rmb_ref_frame[idx]);
++        const int comp = rmb_list_index - 6U < 2U ||
++            (rmb_list_index == REF_MV_BANK_LIST_FOR_ALL_OTHERS &&
++             rf[1] != NONE_FRAME);
++        DEBUG_REFMV_printf("refbank[%d/%d,c=%d]: mv=y:%d,x:%d,y2=%d,x2=%d,r=%d,%d\n",
++                           i, count, rmb_list_index,
++                           queue[idx].this_mv.as_mv.row,
++                           queue[idx].this_mv.as_mv.col,
++                           comp ? queue[idx].comp_mv.as_mv.row : 0,
++                           comp ? queue[idx].comp_mv.as_mv.col : 0,
++                           rmb_list_index < 6 ? rmb_list_index :
++                           rmb_list_index < 8 ? 0 :
++                           rf[0] == TIP_FRAME ? 7 :
++                           rf[0] == INTRA_FRAME ? -1 : rf[0],
++                           rmb_list_index < 6 ? -1 :
++                           rmb_list_index < 8 ? rmb_list_index - 6 : rf[1]);
++    }
++}
++#else
++#define debug_refbank(...)
++#endif
++
+ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+                                       MACROBLOCKD *const xd, int from_within_sb,
+                                       const MB_MODE_INFO *const mbmi,
+                                       REF_MV_BANK *ref_mv_bank) {
++#if DEBUG_BLOCK_INFO && DEBUG_REFMV
++    const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++#endif
+   if (from_within_sb) {
+     decide_rmb_unit_update_count(cm, xd, mbmi);
+ 
+     if (ref_mv_bank->remain_hits == 0 ||
+         ref_mv_bank->rmb_unit_hits >= BANK_UNIT_MAX_ALLOWED_LEFTOVER_UPDATES ||
+         ref_mv_bank->rmb_sb_hits >= MAX_RMB_SB_HITS) {
++        DEBUG_REFMV_printf("Refbank is full: remain=%d|hits=%d|%d\n",
++                           xd->ref_mv_bank.remain_hits,
++                           xd->ref_mv_bank.rmb_unit_hits,
++                           ref_mv_bank->rmb_sb_hits);
+       return;
+     }
+ 
+@@ -4728,7 +5183,13 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+     ref_mv_bank->rmb_unit_hits++;
+   } else {
+     // If max hits have been reached return.
+-    if (ref_mv_bank->rmb_sb_hits >= MAX_RMB_SB_HITS) return;
++      if (ref_mv_bank->rmb_sb_hits >= MAX_RMB_SB_HITS) {
++          DEBUG_REFMV_printf("Refbank is full [external]: remain=%d|hits=%d|%d\n",
++                             xd->ref_mv_bank.remain_hits,
++                             xd->ref_mv_bank.rmb_unit_hits,
++                             ref_mv_bank->rmb_sb_hits);
++          return;
++      }
+   }
+ 
+   // else increment count and proceed with updating.
+@@ -4768,11 +5229,18 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+         rmb_ref_frame[idx0] = rmb_ref_frame[idx1];
+       }
+     }
++      DEBUG_REFMV_printf("Moving refbank entry %d to tail %d | "
++                         "remain=%d|hits=%d|%d\n",
++                         idx, (start_idx + count - 1) % REF_MV_BANK_SIZE,
++                         xd->ref_mv_bank.remain_hits,
++                         xd->ref_mv_bank.rmb_unit_hits,
++                         ref_mv_bank->rmb_sb_hits);
+     const int tail = (start_idx + count - 1) % REF_MV_BANK_SIZE;
+     queue[tail] = cand;
+     if (rmb_list_index == REF_MV_BANK_LIST_FOR_ALL_OTHERS) {
+       rmb_ref_frame[tail] = ref_frame;
+     }
++      debug_refbank(cm, mi_row, mi_col, ref_mv_bank, rmb_list_index);
+     return;
+   }
+ 
+@@ -4785,11 +5253,16 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+     rmb_ref_frame[idx] = ref_frame;
+   }
+   queue[idx].cwp_idx = mbmi->cwp_idx;
++    DEBUG_REFMV_printf("Adding new refbank entry in %d | remain=%d|hits=%d|%d\n",
++                       idx, xd->ref_mv_bank.remain_hits,
++                       xd->ref_mv_bank.rmb_unit_hits,
++                       ref_mv_bank->rmb_sb_hits);
+   if (count < REF_MV_BANK_SIZE) {
+     ++ref_mv_bank->rmb_count[rmb_list_index];
+   } else {
+     ++ref_mv_bank->rmb_start_idx[rmb_list_index];
+   }
++    debug_refbank(cm, mi_row, mi_col, ref_mv_bank, rmb_list_index);
+ }
+ 
+ void av1_update_ref_mv_bank(const AV1_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -4852,12 +5325,40 @@ void span_submv(const AV1_COMMON *cm, SUBMB_INFO **submi, int mi_row,
+   }
+ }
+ 
++#if DEBUG_BLOCK_INFO && DEBUG_REFMV
++static void debug_warpbank(const AV1_COMMON *cm,
++                           const int mi_row, const int mi_col,
++                           WARP_PARAM_BANK *warp_param_bank,
++                           MV_REFERENCE_FRAME ref_frame) {
++    WarpedMotionParams *queue = warp_param_bank->wpb_buffer[ref_frame];
++    const int start_idx = warp_param_bank->wpb_start_idx[ref_frame];
++    const int count = warp_param_bank->wpb_count[ref_frame];
++    for (int idx_bank = 0; idx_bank < count; ++idx_bank) {
++      const int idx = (start_idx + count - 1 - idx_bank) % WARP_PARAM_BANK_SIZE;
++        DEBUG_REFMV_printf("refbank[%d/%d,r=%d]: %d,%d,%d,%d,%d,%d,t=%d\n",
++                           idx_bank, count, ref_frame,
++                           queue[idx].wmmat[0],
++                           queue[idx].wmmat[1],
++                           queue[idx].wmmat[2],
++                           queue[idx].wmmat[3],
++                           queue[idx].wmmat[4],
++                           queue[idx].wmmat[5],
++                           queue[idx].wmtype);
++    }
++}
++#else
++#define debug_warpbank(...)
++#endif
++
+ #define MAX_WARP_SB_HITS 64
+ // Update the warp parameter bank
+ //  If the warp parameters are already exist in the bank, then bank is
+ //  rearranged If the warp parameters are not in the bank, insert it to the
+ //  bank.
+-static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
++static INLINE void update_warp_param_bank(DB_ARGS(const AV1_COMMON *cm,
++                                                  const int mi_row,
++                                                  const int mi_col)
++                                          const MB_MODE_INFO *const mbmi,
+ #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
+                                           int cand_from_sb_above,
+ #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
+@@ -4877,7 +5378,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+       int found = -1;
+ 
+       // If max hits have been reached return.
+-      if (warp_param_bank->wpb_sb_hits >= MAX_WARP_SB_HITS) return;
++        if (warp_param_bank->wpb_sb_hits >= MAX_WARP_SB_HITS) {
++            DEBUG_REFMV_printf("warprefbank: ignoring further action, hits=%d\n",
++                               warp_param_bank->wpb_sb_hits);
++            return;
++        }
+       // else increment count and proceed with updating.
+       ++warp_param_bank->wpb_sb_hits;
+ 
+@@ -4914,6 +5419,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+         }
+         const int tail = (start_idx + count - 1) % WARP_PARAM_BANK_SIZE;
+         queue[tail] = cand;
++          DEBUG_REFMV_printf("warprefbank: reordering %d to %d"
++                             " [%d,%d,%d,%d,%d,%d]\n",
++                             (start_idx + found) % WARP_PARAM_BANK_SIZE, tail,
++                             mbmi->wm_params[ref_idx].wmmat[0],
++                             mbmi->wm_params[ref_idx].wmmat[1],
++                             mbmi->wm_params[ref_idx].wmmat[2],
++                             mbmi->wm_params[ref_idx].wmmat[3],
++                             mbmi->wm_params[ref_idx].wmmat[4],
++                             mbmi->wm_params[ref_idx].wmmat[5]);
++          debug_warpbank(cm, mi_row, mi_col, warp_param_bank, ref_frame);
+         return;
+       }
+ 
+@@ -4933,6 +5448,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+       } else {
+         ++warp_param_bank->wpb_start_idx[ref_frame];
+       }
++        DEBUG_REFMV_printf("warprefbank: adding at %d|%d [%d,%d,%d,%d,%d,%d]\n",
++                           warp_param_bank->wpb_count[ref_frame],
++                           warp_param_bank->wpb_start_idx[ref_frame],
++                           mbmi->wm_params[ref_idx].wmmat[0],
++                           mbmi->wm_params[ref_idx].wmmat[1],
++                           mbmi->wm_params[ref_idx].wmmat[2],
++                           mbmi->wm_params[ref_idx].wmmat[3],
++                           mbmi->wm_params[ref_idx].wmmat[4],
++                           mbmi->wm_params[ref_idx].wmmat[5]);
++        debug_warpbank(cm, mi_row, mi_col, warp_param_bank, ref_frame);
+     }
+   }
+ }
+@@ -4944,7 +5469,8 @@ void av1_update_warp_param_bank(const AV1_COMMON *const cm,
+                                 const MB_MODE_INFO *const mbmi) {
+   (void)cm;
+   if (is_warp_mode(mbmi->motion_mode)) {
+-    update_warp_param_bank(mbmi,
++    update_warp_param_bank(DB_ARGS(cm, xd->mi_row, xd->mi_col)
++                           mbmi,
+ #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
+                            cand_from_sb_above,
+ #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
 index 70e22ec4ea..a9dff1b78d 100644
 --- a/av1/decoder/decodeframe.c
@@ -728,7 +1987,7 @@ index 70e22ec4ea..a9dff1b78d 100644
             features->enable_bawp,
             features->allow_warpmv_mode,
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 5cf0f0e74f..fc0bec5eb1 100644
+index 5cf0f0e74f..1b1a7f793f 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -42,7 +42,8 @@
@@ -2125,7 +3384,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
    int is_compound = has_second_ref(mbmi);
  
    const MV_REFERENCE_FRAME ref_frame = av1_ref_frame_type(mbmi->ref_frame);
-@@ -2860,10 +3227,25 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2860,10 +3227,27 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      read_drl_idx(cm->features.max_drl_bits,
                   av1_mode_context_pristine(inter_mode_ctx, mbmi->ref_frame),
                   ec_ctx, mbmi, r);
@@ -2140,18 +3399,20 @@ index 5cf0f0e74f..fc0bec5eb1 100644
 +      if (BLOCK_TO_DEBUG) {
 +          printf("%*sfind_mv_refs(%d,%d)\n", depth, "", mbmi->ref_frame[0],
 +                 mbmi->ref_frame[1]);
-+          for (int n = 0; n < dcb->ref_mv_count[INTRA_FRAME]; n++)
-+              printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
-+                     depth + 1, "", n, dcb->ref_mv_count[INTRA_FRAME],
-+                     xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.row,
-+                     xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.col,
-+                     xd->weight[INTRA_FRAME][n]);
++          for (int n = 0; n < xd->skip_mvp_candidate_list.ref_mv_count; n++)
++              printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
++                     depth + 1, "", n, xd->skip_mvp_candidate_list.ref_mv_count,
++                     xd->skip_mvp_candidate_list.ref_mv_stack[n].this_mv.as_mv.row,
++                     xd->skip_mvp_candidate_list.ref_mv_stack[n].this_mv.as_mv.col,
++                     xd->skip_mvp_candidate_list.ref_mv_stack[n].comp_mv.as_mv.row,
++                     xd->skip_mvp_candidate_list.ref_mv_stack[n].comp_mv.as_mv.col,
++                     xd->skip_mvp_candidate_list.weight[n]);
 +      }
 +#endif
  
      is_compound = has_second_ref(mbmi);
      if (!is_compound) {
-@@ -2880,9 +3262,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2880,9 +3264,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
        const int16_t mode_ctx =
            av1_mode_context_analyzer(inter_mode_ctx, mbmi->ref_frame);
        if (is_compound)
@@ -2165,7 +3426,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
  
        mbmi->use_amvd = 0;
        if (cm->seq_params.enable_adaptive_mvd && allow_amvd_mode(mbmi->mode)) {
-@@ -2892,12 +3276,28 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2892,12 +3278,65 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          mbmi->use_amvd =
              aom_read_symbol(r, ec_ctx->amvd_mode_cdf[amvd_index][amvd_ctx], 2,
                              ACCT_INFO("use_amvd"));
@@ -2181,20 +3442,57 @@ index 5cf0f0e74f..fc0bec5eb1 100644
 +#if DEBUG_BLOCK_INFO
 +      if (BLOCK_TO_DEBUG) {
 +          printf("%*sfind_mv_refs(%d,%d)\n", depth, "",
-+                 is_tip_ref_frame(mbmi->ref_frame[0]) ? 7 :
-+                     mbmi->ref_frame[0], mbmi->ref_frame[1]);
-+          for (int n = 0; n < dcb->ref_mv_count[INTRA_FRAME]; n++)
-+              printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
-+                     depth + 1, "", n, dcb->ref_mv_count[INTRA_FRAME],
-+                     xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.row,
-+                     xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.col,
-+                     xd->weight[INTRA_FRAME][n]);
++                 mbmi->ref_frame[0] == TIP_FRAME ? 7 : mbmi->ref_frame[0],
++                 mbmi->ref_frame[1]);
++          if (!has_second_ref(mbmi)) {
++              for (int n = 0; n < dcb->ref_mv_count[ref_frame]; n++)
++                  printf("%*smv[%d/%d]: y=%d,x=%d,w=%d,y_off=%d,x_off=%d\n",
++                         depth + 1, "", n, dcb->ref_mv_count[ref_frame],
++                         xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.row,
++                         xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.col,
++                         xd->weight[ref_frame][n],
++                         xd->ref_mv_stack[ref_frame][n].row_offset,
++                         xd->ref_mv_stack[ref_frame][n].col_offset);
++              if (mbmi->ref_frame[0] != TIP_FRAME && mbmi->mode > NEWMV) {
++                  const int n_warp =
++                    xd->valid_num_warp_candidates[mbmi->ref_frame[0]];
++                  for (int n = 0; n < n_warp; n++) {
++                      const int32_t *const mat =
++                          xd->warp_param_stack[mbmi->ref_frame[0]]
++                                              [n].wm_params.wmmat;
++                      printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d, t=%d\n",
++                             depth + 1, "", n, n_warp,
++                             mat[0], mat[1], mat[2], mat[3], mat[4], mat[5],
++                             xd->warp_param_stack[mbmi->ref_frame[0]]
++                                                 [n].wm_params.wmtype);
++                  }
++              }
++          } else if (has_second_drl(mbmi)) {
++              for (int drl = 0; drl < 2; drl++) {
++                  const int rf = mbmi->ref_frame[drl];
++                  for (int n = 0; n < dcb->ref_mv_count[rf]; n++)
++                      printf("%*smv[%d:%d/%d]: y=%d,x=%d,w=%d\n",
++                             depth + 1, "", drl, n, dcb->ref_mv_count[rf],
++                             xd->ref_mv_stack[rf][n].this_mv.as_mv.row,
++                             xd->ref_mv_stack[rf][n].this_mv.as_mv.col,
++                             xd->weight[rf][n]);
++              }
++          } else {
++              for (int n = 0; n < dcb->ref_mv_count[ref_frame]; n++)
++                  printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
++                         depth + 1, "", n, dcb->ref_mv_count[ref_frame],
++                         xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.row,
++                         xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.col,
++                         xd->ref_mv_stack[ref_frame][n].comp_mv.as_mv.row,
++                         xd->ref_mv_stack[ref_frame][n].comp_mv.as_mv.col,
++                         xd->weight[ref_frame][n]);
++          }
 +      }
 +#endif
  
        if (cm->features.enable_bawp &&
            av1_allow_bawp(cm, mbmi, xd->mi_row, xd->mi_col)) {
-@@ -2917,14 +3317,17 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2917,14 +3356,17 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
                r, xd->tile_ctx->explicit_bawp_scale_cdf, EXPLICIT_BAWP_SCALE_CNT,
                ACCT_INFO("explicit_bawp_scales"));
          }
@@ -2219,7 +3517,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
        }
  
        for (int ref = 0; ref < 1 + has_second_ref(mbmi); ++ref) {
-@@ -2941,7 +3344,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2941,7 +3383,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          if (has_second_ref(mbmi))
            mbmi->num_proj_ref[1] = av1_findSamples(cm, xd, pts1, pts1_inref, 1);
        }
@@ -2229,7 +3527,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
        int is_warpmv_warp_causal =
            ((mbmi->motion_mode == WARP_CAUSAL) && mbmi->mode == WARPMV);
        if (mbmi->motion_mode == WARP_DELTA || is_warpmv_warp_causal) {
-@@ -2952,27 +3356,39 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2952,27 +3395,39 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
              xd->valid_num_warp_candidates[av1_ref_frame_type(mbmi->ref_frame)],
              NULL);
  
@@ -2273,7 +3571,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
        }
        if (enable_adaptive_mvd_resolution(cm, mbmi))
          set_amvd_mv_precision(mbmi, mbmi->max_mv_precision);
-@@ -3022,13 +3438,14 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3022,13 +3477,14 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
    }
  
    const int mv_corrupted_flag =
@@ -2290,7 +3588,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
    }
  
    mbmi->warp_inter_intra = 0;
-@@ -3061,10 +3478,15 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3061,10 +3517,15 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          }
        }
      }  // if (mbmi->warp_inter_intra)
@@ -2307,7 +3605,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
    }
  
    // init
-@@ -3079,8 +3501,9 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3079,8 +3540,9 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      const int masked_compound_used = is_any_masked_compound_used(bsize) &&
                                       cm->seq_params.enable_masked_compound;
  
@@ -2318,7 +3616,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
        mbmi->comp_group_idx = (uint8_t)aom_read_symbol(
            r, ec_ctx->comp_group_idx_cdf[ctx_comp_group_idx], 2,
            ACCT_INFO("comp_group_idx"));
-@@ -3119,11 +3542,28 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3119,11 +3581,28 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
              aom_read_literal(r, MAX_DIFFWTD_MASK_BITS, ACCT_INFO("mask_type"));
        }
      }
@@ -2348,7 +3646,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
      if (is_cwp_allowed(mbmi) && mbmi->skip_mode)
        mbmi->cwp_idx =
            xd->skip_mvp_candidate_list.ref_mv_stack[mbmi->ref_mv_idx[0]].cwp_idx;
-@@ -3132,10 +3572,13 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3132,10 +3611,13 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      mbmi->refinemv_flag = 0;
    }
  
@@ -2363,7 +3661,36 @@ index 5cf0f0e74f..fc0bec5eb1 100644
  
    if (mbmi->motion_mode == WARP_CAUSAL) {
      mbmi->wm_params[0].wmtype = DEFAULT_WMTYPE;
-@@ -3232,7 +3675,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3226,13 +3708,37 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+   }
+ 
+   if (xd->tree_type != LUMA_PART) xd->cfl.store_y = store_cfl_required(cm, xd);
++    if (is_inter_ref_frame(mbmi->ref_frame[1])) {
++        // FIXME newmv^2 can be WARP_CAUSAL?
++        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n", depth, "",
++                           mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col,
++                           mbmi->mv[1].as_mv.row, mbmi->mv[1].as_mv.col);
++    } else {
++        if (mbmi->motion_mode >= WARP_CAUSAL) {
++#define signabs(v) v < 0 ? '-' : ' ', abs(v)
++            DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ], "
++                               "mv=y:%d,x:%d\n", depth, "",
++                               signabs(mbmi->wm_params[0].wmmat[0]),
++                               signabs(mbmi->wm_params[0].wmmat[1]),
++                               signabs(mbmi->wm_params[0].wmmat[2]),
++                               signabs(mbmi->wm_params[0].wmmat[3]),
++                               signabs(mbmi->wm_params[0].wmmat[4]),
++                               signabs(mbmi->wm_params[0].wmmat[5]),
++                               mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col);
++#undef signabs
++        } else {
++            DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n", depth, "",
++                               mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col);
++        }
++    }
+ 
+ #if DEC_MISMATCH_DEBUG
+   dec_dump_logs(cm, mi, mi_row, mi_col, mode_ctx);
  #endif  // DEC_MISMATCH_DEBUG
  }
  
@@ -2373,7 +3700,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
                                         DecoderCodingBlock *dcb, aom_reader *r) {
    AV1_COMMON *const cm = &pbi->common;
    MACROBLOCKD *const xd = &dcb->xd;
-@@ -3256,9 +3700,13 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3256,9 +3762,13 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->refinemv_flag = 0;
  
    if (xd->tree_type != CHROMA_PART)
@@ -2389,7 +3716,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
  
    mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
  
-@@ -3275,7 +3723,8 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3275,7 +3785,8 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    }
  
    if (!mbmi->skip_mode) {
@@ -2399,7 +3726,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
    }
  
    if (!inter_block &&
-@@ -3288,11 +3737,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3288,11 +3799,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          aom_read_symbol(r, xd->tile_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -2417,7 +3744,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -3308,16 +3762,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3308,16 +3824,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->warp_inter_intra = 0;
  
    if (!cm->seg.segid_preskip && xd->tree_type != CHROMA_PART)
@@ -2439,7 +3766,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -3334,7 +3788,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3334,7 +3850,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->ref_frame[1] = NONE_FRAME;
      mbmi->palette_mode_info.palette_size[0] = 0;
      mbmi->palette_mode_info.palette_size[1] = 0;
@@ -2448,7 +3775,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -3343,9 +3797,9 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3343,9 +3859,9 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      }
    }
    if (inter_block)
@@ -2460,7 +3787,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
  }
  
  static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
-@@ -3371,7 +3825,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
+@@ -3371,7 +3887,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
    }
  }
  
@@ -2470,7 +3797,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
                          aom_reader *r, int x_inside_boundary,
                          int y_inside_boundary) {
    AV1_COMMON *const cm = &pbi->common;
-@@ -3383,7 +3838,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3383,7 +3900,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
      mi->sb_type[PLANE_TYPE_UV] = mi->sb_type[PLANE_TYPE_Y];
  
    if (frame_is_intra_only(cm)) {
@@ -2479,7 +3806,7 @@ index 5cf0f0e74f..fc0bec5eb1 100644
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_intrabc_block(mbmi, xd->tree_type)) {
-@@ -3396,7 +3851,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3396,7 +3913,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
        intra_copy_frame_mvs(cm, xd->mi_row, xd->mi_col, x_inside_boundary,
                             y_inside_boundary);
    } else {

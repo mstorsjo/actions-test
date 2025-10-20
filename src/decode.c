@@ -231,120 +231,79 @@ static int neg_deinterleave(int diff, int ref, int max) {
     }
 }
 
-static void find_matching_ref(const Dav1dTaskContext *const t,
-                              const enum EdgeFlags intra_edge_flags,
-                              const int bw4, const int bh4,
-                              const int w4, const int h4,
-                              const int have_left, const int have_top,
-                              const int ref, uint64_t masks[2])
-{
-    /*const*/ refmvs_block *const *r = &t->rt.r[(t->by & 31) + 5];
-    int count = 0;
-    int have_topleft = have_top && have_left;
-    int have_topright = imax(bw4, bh4) < 32 &&
-                        have_top && t->bx + bw4 < t->ts->tiling.col_end &&
-                        (intra_edge_flags & EDGE_I444_TOP_HAS_RIGHT);
-
-#define bs(rp) dav1d_block_dimensions[(rp)->bs]
-#define matches(rp) ((rp)->ref.ref[0] == ref + 1 && (rp)->ref.ref[1] == -1)
-
-    if (have_top) {
-        const refmvs_block *r2 = &r[-1][t->bx];
-        if (matches(r2)) {
-            masks[0] |= 1;
-            count = 1;
-        }
-        int aw4 = bs(r2)[0];
-        if (aw4 >= bw4) {
-            const int off = t->bx & (aw4 - 1);
-            if (off) have_topleft = 0;
-            if (aw4 - off > bw4) have_topright = 0;
-        } else {
-            unsigned mask = 1 << aw4;
-            for (int x = aw4; x < w4; x += aw4) {
-                r2 += aw4;
-                if (matches(r2)) {
-                    masks[0] |= mask;
-                    if (++count >= 8) return;
-                }
-                aw4 = bs(r2)[0];
-                mask <<= aw4;
-            }
-        }
-    }
-    if (have_left) {
-        /*const*/ refmvs_block *const *r2 = r;
-        if (matches(&r2[0][t->bx - 1])) {
-            masks[1] |= 1;
-            if (++count >= 8) return;
-        }
-        int lh4 = bs(&r2[0][t->bx - 1])[1];
-        if (lh4 >= bh4) {
-            if (t->by & (lh4 - 1)) have_topleft = 0;
-        } else {
-            unsigned mask = 1 << lh4;
-            for (int y = lh4; y < h4; y += lh4) {
-                r2 += lh4;
-                if (matches(&r2[0][t->bx - 1])) {
-                    masks[1] |= mask;
-                    if (++count >= 8) return;
-                }
-                lh4 = bs(&r2[0][t->bx - 1])[1];
-                mask <<= lh4;
-            }
-        }
-    }
-    if (have_topleft && matches(&r[-1][t->bx - 1])) {
-        masks[1] |= 1ULL << 32;
-        if (++count >= 8) return;
-    }
-    if (have_topright && matches(&r[-1][t->bx + bw4])) {
-        masks[0] |= 1ULL << 32;
-    }
-#undef matches
-}
-
 static void derive_warpmv(const Dav1dTaskContext *const t,
+                          const int have_top, const int have_left,
                           const int bw4, const int bh4,
-                          const uint64_t masks[2], const union mv mv,
+                          const int w4, const int h4,
+                          const int ref, const union mv mv,
                           Dav1dWarpedMotionParams *const wmp)
 {
     int pts[8][2 /* in, out */][2 /* x, y */], np = 0;
-    /*const*/ refmvs_block *const *r = &t->rt.r[(t->by & 31) + 5];
+    const refmvs_block *const r = &t->rt.r[(t->by & 63) * 128], *ra;
 
+#define bs(rp) dav1d_block_dimensions[(rp)->bs]
+    // FIXME manage ref1 also (once that's part of rp[])
 #define add_sample(dx, dy, sx, sy, rp) do { \
     pts[np][0][0] = 16 * (2 * dx + sx * bs(rp)[0]) - 8; \
     pts[np][0][1] = 16 * (2 * dy + sy * bs(rp)[1]) - 8; \
-    pts[np][1][0] = pts[np][0][0] + (rp)->mv.mv[0].x; \
-    pts[np][1][1] = pts[np][0][1] + (rp)->mv.mv[0].y; \
+    pts[np][1][0] = pts[np][0][0] + (rp)->lmv.mv[0].x; \
+    pts[np][1][1] = pts[np][0][1] + (rp)->lmv.mv[0].y; \
     np++; \
 } while (0)
 
-    // use masks[] to find the projectable motion vectors in the edges
-    if ((unsigned) masks[0] == 1 && !(masks[1] >> 32)) {
-        const int off = t->bx & (bs(&r[-1][t->bx])[0] - 1);
-        add_sample(-off, 0, 1, -1, &r[-1][t->bx]);
-    } else for (unsigned off = 0, xmask = (uint32_t) masks[0]; np < 8 && xmask;) { // top
-        const int tz = ctz(xmask);
-        off += tz;
-        xmask >>= tz;
-        add_sample(off, 0, 1, -1, &r[-1][t->bx + off]);
-        xmask &= ~1;
+    const Dav1dFrameContext *const f = t->f;
+    int have_topleft = 0;
+    int have_topright = 0;
+    const int is_not_sb_boundary = t->by & (f->sb_step - 1);
+    if (have_top) {
+        int off;
+        if (is_not_sb_boundary) {
+            ra = &t->rt.r[((t->by - 1) & 63) * 128];
+            const refmvs_block *r2 = &ra[(t->bx & 63)];
+            off = r2->bx4 - t->bx;
+            have_topleft = !off;
+            do {
+                add_sample(off, 0, 1, -1, &r2[off]);
+                off += bs(&r2[off])[0];
+            } while (off < w4 && np < 8);
+        } else {
+            const refmvs_block *r2 = ra = t->rt.ra;
+            off = r2->bx4 - t->bx;
+            have_topleft = !off;
+            do {
+                add_sample(off, 0, 1, -1, &r2[off >> 1]);
+                off += bs(&r2[off >> 1])[0];
+            } while (off < w4 && np < 8);
+        }
+        have_topright = off <= t->bx + bw4 && t->bx + bw4 < t->ts->tiling.col_end &&
+            (!(t->by & (f->sb_step - 1)) || // top sb boundary
+             ((t->bx + bw4) & (f->sb_step - 1) && // right sb boundary
+              t->is_coded[(t->by - 1) & 63] & (1ULL << ((t->bx + bw4) & 63))));
     }
-    if (np < 8 && masks[1] == 1) {
-        const int off = t->by & (bs(&r[0][t->bx - 1])[1] - 1);
-        add_sample(0, -off, -1, 1, &r[-off][t->bx - 1]);
-    } else for (unsigned off = 0, ymask = (uint32_t) masks[1]; np < 8 && ymask;) { // left
-        const int tz = ctz(ymask);
-        off += tz;
-        ymask >>= tz;
-        add_sample(0, off, -1, 1, &r[off][t->bx - 1]);
-        ymask &= ~1;
+
+    if (np < 8 && have_left) {
+        const refmvs_block *r2 = &r[(t->bx - 1) & 63];
+        int off = r2->by4 - t->by;
+        have_topleft &= !off;
+        do {
+            add_sample(0, off, -1, 1, &r2[off * 128]);
+            off += bs(&r2[off * 128])[1];
+        } while (off < h4 && np < 8);
+    } else
+        have_topleft = 0;
+
+    if (is_not_sb_boundary) {
+        if (np < 8 && have_topleft) // top/left
+            add_sample(0, 0, -1, -1, &ra[((t->bx - 1) & 63)]);
+        if (np < 8 && have_topright) // top/right
+            add_sample(bw4, 0, 1, -1, &ra[((t->bx + bw4) & 63)]);
+    } else {
+        if (np < 8 && have_topleft) // top/left
+            add_sample(0, 0, -1, -1, (t->bx & ~1) & (f->sb_step - 1) ?
+                       &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl);
+        if (np < 8 && have_topright) // top/right
+            add_sample(bw4, 0, 1, -1, &ra[(t->bx >> 1) + ((bw4 + 1) >> 1)]);
     }
-    if (np < 8 && masks[1] >> 32) // top/left
-        add_sample(0, 0, -1, -1, &r[-1][t->bx - 1]);
-    if (np < 8 && masks[0] >> 32) // top/right
-        add_sample(bw4, 0, 1, -1, &r[-1][t->bx + bw4]);
     assert(np > 0 && np <= 8);
 #undef bs
 
@@ -377,6 +336,58 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
         wmp->type = DAV1D_WM_TYPE_AFFINE;
     } else
         wmp->type = DAV1D_WM_TYPE_IDENTITY;
+}
+
+static void extend_warpmv(Dav1dTaskContext *const t,
+                          const int x_off, const int y_off,
+                          const uint8_t *const b_dim,
+                          const Av1Block *const b,
+                          Dav1dWarpedMotionParams *const wmp)
+{
+    const ptrdiff_t off = ((t->by + y_off) & 63) * 128 + ((t->bx + x_off) & 127);
+    const refmvs_block *const r = &t->rt.r[off];
+    int32_t *const m = wmp->matrix;
+
+    if (r->mf & 2) {
+        memcpy(m, t->rt.m[off], sizeof(*m) * 6);
+    } else if (r->mf & 1) {
+        memcpy(m, t->f->frame_hdr->gmv[b->ref[0]].matrix, sizeof(*m) * 6);
+    } else {
+        memcpy(&m[2], &dav1d_default_wm_params.matrix[2], sizeof(*m) * 4);
+        const int ref = r->ref.ref[0] - 1 != b->ref[0];
+        m[0] = r->mv.mv[ref].x * (1 << 13);
+        m[1] = r->mv.mv[ref].y * (1 << 13);
+    }
+
+    // extend warpmv using (quasi-)matrix from neighbour
+    const int bw4 = b_dim[0], bh4 = b_dim[1];
+    const int sx = t->bx * 4 + 2 * bw4 - 1, sy = t->by * 4 + 2 * bh4 - 1;
+    const int px = (sx << 16) + b->mv[0].x * (1 << 13);
+    const int py = (sy << 16) + b->mv[0].y * (1 << 13);
+    if (x_off >= 0) {
+        assert(y_off == -1);
+        const int ay = t->by * 4 - 1, sh = 1 + b_dim[3];
+        const int64_t apx = (int64_t) m[2] * sx + (int64_t) m[3] * ay + m[0];
+        const int64_t apy = (int64_t) m[4] * sx + (int64_t) m[5] * ay + m[1];
+        m[3] = (int) ((px - apx + bh4 - (px < apx)) >> sh);
+        m[5] = (int) ((py - apy + bh4 - (py < apy)) >> sh);
+        m[3] += 0x20 - (m[3] < 0);
+        m[5] += 0x20 - (m[5] < 0);
+        m[3] &= ~0x3f;
+        m[5] &= ~0x3f;
+    } else {
+        assert(x_off == -1 || !(t->by & (t->f->sb_step - 1)));
+        const int ax = t->bx * 4 - 1, sh = 1 + b_dim[2];
+        const int64_t lpx = (int64_t) m[2] * ax + (int64_t) m[3] * sy + m[0];
+        const int64_t lpy = (int64_t) m[4] * ax + (int64_t) m[5] * sy + m[1];
+        m[2] = (int) ((px - lpx + bh4 - (px < lpx)) >> sh);
+        m[4] = (int) ((py - lpy + bh4 - (py < lpy)) >> sh);
+        m[2] += 0x20 - (m[3] < 0);
+        m[4] += 0x20 - (m[5] < 0);
+        m[2] &= ~0x3f;
+        m[4] &= ~0x3f;
+    }
+    dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], wmp, t->bx, t->by);
 }
 
 static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
@@ -514,67 +525,150 @@ static inline unsigned get_prev_frame_segid(const Dav1dFrameContext *const f,
     return seg_id;
 }
 
-static inline void splat_oneref_mv(const Dav1dContext *const c,
+#if DEBUG_BLOCK_INFO
+static void debug_warp_matrix(const int depth,
+                              const Dav1dFrameContext *const f,
+                              const Dav1dTaskContext *const t,
+                              const Av1Block *const b)
+{
+#define signabs(v) v < 0 ? '-' : ' ', abs(v)
+    DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ], "
+                       "mv=y:%d,x:%d\n", depth, "",
+                       signabs(t->warpmv.matrix[0]),
+                       signabs(t->warpmv.matrix[1]),
+                       signabs(t->warpmv.matrix[2]),
+                       signabs(t->warpmv.matrix[3]),
+                       signabs(t->warpmv.matrix[4]),
+                       signabs(t->warpmv.matrix[5]),
+                       b->mv[0].y, b->mv[0].x);
+#undef signabs
+}
+#else
+#define debug_warp_matrix(...)
+#endif
+
+static inline void splat_oneref_mv(DB_ONLY(const int depth)
+                                   const Dav1dFrameContext *const f,
                                    Dav1dTaskContext *const t,
                                    const enum BlockSize bs,
                                    const Av1Block *const b,
-                                   const int bw4, const int bh4)
+                                   const int by4, const int bw4, const int bh4)
 {
-    const enum InterPredMode mode = b->inter_mode;
-    const refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
-        .ref.ref = { b->ref[0] + 1, b->motion_mode == MM_INTERINTRA ? 0 : -1 },
-        .mv.mv[0] = b->mv[0],
-        .bs = bs,
-        .mf = (mode == GLOBALMV && imin(bw4, bh4) >= 2) | ((mode == NEWMV) * 2),
-    };
-    c->refmvs_dsp.splat_mv(&t->rt.r[(t->by & 31) + 5], &tmpl, t->bx, bw4, bh4);
+    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(tmpl, 16);
+    tmpl.ref.ref[0] = b->ref[0] + 1;
+    tmpl.ref.ref[1] = -1;
+    tmpl.bs = bs;
+    tmpl.lmv.mv[0] = b->mv[0];
+    tmpl.bx4 = t->bx;
+    tmpl.by4 = t->by;
+    if (b->motion_mode > MM_INTERINTRA) {
+        assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
+        tmpl.mf = 2;
+        const int32_t *const mat = t->warpmv.matrix;
+        const int64_t mvx = (int64_t) (mat[2] - 0x10000) * (t->bx + 1) * 4 +
+                            (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
+        const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
+                            (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
+        int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
+        f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
+        debug_warp_matrix(depth, f, t, b);
+    } else {
+        tmpl.mf = b->inter_mode == GLOBALMV,
+        f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n",
+                           depth, "", b->mv[0].y, b->mv[0].x);
+    }
+
+    if (t->f->seq_hdr->refmv_bank)
+        dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
+    if (b->ref[0] != TIP_FRAME && b->motion_mode > MM_INTERINTRA)
+        dav1d_refmvs_warp_add(&t->rt, &t->warpmv,
+                              DB_ONLY(t->by, t->bx) b->ref[0]);
 }
 
-static inline void splat_intrabc_mv(const Dav1dContext *const c,
+static inline void splat_intrabc_mv(DB_ONLY(const int depth)
+                                    const Dav1dFrameContext *const f,
                                     Dav1dTaskContext *const t,
                                     const enum BlockSize bs,
                                     const Av1Block *const b,
-                                    const int bw4, const int bh4)
+                                    const int by4, const int bw4, const int bh4)
 {
-    const refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
+    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
         .ref.ref = { 0, -1 },
-        .mv.mv[0] = b->mv[0],
+        .lmv.mv[0] = b->mv[0],
         .bs = bs,
         .mf = 0,
+        .bx4 = t->bx,
+        .by4 = t->by,
     };
-    c->refmvs_dsp.splat_mv(&t->rt.r[(t->by & 31) + 5], &tmpl, t->bx, bw4, bh4);
+    f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+
+    if (t->f->seq_hdr->refmv_bank)
+        dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
 }
 
-static inline void splat_tworef_mv(const Dav1dContext *const c,
+static inline void splat_tworef_mv(DB_ONLY(const int depth)
+                                   const Dav1dFrameContext *const f,
                                    Dav1dTaskContext *const t,
                                    const enum BlockSize bs,
                                    const Av1Block *const b,
-                                   const int bw4, const int bh4)
+                                   const int by4, const int bw4, const int bh4)
 {
-    const enum CompInterPredMode mode = b->inter_mode;
-    const refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
-        .ref.ref = { b->ref[0] + 1, b->ref[1] + 1 },
-        .mv.mv = { b->mv[0], b->mv[1] },
-        .bs = bs,
-        .mf = (mode == GLOBALMV_GLOBALMV) | !!((1 << mode) & (0xbc)) * 2,
-    };
-    c->refmvs_dsp.splat_mv(&t->rt.r[(t->by & 31) + 5], &tmpl, t->bx, bw4, bh4);
+    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(tmpl, 16);
+    tmpl.ref.ref[0] = b->ref[0] + 1;
+    tmpl.ref.ref[1] = b->ref[1] + 1;
+    tmpl.bs = bs;
+    tmpl.lmv.mv[0] = b->mv[0];
+    tmpl.lmv.mv[1] = b->mv[1];
+    tmpl.bx4 = t->bx;
+    tmpl.by4 = t->by;
+    if (b->motion_mode > MM_INTERINTRA) {
+        assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
+        tmpl.mf = 0;
+        const int32_t *const mat = t->warpmv.matrix;
+        const int64_t mvx = (int64_t) mat[2] * (t->bx + 1) * 4 +
+                            (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
+        const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 +
+                            (int64_t) mat[5] * (t->by + 1) * 4 + mat[1];
+        // FIXME this presumably needs a warp matrix per ref?
+        int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
+        f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
+    } else {
+        tmpl.mf = b->inter_mode == GLOBALMV_GLOBALMV;
+        f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n",
+                           depth, "", b->mv[0].y, b->mv[0].x,
+                           b->mv[1].y, b->mv[1].x);
+    }
+
+    if (t->f->seq_hdr->refmv_bank)
+        dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
 }
 
 static inline void splat_intraref(const Dav1dContext *const c,
                                   Dav1dTaskContext *const t,
                                   const enum BlockSize bs,
-                                  const int bw4, const int bh4)
+                                  const int by4, const int bw4, const int bh4)
 {
-    const refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
-        .ref.ref = { 0, -1 },
-        .mv.mv[0].n = INVALID_MV,
+    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
+        .ref.ref = { -1, -1 },
+        .lmv.mv[0].n = INVALID_MV,
         .bs = bs,
         .mf = 0,
+        .bx4 = t->bx,
+        .by4 = t->by,
     };
-    c->refmvs_dsp.splat_mv(&t->rt.r[(t->by & 31) + 5], &tmpl, t->bx, bw4, bh4);
+    c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+
+    if (t->f->seq_hdr->refmv_bank)
+        dav1d_refmvs_bank_update(&t->rt, bs, t->by, t->bx);
 }
 
+#if 0
 static void mc_lowest_px(int *const dst, const int by4, const int bh4,
                          const int mvy, const int ss_ver,
                          const struct ScalableMotionParams *const smp)
@@ -586,7 +680,7 @@ static void mc_lowest_px(int *const dst, const int by4, const int bh4,
     } else {
         int y = (by4 * v_mul << 4) + mvy * (1 << !ss_ver);
         const int64_t tmp = (int64_t)(y) * smp->scale + (smp->scale - 0x4000) * 8;
-        y = apply_sign64((int)((llabs(tmp) + 128) >> 8), tmp) + 32;
+        y = apply_sign64((llabs(tmp) + 128) >> 8, tmp) + 32;
         const int bottom = ((y + (bh4 * v_mul - 1) * smp->step) >> 10) + 1 + 4;
         *dst = imax(*dst, bottom);
     }
@@ -633,6 +727,7 @@ static NOINLINE void affine_lowest_px_chroma(Dav1dTaskContext *const t, int *con
     else
         affine_lowest_px(t, dst, b_dim, wmp, f->cur.p.layout & DAV1D_PIXEL_LAYOUT_I420, 1);
 }
+#endif
 
 static void read_tx_part(Dav1dTaskContext *const t,
                          DB_ONLY(const int depth) Av1Block *const b,
@@ -835,6 +930,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 #undef set_ctx
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
+#if 0
                 refmvs_block *const r = &t->rt.r[(t->by & 31) + 5 + bh4 - 1][t->bx];
                 for (int x = 0; x < bw4; x++) {
                     r[x].ref.ref[0] = 0;
@@ -845,6 +941,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     rr[y][t->bx + bw4 - 1].ref.ref[0] = 0;
                     rr[y][t->bx + bw4 - 1].bs = bs;
                 }
+#endif
             }
 
             if (has_chroma) {
@@ -867,22 +964,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     dav1d_set_affine_mv2d(bw4, bh4, b->mv2d, &t->warpmv,
                                           t->bx, t->by);
                     dav1d_get_shear_params(&t->warpmv);
-#define signabs(v) v < 0 ? '-' : ' ', abs(v)
-                    if (DEBUG_BLOCK_INFO)
-                        printf("[ %c%x %c%x %c%x\n  %c%x %c%x %c%x ]\n"
-                               "alpha=%c%x, beta=%c%x, gamma=%c%x, delta=%c%x, mv=y:%d,x:%d\n",
-                               signabs(t->warpmv.matrix[0]),
-                               signabs(t->warpmv.matrix[1]),
-                               signabs(t->warpmv.matrix[2]),
-                               signabs(t->warpmv.matrix[3]),
-                               signabs(t->warpmv.matrix[4]),
-                               signabs(t->warpmv.matrix[5]),
-                               signabs(t->warpmv.u.p.alpha),
-                               signabs(t->warpmv.u.p.beta),
-                               signabs(t->warpmv.u.p.gamma),
-                               signabs(t->warpmv.u.p.delta),
-                               b->mv2d.y, b->mv2d.x);
-#undef signabs
+                    debug_warp_matrix(depth, f, t, b);
                 }
             }
             f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
@@ -897,6 +979,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
+#if 0
                 refmvs_block *const r = &t->rt.r[(t->by & 31) + 5 + bh4 - 1][t->bx];
                 for (int x = 0; x < bw4; x++) {
                     r[x].ref.ref[0] = b->ref[0] + 1;
@@ -909,6 +992,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     rr[y][t->bx + bw4 - 1].mv.mv[0] = b->mv[0];
                     rr[y][t->bx + bw4 - 1].bs = bs;
                 }
+#endif
             }
 
             if (has_chroma) {
@@ -1608,19 +1692,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                           ts->cdf.m.pal_y);
                 if (use_y_pal) {
                     f->bd_fn.read_pal_plane(DB_ONLY(depth) t, b, bx4, by4);
-
-                    uint8_t *pal_idx;
-                    if (t->frame_thread.pass) {
-                        const int p = t->frame_thread.pass & 1;
-                        assert(ts->frame_thread[p].pal_idx);
-                        pal_idx = ts->frame_thread[p].pal_idx;
-                        ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
-                    } else
-                        pal_idx = t->scratch.pal_idx_y;
-                    read_pal_indices(t, pal_idx, b->pal_sz,
-                                     (int[4]) { w4 * 4, h4 * 4, bw4 * 4, bh4 * 4 });
-                    DEBUG_BLOCK_printf("%*sPost-y-pal-indices: r=%d\n",
-                                       depth, "", ts->msac.rng);
                 } else
                     DEBUG_BLOCK_printf("%*sPost-ypal[0]: r=%d\n",
                                        depth, "", ts->msac.rng);
@@ -1645,6 +1716,23 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    (b->dip - !!b->dip) & 7, ts->msac.rng);
             }
 
+            if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
+                splat_intraref(f->c, t, bs, by4, bw4, bh4);
+
+            if (b->pal_sz) {
+                uint8_t *pal_idx;
+                if (t->frame_thread.pass) {
+                    const int p = t->frame_thread.pass & 1;
+                    assert(ts->frame_thread[p].pal_idx);
+                    pal_idx = ts->frame_thread[p].pal_idx;
+                    ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
+                } else
+                    pal_idx = t->scratch.pal_idx_y;
+                read_pal_indices(t, pal_idx, b->pal_sz,
+                                 (int[4]) { w4 * 4, h4 * 4, bw4 * 4, bh4 * 4 });
+                DEBUG_BLOCK_printf("%*sPost-y-pal-indices: r=%d\n",
+                                   depth, "", ts->msac.rng);
+            }
             read_tx_part(t, DB_ONLY(depth) b, bs);
         }
 
@@ -1694,8 +1782,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 case_set(b_dim[2 + i]);
 #undef set_ctx
             }
-            if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
-                splat_intraref(f->c, t, bs, bw4, bh4);
         }
         if (b->pal_sz)
             f->bd_fn.copy_pal_block_y(t, bx4, by4, bw4, bh4);
@@ -1706,11 +1792,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     } else if (b->intrabc) {
         // intra block copy
-        refmvs_candidate mvstack[8];
-        int n_mvs, ctx;
-        dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
+        refmvs_candidate mvstack[6];
+        int n_mvs;
+        dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
                           (union refmvs_refpair) { .ref = { 0, -1 }},
-                          bs, 0, t->by, t->bx);
+                          bs, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
         if (BLOCK_TO_DEBUG) {
             printf("%*sfind_mv_refs(intra)\n", depth, "");
@@ -1727,6 +1813,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         for (drl_idx = 0; drl_idx < f->frame_hdr->max_bvp_drl_bits; drl_idx++)
             if (!dav1d_msac_decode_bool_bypass(&ts->msac)) break;
 
+        b->ref[0] = b->ref[1] = -1;
         b->mv[0] = mvstack[drl_idx].mv.mv[0];
         if (!b->mv[0].n) {
             // I don't know if this can actually happen, but AVM has code here
@@ -1833,6 +1920,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                            "prec=%d,morphctx=%d,morph=%d]: r=%d\n",
                            depth, "", is_refmv, drl_idx, b->mv[0].y, b->mv[0].x,
                            is_qpel, morphctx, b->morph_pred, ts->msac.rng);
+        if (has_luma)
+            splat_intrabc_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
         read_tx_part(t, DB_ONLY(depth) b, bs);
 
         // reconstruction
@@ -1844,7 +1933,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (has_luma) {
-            splat_intrabc_mv(f->c, t, bs, b, bw4, bh4);
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
@@ -1944,17 +2032,17 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->inter_mode = NEARMV_NEARMV;
             has_subpel_filter = 0;
 
-            refmvs_candidate mvstack[8];
-            int n_mvs, ctx;
-            dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
+            refmvs_candidate mvstack[6];
+            int n_mvs;
+            dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
-                              bs, 0, t->by, t->bx);
+                              bs, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
                 printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
                 for (int n = 0; n < n_mvs; n++)
-                    printf("%*smv[%d/%d]: y0=%d,x0=%d,y1=%d,x1=%d,w=%d\n",
+                    printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
                            depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
                            mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
                            mvstack[n].mv.mv[1].x, mvstack[n].weight);
@@ -2086,20 +2174,54 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", mode_ctx, ctx, amvd, ts->msac.rng);
             }
 
-            refmvs_candidate mvstack[8];
-            int n_mvs, ctx;
-            dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
-                              (union refmvs_refpair) { .ref = {
-                                    b->ref[0] + 1, b->ref[1] + 1 }},
-                              bs, 0, t->by, t->bx);
+            refmvs_candidate mvstack[6];
+            int n_mvs[2];
+            if (b->inter_mode > NEARMV_NEWMV) {
+                dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
+                                  (union refmvs_refpair) { .ref = {
+                                      b->ref[0] + 1, b->ref[1] + 1 } },
+                                  bs, t->by, t->bx);
+            } else if (b->ref[0] == b->ref[1]) {
+                dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
+                                  (union refmvs_refpair) { .ref = {
+                                      b->ref[0] + 1, -1 } }, bs, t->by, t->bx);
+                for (int n = 0; n < 6; n++) {
+                    mvstack[n].mv.mv[1] = mvstack[n].mv.mv[0];
+                    mvstack[n].weight *= 0x11;
+                }
+                n_mvs[1] = n_mvs[0];
+            } else {
+                dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
+                                  (union refmvs_refpair) { .ref = {
+                                      b->ref[0] + 1, -1 } }, bs, t->by, t->bx);
+                refmvs_candidate mvstack2[6];
+                dav1d_refmvs_find(&t->rt, mvstack2, NULL, &n_mvs[1],
+                                  (union refmvs_refpair) { .ref = {
+                                      b->ref[1] + 1, -1 } }, bs, t->by, t->bx);
+                for (int n = 0; n < 6; n++) {
+                    mvstack[n].mv.mv[1] = mvstack2[n].mv.mv[0];
+                    mvstack[n].weight = (mvstack[n].weight & 0xf) |
+                                         mvstack2[n].weight << 4;
+                }
+            }
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
                 printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
-                for (int n = 0; n < n_mvs; n++)
-                    printf("%*smv[%d/%d]: y0=%d,x0=%d,y1=%d,x1=%d,w=%d\n",
-                           depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
-                           mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
-                           mvstack[n].mv.mv[1].x, mvstack[n].weight);
+                if (b->inter_mode <= NEARMV_NEWMV) {
+                    for (int drl = 0; drl < 2; drl++)
+                        for (int n = 0; n < n_mvs[drl]; n++)
+                            printf("%*smv[%d:%d/%d]: y=%d,x=%d,w=%d\n",
+                                   depth + 1, "", drl, n, n_mvs[drl],
+                                   mvstack[n].mv.mv[drl].y,
+                                   mvstack[n].mv.mv[drl].x,
+                                   (mvstack[n].weight >> (4 * drl)) & 0xf);
+                } else {
+                    for (int n = 0; n < n_mvs[0]; n++)
+                        printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
+                               depth + 1, "", n, n_mvs[0], mvstack[n].mv.mv[0].y,
+                               mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
+                               mvstack[n].mv.mv[1].x, mvstack[n].weight);
+                }
             }
 #endif
 
@@ -2284,6 +2406,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         b->mv[n].y += diff[n].y;
                     }
                 }
+            } else {
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]],
+                                      t->bx, t->by, bw4, bh4, f->frame_hdr);
+                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[1]],
+                                      t->bx, t->by, bw4, bh4, f->frame_hdr);
             }
 
             if (f->seq_hdr->refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
@@ -2472,18 +2599,28 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", ctx, amvd, ts->msac.rng);
             }
 
-            refmvs_candidate mvstack[8];
-            int n_mvs, ctx;
-            dav1d_refmvs_find(&t->rt, mvstack, &n_mvs, &ctx,
+            refmvs_candidate mvstack[6];
+            int32_t warp[4][7];
+            int n_mvs[2];
+            dav1d_refmvs_find(&t->rt, mvstack,
+                              b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV ?
+                                  warp : NULL, n_mvs,
                               (union refmvs_refpair) { .ref = { b->ref[0] + 1, -1 }},
-                              bs, 0, t->by, t->bx);
+                              bs, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
                 printf("%*sfind_mv_refs(%d,-1)\n", depth, "", b->ref[0]);
-                for (int n = 0; n < n_mvs; n++)
-                    printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
-                           depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
-                           mvstack[n].mv.mv[0].x, mvstack[n].weight);
+                for (int n = 0; n < n_mvs[0]; n++)
+                    printf("%*smv[%d/%d]: y=%d,x=%d,w=%d,y_off=%d,x_off=%d\n",
+                           depth + 1, "", n, n_mvs[0], mvstack[n].mv.mv[0].y,
+                           mvstack[n].mv.mv[0].x, mvstack[n].weight,
+                           mvstack[n].y_off, mvstack[n].x_off);
+                if (b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV)
+                    for (int n = 0; n < n_mvs[1]; n++)
+                        printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d, t=%d\n",
+                               depth + 1, "", n, n_mvs[1],
+                               warp[n][0], warp[n][1], warp[n][2],
+                               warp[n][3], warp[n][4], warp[n][5], warp[n][6]);
             }
 #endif
 
@@ -2646,12 +2783,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    mv_prec, ts->msac.rng);
             }
 
+            mv diff;
             if (b->inter_mode != GLOBALMV) {
                 b->mv[0] = mvstack[drl_idx].mv.mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
                 {
-                    mv diff;
                     int nnzc, nnzc2 = 0, sum_mvd;
                     if (amvd) {
                         read_amvd(ts, &diff);
@@ -2681,13 +2818,17 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                       dav1d_msac_decode_bool_bypass(&ts->msac);
                         if (s) diff.x = -diff.x;
                     }
-                    mv_reduce_prec(&b->mv[0], mv_prec);
+                    if (mv_prec <= 3)
+                        mv_reduce_prec(&b->mv[0], mv_prec);
                     b->mv[0].x += diff.x;
                     b->mv[0].y += diff.y;
                     DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
                                        depth, "", 0, diff.y, diff.x,
                                        ts->msac.rng);
                 }
+            } else {
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]],
+                                      t->bx, t->by, bw4, bh4, f->frame_hdr);
             }
 
             if (b->inter_mode == WARPNEWMV && b->motion_mode == MM_WARP_DELTA &&
@@ -2714,20 +2855,83 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         const int sign = dav1d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.warp_delta_sign);
                         if (sign) b->matrix[n] = -b->matrix[n];
-                        t->warpmv.matrix[2 + n] =
-                            ctx * 0x10000 + b->matrix[n] * step;
+                        t->warpmv.matrix[2 + n] = warp[warp_ref_idx][n + 2] +
+                                                  b->matrix[n] * step;
                     } else {
-                        t->warpmv.matrix[2 + n] = ctx * 0x10000;
+                        t->warpmv.matrix[2 + n] = warp[warp_ref_idx][n + 2];
                     }
                 }
                 if (np == 2) {
                     t->warpmv.matrix[5] = t->warpmv.matrix[2];
                     t->warpmv.matrix[4] = -t->warpmv.matrix[3];
                 }
+                const int xpos = 4 * t->bx + 2 * bw4 - 1;
+                const int ypos = 4 * t->by + 2 * bh4 - 1;
+                t->warpmv.matrix[0] = b->mv[0].x * (1 << 13) -
+                    xpos * (t->warpmv.matrix[2] - 0x10000) -
+                    ypos * t->warpmv.matrix[3];
+                t->warpmv.matrix[1] = b->mv[0].y * (1 << 13) -
+                    xpos * t->warpmv.matrix[4] -
+                    ypos * (t->warpmv.matrix[5] - 0x10000);
                 DEBUG_BLOCK_printf("%*sPost-warp_param_signal[%d,%d,%d,%d]: r=%d\n",
                                    depth, "", b->matrix[0], b->matrix[1],
                                    (np == 4) ? b->matrix[2] : 0,
                                    (np == 4) ? b->matrix[3] : 0, ts->msac.rng);
+            } else if (b->motion_mode == MM_WARP_DELTA) {
+                memcpy(t->warpmv.matrix, warp[warp_ref_idx],
+                       sizeof(int32_t) * 6);
+                t->warpmv.type = warp[warp_ref_idx][6];
+                if (b->inter_mode == WARPMV) {
+                    if (warpmv_with_mvd) {
+                        t->warpmv.matrix[0] += diff.x * (1 << 13);
+                        t->warpmv.matrix[1] += diff.y * (1 << 13);
+                    }
+                    b->mv[0] = get_warpmv_2d(t->warpmv.matrix, t->bx, t->by,
+                                             bw4, bh4, mv_prec);
+                }
+                // yes this re-calculates the warpmatrix from mv after (for
+                // warpmv) we've just done the opposite. The round-trip error
+                // from this operation is required for conformance.
+                dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv, t->bx, t->by);
+            } else if (b->motion_mode == MM_WARP_CAUSAL) {
+                derive_warpmv(t, have_top, have_left,
+                              bw4, bh4, w4, h4, b->ref[0], b->mv[0], &t->warpmv);
+            } else if (b->motion_mode == MM_WARP_EXTEND) {
+                int y_off, x_off;
+                if (mvstack[drl_idx].x_off == -1 ||
+                    mvstack[drl_idx].y_off == -1)
+                {
+                    y_off = mvstack[drl_idx].y_off;
+                    x_off = mvstack[drl_idx].x_off;
+                } else if (have_bottom_left &&
+                    (t->l.ref[0][by4 + bh4 - 1] == b->ref[0] ||
+                     t->l.ref[1][by4 + bh4 - 1] == b->ref[0]))
+                {
+                    y_off = bh4 - 1;
+                    x_off = -1;
+                } else if (have_top_right &&
+                           (t->a->ref[0][bx4 + bw4 - 1] == b->ref[0] ||
+                            t->a->ref[1][bx4 + bw4 - 1] == b->ref[0]))
+                {
+                    y_off = -1;
+                    x_off = bw4 - 1;
+                } else if (have_left &&
+                           (t->l.ref[0][by4] == b->ref[0] ||
+                            t->l.ref[1][by4] == b->ref[0]))
+                {
+                    y_off = 0;
+                    x_off = -1;
+                } else if (have_top &&
+                           (t->a->ref[0][bx4 + bw4 - 1] == b->ref[0] ||
+                            t->a->ref[1][bx4 + bw4 - 1] == b->ref[0]))
+                {
+                    y_off = -1;
+                    x_off = 0;
+                } else {
+                    y_off = x_off = 0; // invalid
+                }
+                if (y_off || x_off)
+                    extend_warpmv(t, x_off, y_off, b_dim, b, &t->warpmv);
             }
 
             b->warp_ii = 0;
@@ -2753,70 +2957,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
                 (b->inter_mode != GLOBALMV || imin(bw4, bh4) == 1 ||
                  f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION);
-
-#if 0
-            // motion variation
-            if (f->frame_hdr->motion_modes > 1 &&
-                b->interintra_type == INTER_INTRA_NONE && imin(bw4, bh4) >= 2 &&
-                // is not warped global motion
-                !(!f->frame_hdr->force_integer_mv && b->inter_mode == GLOBALMV &&
-                  f->frame_hdr->gmv[b->ref[0]].type > DAV1D_WM_TYPE_TRANSLATION) &&
-                // has overlappable neighbours
-                ((have_left && findoddzero(&t->l.intra[by4 + 1], h4 >> 1)) ||
-                 (have_top && findoddzero(&t->a->intra[bx4 + 1], w4 >> 1))))
-            {
-                // reaching here means the block allows obmc - check warp by
-                // finding matching-ref blocks in top/left edges
-                uint64_t mask[2] = { 0, 0 };
-                find_matching_ref(t, 0, bw4, bh4, w4, h4,
-                                  have_left, have_top, b->ref[0], mask);
-                const int allow_warp = !f->svc[b->ref[0]][0].scale &&
-                    !f->frame_hdr->force_integer_mv &&
-                    f->frame_hdr->warp_motion && (mask[0] | mask[1]);
-
-                b->motion_mode = allow_warp ?
-                    dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                        ts->cdf.m.motion_mode[bs], 2) :
-                    dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.obmc[bs]);
-                if (b->motion_mode == MM_WARP) {
-                    derive_warpmv(t, bw4, bh4, mask, b->mv[0], &t->warpmv);
-#define signabs(v) v < 0 ? '-' : ' ', abs(v)
-                    if (DEBUG_BLOCK_INFO)
-                        printf("[ %c%x %c%x %c%x\n  %c%x %c%x %c%x ]\n"
-                               "alpha=%c%x, beta=%c%x, gamma=%c%x, delta=%c%x, "
-                               "mv=y:%d,x:%d\n",
-                               signabs(t->warpmv.matrix[0]),
-                               signabs(t->warpmv.matrix[1]),
-                               signabs(t->warpmv.matrix[2]),
-                               signabs(t->warpmv.matrix[3]),
-                               signabs(t->warpmv.matrix[4]),
-                               signabs(t->warpmv.matrix[5]),
-                               signabs(t->warpmv.u.p.alpha),
-                               signabs(t->warpmv.u.p.beta),
-                               signabs(t->warpmv.u.p.gamma),
-                               signabs(t->warpmv.u.p.delta),
-                               b->mv[0].y, b->mv[0].x);
-#undef signabs
-                    if (t->frame_thread.pass) {
-                        if (t->warpmv.type == DAV1D_WM_TYPE_AFFINE) {
-                            b->matrix[0] = t->warpmv.matrix[2] - 0x10000;
-                            b->matrix[1] = t->warpmv.matrix[3];
-                            b->matrix[2] = t->warpmv.matrix[4];
-                            b->matrix[3] = t->warpmv.matrix[5] - 0x10000;
-                        } else {
-                            b->matrix[0] = INT16_MIN;
-                        }
-                    }
-                }
-
-                if (DEBUG_BLOCK_INFO)
-                    printf("Post-motionmode[%d]: r=%d [mask: 0x%" PRIx64 "/0x%"
-                           PRIx64 "]\n", b->motion_mode, ts->msac.rng, mask[0],
-                            mask[1]);
-            } else {
-                b->motion_mode = MM_TRANSLATION;
-            }
-#endif
         }
 
         // subpel filter
@@ -2837,6 +2977,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         } else {
             b->filter = f->frame_hdr->subpel_filter_mode;
         }
+
+        if (is_comp)
+            splat_tworef_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
+        else
+            splat_oneref_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
 
         read_tx_part(t, DB_ONLY(depth) b, bs);
 
@@ -2864,10 +3009,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         // context updates
-        if (is_comp)
-            splat_tworef_mv(f->c, t, bs, b, bw4, bh4);
-        else
-            splat_oneref_mv(f->c, t, bs, b, bw4, bh4);
         BlockContext *edge = t->a;
         for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
@@ -2942,6 +3083,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #undef set_ctx
     }
 
+#if 0
     if (t->frame_thread.pass == 1 && !b->intra && IS_INTER_OR_SWITCH(f->frame_hdr)) {
         const int sby = (t->by - ts->tiling.row_start) >> f->sb_shift;
         int (*const lowest_px)[2] = ts->lowest_pixel[sby];
@@ -3039,6 +3181,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
     }
+#endif
 
     return 0;
 }
@@ -3973,10 +4116,11 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     const int tile_row = ts->tiling.row, tile_col = ts->tiling.col;
 
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
-        dav1d_refmvs_tile_sbrow_init(&t->rt, &f->rf, ts->tiling.col_start,
-                                     ts->tiling.col_end, ts->tiling.row_start,
-                                     ts->tiling.row_end, t->by >> f->sb_shift,
-                                     ts->tiling.row, t->frame_thread.pass);
+        dav1d_refmvs_tile_sbrow_init(&t->rt, &f->rf,
+                                     ts->tiling.col_start, ts->tiling.col_end,
+                                     ts->tiling.row_start, ts->tiling.row_end,
+                                     t->by >> f->sb_shift, ts->tiling.row,
+                                     t->frame_thread.pass);
     }
 
     if (IS_INTER_OR_SWITCH(f->frame_hdr) && c->n_fc > 1) {
@@ -4006,9 +4150,9 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     }
 
     if (f->c->n_tc > 1 && f->frame_hdr->use_ref_frame_mvs) {
-        f->c->refmvs_dsp.load_tmvs(&f->rf, ts->tiling.row,
-                                   ts->tiling.col_start >> 1, ts->tiling.col_end >> 1,
-                                   t->by >> 1, (t->by + sb_step) >> 1);
+        dav1d_refmvs_load_tmvs(&f->rf, ts->tiling.row,
+                               ts->tiling.col_start >> 1, ts->tiling.col_end >> 1,
+                               t->by >> 1, (t->by + sb_step) >> 1);
     }
     const int sb256y = t->by >> 6;
     for (t->bx = ts->tiling.col_start;
@@ -4081,6 +4225,9 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         }
         int dir = 0;
         t->sdp_cfl_disallowed = 0;
+        if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
+            dav1d_refmvs_reset_sb(&t->rt, t->by, t->bx);
+        }
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
             // for some contexts related to warp-motion, AVM uses 8x8 (instead
             // of 4x4) context resolution when we cross SB boundaries. However,
@@ -4097,12 +4244,11 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         }
         if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
             return 1;
-    }
-
-    if (f->seq_hdr->ref_frame_mvs && f->c->n_tc > 1 && IS_INTER_OR_SWITCH(f->frame_hdr)) {
-        dav1d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
-                               ts->tiling.col_start >> 1, ts->tiling.col_end >> 1,
-                               t->by >> 1, (t->by + sb_step) >> 1);
+        if ((IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)) {
+            dav1d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
+                                   t->bx >> 1, (t->bx + sb_step) >> 1,
+                                   t->by >> 1, (t->by + sb_step) >> 1);
+        }
     }
 
     // backup pre-loopfilter pixels for intra prediction of the next sbrow
@@ -4577,16 +4723,12 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
             t->by = sby << (4 + f->frame_hdr->sb128);
             const int by_end = (t->by + f->sb_step) >> 1;
             if (f->frame_hdr->use_ref_frame_mvs) {
-                f->c->refmvs_dsp.load_tmvs(&f->rf, tile_row,
-                                           0, f->bw >> 1, t->by >> 1, by_end);
+                dav1d_refmvs_load_tmvs(&f->rf, tile_row,
+                                       0, f->bw >> 1, t->by >> 1, by_end);
             }
             for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {
                 t->ts = &f->ts[tile_row * f->frame_hdr->tiling.t.cols + tile_col];
                 if (dav1d_decode_tile_sbrow(t)) goto error;
-            }
-            if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
-                dav1d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
-                                       0, f->bw >> 1, t->by >> 1, by_end);
             }
 
             // loopfilter + cdef + restoration
@@ -5068,7 +5210,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             if (f->cur_segmap_ref)
                 dav1d_ref_inc(f->cur_segmap_ref);
             dav1d_ref_dec(&c->refs[i].refmvs);
-            if (!f->frame_hdr->allow_intrabc) {
+            if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
                 c->refs[i].refmvs = f->mvs_ref;
                 if (f->mvs_ref)
                     dav1d_ref_inc(f->mvs_ref);

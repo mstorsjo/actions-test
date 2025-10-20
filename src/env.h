@@ -348,6 +348,36 @@ static inline void mv_reduce_prec(mv *const mv, const int mv_prec) {
     mv->y &= mask;
 }
 
+static inline mv get_warpmv_proj(const int32_t *const matrix,
+                                 const int x, const int y)
+{
+    const int xc = (matrix[2] - (1 << 16)) * x + matrix[3] * y + matrix[0];
+    const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
+    return (mv) {
+        .y = iclip((yc + 0x1000 - (yc < 0)) >> 13, -0xffff, +0xffff),
+        .x = iclip((xc + 0x1000 - (xc < 0)) >> 13, -0xffff, +0xffff),
+    };
+}
+
+static inline mv get_warpmv_2d(const int32_t *const matrix,
+                               const int bx4, const int by4,
+                               const int bw4, const int bh4,
+                               const int mv_precision)
+{
+    const int x = bx4 * 4 + bw4 * 2 - 1;
+    const int y = by4 * 4 + bh4 * 2 - 1;
+    const int xc = (matrix[2] - (1 << 16)) * x + matrix[3] * y + matrix[0];
+    const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
+    const int not_epel = mv_precision < 6, shift = 13 + not_epel;
+    const int rnd = (1 << shift) >> 1, max = 0xffff - not_epel;
+    return (mv) {
+        .y = iclip(apply_sign(((abs(yc) + rnd) >> shift) << not_epel, yc),
+                   -max, +max),
+        .x = iclip(apply_sign(((abs(xc) + rnd) >> shift) << not_epel, xc),
+                   -max, +max),
+    };
+}
+
 static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
                             const int bx4, const int by4,
                             const int bw4, const int bh4,
@@ -360,20 +390,10 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
         // fall-through
     default:
     case DAV1D_WM_TYPE_AFFINE: {
-        const int x = bx4 * 4 + bw4 * 2 - 1;
-        const int y = by4 * 4 + bh4 * 2 - 1;
-        const int xc = (gmv->matrix[2] - (1 << 16)) * x +
-                       gmv->matrix[3] * y + gmv->matrix[0];
-        const int yc = (gmv->matrix[5] - (1 << 16)) * y +
-                       gmv->matrix[4] * x + gmv->matrix[1];
-        const int shift = 16 - hdr->mv_precision;
-        const int round = (1 << shift) >> 1;
-        mv res = (mv) {
-            .y = apply_sign(((abs(yc) + round) >> shift) << (3 - hdr->mv_precision), yc),
-            .x = apply_sign(((abs(xc) + round) >> shift) << (3 - hdr->mv_precision), xc),
-        };
-        if (hdr->force_integer_mv)
-            fix_int_mv_precision(&res);
+        mv res = get_warpmv_2d(gmv->matrix, bx4, by4, bw4, bh4,
+                               hdr->mv_precision + 3);
+        // FIXME clamp to image edges
+        if (hdr->force_integer_mv) fix_int_mv_precision(&res);
         return res;
     }
     case DAV1D_WM_TYPE_TRANSLATION: {
@@ -381,8 +401,8 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
             .y = gmv->matrix[0] >> 13,
             .x = gmv->matrix[1] >> 13,
         };
-        if (hdr->force_integer_mv)
-            fix_int_mv_precision(&res);
+        // FIXME clamp to image edges
+        if (hdr->force_integer_mv) fix_int_mv_precision(&res);
         return res;
     }
     case DAV1D_WM_TYPE_IDENTITY:

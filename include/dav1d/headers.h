@@ -441,7 +441,7 @@ typedef struct Dav1dFrameHeader {
     uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
     uint8_t max_bvp_drl_bits, max_drl_bits;
     int8_t refidx[DAV1D_REFS_PER_FRAME];
-    uint8_t mv_precision;
+    uint8_t mv_precision; // 0-3 for {f,h,q,e}pel
     enum Dav1dFilterMode subpel_filter_mode;
     uint8_t motion_modes;
     uint8_t use_ref_frame_mvs;

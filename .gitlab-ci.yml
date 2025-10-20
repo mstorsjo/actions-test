@@ -93,14 +93,29 @@ build-debian:
         - cd x86-64 && make -j$(nproc) aomdec && cd ../..
         - |
           sed -i 's|#define DEBUG_B_PIXELS 1|#define DEBUG_B_PIXELS 0|' src/debug.h
-          sed -i 's|f->frame_hdr->frame_offset == 0|f->frame_hdr->frame_offset <= 4|' src/debug.h
+          sed -i 's|frame_offset == 0|frame_offset <= 4|' src/debug.h
           git diff
         - ninja -C build
         - |
           file="media/avm-v12.0.0-bus.64x64.l5.ivf"
-          # refmvs is not yet implemented, so discard these parts of the entropy debugging log
-          avm/x86-64/aomdec $file -o /dev/null | grep -v ' mv\[' > avm.inter.log
-          build/tools/dav1d -i $file --muxer=null --threads=1 --quiet | grep -v ' mv\[' > dav1d.inter.log
+          # refmvs is not yet fully implemented, so discard these parts of the entropy debugging log
+          avm/x86-64/aomdec $file -o /dev/null | grep -v ' mv\[' | grep -v 2dmv > avm.inter.log
+          build/tools/dav1d -i $file --muxer=null --threads=1 --quiet | grep -v ' mv\[' | grep -v 2dmv > dav1d.inter.log
+          diff -uw {avm,dav1d}.inter.log
+          wc -l avm.inter.log
+        - |
+          cd avm
+          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' av1/common/mvref_common.c
+          git diff
+        - cd x86-64 && make -j$(nproc) aomdec && cd ../..
+        - |
+          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' src/refmvs.c
+          git diff
+        - ninja -C build
+        - |
+          file="media/avm-v12.0.0-bus.64x64.l5.opfl0-refinemv0.ivf"
+          avm/x86-64/aomdec $file -o /dev/null > avm.inter.log
+          build/tools/dav1d -i $file --muxer=null --threads=1 --quiet > dav1d.inter.log
           diff -uw {avm,dav1d}.inter.log
           wc -l avm.inter.log
         - |

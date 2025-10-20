@@ -40,6 +40,7 @@ static inline int gen_mv(const int total_bits, int spel_bits) {
     return rnd() & 1 ? -bits : bits;
 }
 
+#if 0
 static inline int get_min_mv_val(const int idx) {
     if      (idx <= 9)  return idx;
     else if (idx <= 18) return (idx - 9) * 10;
@@ -48,9 +49,10 @@ static inline int get_min_mv_val(const int idx) {
     else                return (idx - 36) * 10000;
 }
 
-static inline void gen_tmv(refmvs_temporal_block *const rb, const uint8_t *const ref2ref) {
-    rb->ref = rnd() % 7;
-    if (!rb->ref) return;
+static inline void gen_tmv(refmvs_temporal_block *const rb, const int8_t *const ref2ref) {
+    rb->ref.ref[1] = -1;
+    rb->ref.ref[0] = rnd() % 7;
+    if (!rb->ref.ref[0]) return;
     static const int x_prob[] = {
         26447556, 6800591, 3708783,  2198592, 1635940, 1145901, 1052602, 1261759,
          1099739,  755108, 6075404,  4355916, 3254908, 2897157, 2273676, 2154432,
@@ -71,7 +73,7 @@ static inline void gen_tmv(refmvs_temporal_block *const rb, const uint8_t *const
             const int min = get_min_mv_val(i);
             const int max = get_min_mv_val(i + 1);
             const int val = min + rnd() % (max - min);
-            rb->mv.x = iclip(val * ref2ref[rb->ref], -(1 << 15), (1 << 15) - 1);
+            rb->mv.mv[0].x = iclip(val * ref2ref[rb->ref.ref[0]], -(1 << 15), (1 << 15) - 1);
             break;
         }
     }
@@ -82,7 +84,7 @@ static inline void gen_tmv(refmvs_temporal_block *const rb, const uint8_t *const
             const int min = get_min_mv_val(i);
             const int max = get_min_mv_val(i + 1);
             const int val = min + rnd() % (max - min);
-            rb->mv.y = iclip(val * ref2ref[rb->ref], -(1 << 15), (1 << 15) - 1);
+            rb->mv.mv[0].y = iclip(val * ref2ref[rb->ref.ref[0]], -(1 << 15), (1 << 15) - 1);
             break;
         }
     }
@@ -132,7 +134,7 @@ static inline void init_rp_ref(refmvs_frame const *const rf,
     const int col_start8i = imax(col_start8 - 8, 0);
     const int col_end8i = imin(col_end8 + 8, rf->iw8);
     for (int n = 0; n < rf->n_mfmvs; n++) {
-        refmvs_temporal_block *rp_ref = rf->rp_ref[rf->mfmv_ref[n]];
+        refmvs_temporal_block *rp_ref = rf->rp_ref[rf->mfmv[n].ref];
         for (int i = row_start8; i < imin(row_end8, rf->ih8); i++) {
             for (int j = col_start8i; j < col_end8i;) {
                 refmvs_temporal_block rb;
@@ -221,6 +223,7 @@ static void check_load_tmvs(const Dav1dRefmvsDSPContext *const c) {
 
     report("load_tmvs");
 }
+#endif
 
 static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
     refmvs_block *rr[31];
@@ -260,7 +263,7 @@ static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
                 };
                 for (int k = 0; k < (dav1d_block_dimensions[bs][0] + 1) >> 1; k++, j++) {
                     c_rp[i * 128 + j].mv.n = 0xdeadbeef;
-                    c_rp[i * 128 + j].ref = 0xdd;
+                    c_rp[i * 128 + j].ref.pair = 0xdead;
                 }
             }
 
@@ -271,15 +274,18 @@ static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
         for (int i = row_start8; i < row_end8; i++)
             for (int j = col_start8; j < col_end8; j++)
                 if (c_rp[i * 128 + j].mv.n != a_rp[i * 128 + j].mv.n ||
-                    c_rp[i * 128 + j].ref != a_rp[i * 128 + j].ref)
+                    c_rp[i * 128 + j].ref.pair != a_rp[i * 128 + j].ref.pair)
                 {
                     if (fail()) {
                         fprintf(stderr, "[%d][%d] c_rp.mv.x = 0x%x a_rp.mv.x = 0x%x\n",
-                                i, j, c_rp[i * 128 + j].mv.x, a_rp[i * 128 + j].mv.x);
+                                i, j, c_rp[i * 128 + j].mv.mv[0].x,
+                                a_rp[i * 128 + j].mv.mv[0].x);
                         fprintf(stderr, "[%d][%d] c_rp.mv.y = 0x%x a_rp.mv.y = 0x%x\n",
-                                i, j, c_rp[i * 128 + j].mv.y, a_rp[i * 128 + j].mv.y);
+                                i, j, c_rp[i * 128 + j].mv.mv[0].y,
+                                a_rp[i * 128 + j].mv.mv[0].y);
                         fprintf(stderr, "[%d][%d] c_rp.ref = %u a_rp.ref = %u\n",
-                                i, j, c_rp[i * 128 + j].ref, a_rp[i * 128 + j].ref);
+                                i, j, c_rp[i * 128 + j].ref.ref[0],
+                                a_rp[i * 128 + j].ref.ref[0]);
                     }
                 }
 
