@@ -78,6 +78,16 @@ static const DRFilter4Tap av1_dr_interp_filter[32] = {
     {  -1,   4, 127,  -2 }
 };
 
+static const uint8_t ibp_weights[32] = {
+    /* Unused */ 0,
+    /* len  1 */ 96,
+    /* len  2 */ 86, 107,
+    /* len  4 */ 77,  90, 102, 115,
+    /* len  8 */ 71,  78,  86,  92, 100, 107, 114, 121,
+    /* len 16 */ 68,  72,  76,  79,  83,  87,  90,  94,
+                 98, 102, 106, 109, 113, 117, 121, 124
+};
+
 static NOINLINE void
 splat_dc(pixel *dst, const ptrdiff_t stride,
          const int width, const int height, const int dc HIGHBD_DECL_SUFFIX)
@@ -134,12 +144,27 @@ static unsigned dc_gen_top(const pixel *const topleft, const int width) {
 
 static void ipred_dc_top_c(pixel *dst, const ptrdiff_t stride,
                            const pixel *const topleft,
-                           const int width, const int height, const int a,
+                           const int width, int height, const int a,
                            const int max_width, const int max_height
                            HIGHBD_DECL_SUFFIX)
 {
-    splat_dc(dst, stride, width, height, dc_gen_top(topleft, width)
-             HIGHBD_TAIL_SUFFIX);
+    const unsigned dc = dc_gen_top(topleft, width);
+
+    if (a & ANGLE_IBP_FLAG) {
+        const int h = height >> 2;
+        const uint8_t *w_y = &ibp_weights[h];
+        for (int y = 0; y < h; y++) {
+            const int wy = 128 - w_y[y];
+            const int dc_wy = dc * w_y[y];
+            for (int x = 0; x < width; x++) {
+                dst[x] = (topleft[x + 1] * wy + dc_wy + 64) >> 7;
+            }
+            dst += stride;
+        }
+        height -= h;
+    }
+
+    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
 }
 
 static void ipred_cfl_top_c(pixel *dst, const ptrdiff_t stride,
@@ -161,12 +186,27 @@ static unsigned dc_gen_left(const pixel *const topleft, const int height) {
 
 static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
                             const pixel *const topleft,
-                            const int width, const int height, const int a,
+                            int width, const int height, const int a,
                             const int max_width, const int max_height
                             HIGHBD_DECL_SUFFIX)
 {
-    splat_dc(dst, stride, width, height, dc_gen_left(topleft, height)
-             HIGHBD_TAIL_SUFFIX);
+    const unsigned dc = dc_gen_left(topleft, height);
+
+    if (a & ANGLE_IBP_FLAG) {
+        const int w = width >> 2;
+        const uint8_t *w_x = &ibp_weights[w];
+        for (int y = 0; y < height; y++) {
+            const int left = topleft[-(y + 1)];
+            for (int x = 0; x < w; x++) {
+                dst[x] = (left * (128 - w_x[x]) + dc * w_x[x] + 64) >> 7;
+            }
+            dst += stride;
+        }
+        dst -= stride * height;
+        width -= w;
+    }
+
+    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
 }
 
 static void ipred_cfl_left_c(pixel *dst, const ptrdiff_t stride,
@@ -209,12 +249,43 @@ static unsigned dc_gen(const pixel *const topleft,
 
 static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
                        const pixel *const topleft,
-                       const int width, const int height, const int a,
+                       int width, int height, const int a,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    splat_dc(dst, stride, width, height, dc_gen(topleft, width, height)
-             HIGHBD_TAIL_SUFFIX);
+    const unsigned dc = dc_gen(topleft, width, height);
+
+    if (a & ANGLE_IBP_FLAG) {
+        pixel *const p_dst = dst;
+        const int h = height >> 2;
+        const int w = width >> 2;
+        const int x_start = width < height ? w : 0;
+        const uint8_t *const w_y = &ibp_weights[h];
+        for (int y = 0; y < h; y++) {
+            const int wy = 128 - w_y[y];
+            const int dc_wy = dc * w_y[y];
+            for (int x = x_start; x < width; x++) {
+                dst[x] = (topleft[x + 1] * wy + dc_wy + 64) >> 7;
+            }
+            dst += stride;
+        }
+
+        const int y_start = width >= height ? h : 0;
+        dst = p_dst + y_start * stride;
+        const uint8_t *const w_x = &ibp_weights[w];
+        for (int y = y_start; y < height; y++) {
+            const int left = topleft[-(y + 1)];
+            for (int x = 0; x < w; x++) {
+                dst[x] = (left * (128 - w_x[x]) + dc * w_x[x] + 64) >> 7;
+            }
+            dst += stride;
+        }
+        dst = p_dst + (h * stride + w);
+        width -= w;
+        height -= h;
+    }
+
+    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
 }
 
 static void ipred_cfl_c(pixel *dst, const ptrdiff_t stride,

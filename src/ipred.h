@@ -34,6 +34,19 @@
 
 #include "src/levels.h"
 
+// These flags are OR'ed with the angle parameter in intra predictors.
+//
+// ANGLE_USE_EDGE_FILTER_FLAG indicates that reference edges should be
+// filtered (convolved) before being used for prediction.
+//
+// ANGLE_SMOOTH_EDGE_FLAG indicates that the reference edges are smooth,
+// and thus a reduced filter strength should be applied.
+//
+// ANGLE_IBP_FLAG enables intra bi-prediction for the current block.
+#define ANGLE_IBP_FLAG             2048
+#define ANGLE_USE_EDGE_FILTER_FLAG 1024
+#define ANGLE_SMOOTH_EDGE_FLAG      512
+
 /*
  * Intra prediction.
  * - a is the angle (in degrees) for directional intra predictors. For other
