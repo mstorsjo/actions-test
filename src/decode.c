@@ -1513,7 +1513,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                b->uv_angle, ts->msac.rng);
             if (b->uv_mode == CFL_PRED) {
                 memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
-                if (f->seq_hdr->mhccp &&
+                if (f->seq_hdr->mhccp && imax(cbw4, cbh4) <= 8 &&
                     dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp))
                 {
                     const int sz_ctx = size_group_lookup[bs];
