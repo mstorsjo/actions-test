@@ -750,29 +750,28 @@ inv_adst_1d(16)
 static void inv_identity4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 4; i++) {
-        const int in = c[stride * i];
-        c[stride * i] = in + ((in * 1697 + 2048) >> 12);
+        c[stride * i] *= 128;
     }
 }
 
 static void inv_identity8_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
-    for (int i = 0; i < 8; i++)
-        c[stride * i] *= 2;
+    for (int i = 0; i < 8; i++) {
+        c[stride * i] *= 181;
+    }
 }
 
 static void inv_identity16_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 16; i++) {
-        const int in = c[stride * i];
-        c[stride * i] = 2 * in + ((in * 1697 + 1024) >> 11);
+        c[stride * i] *= 256;
     }
 }
 
 static void inv_identity32_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     for (int i = 0; i < 32; i++)
-        c[stride * i] *= 4;
+        c[stride * i] *= 362;
 }
 
 const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES] = {
