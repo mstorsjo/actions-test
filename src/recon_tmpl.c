@@ -1458,7 +1458,8 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
                                  (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
                 const int transpose = !((mask >> m) & 1);
-                dsp->stx.stxfm(cf, tx, stx, eob, transpose HIGHBD_CALL_SUFFIX);
+                const int is_8x8 = tw >= 8 && th >= 8;
+                eob = dsp->stx.stxfm[is_8x8](cf, tx, stx, eob, transpose HIGHBD_CALL_SUFFIX);
                 if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                     coef_dump(cf, imin(t_dim->h, 8) * 4,
                               imin(t_dim->w, 8) * 4, 3, "stx");

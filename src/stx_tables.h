@@ -32,8 +32,10 @@
 
 #include "src/levels.h"
 
+EXTERN const uint8_t stx_scan_orders_4x4[TX_64X64][2][16];
 EXTERN const uint8_t stx_scan_orders_8x8[TX_32X32][2][64];
 EXTERN const uint8_t coeff8x8_mapping[42][48];
+EXTERN const int8_t stx_4x4_kernel[14][3][8][16];
 EXTERN const int8_t stx_8x8_kernel[14][3][32][48];
 
 #endif  /* DAV1D_SRC_STX_TABLES_H */
