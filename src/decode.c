@@ -2118,8 +2118,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // mv precision
             int mv_prec = 3 + f->frame_hdr->mv_precision;
             if (mv_prec > 3 && !amvd && f->seq_hdr->flex_mvres && is_newmv_mode) {
-                const int mvprec1 = idx >= 1 && nx[0]->mvprec[xoff[0]];
-                const int mvprec2 = idx >= 2 && nx[1]->mvprec[xoff[1]];
+                const int mvprec1 = boff[0] == -1 ? 0 : nb[0]->mvprec[boff[0]];
+                const int mvprec2 = boff[1] == -1 ? 0 : nb[1]->mvprec[boff[1]];
                 const int ctx1 = mvprec1 + mvprec2;
                 if (!dav1d_msac_decode_bool_adapt(&ts->msac,
                                                   ts->cdf.m.mvprec_def[ctx1]))
@@ -2551,8 +2551,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (mv_prec > 3 && !amvd && f->seq_hdr->flex_mvres &&
                 (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV))
             {
-                const int mvprec1 = idx >= 1 && nx[0]->mvprec[xoff[0]];
-                const int mvprec2 = idx >= 2 && nx[1]->mvprec[xoff[1]];
+                const int mvprec1 = boff[0] == -1 ? 0 : nb[0]->mvprec[boff[0]];
+                const int mvprec2 = boff[1] == -1 ? 0 : nb[1]->mvprec[boff[1]];
                 const int ctx1 = mvprec1 + mvprec2;
                 if (!dav1d_msac_decode_bool_adapt(&ts->msac,
                                                   ts->cdf.m.mvprec_def[ctx1]))
