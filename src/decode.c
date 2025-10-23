@@ -1671,6 +1671,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 if (IS_INTER_OR_SWITCH(f->frame_hdr)) { \
                     rep_macro(edge->amvd, off, 0); \
                     rep_macro(edge->mvprec, off, 0); \
+                    rep_macro(edge->motion_mode, off, 0); \
                     rep_macro(edge->comp_type, off, COMP_INTER_NONE); \
                     rep_macro(edge->ref[0], off, ((uint8_t) -1)); \
                     rep_macro(edge->ref[1], off, ((uint8_t) -1)); \
@@ -1849,6 +1850,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     rep_macro(edge->amvd, off, 0); \
                     rep_macro(edge->mvprec, off, 0); \
                     rep_macro(edge->comp_type, off, COMP_INTER_NONE); \
+                    rep_macro(edge->motion_mode, off, 0); \
                     rep_macro(edge->ref[0], off, ((uint8_t) -1)); \
                     rep_macro(edge->ref[1], off, ((uint8_t) -1)); \
                 }
