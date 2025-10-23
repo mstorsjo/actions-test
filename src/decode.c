@@ -2486,10 +2486,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #undef match_ref
                     b->motion_mode = MM_WARP_DELTA;
                     if (has_cs_ext) {
-                        const enum MotionMode x1 = xoff[0] == -1 ? MM_TRANSLATION :
-                                                   nx[0]->motion_mode[xoff[0]],
-                                              x2 = xoff[1] == -1 ? MM_TRANSLATION :
-                                                   nx[1]->motion_mode[xoff[1]];
+                        const enum MotionMode x1 = boff[0] == -1 ? MM_TRANSLATION :
+                                                   nb[0]->motion_mode[boff[0]],
+                                              x2 = boff[1] == -1 ? MM_TRANSLATION :
+                                                   nb[1]->motion_mode[boff[1]];
                         const int ext_ctx = (x1 >= MM_WARP_CAUSAL) +
                                             (x2 >= MM_WARP_CAUSAL);
                         if (dav1d_msac_decode_bool_adapt(&ts->msac,
