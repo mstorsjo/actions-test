@@ -664,7 +664,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     if (enable_ibp) {
         const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 12];
         if (mode_index) {
-            dx = dr_intra_derivative[angle - 180];
+            dx = dr_intra_derivative[90 - angle];
             idif_z3_ibp_z1(dst, stride, topleft_in, width, height, dx,
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
