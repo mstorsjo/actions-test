@@ -2059,7 +2059,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int ctx = nx[0]->amvd[xoff[0]] + nx[1]->amvd[xoff[1]];
                 amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[mode_ctx][ctx]);
-                mvprec_def = !amvd || f->frame_hdr->mv_precision < 3;
+                mvprec_def = 2 - (!amvd || f->frame_hdr->mv_precision < 3);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=%d|%d,%d]: r=%d\n",
                                    depth, "", mode_ctx, ctx, amvd, ts->msac.rng);
             }
@@ -2120,21 +2120,21 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (mv_prec > 3 && !amvd && f->seq_hdr->flex_mvres && is_newmv_mode) {
                 const int mvprec1 = boff[0] == -1 ? 0 : nb[0]->mvprec[boff[0]];
                 const int mvprec2 = boff[1] == -1 ? 0 : nb[1]->mvprec[boff[1]];
-                const int ctx1 = mvprec1 + mvprec2;
+                const int ctx1 = (mvprec1 & 1) + (mvprec2 & 1);
                 if (!dav1d_msac_decode_bool_adapt(&ts->msac,
                                                   ts->cdf.m.mvprec_def[ctx1]))
                 {
-                    const int ctx2 = !mvprec1 || !mvprec2;
+                    const int ctx2 = (mvprec1 | mvprec2) >> 1;
                     const int idx =
                         dav1d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
                     mv_prec = mv_prec_tbl[mv_prec == 6][idx];
-                    mvprec_def = 0;
+                    mvprec_def = 2;
                 }
                 DEBUG_BLOCK_printf("%*sPost-mv_precision[ctx=%d|%d|%d,%d]: r=%d\n",
                                    depth, "", ctx1,
-                                   mvprec_def ? -1 : !mvprec1 || !mvprec2,
-                                   mvprec_def ? -1 :
+                                   mvprec_def == 1 ? -1 : (mvprec1 | mvprec2) >> 1,
+                                   mvprec_def == 1 ? -1 :
                                        f->frame_hdr->mv_precision - 1,
                                    mv_prec, ts->msac.rng);
             }
@@ -2400,7 +2400,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     (nx[1]->amvd[xoff[1]] && nx[1]->ref[0][xoff[1]] == b->ref[0]);
                 amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[4][ctx]);
-                mvprec_def = !amvd || f->frame_hdr->mv_precision < 3;
+                mvprec_def = 2 - (!amvd || f->frame_hdr->mv_precision < 3);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=4|%d,%d]: r=%d\n",
                                    depth, "", ctx, amvd, ts->msac.rng);
             }
@@ -2553,21 +2553,21 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             {
                 const int mvprec1 = boff[0] == -1 ? 0 : nb[0]->mvprec[boff[0]];
                 const int mvprec2 = boff[1] == -1 ? 0 : nb[1]->mvprec[boff[1]];
-                const int ctx1 = mvprec1 + mvprec2;
+                const int ctx1 = (mvprec1 & 1) + (mvprec2 & 1);
                 if (!dav1d_msac_decode_bool_adapt(&ts->msac,
                                                   ts->cdf.m.mvprec_def[ctx1]))
                 {
-                    const int ctx2 = !mvprec1 || !mvprec2;
+                    const int ctx2 = (mvprec1 | mvprec2) >> 1;
                     const int idx =
                         dav1d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
                     mv_prec = mv_prec_tbl[mv_prec == 6][idx];
-                    mvprec_def = 0;
+                    mvprec_def = 2;
                 }
                 DEBUG_BLOCK_printf("%*sPost-mv_precision[ctx=%d|%d|%d,%d]: r=%d\n",
                                    depth, "", ctx1,
-                                   mvprec_def ? -1 : !mvprec1 || !mvprec2,
-                                   mvprec_def ? -1 :
+                                   mvprec_def == 1 ? -1 : (mvprec1 | mvprec2) >> 1,
+                                   mvprec_def == 1 ? -1 :
                                        f->frame_hdr->mv_precision - 1,
                                    mv_prec, ts->msac.rng);
             }
