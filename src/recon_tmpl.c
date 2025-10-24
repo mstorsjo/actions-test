@@ -2618,6 +2618,7 @@ void bytefn(dav1d_filter_sbrow)(Dav1dFrameContext *const f, const int sby) {
 void bytefn(dav1d_backup_ipred_edge)(Dav1dTaskContext *const t) {
     const Dav1dFrameContext *const f = t->f;
     Dav1dTileState *const ts = t->ts;
+    if (t->by + f->sb_step >= ts->tiling.row_end) return;
     const int sby = t->by >> f->sb_shift;
     const int sby_off = f->sb256w * 256 * sby;
     const int x_off = ts->tiling.col_start;
