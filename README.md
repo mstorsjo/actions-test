@@ -1,26 +1,24 @@
-![dav1d logo](doc/dav1d_logo.png)
+# dav2d
 
-# dav1d
-
-**dav1d** is an **AV1** cross-platform **d**ecoder, open-source, and focused on speed and correctness.
+**dav2d** is an **AV2** cross-platform **d**ecoder, open-source, and focused on speed and correctness.
 
 It is now battle-tested and production-ready and can be used everywhere.
 
-The canonical repository URL for this repo is https://code.videolan.org/videolan/dav1d
+The canonical repository URL for this repo is https://code.videolan.org/videolan/dav2d
 
-This project was partially funded by the *Alliance for Open Media*/**AOM**.
+This project is edited by VideoLAN as part of its membership by the *Alliance for Open Media*/**AOM**.
 
 ## Goal and Features
 
-The goal of this project is to provide a decoder for **most platforms**, and achieve the **highest speed** possible to overcome the temporary lack of AV1 hardware decoder.
+The goal of this project is to provide a decoder for **most platforms**, and achieve the **highest speed** possible to overcome the temporary lack of AV2 hardware decoder.
 
-It supports all features from AV1, including all subsampling and bit-depth parameters.
+It will support all features from AV2, including all subsampling and bit-depth parameters.
 
-In the future, this project will host simple tools or simple wrappings *(like, for example, an MFT transform)*.
+In the future, this project will host simple tools or simple wrappings.
 
 ## License
 
-**dav1d** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
+**dav2d** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
 
 The reasoning behind this decision is the same as for libvorbis, see [RMS on vorbis](https://lwn.net/2001/0301/a/rms-ov-license.php3).
 
@@ -28,10 +26,12 @@ The reasoning behind this decision is the same as for libvorbis, see [RMS on vor
 
 The plan is the following:
 
-### Reached
+### On-going
 1. Complete C implementation of the decoder,
 2. Provide a usable API,
 3. Port to most platforms,
+
+### After
 4. Make it fast on desktop, by writing asm for AVX2 chips.
 5. Make it fast on mobile, by writing asm for ARMv8 chips,
 6. Make it fast on older desktop, by writing asm for SSSE3+ chips,
@@ -41,12 +41,8 @@ The plan is the following:
 10. Make high bit-depth fast on desktop, by writing asm for AVX2 chips,
 11. Make high bit-depth fast on older desktop, by writing asm for SSSE3+ chips,
 12. Improve threading.
-
-### On-going
-13. Improve C code base with [various tweaks](https://code.videolan.org/videolan/dav1d/wikis/task-list),
+13. Improve C code base with various tweaks.
 14. Accelerate for less common architectures, like PPC, SSE2, RISC-V or AVX-512.
-
-### After
 15. Use more GPU decoding, when possible.
 
 # Contribute
@@ -55,14 +51,13 @@ Currently, we are looking for help from:
 - C developers,
 - asm developers,
 - platform-specific developers,
-- GPGPU developers,
 - testers.
 
 Our contributions guidelines are quite strict. We want to build a coherent codebase to simplify maintenance and achieve the highest possible speed.
 
 Notably, the codebase is in pure C and asm.
 
-We are on IRC, on the **#dav1d** channel on [*Libera.chat*](http://libera.chat/). If you do not have an IRC Client at hand, use [IRC Web Interface](https://web.libera.chat/#dav1d).
+We are on IRC, on the **#dav2d** channel on [*Libera.chat*](http://libera.chat/). If you do not have an IRC Client at hand, use [IRC Web Interface](https://web.libera.chat/#dav2d).
 
 See the [contributions document](CONTRIBUTING.md).
 
@@ -116,7 +111,7 @@ meson setup .. --cross-file=../package/crossfiles/i686-linux32.meson
 2. Run `meson setup .. -Denable_docs=true` to configure meson to generate docs from the build directory.
 3. Run `ninja doc/html` to build the docs
 
-The result can be found in `build/doc/html/`. An online version built from master can be found [here](https://videolan.videolan.me/dav1d/).
+The result can be found in `build/doc/html/`. An online version built from master can be found [here](https://videolan.videolan.me/dav2d/).
 
 # Run tests
 
@@ -133,12 +128,7 @@ These companies can provide support and integration help, should you need it.
 
 # FAQ
 
-## Why do you not improve libaom rather than starting a new project?
-
-- We believe that libaom is a very good library. It was however developed for research purposes during AV1 design.
-We think that an implementation written from scratch can achieve faster decoding, in the same way that *ffvp9* was faster than *libvpx*.
-
-## Is dav1d a recursive acronym?
+## Is dav2d a recursive acronym?
 
 - Yes.
 
@@ -150,9 +140,9 @@ We think that an implementation written from scratch can achieve faster decoding
 
 - Yes. We need testers, bug reporters and documentation writers.
 
-## What about the AV1 patent license?
+## What about the AV2 patent license?
 
-- This project is an implementation of a decoder. It gives you no special rights on the AV1 patents.
+- This project is an implementation of a decoder. It gives you no special rights on the AV2 patents.
 
 Please read the [AV1 patent license](doc/PATENTS) that applies to the AV1 specification and codec.
 
