@@ -238,11 +238,14 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
     const int8_t *const inc_tbl = av1_prob_inc_tbl[n_symbols - 1];
 
     assert(n_symbols <= 15);
-    assert(cdf[n_symbols] <= 32);
 
     do {
         val++;
         u = v;
+        if (val == n_symbols) {
+            v = 0;
+            break;
+        }
         const int p = ((cdf[val] >> EC_PROB_SHIFT) << 4) + inc_tbl[val];
         v = (r * p >> (14 - EC_PROB_SHIFT)) << 3;
     } while (c < v);
@@ -252,16 +255,18 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
     ctx_norm(s, s->dif - ((ec_win)v << (EC_WIN_SIZE - 16)), u - v);
 
     if (s->allow_update_cdf) {
-        const unsigned count = cdf[n_symbols];
+        const unsigned pc = cdf[n_symbols];
+        const unsigned count = (uint8_t)pc;
+        assert(count <= 32);
         const unsigned time_int = count >> 4;
         const unsigned rate = 4 + time_int + (n_symbols > 2) +
-                              para_adjustment_list[cdf[n_symbols + 1]][time_int];
+                              para_adjustment_list[pc >> 8][time_int];
         unsigned i;
         for (i = 0; i < val; i++)
             cdf[i] += (32768 - cdf[i]) >> rate;
         for (; i < n_symbols; i++)
             cdf[i] -= cdf[i] >> rate;
-        cdf[n_symbols] = count + (count < 32);
+        cdf[n_symbols] = pc + (count < 32);
     }
 
     return val;
@@ -274,15 +279,16 @@ unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
 
     if (s->allow_update_cdf) {
         // update_cdf() specialized for boolean CDFs
-        const unsigned count = cdf[1];
+        const unsigned pc = cdf[1];
+        const unsigned count = (uint8_t)pc;
         const unsigned time_int = count >> 4;
         const unsigned rate = 4 + time_int +
-                              para_adjustment_list[cdf[2]][time_int];
+                              para_adjustment_list[pc >> 8][time_int];
         if (bit)
             cdf[0] += (32768 - cdf[0]) >> rate;
         else
             cdf[0] -= cdf[0] >> rate;
-        cdf[1] = count + (count < 32);
+        cdf[1] = pc + (count < 32);
     }
 
     return bit;

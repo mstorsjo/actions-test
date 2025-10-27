@@ -679,7 +679,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int sz = (16 << tx2dszctx) - 1;
         const int bob = sz - eob;
         unsigned ctx = (bob > 2 << tx2dszctx) + (bob > 4 << tx2dszctx);
-        uint16_t (*hi_cdf)[5] = ts->cdf.coef.br_y_tok_idtx[sz_ctx];
+        uint16_t (*hi_cdf)[4] = ts->cdf.coef.br_y_tok_idtx[sz_ctx];
         int tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac,
                           ts->cdf.coef.bob_base_y_tok[sz_ctx][ctx], 2);
         if (tok == 3) {
@@ -694,7 +694,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         depth, "", bob, sz_ctx, ctx, tok < 3 ? -1 : 0,
                         chroma ? "uv" : "y", tok, ts->msac.rng);
 
-        uint16_t (*lo_cdf)[5] = ts->cdf.coef.base_y_tok_idtx[sz_ctx];
+        uint16_t (*lo_cdf)[4] = ts->cdf.coef.base_y_tok_idtx[sz_ctx];
         for (int i = bob + 1; i <= sz; i++) {
             rc = scan[i];
             x = rc >> shift;
@@ -713,7 +713,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         int hr_avg = 0;
-        uint16_t (*sign_cdf)[3] = ts->cdf.coef.sign_idtx[sz_ctx];
+        uint16_t (*sign_cdf)[2] = ts->cdf.coef.sign_idtx[sz_ctx];
         const unsigned dq = dq_tbl[1]; // FIXME qm
         dq_shift -= tcq_enabled;
         for (int i = bob; i <= sz; i++) {
@@ -756,7 +756,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
 #define DECODE_COEFS_CLASS(tx_class, xy, is_stx) \
         int lim; \
-        uint16_t *eob_cdf, (*hi_cdf)[5], *lo_cdf; \
+        uint16_t *eob_cdf, (*hi_cdf)[4], *lo_cdf; \
         if (eob >= hi_to_low_tx) { \
             lim = 3; \
             if (!chroma) { \
@@ -783,7 +783,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         /* eob */ \
         unsigned ctx = 1 + (eob > 2 << tx2dszctx) + (eob > 4 << tx2dszctx); \
         int tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac, \
-                          &eob_cdf[ctx * (lim + 1)], lim - 1); \
+                          &eob_cdf[ctx * lim], lim - 1); \
         unsigned rc; \
         unsigned x, y; \
         int8_t *level; \
@@ -837,7 +837,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ctx = get_lo_ctx(level, tx_class, &hr_ctx, xy, plane, stride); \
             const int tcq = (tcq_state & 2) >> 1; \
             tok = dav1d_msac_decode_symbol_adapt4(&ts->msac, \
-                      &lo_cdf[(ctx * (2 - chroma) + tcq) * (lim + 2)], lim); \
+                      &lo_cdf[(ctx * (2 - chroma) + tcq) * (lim + 1)], lim); \
             if (tok == lim && hi_cdf) { \
                 tok += dav1d_msac_decode_symbol_adapt4(&ts->msac, hi_cdf[hr_ctx], 3); \
             } \
@@ -855,7 +855,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         ctx = get_lo_ctx(levels, tx_class, &hr_ctx, 0, plane, stride); \
         const int tcq = (tcq_state & 2) >> 1; \
         dc_tok = dav1d_msac_decode_symbol_adapt4(&ts->msac, \
-                     &lo_cdf[(ctx * (2 - chroma) + tcq) * (lim + 2)], lim); \
+                     &lo_cdf[(ctx * (2 - chroma) + tcq) * (lim + 1)], lim); \
         if (dc_tok == lim && hi_cdf) { \
             dc_tok += dav1d_msac_decode_symbol_adapt4(&ts->msac, hi_cdf[hr_ctx], 3); \
         } \
@@ -950,18 +950,16 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         default: assert(0);
         }
     } else if (chroma) { // dc-only
-        uint16_t (*const eob_cdf)[6] = ts->cdf.coef.eob_base_uv_tok_lf;
-        dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac, eob_cdf[0], 4);
+        dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                         ts->cdf.coef.eob_base_uv_tok_lf[0], 4);
         DEBUG_CF_printf("%*sPost-eob_tok[pos=%d,ctx=%d|0|-1,freq=lo,plane=uv,%d]: r=%d\n",
                         depth, "", eob, t_dim->ctx, dc_tok, ts->msac.rng);
     } else {
-        uint16_t (*const eob_cdf)[6] =
-            ts->cdf.coef.eob_base_y_tok_lf[t_dim->ctx];
-        uint16_t (*const hi_cdf)[5] = ts->cdf.coef.br_y_tok_lf;
-        dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac, eob_cdf[0], 4);
+        dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                         ts->cdf.coef.eob_base_y_tok_lf[t_dim->ctx][0], 4);
         if (dc_tok == 5) {
             dc_tok += dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                          hi_cdf[tx_class == TX_CLASS_2D ? 0 : 7], 3);
+                          ts->cdf.coef.br_y_tok_lf[tx_class == TX_CLASS_2D ? 0 : 7], 3);
         }
         DEBUG_CF_printf("%*sPost-eob_tok[pos=%d,ctx=%d|0|%d,freq=lo,plane=y,%d]: r=%d\n",
                         depth, "", eob, t_dim->ctx,

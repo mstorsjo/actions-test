@@ -53,12 +53,13 @@ typedef struct {
 } MsacDSPContext;
 
 static void randomize_cdf(uint16_t *const cdf, int n) {
-    for (int i = n + 2; i < 9; i++)
-        cdf[i] = 0;           // padding
-    cdf[n + 1] = rnd() % 125;
-    cdf[n + 0] = 0;           // count
+    for (int i = n + 1; i < 8; i++)
+        cdf[i] = 0; // padding
+    cdf[n] = (rnd() % 125) << 8;
+    int c = 0;
     do {
-        cdf[n - 1] = cdf[n] + rnd() % (32768 - cdf[n] - n) + 1;
+        c += rnd() % (32768 - c - n) + 1;
+        cdf[n - 1] = c;
     } while (--n > 0);
 }
 
@@ -89,7 +90,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
     if (a->allow_update_cdf != b->allow_update_cdf)
         fprintf(stderr, "allow_update_cdf %d vs %d\n",
                 a->allow_update_cdf, b->allow_update_cdf);
-    if (num_cdf && memcmp(cdf_a, cdf_b, sizeof(*cdf_a) * (num_cdf + 2))) {
+    if (num_cdf && memcmp(cdf_a, cdf_b, sizeof(*cdf_a) * (num_cdf + 1))) {
         fprintf(stderr, "cdf:\n");
         for (int i = 0; i <= num_cdf; i++)
             fprintf(stderr, " %5u", cdf_a[i]);
@@ -108,7 +109,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
                    "msac_decode_symbol_adapt%d", n))                       \
     {                                                                      \
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {          \
-            for (int ns = 1; ns < n; ns++) {                               \
+            for (int ns = 2; ns < n; ns++) {                               \
                 dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);         \
                 s_a = s_c;                                                 \
                 randomize_cdf(cdf[0], ns);                                 \
@@ -117,7 +118,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
                     unsigned c_res = call_ref(&s_c, cdf[0], ns);           \
                     unsigned a_res = call_new(&s_a, cdf[1], ns);           \
                     if (c_res != a_res || msac_cmp(&s_c, &s_a) ||          \
-                        memcmp(cdf[0], cdf[1], sizeof(**cdf) * (ns + 2)))  \
+                        memcmp(cdf[0], cdf[1], sizeof(**cdf) * (ns + 1)))  \
                     {                                                      \
                         if (fail())                                        \
                             msac_dump(c_res, a_res, &s_c, &s_a,            \
@@ -133,7 +134,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
 } while (0)
 
 static void check_decode_symbol_adapt(MsacDSPContext *const c, uint8_t *const buf) {
-    ALIGN_STK_16(uint16_t, cdf, 2, [9]);
+    ALIGN_STK_16(uint16_t, cdf, 2, [8]);
     MsacContext s_c, s_a;
 
     declare_func(unsigned, MsacContext *s, uint16_t *cdf, size_t n_symbols);
@@ -146,13 +147,12 @@ static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf)
 
     declare_func(unsigned, MsacContext *s, uint16_t *cdf);
     if (check_func(c->decode_bool_adapt, "msac_decode_bool_adapt")) {
-        uint16_t cdf[2][3];
+        uint16_t cdf[2][2];
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {
             dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);
             s_a = s_c;
             cdf[0][0] = cdf[1][0] = rnd() % 32767 + 1;
-            cdf[0][1] = cdf[1][1] = 0;
-            cdf[0][2] = cdf[1][2] = rnd() % 125;
+            cdf[0][1] = cdf[1][1] = (rnd() % 125) << 8;
             while (s_c.cnt >= 0) {
                 unsigned c_res = call_ref(&s_c, cdf[0]);
                 unsigned a_res = call_new(&s_a, cdf[1]);

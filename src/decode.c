@@ -350,7 +350,7 @@ static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
                              const int pal_sz, const int sz[4])
 {
     Dav1dTileState *const ts = t->ts;
-    uint16_t (*const pal_cdf)[9] = ts->cdf.m.pal_idx[pal_sz - 2];
+    uint16_t (*const pal_cdf)[8] = ts->cdf.m.pal_idx[pal_sz - 2];
     uint8_t *const pal_idx = t->scratch.pal_idx_y;
 
     const int dir = imax(sz[2], sz[3]) < 64 &&
