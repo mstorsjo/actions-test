@@ -33,12 +33,10 @@
 
 #include "common/intops.h"
 
-typedef size_t ec_win;
-
 typedef struct MsacContext {
     const uint8_t *buf_pos;
     const uint8_t *buf_end;
-    ec_win dif;
+    uint64_t dif;
     unsigned rng;
     int cnt;
     int allow_update_cdf;

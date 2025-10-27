@@ -35,8 +35,6 @@
 
 #define EC_PROB_SHIFT 7
 
-#define EC_WIN_SIZE (sizeof(ec_win) << 3)
-
 static const uint8_t msac_rate[125 /* para */][3 /* count */] = {
     { 4, 5, 6 }, { 4, 5, 5 }, { 4, 5, 4 }, { 4, 5, 7 }, { 4, 5, 7 },
     { 4, 4, 6 }, { 4, 4, 5 }, { 4, 4, 4 }, { 4, 4, 7 }, { 4, 4, 7 },
@@ -77,15 +75,15 @@ static const uint8_t msac_prob_inc[6][8] = {
 static inline void ctx_refill(MsacContext *const s) {
     const uint8_t *buf_pos = s->buf_pos;
     const uint8_t *buf_end = s->buf_end;
-    int c = EC_WIN_SIZE - s->cnt - 24;
-    ec_win dif = s->dif;
+    int c = 40 - s->cnt;
+    uint64_t dif = s->dif;
     do {
         if (buf_pos >= buf_end) break;
-        dif ^= (ec_win)*buf_pos++ << c;
+        dif ^= (uint64_t)*buf_pos++ << c;
         c -= 8;
     } while (c >= 0);
     s->dif = dif;
-    s->cnt = EC_WIN_SIZE - c - 24;
+    s->cnt = 40 - c;
     s->buf_pos = buf_pos;
 }
 
@@ -122,7 +120,7 @@ int dav1d_msac_decode_4way(MsacContext *const s, const int ref,
   ARCH_AARCH64 || \
   (ARCH_ARM && (defined(__ARM_NEON) || defined(__APPLE__) || defined(_WIN32))) \
 ))
-static inline void ctx_norm_bypass(MsacContext *const s, ec_win dif,
+static inline void ctx_norm_bypass(MsacContext *const s, uint64_t dif,
                                    const unsigned n_bits)
 {
     s->cnt -= n_bits;
@@ -134,9 +132,9 @@ unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
                                           const unsigned n_bits)
 {
     const unsigned r = s->rng;
-    ec_win dif = s->dif;
-    assert((dif >> (EC_WIN_SIZE - 16)) < r);
-    ec_win vw = (ec_win) r << (EC_WIN_SIZE - 16);
+    uint64_t dif = s->dif;
+    assert((dif >> 48) < r);
+    uint64_t vw = (uint64_t)r << 48;
     unsigned ret = 0;
     for (unsigned n = 0; n < n_bits; n++) {
         vw >>= 1;
@@ -157,9 +155,9 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
     assert(max_bits > 0 && max_bits <= 32);
     if (s->cnt < max_bits - 1) ctx_refill(s);
     const unsigned r = s->rng;
-    ec_win dif = s->dif;
-    assert((dif >> (EC_WIN_SIZE - 16)) < r);
-    ec_win vw = (ec_win) r << (EC_WIN_SIZE - 16);
+    uint64_t dif = s->dif;
+    assert((dif >> 48) < r);
+    uint64_t vw = (uint64_t)r << 48;
     int ret = 0, bit;
     for (bit = 0; bit < max_bits; bit++) {
         vw >>= 1;
@@ -180,7 +178,7 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
  * necessary), and stores them back in the decoder context.
  * dif: The new value of dif.
  * rng: The new value of the range. */
-static inline void ctx_norm(MsacContext *const s, const ec_win dif,
+static inline void ctx_norm(MsacContext *const s, const uint64_t dif,
                             const unsigned rng)
 {
     const int d = 15 ^ (31 ^ clz(rng));
@@ -199,11 +197,11 @@ static inline void ctx_norm(MsacContext *const s, const ec_win dif,
  * Return: The value decoded (0 or 1). */
 static unsigned dav1d_msac_decode_bool_c(MsacContext *const s, const unsigned f) {
     const unsigned r = s->rng;
-    ec_win dif = s->dif;
-    assert((dif >> (EC_WIN_SIZE - 16)) < r);
+    uint64_t dif = s->dif;
+    assert((dif >> 48) < r);
     const int p = ((f >> EC_PROB_SHIFT) << 4) + 8;
     unsigned v = ((r >> 8) * p >> (14 - EC_PROB_SHIFT)) << 3;
-    const ec_win vw = (ec_win)v << (EC_WIN_SIZE - 16);
+    const uint64_t vw = (uint64_t)v << 48;
     const unsigned ret = dif >= vw;
     dif -= ret * vw;
     v += ret * (r - 2 * v);
@@ -217,7 +215,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
                                           uint16_t *const cdf,
                                           const size_t n_symbols)
 {
-    const unsigned c = s->dif >> (EC_WIN_SIZE - 16), r = s->rng >> 8;
+    const unsigned c = s->dif >> 48, r = s->rng >> 8;
     unsigned u, v = s->rng, val = -1;
     const uint8_t *const prob_inc = msac_prob_inc[n_symbols - 2];
 
@@ -236,7 +234,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
 
     assert(u <= s->rng);
 
-    ctx_norm(s, s->dif - ((ec_win)v << (EC_WIN_SIZE - 16)), u - v);
+    ctx_norm(s, s->dif - ((uint64_t)v << 48), u - v);
 
     if (s->allow_update_cdf) {
         const unsigned pc = cdf[n_symbols];
@@ -280,7 +278,7 @@ void dav1d_msac_init(MsacContext *const s, const uint8_t *const data,
 {
     s->buf_pos = data;
     s->buf_end = data + sz;
-    s->dif = (~(size_t) 0) >> 1;
+    s->dif = (~(uint64_t)0) >> 1;
     s->rng = 0x8000;
     s->cnt = -15;
     s->allow_update_cdf = !disable_cdf_update_flag;
