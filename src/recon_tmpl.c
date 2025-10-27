@@ -1398,7 +1398,8 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         b->y_mode == VERT_LEFT_PRED ||
         (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED))
     {
-        pixel *const edge = bitfn(t->scratch.edge) + 128;
+        const int mrl_idx = b->mrl_index;
+        pixel *const edge = bitfn(t->scratch.edge) + (mrl_idx ? 384 : 128);
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
@@ -1419,14 +1420,15 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ts->tiling.col_end, ts->tiling.row_end, edge_flags, dst,
             f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
             t_dim->w, t_dim->h, f->seq_hdr->intra_edge_filter,
-            apply_ibp,
+            apply_ibp, mrl_idx,
             edge HIGHBD_CALL_SUFFIX);
 
         const int intra_edge_filter_flag = f->seq_hdr->intra_edge_filter << 10;
         const int intra_ibp_flag = apply_ibp << 11;
+        const int mrl_flag = mrl_idx << 12;
         const int intra_flags =
             sm_flag(t->a, bx4) | sm_flag(&t->l, by4) | intra_edge_filter_flag |
-            intra_ibp_flag;
+            mrl_flag | intra_ibp_flag;
 
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
                                  edge, tw, th, angle | intra_flags,

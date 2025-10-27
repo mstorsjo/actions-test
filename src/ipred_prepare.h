@@ -84,7 +84,7 @@ enum IntraPredMode
                                       const pixel *prefilter_toplevel_sb_edge,
                                       enum IntraPredMode mode, int *angle,
                                       int tw, int th, int filter_edge,
-                                      const int apply_ibp,
+                                      const int apply_ibp, const int mrl_idx,
                                       pixel *topleft_out HIGHBD_DECL_SUFFIX);
 
 static inline int sm_flag(const BlockContext *const b, const int idx) {

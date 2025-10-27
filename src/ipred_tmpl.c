@@ -595,12 +595,62 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     const int is_sm = (angle >> 9) & 0x1;
     const int enable_intra_edge_filter = (angle >> 10) & 0x1;
     const int enable_ibp = (angle >> 11) & 0x1;
+    const int mrl_idx = (angle >> 12) & 0x3;
     angle &= 511;
     assert(angle < 90);
     int dx = dav1d_dr_intra_derivative[angle];
-    pixel top_out[64 + 64];
     const pixel *top;
     int max_base_x;
+
+    if (mrl_idx) {
+        // Safe maximum size for edge buffers
+        const int e_stride = (imax(width, height) + (mrl_idx << 1)) * 2;
+        const int max_base_x2 = (width + height) - 1 + (mrl_idx << 1);
+        max_base_x = (width + height) - 1;
+        top = &topleft_in[1];
+        const pixel *top2 = &topleft_in[1 - e_stride];
+        int xpos1 = dx;
+        int xpos2 = dx * (1 + mrl_idx);
+
+        for (int y = 0; y < height; y++, xpos1 += dx, xpos2 += dx) {
+            int base1 = xpos1 >> 6;
+            int base2 = xpos2 >> 6;
+            if (base2 > max_base_x2) {
+                for (; y < height; y++) {
+                    const int v = (top[max_base_x] + top2[max_base_x2]) >> 1;
+                    pixel_set(dst, v, width);
+                    dst += PXSTRIDE(stride);
+                }
+                return;
+            }
+
+            const DRFilter4Tap f1 = av1_dr_interp_filter[(xpos1 & 0x3F) >> 1];
+            const DRFilter4Tap f2 = av1_dr_interp_filter[(xpos2 & 0x3F) >> 1];
+            for (int x = 0; x < width; x++, base1++, base2++) {
+                int v1, v2;
+                if (base1 <= max_base_x) {
+                    v1 = f1.a * top[base1 - 1] + f1.b * top[base1] +
+                         f1.c * top[base1 + 1] + f1.d * top[base1 + 2];
+                    v1 = iclip_pixel((v1 + 64) >> 7);
+                } else {
+                    v1 = top[max_base_x];
+                }
+
+                if (base2 <= max_base_x2) {
+                    v2 = f2.a * top2[base2 - 1] + f2.b * top2[base2] +
+                         f2.c * top2[base2 + 1] + f2.d * top2[base2 + 2];
+                    v2 = iclip_pixel((v2 + 64) >> 7);
+                } else {
+                    v2 = top2[max_base_x2];
+                }
+                dst[x] = (v1 + v2) >> 1;
+            }
+            dst += PXSTRIDE(stride);
+        }
+        return;
+    }
+
+    pixel top_out[64 + 64];
     const int upsample_above = enable_intra_edge_filter ?
         get_upsample(width + height, 90 - angle, is_sm) : 0;
     if (upsample_above) {

@@ -446,12 +446,14 @@ struct Dav1dTaskContext {
             union {
                 struct {
                     uint8_t interintra_8bpc[64 * 64];
-                    uint8_t edge_8bpc[257];
+                    // worst case: edge buffer size: 644+1 (adjacent) + 644+32+1 (MRL)
+                    uint8_t edge_8bpc[644 + 1 + 644 + 32 + 1];
                     ALIGN(uint8_t pal_8bpc[8 /* palette_idx */], 8);
                 };
                 struct {
                     uint16_t interintra_16bpc[64 * 64];
-                    uint16_t edge_16bpc[257];
+                    // worst case: edge buffer size: 644+1 (adjacent) + 644+32+1 (MRL)
+                    uint16_t edge_16bpc[644 + 1 + 644 + 32 + 1];
                     ALIGN(uint16_t pal_16bpc[8 /* palette_idx */], 16);
                 };
             };
