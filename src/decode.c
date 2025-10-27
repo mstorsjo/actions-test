@@ -3762,10 +3762,10 @@ static void read_restoration_info(Dav1dTaskContext *const t,
         uint8_t grp_cnt[3], grp_ref_cnt[3] = { 0 };
         assert(n_classes > 0);
         grp_cnt[0] = n_classes;
-        grp_cnt[1] = 0; // FIXME num_refs - assume this can be non-zero
+        grp_cnt[1] = f->num_ref_ns_wiener_filters[!!p];
         grp_cnt[2] = n_ref_filters - (grp_cnt[0] + grp_cnt[1]);
         uint8_t filter_refs[64];
-        int pred_grp = 2 * (grp_cnt[2] > 1);
+        int pred_grp = 2 - (grp_cnt[1] > 2);
         const int nnz_grps = 1 + !!grp_cnt[1] + !!grp_cnt[2];
         for (int n = 0; n < n_classes; n++) {
             int group;
@@ -3805,8 +3805,9 @@ static void read_restoration_info(Dav1dTaskContext *const t,
             int8_t *const filter = (int8_t *) f->ns_wiener.filter[p][n];
             const int8_t *const ref_filter = !r ? zero :
                 r < n_classes ? f->ns_wiener.filter[p][r - 1] :
-                /* something re: ref_filters */
-                dav1d_wiener_ns_filters[shuffled_index[r - n_classes]];
+                r < n_classes + grp_cnt[1] ?
+                                f->ref_ns_wiener_filter[p][r - n_classes] :
+                dav1d_wiener_ns_filters[shuffled_index[r - n_classes - grp_cnt[1]]];
             if (exact_match_mask & 1) {
                 memcpy(filter, ref_filter, 16 + 2 * !!p);
                 continue;
@@ -5009,6 +5010,36 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         }
     }
 
+    // frame-wide ref filters
+    for (int p = 0; p < 3; p++) {
+        if (!f->frame_hdr->restoration.p[p].ns.frame_filters_on) continue;
+        const int n_feat = 16 + 2 * !!p;
+        int i = 0;
+        const int n_ref_filters = f->seq_hdr->rst_disable_mask[!!p] & 1 ? 16 : 48;
+        for (int r = 0; r < f->frame_hdr->n_ref_frames; r++) {
+            const Dav1dFrameHeader *const ref_hdr = f->refp[r].p.frame_hdr;
+            for (int dir = (const int8_t[]){ 0, +1, -1 }[p], p2 = p;;
+                 p2 += dir, dir = 0)
+            {
+                if (ref_hdr->restoration.p[p2].ns.frame_filters_on) {
+                    const int n_classes =
+                        imin(n_ref_filters - i,
+                             ref_hdr->restoration.p[p2].ns.num_classes);
+                    for (int n = 0; n < n_classes; n++)
+                        memcpy(f->ref_ns_wiener_filter[p][i++],
+                               c->refs[f->frame_hdr->refidx[r]].ns_wiener_filter[p2][n],
+                               n_feat);
+                }
+                if (!dir) break;
+            }
+        }
+        if (p == 2) {
+            assert(i == f->num_ref_ns_wiener_filters[1]);
+        } else {
+            f->num_ref_ns_wiener_filters[p] = i;
+        }
+    }
+
     // update references etc.
     const unsigned refresh_frame_flags = f->frame_hdr->refresh_frame_flags;
     for (int i = 0; i < 8; i++) {
@@ -5055,6 +5086,22 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     } else {
         dav1d_task_frame_init(f);
         pthread_mutex_unlock(&c->task_thread.lock);
+    }
+
+    /* this isn't compatible with frame-threading, but this should be fixed
+     * in v12 (where frame-wide ns_wiener filter setup is part of the frame
+     * header?), so it's an acceptable short-term workaround. */
+    for (int p = 0; p < 3; p++) {
+        if (!f->frame_hdr->restoration.p[p].ns.frame_filters_on) continue;
+        const int n_classes = f->frame_hdr->restoration.p[p].ns.num_classes;
+        const int n_feat = 16 + 2 * !!p;
+        for (int i = 0; i < 8; i++) {
+            if (refresh_frame_flags & (1 << i)) {
+                for (int n = 0; n < n_classes; n++)
+                    memcpy(c->refs[n].ns_wiener_filter[p][n],
+                           f->ns_wiener.filter[p][n], n_feat);
+            }
+        }
     }
 
     return 0;
