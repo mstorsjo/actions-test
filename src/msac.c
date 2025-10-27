@@ -219,7 +219,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
     unsigned u, v = s->rng, val = -1;
     const uint8_t *const prob_inc = msac_prob_inc[n_symbols - 2];
 
-    assert(n_symbols <= 15);
+    assert(n_symbols <= 7);
 
     do {
         val++;
