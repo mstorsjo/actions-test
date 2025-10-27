@@ -6380,7 +6380,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(2, 1, type, col_component, op); \
     update_cdf_2d(4, 1, type, col_index, op)
 
-#define update_cdfs(op, may_ret_on_kf) \
+#define update_cdfs(op, between_kf_nonkf_condition) \
     update_cdf_2d(2, 1, m, rst_switchable, op); \
     update_cdf_1d(1, m, rst_ns_wiener, op); \
     update_cdf_1d(1, m, rst_pc_wiener, op); \
@@ -6471,8 +6471,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
  \
     update_mv_cdfs(dmv, op); \
  \
-    if (may_ret_on_kf && IS_KEY_OR_INTRA(hdr)) \
-        return; \
+    between_kf_nonkf_condition; \
  \
     update_cdf_2d(4, 1, m, region_type, op); \
     update_cdf_2d(3, 1, m, skip_mode, op); \
@@ -6529,8 +6528,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_mv_cdfs(mv, op)
 
 void dav1d_cdf_reset_count(const Dav1dFrameHeader *const hdr,
-                           CdfContext *const dst,
-                           const CdfContext *const src)
+                           CdfContext *const dst)
 {
 #define reset_count(n1d, type, name) \
     do { \
@@ -6538,13 +6536,47 @@ void dav1d_cdf_reset_count(const Dav1dFrameHeader *const hdr,
         *count = (*count * 3) >> 2; \
     } while (0)
 
-    memcpy(dst, src, sizeof(CdfContext));
-    update_cdfs(reset_count, 1);
+    update_cdfs(reset_count, if (IS_KEY_OR_INTRA(hdr)) return);
 #undef reset_count
 }
 
-void dav1d_cdf_pri_sec_average(const Dav1dFrameHeader *const hdr,
-                               CdfContext *const dst,
+void dav1d_cdf_shift(CdfContext *const dst, const CdfContext *const src,
+                     const int n_tiles_log2)
+{
+#define shift_store(n1d, type, name) \
+    do { \
+        for (int n = 0; n < n1d; n++) { \
+            dst->type.name[n] = src->type.name[n] >> n_tiles_log2; \
+        } \
+        uint8_t *const dst_count = (uint8_t*)&dst->type.name[n1d]; \
+        const uint8_t *const src_count = (const uint8_t*)&src->type.name[n1d]; \
+        dst_count[0] = src_count[0] >> n_tiles_log2; \
+        dst_count[1] = src_count[1]; /* don't modify para */ \
+    } while (0)
+
+    update_cdfs(shift_store,);
+#undef shift_store
+}
+
+void dav1d_cdf_shift_accumulate(CdfContext *const dst, const CdfContext *const src,
+                                const int n_tiles_log2)
+{
+#define shift_accumulate(n1d, type, name) \
+    do { \
+        for (int n = 0; n < n1d; n++) { \
+            dst->type.name[n] += src->type.name[n] >> n_tiles_log2; \
+        } \
+        uint8_t *const dst_count = (uint8_t*)&dst->type.name[n1d]; \
+        const uint8_t *const src_count = (const uint8_t*)&src->type.name[n1d]; \
+        *dst_count += *src_count >> n_tiles_log2; \
+        /* ignore para beyond first tile */ \
+    } while (0)
+
+    update_cdfs(shift_accumulate,);
+#undef shift_accumulate
+}
+
+void dav1d_cdf_pri_sec_average(CdfContext *const dst,
                                const CdfThreadContext *const src1,
                                const CdfThreadContext *const src2)
 {
@@ -6575,7 +6607,7 @@ void dav1d_cdf_pri_sec_average(const Dav1dFrameHeader *const hdr,
     assign_src(1);
     assign_src(2);
 #undef assign_src
-    update_cdfs(pri_sec_average, 0);
+    update_cdfs(pri_sec_average,);
 #undef pri_sec_average
 }
 

@@ -205,10 +205,11 @@ typedef struct CdfThreadContext {
     atomic_uint *progress;
 } CdfThreadContext;
 
-void dav1d_cdf_reset_count(const Dav1dFrameHeader *hdr, CdfContext *dst,
-                           const CdfContext *src);
-void dav1d_cdf_pri_sec_average(const Dav1dFrameHeader *hdr, CdfContext *dst,
-                               const CdfThreadContext *src1,
+void dav1d_cdf_reset_count(const Dav1dFrameHeader *hdr, CdfContext *dst);
+void dav1d_cdf_shift(CdfContext *dst, const CdfContext *src, int n_tiles_log2);
+void dav1d_cdf_shift_accumulate(CdfContext *dst, const CdfContext *src,
+                                int n_tiles_log2);
+void dav1d_cdf_pri_sec_average(CdfContext *dst, const CdfThreadContext *src1,
                                const CdfThreadContext *src2);
 void dav1d_cdf_thread_init_static(CdfThreadContext *cdf, unsigned qidx);
 int dav1d_cdf_thread_alloc(Dav1dContext *c, CdfThreadContext *cdf,

@@ -803,9 +803,22 @@ void *dav1d_worker_task(void *data) {
                     tc->frame_thread.pass <= 1 && f->task_thread.update_set &&
                     f->frame_hdr->tiling.update == tile_idx)
                 {
-                    if (!error)
-                        dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf,
-                                              &f->ts[f->frame_hdr->tiling.update].cdf);
+                    if (!error) {
+                        const int shift = f->frame_hdr->tiling.log2_cols +
+                                          f->frame_hdr->tiling.log2_rows;
+                        if (shift && f->seq_hdr->avg_cdf_type) {
+                            const int n_tiles = 1 << shift;
+                            dav1d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
+                            for (int n = 1; n < n_tiles; n++)
+                                dav1d_cdf_shift_accumulate(f->out_cdf.data.cdf,
+                                                           &f->ts[n].cdf, shift);
+                        } else {
+                            memcpy(f->out_cdf.data.cdf,
+                                   &f->ts[f->frame_hdr->tiling.update].cdf,
+                                   sizeof(CdfContext));
+                        }
+                        dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
+                    }
                     if (c->n_fc > 1)
                         atomic_store(f->out_cdf.progress, error ? TILE_ERROR : 1);
                 }

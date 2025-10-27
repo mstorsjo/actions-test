@@ -4448,7 +4448,7 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
     int retval = DAV1D_ERR(EINVAL);
 
     if (f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE) {
-        dav1d_cdf_pri_sec_average(f->frame_hdr, f->in_cdf.data.cdf,
+        dav1d_cdf_pri_sec_average(f->in_cdf.data.cdf,
                                   &f->src_cdf[0], &f->src_cdf[1]);
     }
     if (f->frame_hdr->refresh_context)
@@ -4621,8 +4621,20 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
         } else {
             res = dav1d_decode_frame_main(f);
             if (!res && f->frame_hdr->refresh_context && f->task_thread.update_set) {
-                dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf,
-                                      &f->ts[f->frame_hdr->tiling.update].cdf);
+                const int shift = f->frame_hdr->tiling.log2_cols +
+                                  f->frame_hdr->tiling.log2_rows;
+                if (shift && f->seq_hdr->avg_cdf_type) {
+                    const int n_tiles = 1 << shift;
+                    dav1d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
+                    for (int n = 1; n < n_tiles; n++)
+                        dav1d_cdf_shift_accumulate(f->out_cdf.data.cdf,
+                                                   &f->ts[n].cdf, shift);
+                } else {
+                    memcpy(f->out_cdf.data.cdf,
+                           &f->ts[f->frame_hdr->tiling.update].cdf,
+                           sizeof(CdfContext));
+                }
+                dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
             }
         }
     }
