@@ -77,7 +77,7 @@ static void ipred_z1_neon(pixel *dst, const ptrdiff_t stride,
     const int is_sm = (angle >> 9) & 0x1;
     const int enable_intra_edge_filter = angle >> 10;
     angle &= 511;
-    int dx = dav1d_dr_intra_derivative[angle >> 1];
+    int dx = dav1d_dr_intra_derivative[angle];
     pixel top_out[64 + 64 + (64+15)*2 + 16];
     int max_base_x;
     const int upsample_above = enable_intra_edge_filter ?
@@ -148,8 +148,8 @@ static void ipred_z2_neon(pixel *dst, const ptrdiff_t stride,
     const int enable_intra_edge_filter = angle >> 10;
     angle &= 511;
     assert(angle > 90 && angle < 180);
-    int dy = dav1d_dr_intra_derivative[(angle - 90) >> 1];
-    int dx = dav1d_dr_intra_derivative[(180 - angle) >> 1];
+    int dy = dav1d_dr_intra_derivative[angle - 90];
+    int dx = dav1d_dr_intra_derivative[180 - angle];
     const int upsample_left = enable_intra_edge_filter ?
         get_upsample(width + height, 180 - angle, is_sm) : 0;
     const int upsample_above = enable_intra_edge_filter ?
@@ -240,7 +240,7 @@ static void ipred_z3_neon(pixel *dst, const ptrdiff_t stride,
     const int enable_intra_edge_filter = angle >> 10;
     angle &= 511;
     assert(angle > 180);
-    int dy = dav1d_dr_intra_derivative[(270 - angle) >> 1];
+    int dy = dav1d_dr_intra_derivative[270 - angle];
     pixel flipped[64 + 64 + 16];
     pixel left_out[64 + 64 + (64+15)*2];
     int max_base_y;

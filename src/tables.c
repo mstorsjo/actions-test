@@ -622,42 +622,9 @@ const uint8_t ALIGN(dav1d_avm_sm_weights[3 /* scale */][64], 16) = {
     [2] = { 32, 32, 16, 16,  8,  8,  4,  4,  2,  2,  1,  1,  0,  0, },
 };
 
-ATTR_MCMODEL_SMALL
-const uint16_t dav1d_dr_intra_derivative[44] = {
-    // Values that are 0 will never be used
-          0,    // Angles:
-    1023, 0,    //  3,  93, 183
-     547,       //  6,  96, 186
-     372, 0, 0, //  9,  99, 189
-     273,       // 14, 104, 194
-     215, 0,    // 17, 107, 197
-     178,       // 20, 110, 200
-     151, 0,    // 23, 113, 203 (113 & 203 are base angles)
-     132,       // 26, 116, 206
-     116, 0,    // 29, 119, 209
-     102, 0,    // 32, 122, 212
-      90,       // 36, 126, 216
-      80, 0,    // 39, 129, 219
-      71,       // 42, 132, 222
-      64, 0,    // 45, 135, 225 (45 & 135 are base angles)
-      57,       // 48, 138, 228
-      51, 0,    // 51, 141, 231
-      45, 0,    // 54, 144, 234
-      40,       // 58, 148, 238
-      35, 0,    // 61, 151, 241
-      31,       // 64, 154, 244
-      27, 0,    // 67, 157, 247 (67 & 157 are base angles)
-      23,       // 70, 160, 250
-      19, 0,    // 73, 163, 253
-      15, 0,    // 76, 166, 256
-      11, 0,    // 81, 171, 261
-       7,       // 84, 174, 264
-       3        // 87, 177, 267
-};
-
 // Intra derivative for directional predictions.
 // second_dr_intra_derivative[x] = 64*64/dr_intra_derivative[x]
-const int16_t dr_intra_derivative[90] = {
+const uint16_t dav1d_dr_intra_derivative[90] = {
     // Angle in degrees.
     // Starred (*) values are unused.
        0, 4096, 2048,            //    *,  0.9,  1.8,

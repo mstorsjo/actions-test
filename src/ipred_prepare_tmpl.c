@@ -221,9 +221,6 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         else
             *topleft_out = have_top ? *dst_top : (1 << bitdepth) >> 1;
 
-        if (mode == Z2_PRED && tw + th >= 6 && filter_edge)
-            *topleft_out = ((topleft_out[-1] + topleft_out[1]) * 5 +
-                            topleft_out[0] * 6 + 8) >> 4;
 #if DEBUG_BLOCK_INFO
         if (print_dbg)
             hex_dump(topleft_out, 1, 1, 1, "tl");

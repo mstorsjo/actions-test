@@ -597,7 +597,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     const int enable_ibp = (angle >> 11) & 0x1;
     angle &= 511;
     assert(angle < 90);
-    int dx = dav1d_dr_intra_derivative[angle >> 1];
+    int dx = dav1d_dr_intra_derivative[angle];
     pixel top_out[64 + 64];
     const pixel *top;
     int max_base_x;
@@ -643,7 +643,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     if (enable_ibp) {
         const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 12];
         if (mode_index) {
-            dx = dr_intra_derivative[90 - angle];
+            dx = dav1d_dr_intra_derivative[90 - angle];
             idif_z3_ibp_z1(dst, stride, topleft_in, width, height, dx,
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
@@ -660,14 +660,21 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     const int enable_intra_edge_filter = angle >> 10;
     angle &= 511;
     assert(angle > 90 && angle < 180);
-    int dy = dav1d_dr_intra_derivative[(angle - 90) >> 1];
-    int dx = dav1d_dr_intra_derivative[(180 - angle) >> 1];
+    int dy = dav1d_dr_intra_derivative[angle - 90];
+    int dx = dav1d_dr_intra_derivative[180 - angle];
+#if 0
     const int upsample_left = enable_intra_edge_filter ?
         get_upsample(width + height, 180 - angle, is_sm) : 0;
     const int upsample_above = enable_intra_edge_filter ?
         get_upsample(width + height, angle - 90, is_sm) : 0;
-    pixel edge[64 + 64 + 1];
-    pixel *const topleft = &edge[64];
+#else
+    // It looks like upsample is implemented in AVM but never enabled
+    const int upsample_left = 0;
+    const int upsample_above = 0;
+#endif
+    // Each edge can have 2 extra padding pixels
+    pixel edge[64 + 64 + 5];
+    pixel *const topleft = &edge[66];
 
     if (upsample_above) {
         upsample_edge(topleft, width + 1, topleft_in, 0, width + 1
@@ -682,7 +689,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
                         &topleft_in[1], -1, width,
                         filter_strength);
         } else {
-            pixel_copy(&topleft[1], &topleft_in[1], width);
+            topleft[0] = topleft_in[0];
+            pixel_copy(&topleft[1], &topleft_in[0], width + 1);
         }
     }
     if (upsample_left) {
@@ -698,35 +706,41 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
                         &topleft_in[-height],
                         0, height + 1, filter_strength);
         } else {
-            pixel_copy(&topleft[-height], &topleft_in[-height], height);
+            topleft[0] = topleft_in[0];
+            pixel_copy(&topleft[-(height + 2)], &topleft_in[-(height + 1)], height + 2);
         }
     }
     *topleft = *topleft_in;
 
-    const int base_inc_x = 1 + upsample_above;
-    const pixel *const left = &topleft[-(1 + upsample_left)];
-    for (int y = 0, xpos = ((1 + upsample_above) << 6) - dx; y < height;
-         y++, xpos -= dx, dst += PXSTRIDE(stride))
-    {
-        int base_x = xpos >> 6;
-        const int frac_x = xpos & 0x3E;
-
-        for (int x = 0, ypos = (y << (6 + upsample_left)) - dy; x < width;
-             x++, base_x += base_inc_x, ypos -= dy)
-        {
-            int v;
-            if (base_x >= 0) {
-                v = topleft[base_x] * (64 - frac_x) +
-                    topleft[base_x + 1] * frac_x;
-            } else {
-                const int base_y = ypos >> 6;
-                assert(base_y >= -(1 + upsample_left));
-                const int frac_y = ypos & 0x3E;
-                v = left[-base_y] * (64 - frac_y) +
-                    left[-(base_y + 1)] * frac_y;
-            }
-            dst[x] = (v + 32) >> 6;
+    for (int y = 0; y < height; y++) {
+        const int ypos = y + 1;
+        int xpos = -(ypos + 0) * dx;
+        int x;
+        for (x = 0; x < width && xpos < -64; x++, xpos += 64) {
+            const int xpos_l = x + 1;
+            const int ypos_l = (y << 6) - (xpos_l + 0) * dy;
+            const int base_y = ypos_l >> 6;
+            assert(base_y >= -1);
+            const int shift = (ypos_l & 0x3F) >> 1;
+            const int v =
+                av1_dr_interp_filter[shift].a * topleft[-(base_y + 1)] +
+                av1_dr_interp_filter[shift].b * topleft[-(base_y + 2)] +
+                av1_dr_interp_filter[shift].c * topleft[-(base_y + 3)] +
+                av1_dr_interp_filter[shift].d * topleft[-(base_y + 4)];
+            dst[x] = iclip_pixel((v + 64) >> 7);
         }
+
+        for (; x < width; x++, xpos += 64) {
+            const int base_x = xpos >> 6;
+            const int shift = (xpos & 0x3F) >> 1;
+            const int v =
+                av1_dr_interp_filter[shift].a * topleft[base_x + 1] +
+                av1_dr_interp_filter[shift].b * topleft[base_x + 2] +
+                av1_dr_interp_filter[shift].c * topleft[base_x + 3] +
+                av1_dr_interp_filter[shift].d * topleft[base_x + 4];
+            dst[x] = iclip_pixel((v + 64) >> 7);
+        }
+        dst += PXSTRIDE(stride);
     }
 }
 
@@ -741,7 +755,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     const int enable_ibp = (angle >> 11) & 0x1;
     angle &= 511;
     assert(angle > 180);
-    int dy = dr_intra_derivative[270 - angle];
+    int dy = dav1d_dr_intra_derivative[270 - angle];
     pixel left_out[64 + 64];
     const pixel *left;
     int max_base_y;
@@ -795,7 +809,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     if (enable_ibp) {
         const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 57];
         if (mode_index) {
-            dy = dr_intra_derivative[angle - 180];
+            dy = dav1d_dr_intra_derivative[angle - 180];
             idif_z1_ibp_z3(dst, stride, topleft_in, width, height, dy,
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
