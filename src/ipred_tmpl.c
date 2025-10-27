@@ -90,34 +90,13 @@ static const uint8_t ibp_weights[32] = {
 
 static NOINLINE void
 splat_dc(pixel *dst, const ptrdiff_t stride,
-         const int width, const int height, const int dc HIGHBD_DECL_SUFFIX)
+         const int width, int height, const int dc)
 {
-#if BITDEPTH == 8
-    assert(dc <= 0xff);
-    if (width > 4) {
-        const uint64_t dcN = dc * 0x0101010101010101ULL;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x += sizeof(dcN))
-                *((uint64_t *) &dst[x]) = dcN;
-            dst += PXSTRIDE(stride);
-        }
-    } else {
-        const unsigned dcN = dc * 0x01010101U;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x += sizeof(dcN))
-                *((unsigned *) &dst[x]) = dcN;
-            dst += PXSTRIDE(stride);
-        }
-    }
-#else
-    assert(dc <= bitdepth_max);
-    const uint64_t dcN = dc * 0x0001000100010001ULL;
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x += sizeof(dcN) >> 1)
-            *((uint64_t *) &dst[x]) = dcN;
+    do {
+        for (int x = 0; x < width; x++)
+            dst[x] = dc;
         dst += PXSTRIDE(stride);
-    }
-#endif
+    } while (--height);
 }
 
 static NOINLINE void
@@ -164,7 +143,7 @@ static void ipred_dc_top_c(pixel *dst, const ptrdiff_t stride,
         height -= h;
     }
 
-    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
+    splat_dc(dst, stride, width, height, dc);
 }
 
 static void ipred_cfl_top_c(pixel *dst, const ptrdiff_t stride,
@@ -206,7 +185,7 @@ static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
         width -= w;
     }
 
-    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
+    splat_dc(dst, stride, width, height, dc);
 }
 
 static void ipred_cfl_left_c(pixel *dst, const ptrdiff_t stride,
@@ -285,7 +264,7 @@ static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
         height -= h;
     }
 
-    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
+    splat_dc(dst, stride, width, height, dc);
 }
 
 static void ipred_cfl_c(pixel *dst, const ptrdiff_t stride,
@@ -313,7 +292,7 @@ static void ipred_dc_128_c(pixel *dst, const ptrdiff_t stride,
 #else
     const int dc = 128;
 #endif
-    splat_dc(dst, stride, width, height, dc HIGHBD_TAIL_SUFFIX);
+    splat_dc(dst, stride, width, height, dc);
 }
 
 static void ipred_cfl_128_c(pixel *dst, const ptrdiff_t stride,
