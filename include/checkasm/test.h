@@ -125,7 +125,7 @@ CHECKASM_API extern CheckasmPerf checkasm_perf;
     } while (0)
 
 /* Naive loop; used when perf.start/stop() is expected to be slow or imprecise, or when
- * we have no ASM cycle counters */
+ * we have no ASM cycle counters, or when the number of iterations is low */
 #define CHECKASM_PERF_BENCH_SIMPLE(count, time, ...)                                     \
     do {                                                                                 \
         time = perf.start();                                                             \
@@ -161,7 +161,7 @@ CHECKASM_API extern CheckasmPerf checkasm_perf;
   #define CHECKASM_PERF_BENCH(count, time, ...)                                          \
       do {                                                                               \
           const CheckasmPerf perf = checkasm_perf;                                       \
-          if (CHECKASM_PERF_ASM_USABLE) {                                                \
+          if (CHECKASM_PERF_ASM_USABLE && count >= 128) {                                 \
               CHECKASM_PERF_BENCH_ASM(count, time, __VA_ARGS__);                         \
           } else {                                                                       \
               CHECKASM_PERF_BENCH_SIMPLE(count, time, __VA_ARGS__);                      \
