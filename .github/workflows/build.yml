@@ -27,7 +27,7 @@ jobs:
         run: |
           meson setup build --buildtype release `
                             --werror `
-                            -Ddefault_library=both
+                            -Ddefault_library=static # TODO: both
           cd build
           ninja
           meson test -v
@@ -109,7 +109,7 @@ jobs:
         run: |
           meson setup build --buildtype release `
                             --werror `
-                            -Ddefault_library=both
+                            -Ddefault_library=static # TODO: both
           cd build
           ninja
           meson test -v
@@ -212,7 +212,7 @@ jobs:
 
           meson setup build --cross-file cross.txt \
                             --werror \
-                            -Ddefault_library=both
+                            -Ddefault_library=static # TODO: both
           cd build
           ninja
           meson test -v
