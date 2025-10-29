@@ -126,7 +126,7 @@ enum IntraPredMode {
     Z1_PRED,
     Z2_PRED,
     Z3_PRED,
-    FILTER_PRED = N_INTRA_PRED_MODES,
+    DIP_PRED = N_INTRA_PRED_MODES,
 };
 
 enum InterIntraPredMode {

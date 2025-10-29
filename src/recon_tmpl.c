@@ -1412,7 +1412,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
-        int has_tr;
+        int has_tr = 0, has_bl = 0;
         if (t->by > ts->tiling.row_start) {
             if (t->by + t_dim->h > t->pb.row_end) {
                 has_tr = t->bx + t_dim->w < t->pb.col_end;
@@ -1423,8 +1423,23 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 has_tr = (t->is_coded[by4 - 1] >> (xpos & 63)) & 1;
             }
         }
-        const enum EdgeFlags edge_flags = has_tr ? EDGE_I444_TOP_HAS_RIGHT : 0;
-        int angle = b->y_angle;
+
+        if (t->bx > ts->tiling.col_start) {
+            if (t->bx + t_dim->w > t->pb.col_end) {
+                has_bl = 0;
+            } else {
+                if (t->by + t_dim->h > t->pb.row_end) {
+                    has_bl = 1;
+                } else {
+                    const int xpos = bx4 - 1;
+                    has_bl = (t->is_coded[by4 + t_dim->h] >> (xpos & 63)) & 1;
+                }
+            }
+        }
+        const enum EdgeFlags edge_flags =
+            (has_tr ? EDGE_I444_TOP_HAS_RIGHT : 0) |
+            (has_bl ? EDGE_I444_LEFT_HAS_BOTTOM : 0);
+
         const pixel *top_sb_edge = NULL;
         if (!(t->by & (f->sb_step - 1))) {
             top_sb_edge = f->ipred_edge[0];
@@ -1432,14 +1447,17 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
         const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4;
+        const int dip = b->dip - !!b->dip;
         const int intra_edge_filter_flag = f->seq_hdr->intra_edge_filter << 10;
         const int ibp_flag = apply_ibp << 11;
         const int mrl_flag = mrl_idx << 12;
         const int have_left_flag = (t->bx > ts->tiling.col_start) << 14;
         const int have_top_flag = (t->by > ts->tiling.row_start) << 15;
+        const int dip_flag =  !!dip << 16;
         const int intra_flags =
             sm_flag(t->a, bx4) | sm_flag(&t->l, by4) | intra_edge_filter_flag |
-            mrl_flag | ibp_flag | have_left_flag | have_top_flag;
+            mrl_flag | ibp_flag | have_left_flag | have_top_flag | dip_flag;
+        int angle = dip ? dip : b->y_angle;
 
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,

@@ -45,7 +45,7 @@ static const char *const intra_pred_mode_names[N_IMPL_INTRA_PRED_MODES] = {
     [Z1_PRED]       = "z1",
     [Z2_PRED]       = "z2",
     [Z3_PRED]       = "z3",
-    [FILTER_PRED]   = "filter"
+    [DIP_PRED]      = "dip"
 };
 
 static const char *const cfl_ac_names[3] = { "420", "422", "444" };
@@ -87,70 +87,62 @@ static void check_intra_pred(Dav1dIntraPredDSPContext *const c) {
 
     for (int mode = 0; mode < N_IMPL_INTRA_PRED_MODES; mode++) {
         if (mode == Z1_PRED || mode == Z3_PRED) continue; // FIXME: currently broken (IBP?)
-        int bpc_min = BITDEPTH, bpc_max = BITDEPTH;
-        if (mode == FILTER_PRED && BITDEPTH == 16) {
-            bpc_min = 10;
-            bpc_max = 12;
-        }
-        for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2)
-            for (int w = 4; w <= (mode == FILTER_PRED ? 32 : 64); w <<= 1)
-                if (check_func(c->intra_pred[mode], "intra_pred_%s_w%d_%dbpc",
-                    intra_pred_mode_names[mode], w, bpc))
-                {
-                    for (int h = imax(w / 4, 4); h <= imin(w * 4,
-                        (mode == FILTER_PRED ? 32 : 64)); h <<= 1)
-                    {
-                        const ptrdiff_t stride = c_dst_stride;
-                        int nb_iters = (mode >= Z1_PRED && mode <= Z3_PRED) ? 5 : 1;
+        for (int w = 4; w <= 64; w <<= 1)
+            if (check_func(c->intra_pred[mode], "intra_pred_%s_w%d_%dbpc",
+                intra_pred_mode_names[mode], w, BITDEPTH))
+            {
+                for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1) {
+                    const ptrdiff_t stride = c_dst_stride;
+                    int nb_iters = (mode >= Z1_PRED && mode <= Z3_PRED) ? 5 : 1;
 
-                        for (int iter = 0; iter < nb_iters; iter++) {
-                            int a = 0, maxw = 0, maxh = 0;
-                            if (mode >= Z1_PRED && mode <= Z3_PRED) { /* angle */
-                                a = (90 * (mode - Z1_PRED) + z_angles[rnd() % 27]) |
-                                    (rnd() & 0xe00);
-                                if (mode == Z2_PRED) {
-                                    maxw = gen_z2_max_wh(w);
-                                    maxh = gen_z2_max_wh(h);
-                                }
-                            } else if (mode == FILTER_PRED) /* filter_idx */
-                                a = (rnd() % 5) | (rnd() & ~511);
-
-                            int bitdepth_max;
-                            if (bpc == 16)
-                                bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-                            else
-                                bitdepth_max = (1 << bpc) - 1;
-
-                            for (int i = -h * 2; i <= w * 2; i++)
-                                topleft[i] = rnd() & bitdepth_max;
-
-                            CLEAR_PIXEL_RECT(c_dst);
-                            CLEAR_PIXEL_RECT(a_dst);
-                            call_ref(c_dst, stride, topleft, w, h, a, maxw, maxh
-                                     HIGHBD_TAIL_SUFFIX);
-                            call_new(a_dst, stride, topleft, w, h, a, maxw, maxh
-                                     HIGHBD_TAIL_SUFFIX);
-                            if (checkasm_check_pixel_padded(c_dst, stride,
-                                                            a_dst, stride,
-                                                            w, h, "dst"))
-                            {
-                                if (mode == Z1_PRED || mode == Z3_PRED)
-                                    fprintf(stderr, "angle = %d (0x%03x)\n",
-                                            a & 0x1ff, a & 0x600);
-                                else if (mode == Z2_PRED)
-                                    fprintf(stderr, "angle = %d (0x%03x), "
-                                            "max_width = %d, max_height = %d\n",
-                                            a & 0x1ff, a & 0x600, maxw, maxh);
-                                else if (mode == FILTER_PRED)
-                                    fprintf(stderr, "filter_idx = %d\n", a & 0x1ff);
-                                break;
+                    for (int iter = 0; iter < nb_iters; iter++) {
+                        int a = 0, maxw = 0, maxh = 0;
+                        if (mode >= Z1_PRED && mode <= Z3_PRED) { /* angle */
+                            a = (90 * (mode - Z1_PRED) + z_angles[rnd() % 27]) |
+                                (rnd() & 0xe00);
+                            if (mode == Z2_PRED) {
+                                maxw = gen_z2_max_wh(w);
+                                maxh = gen_z2_max_wh(h);
                             }
+                        } else if (mode == DIP_PRED) /* dip_idx */
+                            a = (rnd() % 5) | (rnd() & 16);
 
-                            bench_new(a_dst, stride, topleft, w, h, a, 128, 128
-                                      HIGHBD_TAIL_SUFFIX);
+                        int bitdepth_max;
+                        if (BITDEPTH == 16)
+                            bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+                        else
+                            bitdepth_max = (1 << BITDEPTH) - 1;
+
+                        for (int i = -h * 2; i <= w * 2; i++)
+                            topleft[i] = rnd() & bitdepth_max;
+
+                        CLEAR_PIXEL_RECT(c_dst);
+                        CLEAR_PIXEL_RECT(a_dst);
+                        call_ref(c_dst, stride, topleft, w, h, a, maxw, maxh
+                                 HIGHBD_TAIL_SUFFIX);
+                        call_new(a_dst, stride, topleft, w, h, a, maxw, maxh
+                                 HIGHBD_TAIL_SUFFIX);
+                        if (checkasm_check_pixel_padded(c_dst, stride,
+                                                        a_dst, stride,
+                                                        w, h, "dst"))
+                        {
+                            if (mode == Z1_PRED || mode == Z3_PRED)
+                                fprintf(stderr, "angle = %d (0x%03x)\n",
+                                        a & 0x1ff, a & 0x600);
+                            else if (mode == Z2_PRED)
+                                fprintf(stderr, "angle = %d (0x%03x), "
+                                        "max_width = %d, max_height = %d\n",
+                                        a & 0x1ff, a & 0x600, maxw, maxh);
+                            else if (mode == DIP_PRED)
+                                fprintf(stderr, "dip tp =%d mode = %d\n", a > 7, a & 7);
+                            break;
                         }
+
+                        bench_new(a_dst, stride, topleft, w, h, a, 128, 128
+                                  HIGHBD_TAIL_SUFFIX);
                     }
                 }
+            }
     }
     report("intra_pred");
 }

@@ -70,7 +70,8 @@ static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
     [SMOOTH_V_PRED] = { .needs_left = 1, .needs_top = 1, .needs_bottomleft= 1 },
     [SMOOTH_H_PRED] = { .needs_left = 1, .needs_top = 1, .needs_topright = 1 },
     [PAETH_PRED]    = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
-    [FILTER_PRED]   = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
+    [DIP_PRED]      = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1,
+                        .needs_topright = 1, .needs_bottomleft= 1 }
 };
 
 enum IntraPredMode
@@ -89,6 +90,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     const int bitdepth = bitdepth_from_max(bitdepth_max);
     assert(y < h && x < w);
     int is_dir = 0;
+    const int apply_dip = !!(intra_flags & ANGLE_DIP_FLAG);
     const int apply_ibp = !!(intra_flags & ANGLE_IBP_FLAG);
     const int mrl_idx = (intra_flags & ANGLE_MRL_FLAGS) >> 12;
     const int have_left = !!(intra_flags & ANGLE_HAS_LEFT);
@@ -116,7 +118,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         break;
     }
     case DC_PRED:
-        mode = mode_conv[mode][have_left][have_top];
+        mode = apply_dip ? DIP_PRED : mode_conv[mode][have_left][have_top];
         break;
     default:
         break;
@@ -147,14 +149,24 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     // Safe maximum size for edge buffers
     const int e_stride = (imax(tw, th) + (mrl_idx << 1)) * 2;
     if (e.needs_left) {
-        const int sz = th + (e.needs_bottomleft ? tw : 3) + (mrl_idx << 1);
+        const int sz = th + (apply_dip ? (th >> 2) :
+            ((e.needs_bottomleft ? tw : 3) + (mrl_idx << 1)));
         pixel *const left = &topleft_out[-sz];
         pixel *const left2 = &topleft_out[-(sz + e_stride)];
 
         if (have_left) {
-            const int px_have = imin(th, (h - y) << 2);
-            for (int i = 0; i < px_have; i++)
+            int px_have = imin(th, (h - y) << 2);
+            int i;
+            for (i = 0; i < px_have; i++)
                 left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
+            if (e.needs_bottomleft) {
+                const int have_bot = edge_flags & EDGE_I444_LEFT_HAS_BOTTOM;
+                if (have_bot) {
+                    px_have += h - th;
+                    for (; i < px_have; i++)
+                        left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
+                }
+            }
             if (px_have < sz)
                 pixel_set(left, left[sz - px_have], sz - px_have);
             if (mrl_idx) {
@@ -198,7 +210,8 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         if (is_dir) {
             e.needs_topright = apply_ibp ? *angle < 90 || *angle > 180 : *angle < 90;
         }
-        const int sz = tw + (e.needs_topright ? th : 0)  + (mrl_idx << 1);
+        const int sz = tw + (apply_dip ? (tw >> 2) :
+            ((e.needs_topright ? th : 0) + (mrl_idx << 1)));
         pixel *const top = &topleft_out[1];
         pixel *const top2 = &topleft_out[1 - e_stride];
 

@@ -797,10 +797,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (b->intra) {
             f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
 
-            const enum IntraPredMode y_mode_nofilt =
-                b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
 #define set_ctx(rep_macro) \
-            rep_macro(edge->mode, off, y_mode_nofilt); \
+            rep_macro(edge->mode, off, b->y_mode); \
             rep_macro(edge->intra, off, 1)
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
@@ -1655,13 +1653,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         // update contexts
         if (has_luma) {
-            const enum IntraPredMode y_mode_nofilt =
-                b->y_mode == FILTER_PRED ? DC_PRED : b->y_mode;
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
                 rep_macro(edge->fsc, off, b->fsc); \
-                rep_macro(edge->mode, off, y_mode_nofilt); \
+                rep_macro(edge->mode, off, b->y_mode); \
                 rep_macro(edge->midx, off, midx); \
                 rep_macro(edge->mrl, off, !!b->mrl_index); \
                 rep_macro(edge->multi_mrl, off, b->multi_mrl); \

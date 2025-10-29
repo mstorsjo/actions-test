@@ -81,7 +81,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_loongarch(Dav1dIntraPredDSPContext
     init_angular_ipred_fn(SMOOTH_PRED,   ipred_smooth,   lsx);
     init_angular_ipred_fn(SMOOTH_V_PRED, ipred_smooth_v, lsx);
     init_angular_ipred_fn(SMOOTH_H_PRED, ipred_smooth_h, lsx);
-    init_angular_ipred_fn(FILTER_PRED,   ipred_filter,   lsx);
+    //init_angular_ipred_fn(DIP_PRED,      ipred_dip,   lsx);
     init_angular_ipred_fn(Z1_PRED,       ipred_z1,       lsx);
 
     init_cfl_pred_fn(DC_PRED,      ipred_cfl,      lsx);

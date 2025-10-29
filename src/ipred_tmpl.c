@@ -33,6 +33,7 @@
 #include "common/attributes.h"
 #include "common/intops.h"
 
+#include "src/dip_tables.h"
 #include "src/ibp.h"
 #include "src/ipred.h"
 #include "src/tables.h"
@@ -882,46 +883,6 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
 #define FLT_INCR 1
 #endif
 
-/* Up to 32x32 only */
-static void ipred_filter_c(pixel *dst, const ptrdiff_t stride,
-                           const pixel *const topleft_in,
-                           const int width, const int height, int filt_idx,
-                           const int max_width, const int max_height
-                           HIGHBD_DECL_SUFFIX)
-{
-    filt_idx &= 511;
-    assert(filt_idx < 5);
-
-    const int8_t *const filter = dav1d_filter_intra_taps[filt_idx];
-    const pixel *top = &topleft_in[1];
-    for (int y = 0; y < height; y += 2) {
-        const pixel *topleft = &topleft_in[-y];
-        const pixel *left = &topleft[-1];
-        ptrdiff_t left_stride = -1;
-        for (int x = 0; x < width; x += 4) {
-            const int p0 = *topleft;
-            const int p1 = top[0], p2 = top[1], p3 = top[2], p4 = top[3];
-            const int p5 = left[0 * left_stride], p6 = left[1 * left_stride];
-            pixel *ptr = &dst[x];
-            const int8_t *flt_ptr = filter;
-
-            for (int yy = 0; yy < 2; yy++) {
-                for (int xx = 0; xx < 4; xx++, flt_ptr += FLT_INCR) {
-                    const int acc = FILTER(flt_ptr, p0, p1, p2, p3, p4, p5, p6);
-                    ptr[xx] = iclip_pixel((acc + 8) >> 4);
-                }
-                ptr += PXSTRIDE(stride);
-            }
-            left = &dst[x + 4 - 1];
-            left_stride = PXSTRIDE(stride);
-            top += 4;
-            topleft = &top[-1];
-        }
-        top = &dst[PXSTRIDE(stride)];
-        dst = &dst[PXSTRIDE(stride) * 2];
-    }
-}
-
 static NOINLINE void
 cfl_ac_c(int16_t *ac, const pixel *ypx, const ptrdiff_t stride,
          const int w_pad, const int h_pad, const int width, const int height,
@@ -1098,6 +1059,120 @@ static void orip_c(pixel *dst, const ptrdiff_t stride,
     }
 }
 
+static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
+                        const pixel *const topleft,
+                        const int width, const int height, int mode,
+                        const int max_width, const int max_height
+                        HIGHBD_DECL_SUFFIX)
+{
+    const int trans = mode > 15;
+    const int wd = width >> 2;
+    const int hd = height >> 2;
+    const int wl2 = ulog2(wd);
+    const int hl2 = ulog2(hd);
+    const int wrnd = width >> 3;
+    const int hrnd = height >> 3;
+    const int i_t = 1 + 4 * trans;
+    const int i_l = 5 - 4 * trans;
+    pixel in[11];
+    int sum;
+    int in_sum = in[0] = topleft[0];
+
+    const pixel *tl = &topleft[1];
+    for (int i = 0; i < 4; i++) {
+        sum = 0;
+        for (int x = 0; x < wd; x++)
+            sum += *tl++;
+        in_sum += in[i_t + i] = (sum + wrnd) >> wl2;
+    }
+
+    tl = &topleft[-1];
+    for (int i = 0; i < 4; i++) {
+        sum = 0;
+        for (int y = 0; y < hd; y++)
+            sum += *tl--;
+        in_sum += in[i_l + i] = (sum + hrnd) >> hl2;
+    }
+
+    sum = 0;
+    for (int x = 0; x < wd; x++)
+        sum += topleft[x + width + 1];
+    in_sum += in[9 + trans] = (sum + wrnd) >> wl2;
+
+    sum = 0;
+    for (int y = 0; y < hd; y++)
+        sum += topleft[-(y + height + 1)];
+    in_sum += in[10 - trans] = (sum + hrnd) >> hl2;
+
+    const int m = mode & 7;
+    assert(m < 6);
+
+    int uwl2 = wl2 - 1;
+    int dwl2 = 0;
+    if (uwl2 < 0) {
+        dwl2 = -uwl2;
+        uwl2 = 0;
+    }
+    int mx = 1 << uwl2;
+    int dw = 1 << dwl2;
+    int uhl2 = hl2 - 1;
+    int dhl2 = 0;
+    if (uhl2 < 0) {
+        dhl2 = -uhl2;
+        uhl2 = 0;
+    }
+    int my = 1 << uhl2;
+    int dh = 1 << dhl2;
+    const int bh = 8 >> dhl2;
+    const int bw = 8 >> dwl2;
+
+    for (int y = 0; y < bh; y++) {
+        const int dy = y * my + (my - 1);
+        const int oy = y * dh;
+        for (int x = 0; x < bw; x++) {
+            const int dx = x * mx + (mx - 1);
+            const int ox = x * dw;
+            const int idx = trans ? (ox * 8 + oy) : (oy * 8 + ox);
+            int sum = 0;
+            for (int i = 0; i < 11; i++) {
+                sum += dav1d_dip_weights[m][idx][i] * in[i];
+            }
+            dst[dy * PXSTRIDE(stride) + dx] = ((sum + 2048) >> 12) - in_sum;
+        }
+    }
+    if (mx > 1) {
+        for (int y = 0; y < bh; y++) {
+            const int dy = y * my + (my - 1);
+            int p1 = topleft[-(y + 1)];
+            for (int x = 0; x < bw; x++) {
+                const int dx = x * mx;
+                int p0 = p1;
+                p1 = dst[dy * PXSTRIDE(stride) + dx + mx - 1];
+                for (int z = 0; z < mx - 1; z++) {
+                    int z1 = z + 1;
+                    dst[dy * PXSTRIDE(stride) + dx + z] =
+                        (p0 * (mx - z1) + (p1 * z1)) >> uwl2;
+                }
+            }
+        }
+    }
+    if (my > 1) {
+        for (int x = 0; x < bw; x++) {
+            int p1 = topleft[x + 1];
+            for (int y = 0; y < bh; y++) {
+                int dy = y * my;
+                int p0 = p1;
+                p1 = dst[(y + my - 1) * PXSTRIDE(stride) + x];
+                for (int z = 0; z < my - 1; z++) {
+                    int z1 = z + 1;
+                    dst[(dy + z) * PXSTRIDE(stride) + x] =
+                        (p0 * (my - z1) + (p1 * z1)) >> uhl2;
+                }
+            }
+        }
+    }
+ }
+
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/ipred.h"
@@ -1124,7 +1199,7 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
     c->intra_pred[Z1_PRED      ] = ipred_z1_c;
     c->intra_pred[Z2_PRED      ] = ipred_z2_c;
     c->intra_pred[Z3_PRED      ] = ipred_z3_c;
-    c->intra_pred[FILTER_PRED  ] = ipred_filter_c;
+    c->intra_pred[DIP_PRED     ] = ipred_dip_c;
 
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_ac_420_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_ac_422_c;

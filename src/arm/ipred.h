@@ -311,7 +311,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav1dIntraPredDSPContext *cons
     c->intra_pred[Z2_PRED]       = ipred_z2_neon;
     c->intra_pred[Z3_PRED]       = ipred_z3_neon;
 #endif
-    c->intra_pred[FILTER_PRED]   = BF(dav1d_ipred_filter, neon);
+    //c->intra_pred[DIP_PRED]   = BF(dav1d_ipred_dip, neon);
 
     c->cfl_pred[DC_PRED]         = BF(dav1d_ipred_cfl, neon);
     c->cfl_pred[DC_128_PRED]     = BF(dav1d_ipred_cfl_128, neon);
