@@ -26,27 +26,53 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHECKASM_PERF_GETTIME_H
-#define CHECKASM_PERF_GETTIME_H
+#include <linux/perf_event.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
-#include <stdint.h>
-#include <time.h>
+#include "internal.h"
 
-static inline uint64_t clock_gettime_nsec(void)
+static int perf_sysfd;
+
+static uint64_t perf_start(void)
 {
-    struct timespec ts;
-#ifdef CLOCK_MONOTONIC_RAW
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-#else
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-#endif
-    return ((uint64_t) ts.tv_sec * 1000000000u) + (uint64_t) ts.tv_nsec;
+    ioctl(perf_sysfd, PERF_EVENT_IOC_RESET, 0);
+    ioctl(perf_sysfd, PERF_EVENT_IOC_ENABLE, 0);
+    return 0;
 }
 
-#define CHECKASM_PERF_SETUP()
-#define CHECKASM_PERF_START(t) t = clock_gettime_nsec();
-#define CHECKASM_PERF_STOP(t)  t = clock_gettime_nsec() - t
-#define CHECKASM_PERF_NAME     "clock_gettime"
-#define CHECKASM_PERF_UNIT     "nsec"
+static uint64_t perf_stop(uint64_t t)
+{
+    ioctl(perf_sysfd, PERF_EVENT_IOC_DISABLE, 0);
+    int ret = read(perf_sysfd, &t, sizeof(t));
+    (void) ret;
+    return t;
+}
 
-#endif /* CHECKASM_PERF_GETTIME_H */
+COLD int checkasm_perf_init_linux(CheckasmPerf *perf)
+{
+    struct perf_event_attr attr = {
+        .type           = PERF_TYPE_HARDWARE,
+        .size           = sizeof(struct perf_event_attr),
+        .config         = PERF_COUNT_HW_CPU_CYCLES,
+        .disabled       = 1, // start counting only on demand
+        .exclude_kernel = 1,
+        .exclude_hv     = 1,
+#if !ARCH_X86
+        .exclude_guest = 1,
+#endif
+    };
+
+    perf_sysfd = syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0);
+    if (perf_sysfd == -1) {
+        perror("perf_event_open");
+        return 1;
+    }
+
+    perf->start = perf_start;
+    perf->stop  = perf_stop;
+    perf->name  = "linux (perf)";
+    perf->unit  = "tick";
+    return 0;
+}

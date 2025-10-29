@@ -27,156 +27,70 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
-
-#include "config.h"
 
 #include "checkasm/perf.h"
 #include "checkasm/test.h"
 #include "internal.h"
 #include "stats.h"
 
-#if CONFIG_LINUX_PERF
-  #include <sys/syscall.h>
-#elif CONFIG_MACOS_KPERF
-  #include <dlfcn.h>
+#ifdef CHECKASM_PERF_ASM
+static uint64_t perf_start_asm(void)
+{
+    return CHECKASM_PERF_ASM();
+}
+
+static uint64_t perf_stop_asm(uint64_t t)
+{
+    return CHECKASM_PERF_ASM() - t;
+}
 #endif
 
-#if CONFIG_LINUX_PERF
-
-static int perf_sysfd;
+CheckasmPerf checkasm_perf;
 
 COLD int checkasm_perf_init(void)
 {
-    struct perf_event_attr attr = {
-        .type           = PERF_TYPE_HARDWARE,
-        .size           = sizeof(struct perf_event_attr),
-        .config         = PERF_COUNT_HW_CPU_CYCLES,
-        .disabled       = 1, // start counting only on demand
-        .exclude_kernel = 1,
-        .exclude_hv     = 1,
-  #if !ARCH_X86
-        .exclude_guest = 1,
-  #endif
-    };
-
-    perf_sysfd = syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0);
-    if (perf_sysfd == -1) {
-        perror("perf_event_open");
-        return 1;
-    }
-    return 0;
-}
-
-int checkasm_get_perf_sysfd(void)
-{
-    return perf_sysfd;
-}
-
-#elif CONFIG_MACOS_KPERF
-
-static int (*kpc_get_thread_counters)(int, unsigned int, void *);
-
-  #define CFGWORD_EL0A64EN_MASK       (0x20000)
-  #define CPMU_CORE_CYCLE             0x02
-  #define KPC_CLASS_FIXED_MASK        (1 << 0)
-  #define KPC_CLASS_CONFIGURABLE_MASK (1 << 1)
-  #define COUNTERS_COUNT              10
-  #define CONFIG_COUNT                8
-  #define KPC_MASK                    (KPC_CLASS_CONFIGURABLE_MASK | KPC_CLASS_FIXED_MASK)
-
-COLD int checkasm_perf_init(void)
-{
-    uint64_t config[COUNTERS_COUNT] = { 0 };
-
-    void *kperf
-        = dlopen("/System/Library/PrivateFrameworks/kperf.framework/kperf", RTLD_LAZY);
-    if (!kperf) {
-        fprintf(stderr, "checkasm: Unable to load kperf: %s\n", dlerror());
-        return 1;
-    }
-
-    int (*kpc_force_all_ctrs_set)(int)          = dlsym(kperf, "kpc_force_all_ctrs_set");
-    int (*kpc_set_counting)(uint32_t)           = dlsym(kperf, "kpc_set_counting");
-    int (*kpc_set_thread_counting)(uint32_t)    = dlsym(kperf, "kpc_set_thread_counting");
-    int (*kpc_set_config)(uint32_t, void *)     = dlsym(kperf, "kpc_set_config");
-    uint32_t (*kpc_get_counter_count)(uint32_t) = dlsym(kperf, "kpc_get_counter_count");
-    uint32_t (*kpc_get_config_count)(uint32_t)  = dlsym(kperf, "kpc_get_config_count");
-    kpc_get_thread_counters                     = dlsym(kperf, "kpc_get_thread_counters");
-
-    if (!kpc_get_thread_counters) {
-        fprintf(stderr, "checkasm: Unable to load kpc_get_thread_counters\n");
-        return 1;
-    }
-
-    if (!kpc_get_counter_count || kpc_get_counter_count(KPC_MASK) != COUNTERS_COUNT) {
-        fprintf(stderr, "checkasm: Unxpected kpc_get_counter_count\n");
-        return 1;
-    }
-    if (!kpc_get_config_count || kpc_get_config_count(KPC_MASK) != CONFIG_COUNT) {
-        fprintf(stderr, "checkasm: Unxpected kpc_get_config_count\n");
-        return 1;
-    }
-
-    config[0] = CPMU_CORE_CYCLE | CFGWORD_EL0A64EN_MASK;
-
-    if (!kpc_set_config || kpc_set_config(KPC_MASK, config)) {
-        fprintf(stderr, "checkasm: The kperf API needs to be run as root\n");
-        return 1;
-    }
-    if (!kpc_force_all_ctrs_set || kpc_force_all_ctrs_set(1)) {
-        fprintf(stderr, "checkasm: kpc_force_all_ctrs_set failed\n");
-        return 1;
-    }
-    if (!kpc_set_counting || kpc_set_counting(KPC_MASK)) {
-        fprintf(stderr, "checkasm: kpc_set_counting failed\n");
-        return 1;
-    }
-    if (!kpc_set_counting || kpc_set_thread_counting(KPC_MASK)) {
-        fprintf(stderr, "checkasm: kpc_set_thread_counting failed\n");
-        return 1;
-    }
-
-    return 0;
-}
-
-uint64_t checkasm_kperf_cycles(void)
-{
-    uint64_t counters[COUNTERS_COUNT];
-    if (kpc_get_thread_counters(0, COUNTERS_COUNT, counters))
-        return -1;
-
-    return counters[0];
-}
-
-#elif defined(CHECKASM_PERF_START)
-
-COLD int checkasm_perf_init(void)
-{
+#ifdef CHECKASM_PERF_ASM
     if (!checkasm_save_context(checkasm_context)) {
-        uint64_t t;
-        (void) t;
+        /* Try calling the asm timer to see if it works */
         checkasm_set_signal_handler_state(1);
-        CHECKASM_PERF_START(t);
+        CHECKASM_PERF_ASM();
         checkasm_set_signal_handler_state(0);
+
+        checkasm_perf.start      = perf_start_asm;
+        checkasm_perf.stop       = perf_stop_asm;
+        checkasm_perf.name       = CHECKASM_PERF_ASM_NAME;
+        checkasm_perf.unit       = CHECKASM_PERF_ASM_UNIT;
+        checkasm_perf.asm_usable = 1;
         return 0;
     } else {
         fprintf(stderr, "checkasm: unable to access cycle counter\n");
-        return 1;
+        checkasm_perf.asm_usable = 0;
     }
-}
-
-#else
-
-COLD int checkasm_perf_init(void)
-{
-    fprintf(stderr, "checkasm: benchmarking not supported on this platform\n");
-    return 1;
-}
-
 #endif
 
-#ifdef CHECKASM_PERF_START
+#if HAVE_LINUX_PERF
+    if (!checkasm_perf_init_linux(&checkasm_perf))
+        return 0;
+#endif
+
+#if HAVE_MACOS_KPERF
+    if (!checkasm_perf_init_macos(&checkasm_perf))
+        return 0;
+#endif
+
+    /* Generic fallback to gettime() */
+    if (checkasm_gettime_nsec() == (uint64_t) -1) {
+        fprintf(stderr, "checkasm: checkasm_gettime_nsec() returned nonsense\n");
+        return 1;
+    }
+
+    checkasm_perf.start = checkasm_gettime_nsec;
+    checkasm_perf.stop  = checkasm_gettime_nsec_diff;
+    checkasm_perf.name  = "gettime";
+    checkasm_perf.unit  = "nsec";
+    return 0;
+}
+
 /* Measure the overhead of the timing code */
 COLD CheckasmVar checkasm_measure_nop_cycles(void)
 {
@@ -188,28 +102,16 @@ COLD CheckasmVar checkasm_measure_nop_cycles(void)
     void (*const func_new)(void *) = checkasm_noop;
     void *const ptr0 = (void *) 0x1000, *const ptr1 = (void *) 0x2000;
 
-    CHECKASM_PERF_SETUP();
+    const CheckasmPerf perf = checkasm_perf;
+    (void) perf;
 
     for (uint64_t total_nsec = 0; total_nsec < target_nsec;) {
-        const int runs   = stats.next_count;
-        uint64_t  cycles = 0;
-        int       count  = 0;
+        int      count  = stats.next_count;
+        uint64_t cycles = 0;
 
         /* Measure the overhead of the timing code (in cycles) */
         uint64_t nsec = checkasm_gettime_nsec();
-        for (int i = 0; i < runs; i++) {
-            uint64_t t;
-            int      talt;
-            (void) talt;
-            CHECKASM_PERF_START(t);
-            CALL16(alternate(ptr0, ptr1));
-            CALL16(alternate(ptr0, ptr1));
-            CHECKASM_PERF_STOP(t);
-            if (t * count <= cycles * 4 && (i > 0 || runs < 50)) {
-                cycles += t;
-                count++;
-            }
-        }
+        CHECKASM_PERF_BENCH(count, cycles, alternate(ptr0, ptr1));
         nsec = checkasm_gettime_nsec() - nsec;
         checkasm_stats_add(&stats, (CheckasmSample) { cycles, count });
 
@@ -223,6 +125,8 @@ COLD CheckasmVar checkasm_measure_nop_cycles(void)
 
 COLD CheckasmVar checkasm_measure_perf_scale(void)
 {
+    const CheckasmPerf perf = checkasm_perf;
+
     /* Try to make the loop long enough to be measurable, but not too long
      * to avoid being affected by CPU frequency scaling or preemption */
     const uint64_t target_nsec = 100000 / 2; /* 100 us */
@@ -233,8 +137,6 @@ COLD CheckasmVar checkasm_measure_perf_scale(void)
     checkasm_stats_reset(&stats_cycles);
     checkasm_stats_reset(&stats_nsec);
 
-    CHECKASM_PERF_SETUP();
-
     while (stats_cycles.nb_samples < (int) ARRAY_SIZE(stats_cycles.samples)) {
         const int iters = stats_cycles.next_count;
 
@@ -243,10 +145,10 @@ COLD CheckasmVar checkasm_measure_perf_scale(void)
             checkasm_noop(NULL);
 
         uint64_t cycles;
-        CHECKASM_PERF_START(cycles);
+        cycles = perf.start();
         for (int i = 0; i < iters; i++)
             checkasm_noop(NULL);
-        CHECKASM_PERF_STOP(cycles);
+        cycles = perf.stop(cycles);
 
         /* Measure the same loop with wallclock time instead of cycles */
         uint64_t nsec = checkasm_gettime_nsec();
@@ -265,13 +167,3 @@ COLD CheckasmVar checkasm_measure_perf_scale(void)
     CheckasmVar est_nsec   = checkasm_stats_estimate(&stats_nsec);
     return checkasm_var_div(est_nsec, est_cycles);
 }
-#else
-COLD CheckasmVar checkasm_measure_nop_cycles(void)
-{
-    return (CheckasmVar) { 0 };
-}
-COLD CheckasmVar checkasm_measure_perf_scale(void)
-{
-    return (CheckasmVar) { 0 };
-}
-#endif

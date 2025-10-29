@@ -48,6 +48,10 @@
   #include <sys/ioctl.h>
 #endif
 
+#if defined(__APPLE__) && defined(__MACH__)
+  #include <mach/mach_time.h>
+#endif
+
 #include "checkasm/test.h"
 #include "checkasm/utils.h"
 #include "internal.h"
@@ -57,7 +61,7 @@ NOINLINE void checkasm_noop(void *ptr)
     (void) ptr;
 }
 
-uint64_t checkasm_gettime_nsec(void)
+static ALWAYS_INLINE uint64_t gettime_nsec(void)
 {
 #ifdef _WIN32
     static LARGE_INTEGER freq;
@@ -66,6 +70,13 @@ uint64_t checkasm_gettime_nsec(void)
         QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&ts);
     return UINT64_C(1000000000) * ts.QuadPart / freq.QuadPart;
+#elif defined(__APPLE__) && defined(__MACH__)
+    static mach_timebase_info_data_t tb_info;
+    if (!tb_info.denom) {
+        if (mach_timebase_info(&tb_info) != KERN_SUCCESS)
+            return -1;
+    }
+    return mach_absolute_time() * tb_info.numer / tb_info.denom;
 #else
     struct timespec ts;
   #ifdef CLOCK_MONOTONIC_RAW
@@ -75,6 +86,16 @@ uint64_t checkasm_gettime_nsec(void)
   #endif
     return UINT64_C(1000000000) * ts.tv_sec + ts.tv_nsec;
 #endif
+}
+
+uint64_t checkasm_gettime_nsec(void)
+{
+    return gettime_nsec();
+}
+
+uint64_t checkasm_gettime_nsec_diff(uint64_t t)
+{
+    return gettime_nsec() - t;
 }
 
 // xor128 from Marsaglia, George (July 2003). "Xorshift RNGs".

@@ -1,9 +1,0 @@
-option('linux_perf',
-    type: 'boolean',
-    value: false,
-    description: 'Use the linux perf API for benchmarking')
-
-option('macos_kperf',
-    type: 'boolean',
-    value: false,
-    description: 'Use the private macOS kperf API for benchmarking')

@@ -80,11 +80,17 @@ if host_machine.system() == 'windows'
     endif
 endif
 
+have_linux_perf = false
+if host_machine.system() == 'linux'
+  have_linux_perf = cc.has_header_symbol('linux/perf_event.h', 'PERF_COUNT_HW_CPU_CYCLES', args: test_args)
+endif
+
+# Only depends on <dlfcn.h>, and not needed on other architectures.
+have_macos_kperf = host_machine.system() == 'darwin' and arch_aarch64
+
 # Build configuration
 cdata = configuration_data()
 cdata.set('PREFIX',                         cc.symbols_have_underscore_prefix())
-cdata.set10('CONFIG_LINUX_PERF',            get_option('linux_perf'))
-cdata.set10('CONFIG_MACOS_KPERF',           get_option('macos_kperf'))
 cdata.set10('ARCH_AARCH64',                 arch_aarch64)
 cdata.set10('ARCH_ARM',                     arch_arm)
 cdata.set10('ARCH_X86',                     arch_x86)
@@ -102,6 +108,8 @@ cdata.set10('HAVE_PTHREAD_NP_H',            have_pthread_np)
 cdata.set10('HAVE_PTHREAD_SETAFFINITY_NP',  have_pthread_setaffinity_np)
 cdata.set10('HAVE_GETAUXVAL',               have_getauxval)
 cdata.set10('HAVE_ELF_AUX_INFO',            have_elf_aux_info)
+cdata.set10('HAVE_LINUX_PERF',              have_linux_perf)
+cdata.set10('HAVE_MACOS_KPERF',             have_macos_kperf)
 
 if arch_x86
   cdata.set10('PIC', true)
@@ -116,6 +124,7 @@ checkasm_config += configure_file(
 )
 
 # Build definition
+checkasm_asm_objs = []
 checkasm_sources = files(
   'checkasm.c',
   'cpu.c',
@@ -125,7 +134,14 @@ checkasm_sources = files(
   'utils.c',
 )
 
-checkasm_asm_objs = []
+if have_linux_perf
+  checkasm_sources += files('perf/linux.c')
+endif
+
+if have_macos_kperf
+  checkasm_sources += files('perf/macos_kperf.c')
+endif
+
 if arch_aarch64
   checkasm_asm_sources = files('arm/checkasm_64.S')
   if use_gaspp

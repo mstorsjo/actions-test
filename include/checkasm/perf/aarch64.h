@@ -31,7 +31,17 @@
 
 #include <stdint.h>
 
-static inline uint64_t readtime_pmccntr(void)
+#if defined(_MSC_VER) && !defined(__clang__)
+
+  #define CHECKASM_PERF_ASM()                                                            \
+      (_InstructionSynchronizationBarrier(), ReadTimeStampCounter())
+  #define CHECKASM_PERF_ASM_NAME   "windows (ReadTimeStampCounter)"
+  #define CHECKASM_PERF_ASM_UNIT   "cycle"
+  #define CHECKASM_PERF_ASM_USABLE 1
+
+#else /* !MSVC */
+
+static inline uint64_t checkasm_pmccntr(void)
 {
     uint64_t cycle_counter;
     /* This requires enabling user mode access to the cycle counter
@@ -42,11 +52,10 @@ static inline uint64_t readtime_pmccntr(void)
     __asm__ __volatile__("isb\nmrs %0, pmccntr_el0" : "=r"(cycle_counter)::"memory");
     return cycle_counter;
 }
+  #define CHECKASM_PERF_ASM()    checkasm_pmccntr()
+  #define CHECKASM_PERF_ASM_NAME "aarch64 (pmccntr)"
+  #define CHECKASM_PERF_ASM_UNIT "cycle"
 
-#define CHECKASM_PERF_SETUP()
-#define CHECKASM_PERF_START(t) t = readtime_pmccntr();
-#define CHECKASM_PERF_STOP(t)  t = readtime_pmccntr() - t
-#define CHECKASM_PERF_NAME     "aarch64 (pmccntr)"
-#define CHECKASM_PERF_UNIT     "cycle"
+#endif /* MSVC */
 
 #endif /* CHECKASM_PERF_AARCH64_H */

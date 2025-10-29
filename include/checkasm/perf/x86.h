@@ -33,9 +33,9 @@
 
 #if defined(_MSC_VER) && !defined(__clang__)
   #include <intrin.h>
-  #define readtime_tsc() (_mm_lfence(), __rdtsc())
+  #define checkasm_rdtsc() (_mm_lfence(), __rdtsc())
 #else
-static inline uint64_t readtime_tsc(void)
+static inline uint64_t checkasm_rdtsc(void)
 {
     uint32_t eax, edx;
     __asm__ __volatile__("lfence\nrdtsc" : "=a"(eax), "=d"(edx));
@@ -43,10 +43,9 @@ static inline uint64_t readtime_tsc(void)
 }
 #endif
 
-#define CHECKASM_PERF_SETUP()
-#define CHECKASM_PERF_START(t) t = readtime_tsc();
-#define CHECKASM_PERF_STOP(t)  t = readtime_tsc() - t
-#define CHECKASM_PERF_NAME     "x86 (rdtsc)"
-#define CHECKASM_PERF_UNIT     "cycle"
+#define CHECKASM_PERF_ASM()      checkasm_rdtsc()
+#define CHECKASM_PERF_ASM_NAME   "x86 (rdtsc)"
+#define CHECKASM_PERF_ASM_UNIT   "cycle"
+#define CHECKASM_PERF_ASM_USABLE 1
 
 #endif /* CHECKASM_PERF_X86_H */

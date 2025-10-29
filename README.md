@@ -31,15 +31,7 @@ The following architectures are explicitly supported for asm verification, with 
 - **LoongArch (32, 64)**: registers
 - **PowerPC (64le)**: *none*
 
-In addition the following timer sources are available for benchmarking:
-
-- **x86, x86-64**: raw timestamp counter
-- **ARM, ARM64**: cycle counter (requires privilege), alternatively mach timers (on Apple) or ReadTimeStampCounter (on 64-bit Windows)
-- **LoongArch**: platform timer
-- **PowerPC (64le)**: platform timer
-- **Generic macOS**: `kperf` subsystem
-- **Generic Linux**: `perf` subsystem
-- **Generic POSIX**: `clock_gettime`
+In addition, hardware timers are available for benchmarking purposes on all of the listed platforms (except RISCV-V), with fall-backs to generic OS-specific APIs.
 
 ## Configuration options
 

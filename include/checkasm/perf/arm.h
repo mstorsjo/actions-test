@@ -33,7 +33,7 @@
 
   #include <stdint.h>
 
-static inline uint64_t readtime_counter(void)
+static inline uint64_t checkasm_counter(void)
 {
     uint32_t cycle_counter;
     /* This requires enabling user mode access to the cycle counter (which
@@ -43,19 +43,15 @@ static inline uint64_t readtime_counter(void)
     return cycle_counter;
 }
 
-  #define CHECKASM_PERF_SETUP()
-  #define CHECKASM_PERF_START(t) t = readtime_counter();
-  #define CHECKASM_PERF_STOP(t)  t = readtime_counter() - t
-  #define CHECKASM_PERF_NAME     "arm (ccnt)"
-  #define CHECKASM_PERF_UNIT     "cycle"
+  #define CHECKASM_PERF_ASM()    checkasm_counter()
+  #define CHECKASM_PERF_ASM_NAME "arm (ccnt)"
+  #define CHECKASM_PERF_ASM_UNIT "cycle"
 
 #else
 
-  #undef CHECKASM_PERF_SETUP
-  #undef CHECKASM_PERF_START
-  #undef CHECKASM_PERF_STOP
-  #define CHECKASM_PERF_NAME "none"
-  #define CHECKASM_PERF_UNIT "n/a"
+  #undef CHECKASM_PERF_ASM
+  #undef CHECKASM_PERF_ASM_NAME
+  #undef CHECKASM_PERF_ASM_UNIT
 
 #endif /* !defined(_MSC_VER) && __ARM_ARCH >= 7 */
 #endif /* CHECKASM_PERF_ARM_H */

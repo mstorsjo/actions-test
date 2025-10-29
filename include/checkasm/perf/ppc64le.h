@@ -31,7 +31,7 @@
 
 #include <stdint.h>
 
-static inline uint64_t readtime_mfspr(void)
+static inline uint64_t checkasm_mfspr(void)
 {
     uint32_t tbu, tbl, temp;
 
@@ -48,10 +48,8 @@ static inline uint64_t readtime_mfspr(void)
     return (((uint64_t) tbu) << 32) | (uint64_t) tbl;
 }
 
-#define CHECKASM_PERF_SETUP()
-#define CHECKASM_PERF_START(t) t = readtime_mfspr();
-#define CHECKASM_PERF_STOP(t)  t = readtime_mfspr() - t
-#define CHECKASM_PERF_NAME     "ppc64le (mfspr)"
-#define CHECKASM_PERF_UNIT     "tick"
+#define CHECKASM_PERF_ASM()    checkasm_mfspr()
+#define CHECKASM_PERF_ASM_NAME "ppc64le (mfspr)"
+#define CHECKASM_PERF_ASM_UNIT "tick"
 
 #endif /* CHECKASM_PERF_PPC64LE_H */

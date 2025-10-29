@@ -31,17 +31,15 @@
 
 #include <stdint.h>
 
-static inline uint64_t readtime_rdtime(void)
+static inline uint64_t checkasm_rdtime(void)
 {
     uint64_t a, id;
     __asm__ __volatile__("rdtime.d  %0, %1" : "=r"(a), "=r"(id)::);
     return a;
 }
 
-#define CHECKASM_PERF_SETUP()
-#define CHECKASM_PERF_START(t) t = readtime_rdtime();
-#define CHECKASM_PERF_STOP(t)  t = readtime_rdtime() - t
-#define CHECKASM_PERF_NAME     "loongarch64 (rdtime)"
-#define CHECKASM_PERF_UNIT     "tick"
+#define CHECKASM_PERF_ASM()    checkasm_rdtime()
+#define CHECKASM_PERF_ASM_NAME "loongarch64 (rdtime)"
+#define CHECKASM_PERF_ASM_UNIT "tick"
 
 #endif /* CHECKASM_PERF_LOONGARCH64_H */
