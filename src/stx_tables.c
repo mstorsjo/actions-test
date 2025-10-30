@@ -28,13 +28,15 @@
 #include "src/stx_tables.h"
 
 // Scan order of primary transform coefficients for 4x4 IST
+// FIXME I don't think we need more thant just the first pair
+//       i'll wait until I encounter a 16x4 STX in the bitstream to confirm
 const uint8_t stx_scan_orders_4x4[TX_64X64][2][16] = {
     [TX_4X4] = {
         { 0,  1,  4,  8,  5,  2,  3,  6,  9, 12, 13, 10,  7, 11, 14, 15 },
         { 0,  4,  1,  2,  5,  8, 12,  9,  6,  3,  7, 10, 13, 14, 11, 15 },
     }, [TX_8X8] = {
-        { 0,  1,  8, 16,  9,  2,  3, 10, 17, 24, 25, 18, 11, 19, 26, 27 },
-        { 0,  8,  1,  2,  9, 16, 24, 17, 10,  3, 11, 18, 25, 26, 19, 27 },
+        { 0,  1,  4,  8,  5,  2,  3,  6,  9, 12, 13, 10,  7, 11, 14, 15 },
+        { 0,  4,  1,  2,  5,  8, 12,  9,  6,  3,  7, 10, 13, 14, 11, 15 },
     }, [TX_16X16] = {
         { 0,  1, 16, 32, 17,  2,  3, 18, 33, 48, 49, 34, 19, 35, 50, 51 },
         { 0, 16,  1,  2, 17, 32, 48, 33, 18,  3, 19, 34, 49, 50, 35, 51 },
