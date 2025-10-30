@@ -6551,6 +6551,7 @@ void dav1d_cdf_pri_sec_average(const Dav1dFrameHeader *const hdr,
 #define pri_sec_average(n1d, type, name) \
     do { \
         for (int n = 0; n <= n1d; n++) { \
+            /* for n == n1d this averages count without modifying para */ \
             dst->type.name[n] = (src1##type->name[n] * 7 + \
                                  src2##type->name[n] * 1 + 4) >> 3; \
         } \
