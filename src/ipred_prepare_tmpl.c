@@ -112,7 +112,6 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         break;
     }
     case DC_PRED:
-    case PAETH_PRED:
         mode = mode_conv[mode][have_left][have_top];
         break;
     default:
