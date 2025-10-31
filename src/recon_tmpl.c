@@ -1402,7 +1402,8 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->h, f->bh - t->by));
     t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xf;
 
-    if (b->y_mode == DC_PRED || b->y_mode == HOR_UP_PRED ||
+    if (b->y_mode == DC_PRED || b->y_mode == VERT_PRED || b->y_mode == HOR_PRED ||
+        b->y_mode == HOR_UP_PRED ||
         b->y_mode == DIAG_DOWN_RIGHT_PRED || b->y_mode == PAETH_PRED ||
         b->y_mode == VERT_LEFT_PRED ||
         (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED))
