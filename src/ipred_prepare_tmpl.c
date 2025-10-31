@@ -92,7 +92,8 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     int is_dir = 0;
     const int apply_dip = !!(intra_flags & ANGLE_DIP_FLAG);
     const int apply_ibp = !!(intra_flags & ANGLE_IBP_FLAG);
-    const int mrl_idx = (intra_flags & ANGLE_MRL_FLAGS) >> 12;
+    const int mrl_idx = (intra_flags & ANGLE_MRL_IDX) >> 12;
+    const int mrl_mul = !!(intra_flags & ANGLE_MULTI_MRL_FLAG);
     const int have_left = !!(intra_flags & ANGLE_HAS_LEFT);
     const int have_top = !!(intra_flags & ANGLE_HAS_TOP);
 
@@ -140,38 +141,38 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         if (prefilter_toplevel_sb_edge) {
             dst_top = dst_top2 = &prefilter_toplevel_sb_edge[x * 4];
         } else {
-            dst_top = &dst[-PXSTRIDE(stride)];
-            dst_top2 = &dst_top[-mrl_idx * PXSTRIDE(stride)];
+            dst_top = &dst[-((mrl_idx + 1) * PXSTRIDE(stride))];
+            dst_top2 = &dst[-PXSTRIDE(stride)];
         }
     }
 
     const int tw = tw4 << 2, th = th4 << 2;
     // Safe maximum size for edge buffers
-    const int e_stride = (imax(tw, th) + (mrl_idx << 1)) * 2;
+    const int e_stride = (tw + th + (mrl_idx << 1) + 3) * 2;
     if (e.needs_left) {
         const int sz = th + (apply_dip ? (th >> 2) :
             ((e.needs_bottomleft ? tw : 3) + (mrl_idx << 1)));
-        pixel *const left = &topleft_out[-sz];
+        pixel *const left = &topleft_out[-(mrl_idx + sz)];
         pixel *const left2 = &topleft_out[-(sz + e_stride)];
 
         if (have_left) {
             int px_have = imin(th, (h - y) << 2);
             int i;
             for (i = 0; i < px_have; i++)
-                left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
+                left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
             if (e.needs_bottomleft) {
                 const int have_bot = edge_flags & EDGE_I444_LEFT_HAS_BOTTOM;
                 if (have_bot) {
-                    px_have += h - th;
+                    px_have += th;
                     for (; i < px_have; i++)
-                        left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
+                        left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
                 }
             }
             if (px_have < sz)
                 pixel_set(left, left[sz - px_have], sz - px_have);
-            if (mrl_idx) {
+            if (mrl_mul) {
                 for (int i = 0; i < px_have; i++)
-                    left2[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
+                    left2[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
                 if (px_have < sz)
                     pixel_set(left2, left2[sz - px_have], sz - px_have);
             }
@@ -199,7 +200,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
             hex_dump(left, sz, sz, 1, "l");
-            if (mrl_idx) {
+            if (mrl_mul) {
                 hex_dump(left2, sz, sz, 1, "l2");
             }
         }
@@ -212,7 +213,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         }
         const int sz = tw + (apply_dip ? (tw >> 2) :
             ((e.needs_topright ? th : 0) + (mrl_idx << 1)));
-        pixel *const top = &topleft_out[1];
+        pixel *const top = &topleft_out[mrl_idx + 1];
         pixel *const top2 = &topleft_out[1 - e_stride];
 
         if (have_top) {
@@ -227,7 +228,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
             }
             if (px_have < sz)
                 pixel_set(top + px_have, top[px_have - 1], sz - px_have);
-            if (mrl_idx) {
+            if (mrl_mul) {
                 pixel_copy(top2, dst_top2, px_have);
                 if (px_have < sz)
                     pixel_set(top2 + px_have, top2[px_have - 1], sz - px_have);
@@ -256,7 +257,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
             hex_dump(top, sz, sz, 1, "t");
-            if (mrl_idx) {
+            if (mrl_mul) {
                 hex_dump(top2, sz, sz, 1, "t2");
             }
         }
@@ -264,19 +265,28 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     }
 
     if (e.needs_topleft) {
-        if (have_left) {
-            topleft_out[0] = have_top ? dst_top[-1] : dst[-1];
-            topleft_out[-e_stride] = have_top ? dst_top2[-1] : dst[-1];
+        if (have_top && have_left) {
+            for (int i = -mrl_idx; i < 0; i++)
+                topleft_out[i] = dst_top[-(mrl_idx + 1) + (-i) * PXSTRIDE(stride)];
+            for (int i = 0; i <= mrl_idx; i++)
+                topleft_out[i] = dst_top[-(mrl_idx + 1 - i)];
         } else {
-            topleft_out[0] = have_top ? *dst_top : (1 << bitdepth) >> 1;
-            topleft_out[-e_stride] = have_top ? *dst_top2 : (1 << bitdepth) >> 1;
+            int v;
+            if (have_left)
+                v = have_top ? dst_top[-1] : dst[-1];
+            else
+                v = have_top ? *dst_top : (1 << bitdepth) >> 1;
+            pixel_set(&topleft_out[-mrl_idx], v, 2 * mrl_idx + 1);
         }
+        topleft_out[-e_stride] =
+            have_left ? have_top ? dst_top2[-1] : dst[-1] :
+                        have_top ? *dst_top2 : (1 << bitdepth) >> 1;
 
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
-            hex_dump(topleft_out, 1, 1, 1, "tl");
-            if (mrl_idx) {
-                hex_dump(&topleft_out[-e_stride], 1, 1, 1, "tl2");
+            hex_dump(&topleft_out[-mrl_idx], 0, 2 * mrl_idx + 1, 1, "tl");
+            if (mrl_mul) {
+                hex_dump(&topleft_out[-e_stride], 0, 1, 1, "tl2");
             }
         }
 #endif

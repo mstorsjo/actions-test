@@ -575,42 +575,41 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
-    const int mrl_idx = (angle & ANGLE_MRL_FLAGS) >> 12;
+    const int mrl_idx = (angle & ANGLE_MRL_IDX) >> 12;
+    const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
     angle &= 511;
     assert(angle < 90);
     const int dx = dav1d_dr_intra_derivative[angle];
-    const pixel *top;
-    int max_base_x;
+    int max_base_x = (width + height) - 1 + (mrl_idx << 1);
+    const pixel *top = &topleft_in[mrl_idx + 1];
+    int xpos = dx * (1 + mrl_idx);
 
-    if (mrl_idx) {
+    if (mrl_mul) {
         // Safe maximum size for edge buffers
-        const int e_stride = (imax(width, height) + (mrl_idx << 1)) * 2;
-        const int max_base_x2 = (width + height) - 1 + (mrl_idx << 1);
-        max_base_x = (width + height) - 1;
-        top = &topleft_in[1];
+        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
+        const int max_base_x2 = (width + height) - 1;
         const pixel *top2 = &topleft_in[1 - e_stride];
-        int xpos1 = dx;
-        int xpos2 = dx * (1 + mrl_idx);
-
-        for (int y = 0; y < height; y++, xpos1 += dx, xpos2 += dx) {
-            int base1 = xpos1 >> 6;
+        int xpos2 = dx;
+        for (int y = 0; y < height; y++, xpos += dx, xpos2 += dx) {
+            int base = xpos >> 6;
             int base2 = xpos2 >> 6;
-            if (base2 > max_base_x2) {
-                for (; y < height; y++) {
-                    const int v = (top[max_base_x] + top2[max_base_x2]) >> 1;
+            if (base > max_base_x) {
+                assert(base2 > max_base_x2);
+                const int v = (top[max_base_x] + top2[max_base_x2]) >> 1;
+                do {
                     pixel_set(dst, v, width);
                     dst += PXSTRIDE(stride);
-                }
+                } while (++y < height);
                 return;
             }
 
-            const DRFilter4Tap f1 = av1_dr_interp_filter[(xpos1 & 0x3F) >> 1];
+            const DRFilter4Tap f1 = av1_dr_interp_filter[(xpos & 0x3F) >> 1];
             const DRFilter4Tap f2 = av1_dr_interp_filter[(xpos2 & 0x3F) >> 1];
-            for (int x = 0; x < width; x++, base1++, base2++) {
+            for (int x = 0; x < width; x++, base++, base2++) {
                 int v1, v2;
-                if (base1 <= max_base_x) {
-                    v1 = f1.a * top[base1 - 1] + f1.b * top[base1] +
-                         f1.c * top[base1 + 1] + f1.d * top[base1 + 2];
+                if (base <= max_base_x) {
+                    v1 = f1.a * top[base - 1] + f1.b * top[base] +
+                         f1.c * top[base + 1] + f1.d * top[base + 2];
                     v1 = iclip_pixel((v1 + 64) >> 7);
                 } else {
                     v1 = top[max_base_x];
@@ -641,7 +640,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         max_base_x = width + height - 1;
     } else {
         top = &topleft_in[1];
-        max_base_x = width + imin(width, height) - 1;
+        max_base_x = (width + height) - 1 + (mrl_idx << 1);
     }
 
     for (int y = 0, xpos = dx; y < height;
@@ -753,31 +752,79 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
+    const int mrl_idx = (angle & ANGLE_MRL_IDX) >> 12;
+    const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
     angle &= 511;
     assert(angle > 180);
     const int dy = dav1d_dr_intra_derivative[270 - angle];
-    pixel left_out[64 + 64];
-    const pixel *left;
-    int max_base_y;
+    int max_base_y = height + imin(width, height) - 1 + (mrl_idx << 1);
 
-    const int filter_strength =
-        get_filter_strength(width + height, angle - 180, is_sm);
-    if (filter_strength) {
-        filter_edge(left_out, width + height + 1, 0, width + height,
-                    &topleft_in[-(width + height)],
-                    imax(width - height, 0), width + height + 1,
-                    filter_strength);
-        left = &left_out[width + height - 1];
-        max_base_y = width + height - 1;
-    } else {
-        left = &topleft_in[-1];
-        max_base_y = height + imin(width, height) - 1;
+    const pixel *left = &topleft_in[-(mrl_idx + 1)];
+    int ypos = dy * (1 + mrl_idx);
+    if (mrl_mul) {
+        // Safe maximum size for edge buffers
+        const int e_stride = mrl_idx ? (width + height + (mrl_idx << 1) + 3) * 2 : 0;
+        const pixel *left2 = &topleft_in[-(1 + e_stride)];
+        const int max_base_y2 = height + imin(width, height) - 1;
+        int ypos2 = dy;
+
+        for (int x = 0; x < width; x++, ypos += dy, ypos2 += dy) {
+            int base = ypos >> 6;
+            int base2 = ypos2 >> 6;
+            if (base > max_base_y) {
+                assert(base2 > max_base_y2);
+                const int rem = width - x;
+                dst += x;
+                const int v = (left[-max_base_y] + left2[-max_base_y2]) >> 1;
+                for (int y = 0; y < height; y++) {
+                    pixel_set(dst, v, rem);
+                    dst += PXSTRIDE(stride);
+                }
+                return;
+            }
+
+            const DRFilter4Tap f1 = av1_dr_interp_filter[(ypos & 0x3F) >> 1];
+            const DRFilter4Tap f2 = av1_dr_interp_filter[(ypos2 & 0x3F) >> 1];
+            for (int y = 0; y < height; y++, base++, base2++) {
+                int v1, v2;
+                if (base < max_base_y) {
+                    v1 = f1.a * left[-(base - 1)] + f1.b * left[-base] +
+                         f1.c * left[-(base + 1)] + f1.d * left[-(base + 2)];
+                    v1 = iclip_pixel((v1 + 64) >> 7);
+                } else {
+                    v1 = left[-max_base_y];
+                }
+                if (base2 < max_base_y2) {
+                    v2 = f2.a * left2[-(base2 - 1)] + f2.b * left2[-base2] +
+                         f2.c * left2[-(base2 + 1)] + f2.d * left2[-(base2 + 2)];
+                    v2 = iclip_pixel((v2 + 64) >> 7);
+                } else {
+                    v2 = left2[-max_base_y2];
+                }
+                dst[y * PXSTRIDE(stride) + x] = (v1 + v2) >> 1;
+            }
+        }
+        return;
     }
-    for (int x = 0, ypos = dy; x < width; x++, ypos += dy) {
-        const int shift = (ypos & 0x3F) >> 1;
 
+    pixel left_out[64 + 64];
+    if (!mrl_idx) {
+        const int filter_strength =
+            get_filter_strength(width + height, angle - 180, is_sm);
+        if (filter_strength) {
+            filter_edge(left_out, width + height + 1, 0, width + height,
+                        &topleft_in[-(width + height)],
+                        imax(width - height, 0), width + height + 1,
+                        filter_strength);
+            left = &left_out[width + height - 1];
+            max_base_y = width + height - 1;
+        }
+    }
+
+    for (int x = 0; x < width; x++, ypos += dy) {
+        const int shift = (ypos & 0x3F) >> 1;
         for (int y = 0, base = ypos >> 6; y < height; y++, base++) {
-            if (base < max_base_y) {
+            if (base <= max_base_y) {
                 const int v =
                     av1_dr_interp_filter[shift].a * left[-(base - 1)] +
                     av1_dr_interp_filter[shift].b * left[-base] +
@@ -794,11 +841,11 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         }
     }
 
-    if (enable_ibp) {
+    if (enable_ibp && !mrl_idx) {
         const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 57];
         if (mode_index) {
-            const int delta = dav1d_dr_intra_derivative[angle - 180];
-            idif_z1_ibp_z3(dst, stride, topleft_in, width, height, delta,
+            idif_z1_ibp_z3(dst, stride, topleft_in, width, height,
+                           dav1d_dr_intra_derivative[angle - 180],
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
     }

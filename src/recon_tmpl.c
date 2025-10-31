@@ -1409,6 +1409,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         (b->y_mode >= SMOOTH_PRED && b->y_mode <= SMOOTH_H_PRED))
     {
         const int mrl_idx = b->mrl_index;
+        const int mrl_mul = b->multi_mrl;
         pixel *const edge = bitfn(t->scratch.edge) + (mrl_idx ? 384 : 128);
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
@@ -1451,13 +1452,14 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int dip = b->dip - !!b->dip;
         const int intra_edge_filter_flag = f->seq_hdr->intra_edge_filter << 10;
         const int ibp_flag = apply_ibp << 11;
-        const int mrl_flag = mrl_idx << 12;
-        const int have_left_flag = (t->bx > ts->tiling.col_start) << 14;
-        const int have_top_flag = (t->by > ts->tiling.row_start) << 15;
-        const int dip_flag =  !!dip << 16;
+        const int mrl_flags = (mrl_mul << 14) | (mrl_idx << 12);
+        const int have_left_flag = (t->bx > ts->tiling.col_start) << 15;
+        const int have_top_flag = (t->by > ts->tiling.row_start) << 16;
+        const int dip_flag = !!dip << 17;
+
         const int intra_flags =
             sm_flag(t->a, bx4) | sm_flag(&t->l, by4) | intra_edge_filter_flag |
-            mrl_flag | ibp_flag | have_left_flag | have_top_flag | dip_flag;
+            mrl_flags | ibp_flag | have_left_flag | have_top_flag | dip_flag;
         int angle = dip ? dip : b->y_angle;
 
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
@@ -1476,9 +1478,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
         }
 
-        const int has_orip =
+        const int has_orip = !mrl_idx && (
             m == VERT_PRED ? t_dim->w < 8 : m == HOR_PRED ? t_dim->h < 8 :
-                m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8;
+                m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8);
         if (has_orip) {
             const unsigned th_mask = ((m == VERT_PRED) << 1) | (m == HOR_PRED);
             dsp->ipred.orip(dst, PXSTRIDE(f->cur.stride[0]), edge, th_mask,

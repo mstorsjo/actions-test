@@ -1,18 +1,18 @@
-From be0aa78a2d3e076dc0f95914b65f39fd121109f1 Mon Sep 17 00:00:00 2001
+From c3dd3414231b038cfb6d45df045611bd22c07db5 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- aom/debug.h               | 48 +++++++++++++++++++
- av1/common/idct.c         | 20 ++++++--
- av1/common/idct.h         |  7 ++-
- av1/common/reconintra.c   | 98 +++++++++++++++++++++++++++++++++++++--
- av1/decoder/decodeframe.c | 16 ++++++-
- av1/encoder/encodemb.c    | 10 ++--
- av1/encoder/tpl_model.c   |  2 +-
- av1/encoder/tx_search.c   |  8 ++--
- 8 files changed, 189 insertions(+), 20 deletions(-)
+ aom/debug.h               |  48 +++++++++++++++++
+ av1/common/idct.c         |  20 +++++--
+ av1/common/idct.h         |   7 ++-
+ av1/common/reconintra.c   | 108 ++++++++++++++++++++++++++++++++++++--
+ av1/decoder/decodeframe.c |  16 +++++-
+ av1/encoder/encodemb.c    |  10 ++--
+ av1/encoder/tpl_model.c   |   2 +-
+ av1/encoder/tx_search.c   |   8 +--
+ 8 files changed, 199 insertions(+), 20 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index b203c56cf..9fcfc55c6 100644
@@ -21,7 +21,7 @@ index b203c56cf..9fcfc55c6 100644
 @@ -28,10 +28,15 @@
  #ifndef AOM_DEBUG_H
  #define AOM_DEBUG_H
- 
+
 +#include <inttypes.h>
 +#include <stdio.h>
 +#include <stddef.h>
@@ -91,7 +91,7 @@ index a99da9bf7..d786218a5 100644
 @@ -1278,7 +1278,8 @@ static void av1_highbd_inv_txfm_add_master(const tran_low_t *input,
    av1_highbd_inv_txfm_add(input, dest, stride, txfm_param);
  }
- 
+
 -void av1_inverse_transform_block(const MACROBLOCKD *xd,
 +void av1_inverse_transform_block(DB_ONLY(const int print)
 +                                 const MACROBLOCKD *xd,
@@ -101,21 +101,21 @@ index a99da9bf7..d786218a5 100644
 @@ -1309,7 +1310,7 @@ void av1_inverse_transform_block(const MACROBLOCKD *xd,
    DECLARE_ALIGNED(32, tran_low_t, temp_dqcoeff[MAX_TX_SQUARE]);
    memcpy(temp_dqcoeff, dqcoeff, sizeof(tran_low_t) * tx_size_2d[tx_size]);
- 
+
 -  av1_inv_stxfm(temp_dqcoeff, &txfm_param);
 +  av1_inv_stxfm(DB_ONLY(print) temp_dqcoeff, &txfm_param);
- 
+
    MB_MODE_INFO *const mbmi = xd->mi[0];
    if (xd->lossless[mbmi->segment_id]) {
 @@ -1363,7 +1364,8 @@ void inv_stxfm_c(tran_low_t *src, tran_low_t *dst, const PREDICTION_MODE mode,
    }
  }
- 
+
 -void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
 +void av1_inv_stxfm(DB_ONLY(const int print)
 +                   tran_low_t *coeff, TxfmParam *txfm_param) {
    const TX_TYPE stx_type = txfm_param->sec_tx_type;
- 
+
    const int width = tx_size_wide[txfm_param->tx_size] <= 32
 @@ -1395,6 +1397,12 @@ void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param) {
        *tmp = src[scan[r]];
@@ -156,7 +156,7 @@ index bf16b2a01..b8f9f7b59 100644
 @@ -21,6 +21,8 @@
  #include "av1/common/enums.h"
  #include "aom_dsp/txfm_common.h"
- 
+
 +#include "aom/debug.h"
 +
  #ifdef __cplusplus
@@ -165,7 +165,7 @@ index bf16b2a01..b8f9f7b59 100644
 @@ -41,7 +43,8 @@ void av1_inv_cross_chroma_tx_block(tran_low_t *dqcoeff_c1,
                                     tran_low_t *dqcoeff_c2, TX_SIZE tx_size,
                                     CctxType cctx_type, const int bd);
- 
+
 -void av1_inverse_transform_block(const MACROBLOCKD *xd,
 +void av1_inverse_transform_block(DB_ONLY(int print)
 +                                 const MACROBLOCKD *xd,
@@ -175,20 +175,20 @@ index bf16b2a01..b8f9f7b59 100644
 @@ -65,7 +68,7 @@ static INLINE const int32_t *cast_to_int32(const tran_low_t *input) {
    return (const int32_t *)input;
  }
- 
+
 -void av1_inv_stxfm(tran_low_t *coeff, TxfmParam *txfm_param);
 +void av1_inv_stxfm(DB_ONLY(int print) tran_low_t *coeff, TxfmParam *txfm_param);
- 
+
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index e4b0cf0f7..a734ad9d9 100644
+index e4b0cf0f7..d9daf07e1 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
  #include "av1/common/reconintra.h"
  #include <av1/encoder/block.h>
- 
+
 +#include "aom/debug.h"
 +
  enum {
@@ -197,7 +197,7 @@ index e4b0cf0f7..a734ad9d9 100644
 @@ -1116,7 +1118,7 @@ void av1_highbd_ibp_dr_prediction_z3_c(
    }
  }
- 
+
 -static void build_intra_predictors_high(
 +static void build_intra_predictors_high(DB_ONLY(const AV1_COMMON *cm)
      const MACROBLOCKD *xd, const uint16_t *ref, int ref_stride, uint16_t *dst,
@@ -205,7 +205,7 @@ index e4b0cf0f7..a734ad9d9 100644
      int disable_edge_filter, int n_top_px, int n_topright_px, int n_left_px,
 @@ -1232,13 +1234,14 @@ static void build_intra_predictors_high(
    }
- 
+
    // NEED_LEFT
 +  int num_left_pixels_needed = 0;
    if (need_left) {
@@ -221,7 +221,7 @@ index e4b0cf0f7..a734ad9d9 100644
        // DIP mode requires left edge + 1/4 tx height for overhang feature.
 @@ -1270,12 +1273,13 @@ static void build_intra_predictors_high(
    }
- 
+
    // NEED_ABOVE
 +  int num_top_pixels_needed = 0;
    if (need_above) {
@@ -234,10 +234,10 @@ index e4b0cf0f7..a734ad9d9 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1330,6 +1334,50 @@ static void build_intra_predictors_high(
+@@ -1330,6 +1334,60 @@ static void build_intra_predictors_high(
      }
    }
- 
+
 +#if DEBUG_BLOCK_INFO
 +  const int mi_row = xd->mi_row;
 +  const int mi_col = xd->mi_col;
@@ -255,27 +255,37 @@ index e4b0cf0f7..a734ad9d9 100644
 +      if (print_l) {
 +        printf("l\n");
 +        for (int x = num_left_pixels_needed - 1; x >= 0; x--)
-+          printf(" %02x", left_col_2nd[x]);
++          printf(" %02x", left_col_1st[x]);
 +        printf("\n");
-+        if (mrl_index) {
++        if (xd->mi[0]->multi_line_mrl) {
 +          printf("l2\n");
 +          for (int x = num_left_pixels_needed - 1; x >= 0; x--)
-+            printf(" %02x", left_col_1st[x]);
++            printf(" %02x", left_col_2nd[x]);
 +          printf("\n");
 +        }
 +      }
 +      if (print_t) {
-+        hex_dump(above_row_2nd, num_top_pixels_needed,
++        hex_dump(above_row_1st, num_top_pixels_needed,
 +                 num_top_pixels_needed, 1, "t");
-+        if (mrl_index) {
-+          hex_dump(above_row_1st, num_top_pixels_needed,
++        if (xd->mi[0]->multi_line_mrl) {
++          hex_dump(above_row_2nd, num_top_pixels_needed,
 +                 num_top_pixels_needed, 1, "t2");
 +        }
 +      }
 +      if(print_tl) {
-+        hex_dump(&above_row_2nd[-1], 1, 1, 1, "tl");
 +        if (mrl_index) {
-+          hex_dump(&above_row_1st[-1], 1, 1, 1, "tl2");
++          printf("tl\n");
++          int ii;
++          for (ii = -mrl_index; ii < 0; ii++)
++            printf(" %02x", left_col_1st[-(mrl_index + 1) - ii]);
++          for (; ii <= mrl_index; ii++)
++            printf(" %02x", above_row_1st[ii - (mrl_index + 1)]);
++          printf("\n");
++        } else {
++          hex_dump(&above_row_1st[-1], 0, mrl_index + 1, 1, "tl");
++        }
++        if (xd->mi[0]->multi_line_mrl) {
++          hex_dump(&above_row_2nd[-1], 0, 1, 1, "tl2");
 +        }
 +      }
 +    }
@@ -285,7 +295,7 @@ index e4b0cf0f7..a734ad9d9 100644
    if (use_intra_dip) {
      av1_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1338,6 +1386,14 @@ static void build_intra_predictors_high(
+@@ -1338,6 +1396,14 @@ static void build_intra_predictors_high(
                                     mbmi->intra_dip_features
  #endif  // CONFIG_DIP_EXT_PRUNING
      );
@@ -299,8 +309,8 @@ index e4b0cf0f7..a734ad9d9 100644
 +#endif
      return;
    }
- 
-@@ -1420,6 +1476,7 @@ static void build_intra_predictors_high(
+
+@@ -1420,6 +1486,7 @@ static void build_intra_predictors_high(
          }
        }
      }
@@ -308,10 +318,10 @@ index e4b0cf0f7..a734ad9d9 100644
      if (apply_ibp) {
        if (mrl_index == 0 && (angle_delta % 2 == 0) && plane == PLANE_TYPE_Y) {
          if (p_angle > 0 && p_angle < 90) {
-@@ -1459,11 +1516,28 @@ static void build_intra_predictors_high(
+@@ -1459,11 +1526,28 @@ static void build_intra_predictors_high(
        }
      }
- 
+
 +#if DEBUG_B_PIXELS
 +    if (BLOCK_TO_DEBUG) {
 +      // FIXME only print luma for now
@@ -337,7 +347,7 @@ index e4b0cf0f7..a734ad9d9 100644
      }
      return;
    }
-@@ -1488,6 +1562,14 @@ static void build_intra_predictors_high(
+@@ -1488,6 +1572,14 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -349,10 +359,10 @@ index e4b0cf0f7..a734ad9d9 100644
 +    }
 +  }
 +#endif
- 
+
    // Apply sub-block based filter for DC/smooth intra mode
    apply_sub_block_based_refinement_filter &=
-@@ -1495,6 +1577,14 @@ static void build_intra_predictors_high(
+@@ -1495,6 +1587,14 @@ static void build_intra_predictors_high(
    if (apply_sub_block_based_refinement_filter) {
      av1_apply_orip_4x4subblock_hbd(dst, dst_stride, tx_size, above_row_1st,
                                     left_col_1st, mode, xd->bd);
@@ -366,11 +376,11 @@ index e4b0cf0f7..a734ad9d9 100644
 +#endif
    }
  }
- 
-@@ -1578,7 +1668,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+
+@@ -1578,7 +1678,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
- 
+
 -  build_intra_predictors_high(
 +  build_intra_predictors_high(DB_ONLY(cm)
        xd, ref, ref_stride, dst, dst_stride, mode, angle_delta, tx_size,
@@ -424,7 +434,7 @@ index 747310646..58e27c3ce 100644
            pd_c1->dst.stride, max_chroma_eob,
            replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
 @@ -1066,7 +1066,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
- 
+
    if (p->eobs[block] || recon_with_cctx) {
      *(args->skip) = 0;
 -    av1_inverse_transform_block(
@@ -434,7 +444,7 @@ index 747310646..58e27c3ce 100644
              ? p->eobs[block]
 @@ -1619,7 +1619,7 @@ void av1_encode_block_intra(int plane, int block, int blk_row, int blk_col,
    }
- 
+
    if (*eob) {
 -    av1_inverse_transform_block(
 +    av1_inverse_transform_block(DB_ONLY(0)
@@ -464,9 +474,9 @@ index 4f2781ade..61fe3f354 100644
 --- a/av1/encoder/tpl_model.c
 +++ b/av1/encoder/tpl_model.c
 @@ -192,7 +192,7 @@ static AOM_INLINE void txfm_quant_rdcost(
- 
+
    *rate_cost = rate_estimator(qcoeff, eob, tx_size);
- 
+
 -  av1_inverse_transform_block(xd, dqcoeff, 0, DCT_DCT, tx_size, dst, dst_stride,
 +  av1_inverse_transform_block(DB_ONLY(0) xd, dqcoeff, 0, DCT_DCT, tx_size, dst, dst_stride,
                                eob, 0, 0
@@ -512,6 +522,6 @@ index 9a0d26687..991515e3f 100644
        xd, tmp_dqcoeff_c2, AOM_PLANE_V, tx_type, tx_size, recon_c2, MAX_TX_SIZE,
        max_chroma_eob,
        replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
--- 
+--
 2.43.0
 

@@ -41,14 +41,16 @@
 // ANGLE_DIP_FLAG             – enables directional intra prediction (DIP) mode
 // ANGLE_HAS_TOP              – top reference edge is available for prediction
 // ANGLE_HAS_LEFT             – left reference edge is available for prediction
-// ANGLE_MRL_FLAGS            – multi-reference line (MRL) index bits
+// ANGLE_MULTI_MRL_FLAG       – indicates multi-line MRL mode is enabled
+// ANGLE_MRL_IDX              – multi-reference line (MRL) index bits
 // ANGLE_IBP_FLAG             – enables intra bi-prediction for the current block
 // ANGLE_USE_EDGE_FILTER_FLAG – apply edge filtering (convolution) to reference samples
 // ANGLE_SMOOTH_EDGE_FLAG     – indicates smooth edges; use reduced filter strength
-#define ANGLE_DIP_FLAG             (1 << 16)
-#define ANGLE_HAS_TOP              (1 << 15)
-#define ANGLE_HAS_LEFT             (1 << 14)
-#define ANGLE_MRL_FLAGS            ((1 << 12) | (1 << 13))
+#define ANGLE_DIP_FLAG             (1 << 17)
+#define ANGLE_HAS_TOP              (1 << 16)
+#define ANGLE_HAS_LEFT             (1 << 15)
+#define ANGLE_MULTI_MRL_FLAG       (1 << 14)
+#define ANGLE_MRL_IDX              ((1 << 12) | (1 << 13))
 #define ANGLE_IBP_FLAG             (1 << 11)
 #define ANGLE_USE_EDGE_FILTER_FLAG (1 << 10)
 #define ANGLE_SMOOTH_EDGE_FLAG     (1 << 9)
