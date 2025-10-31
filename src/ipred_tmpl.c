@@ -501,27 +501,6 @@ static NOINLINE void filter_edge(pixel *const out, const int sz,
         out[i] = in[iclip(i, from, to - 1)];
 }
 
-static inline int get_upsample(const int wh, const int angle, const int is_sm) {
-    return angle < 40 && wh <= 16 >> is_sm;
-}
-
-static NOINLINE void upsample_edge(pixel *const out, const int hsz,
-                                   const pixel *const in, const int from,
-                                   const int to HIGHBD_DECL_SUFFIX)
-{
-    static const int8_t kernel[4] = { -1, 9, 9, -1 };
-    int i;
-    for (i = 0; i < hsz - 1; i++) {
-        out[i * 2] = in[iclip(i, from, to - 1)];
-
-        int s = 0;
-        for (int j = 0; j < 4; j++)
-            s += in[iclip(i + j - 1, from, to - 1)] * kernel[j];
-        out[i * 2 + 1] = iclip_pixel((s + 8) >> 4);
-    }
-    out[i * 2] = in[iclip(i, from, to - 1)];
-}
-
 static void idif_z1_ibp_z3(pixel *dst, const ptrdiff_t stride,
                            const pixel *const topleft,
                            const int width, const int height,
@@ -599,7 +578,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     const int mrl_idx = (angle & ANGLE_MRL_FLAGS) >> 12;
     angle &= 511;
     assert(angle < 90);
-    int dx = dav1d_dr_intra_derivative[angle];
+    const int dx = dav1d_dr_intra_derivative[angle];
     const pixel *top;
     int max_base_x;
 
@@ -652,35 +631,25 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     }
 
     pixel top_out[64 + 64];
-    const int upsample_above = enable_intra_edge_filter ?
-        get_upsample(width + height, 90 - angle, is_sm) : 0;
-    if (upsample_above) {
-        upsample_edge(top_out, width + height, &topleft_in[1], -1,
-                      width + imin(width, height) HIGHBD_TAIL_SUFFIX);
+    const int filter_strength = enable_intra_edge_filter ?
+        get_filter_strength(width + height, 90 - angle, is_sm) : 0;
+    if (filter_strength) {
+        filter_edge(top_out, width + height, 0, width + height,
+                    &topleft_in[1], -1, width + imin(width, height),
+                    filter_strength);
         top = top_out;
-        max_base_x = 2 * (width + height) - 2;
-        dx <<= 1;
+        max_base_x = width + height - 1;
     } else {
-        const int filter_strength = enable_intra_edge_filter ?
-            get_filter_strength(width + height, 90 - angle, is_sm) : 0;
-        if (filter_strength) {
-            filter_edge(top_out, width + height, 0, width + height,
-                        &topleft_in[1], -1, width + imin(width, height),
-                        filter_strength);
-            top = top_out;
-            max_base_x = width + height - 1;
-        } else {
-            top = &topleft_in[1];
-            max_base_x = width + imin(width, height) - 1;
-        }
+        top = &topleft_in[1];
+        max_base_x = width + imin(width, height) - 1;
     }
-    const int base_inc = 1 + upsample_above;
+
     for (int y = 0, xpos = dx; y < height;
          y++, dst += PXSTRIDE(stride), xpos += dx)
     {
         const int frac = xpos & 0x3E;
 
-        for (int x = 0, base = xpos >> 6; x < width; x++, base += base_inc) {
+        for (int x = 0, base = xpos >> 6; x < width; x++, base++) {
             if (base < max_base_x) {
                 const int v = top[base] * (64 - frac) + top[base + 1] * frac;
                 dst[x] = (v + 32) >> 6;
@@ -694,8 +663,8 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     if (enable_ibp) {
         const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 12];
         if (mode_index) {
-            dx = dav1d_dr_intra_derivative[90 - angle];
-            idif_z3_ibp_z1(dst, stride, topleft_in, width, height, dx,
+            const int delta = dav1d_dr_intra_derivative[90 - angle];
+            idif_z3_ibp_z1(dst, stride, topleft_in, width, height, delta,
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
     }
@@ -711,55 +680,35 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     angle &= 511;
     assert(angle > 90 && angle < 180);
-    int dy = dav1d_dr_intra_derivative[angle - 90];
-    int dx = dav1d_dr_intra_derivative[180 - angle];
-#if 0
-    const int upsample_left = enable_intra_edge_filter ?
-        get_upsample(width + height, 180 - angle, is_sm) : 0;
-    const int upsample_above = enable_intra_edge_filter ?
-        get_upsample(width + height, angle - 90, is_sm) : 0;
-#else
-    // It looks like upsample is implemented in AVM but never enabled
-    const int upsample_left = 0;
-    const int upsample_above = 0;
-#endif
+    const int dy = dav1d_dr_intra_derivative[angle - 90];
+    const int dx = dav1d_dr_intra_derivative[180 - angle];
+
     // Each edge can have 2 extra padding pixels
     pixel edge[64 + 64 + 5];
     pixel *const topleft = &edge[66];
 
-    if (upsample_above) {
-        upsample_edge(topleft, width + 1, topleft_in, 0, width + 1
-                      HIGHBD_TAIL_SUFFIX);
-        dx <<= 1;
-    } else {
-        const int filter_strength = enable_intra_edge_filter ?
-            get_filter_strength(width + height, angle - 90, is_sm) : 0;
+    const int filter_strength_top = enable_intra_edge_filter ?
+        get_filter_strength(width + height, angle - 90, is_sm) : 0;
 
-        if (filter_strength) {
-            filter_edge(&topleft[1], width, 0, max_width,
-                        &topleft_in[1], -1, width,
-                        filter_strength);
-        } else {
-            topleft[0] = topleft_in[0];
-            pixel_copy(&topleft[1], &topleft_in[0], width + 1);
-        }
+    if (filter_strength_top) {
+        filter_edge(&topleft[1], width, 0, max_width,
+                    &topleft_in[1], -1, width,
+                    filter_strength_top);
+    } else {
+        topleft[0] = topleft_in[0];
+        pixel_copy(&topleft[1], &topleft_in[0], width + 1);
     }
-    if (upsample_left) {
-        upsample_edge(&topleft[-height * 2], height + 1, &topleft_in[-height],
-                      0, height + 1 HIGHBD_TAIL_SUFFIX);
-        dy <<= 1;
-    } else {
-        const int filter_strength = enable_intra_edge_filter ?
-            get_filter_strength(width + height, 180 - angle, is_sm) : 0;
 
-        if (filter_strength) {
-            filter_edge(&topleft[-height], height, height - max_height, height,
-                        &topleft_in[-height],
-                        0, height + 1, filter_strength);
-        } else {
-            topleft[0] = topleft_in[0];
-            pixel_copy(&topleft[-(height + 2)], &topleft_in[-(height + 1)], height + 2);
-        }
+    const int filter_strength_left = enable_intra_edge_filter ?
+        get_filter_strength(width + height, 180 - angle, is_sm) : 0;
+
+    if (filter_strength_left) {
+        filter_edge(&topleft[-height], height, height - max_height, height,
+                    &topleft_in[-height],
+                    0, height + 1, filter_strength_left);
+    } else {
+        topleft[0] = topleft_in[0];
+        pixel_copy(&topleft[-(height + 2)], &topleft_in[-(height + 1)], height + 2);
     }
     *topleft = *topleft_in;
 
@@ -806,40 +755,28 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
     angle &= 511;
     assert(angle > 180);
-    int dy = dav1d_dr_intra_derivative[270 - angle];
+    const int dy = dav1d_dr_intra_derivative[270 - angle];
     pixel left_out[64 + 64];
     const pixel *left;
     int max_base_y;
-    const int upsample_left = enable_intra_edge_filter ?
-        get_upsample(width + height, angle - 180, is_sm) : 0;
-    if (upsample_left) {
-        upsample_edge(left_out, width + height,
-                      &topleft_in[-(width + height)],
-                      imax(width - height, 0), width + height + 1
-                      HIGHBD_TAIL_SUFFIX);
-        left = &left_out[2 * (width + height) - 2];
-        max_base_y = 2 * (width + height) - 2;
-        dy <<= 1;
+
+    const int filter_strength =
+        get_filter_strength(width + height, angle - 180, is_sm);
+    if (filter_strength) {
+        filter_edge(left_out, width + height + 1, 0, width + height,
+                    &topleft_in[-(width + height)],
+                    imax(width - height, 0), width + height + 1,
+                    filter_strength);
+        left = &left_out[width + height - 1];
+        max_base_y = width + height - 1;
     } else {
-        const int filter_strength =
-            get_filter_strength(width + height, angle - 180, is_sm);
-        if (filter_strength) {
-            filter_edge(left_out, width + height + 1, 0, width + height,
-                        &topleft_in[-(width + height)],
-                        imax(width - height, 0), width + height + 1,
-                        filter_strength);
-            left = &left_out[width + height - 1];
-            max_base_y = width + height - 1;
-        } else {
-            left = &topleft_in[-1];
-            max_base_y = height + imin(width, height) - 1;
-        }
+        left = &topleft_in[-1];
+        max_base_y = height + imin(width, height) - 1;
     }
-    const int base_inc = 1 + upsample_left;
     for (int x = 0, ypos = dy; x < width; x++, ypos += dy) {
         const int shift = (ypos & 0x3F) >> 1;
 
-        for (int y = 0, base = ypos >> 6; y < height; y++, base += base_inc) {
+        for (int y = 0, base = ypos >> 6; y < height; y++, base++) {
             if (base < max_base_y) {
                 const int v =
                     av1_dr_interp_filter[shift].a * left[-(base - 1)] +
@@ -860,8 +797,8 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     if (enable_ibp) {
         const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 57];
         if (mode_index) {
-            dy = dav1d_dr_intra_derivative[angle - 180];
-            idif_z1_ibp_z3(dst, stride, topleft_in, width, height, dy,
+            const int delta = dav1d_dr_intra_derivative[angle - 180];
+            idif_z1_ibp_z3(dst, stride, topleft_in, width, height, delta,
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
     }
