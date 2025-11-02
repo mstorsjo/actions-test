@@ -2294,7 +2294,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        b->wedge_sign : -1, ts->msac.rng);
             }
 
-            if (/* FIXME no refinemv && FIXME no jmvd &&*/
+            if (!b->refine_mv && /* FIXME no jmvd &&*/
                 f->seq_hdr->cwp && b->comp_type == COMP_INTER_AVG &&
                 (b->inter_mode == NEARMV_NEARMV || b->inter_mode == JOINT_NEWMV))
             {
