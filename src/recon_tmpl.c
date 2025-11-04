@@ -1414,9 +1414,16 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
+        const int is_hv5 = b->tx_part == TX_PARTITION_H5 || b->tx_part == TX_PARTITION_V5;
+        const uint8_t *const b_dim = dav1d_block_dimensions[b->bs];
+        const int bw4 = b_dim[0], bh4 = b_dim[1];
         int has_tr = 0, has_bl = 0;
-        if (t->by > ts->tiling.row_start) {
-            if (t->by + t_dim->h > t->pb.row_end) {
+        if (t->by > ts->tiling.row_start ) {
+            if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
+                           t->bx + bw4 > t->pb.col_end))
+            {
+                has_tr = 0;
+            } else if (t->by + t_dim->h > t->pb.row_end) {
                 has_tr = t->bx + t_dim->w < t->pb.col_end;
             } else if (t->bx + t_dim->w < t->pb.col_end) {
                 has_tr = 1;
@@ -1427,15 +1434,17 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (t->bx > ts->tiling.col_start) {
-            if (t->bx + t_dim->w > t->pb.col_end) {
+            if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
+                           t->bx + bw4 > t->pb.col_end))
+            {
                 has_bl = 0;
+            } else if (t->bx + t_dim->w > t->pb.col_end) {
+                has_bl = 0;
+            } else if (t->by + t_dim->h > t->pb.row_end) {
+                has_bl = 1;
             } else {
-                if (t->by + t_dim->h > t->pb.row_end) {
-                    has_bl = 1;
-                } else {
-                    const int xpos = bx4 - 1;
-                    has_bl = (t->is_coded[by4 + t_dim->h] >> (xpos & 63)) & 1;
-                }
+                const int xpos = bx4 - 1;
+                has_bl = (t->is_coded[by4 + t_dim->h] >> (xpos & 63)) & 1;
             }
         }
         const enum EdgeFlags edge_flags =
