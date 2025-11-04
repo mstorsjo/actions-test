@@ -2293,9 +2293,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
             }
 
-            // FIXME not gmv^2 if not translational
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
-                                !b->refine_mv && b->motion_mode == MM_TRANSLATION;
+                !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
+                (b->inter_mode != GLOBALMV_GLOBALMV ||
+                 f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION ||
+                 f->frame_hdr->gmv[b->ref[1]].type == DAV1D_WM_TYPE_TRANSLATION);
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
@@ -2722,7 +2724,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
                 (b->inter_mode != GLOBALMV ||
-                 f->frame_hdr->gmv[b->ref[0]].type != DAV1D_WM_TYPE_TRANSLATION);
+                 f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION);
 
 #if 0
             // motion variation
