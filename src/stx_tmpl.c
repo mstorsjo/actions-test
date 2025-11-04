@@ -58,7 +58,7 @@ static int stxfm8_c(coef *const cf, const enum RectTxfmSize tx, const int stx,
 
     memset(cf, 0, 32 * sizeof(coef));
     // Subtract 1 to map {8,16,32} to idx {0,1,2}
-    const int idx = imin(t_dim->lw, 3) - 1;
+    const int idx = t_dim->lw == t_dim->lh ? imin(t_dim->lw, 3) - 1 : 0;
     const uint8_t *scan_out = stx_scan_orders_8x8[idx][transpose];
     const uint8_t *mapping = coeff8x8_mapping[set * 3 + type];
     const int min = -128 * (1 + BITDEPTH_MAX);
