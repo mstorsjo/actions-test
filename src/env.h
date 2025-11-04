@@ -166,7 +166,8 @@ static inline int get_warp_ctx(const BlockContext *const a,
     int ctx = 0;
 
 #define add_matching(dir, idx) do { \
-    ctx += dir->ref[0][idx] == ref && dir->motion_mode[idx] >= 2; \
+    ctx += (dir->ref[0][idx] == ref || dir->ref[1][idx] == ref) && \
+           dir->motion_mode[idx] >= 2; \
 } while (0)
     if (have_top) {
         const unsigned mask = ~top_is_at_tile_boundary;
