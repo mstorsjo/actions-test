@@ -2096,6 +2096,42 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", jmvd_scale_mode, ts->msac.rng);
             }
 
+            if (b->inter_mode == NEWMV_NEWMV && imin(bw4, bh4) > 1 &&
+                !f->frame_hdr->force_integer_mv && b->ref[0] != b->ref[1] &&
+                f->frame_hdr->opfl_refine_type != 2 /* always */)
+            {
+                const int is_sb_boundary = !(t->by & (f->sb_step - 1));
+                const int ref1 = b->ref[0], ref2 = b->ref[1];
+                const unsigned mask = ~(unsigned) is_sb_boundary;
+#define match_ref(dir, off, refidx) \
+                (t->dir ref[0][off] == refidx || t->dir ref[1][off] == refidx)
+#define match_refs(refidx) \
+                (match_ref(l., by4, refidx) || \
+                 (by4 + bh4 <= ts->tiling.row_end && \
+                  match_ref(l., by4 + bh4 - 1, refidx)) || \
+                 match_ref(a->, bx4 & mask, refidx) || \
+                 (bx4 + bw4 - is_sb_boundary <= ts->tiling.col_end && \
+                  match_ref(a->, (bx4 + bw4 - 1 - is_sb_boundary) & mask, refidx)))
+                if (match_refs(ref1) && match_refs(ref2)) {
+#undef match_refs
+#undef match_ref
+                    const enum MotionMode x1 = boff[0] == -1 ? MM_TRANSLATION :
+                                               nb[0]->motion_mode[boff[0]],
+                                          x2 = boff[1] == -1 ? MM_TRANSLATION :
+                                               nb[1]->motion_mode[boff[1]];
+                    const int cs_ctx =
+                        (x1 >= MM_WARP_CAUSAL || x2 >= MM_WARP_CAUSAL) +
+                        (x1 == MM_WARP_CAUSAL) + (x2 == MM_WARP_CAUSAL);
+                    if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                                         ts->cdf.m.warp_causal[cs_ctx]))
+                    {
+                        b->motion_mode = MM_WARP_CAUSAL;
+                    }
+                    DEBUG_BLOCK_printf("%*sPost-comp_newmv_warp[%d]: r=%d\n",
+                                       depth, "", b->motion_mode, ts->msac.rng);
+                }
+            }
+
             // drl
             int drl_idx[2] = { 0, 0 };
             if (b->inter_mode != GLOBALMV_GLOBALMV) {
@@ -2255,7 +2291,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             // FIXME not gmv^2 if not translational
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
-                                !b->refine_mv;
+                                !b->refine_mv && b->motion_mode == MM_TRANSLATION;
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
