@@ -109,7 +109,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
                    "msac_decode_symbol_adapt%d", n))                       \
     {                                                                      \
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {          \
-            for (int ns = 2; ns < n; ns++) {                               \
+            for (int ns = 1; ns < n; ns++) {                               \
                 dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);         \
                 s_a = s_c;                                                 \
                 randomize_cdf(cdf[0], ns);                                 \

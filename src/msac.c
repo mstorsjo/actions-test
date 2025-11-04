@@ -63,7 +63,8 @@ static const uint8_t msac_rate[125 /* para */][3 /* count */] = {
     { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
 };
 
-static const uint8_t msac_prob_inc[6][8] = {
+static const uint8_t msac_prob_inc[7][8] = {
+    {  8,  0,  0,  0,  0,  0,  0,  0 },
     { 10,  5,  0,  0,  0,  0,  0,  0 },
     { 12,  8,  4,  0,  0,  0,  0,  0 },
     { 12,  9,  6,  3,  0,  0,  0,  0 },
@@ -217,7 +218,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
 {
     const unsigned c = s->dif >> 48, r = s->rng >> 8;
     unsigned u, v = s->rng, val = -1;
-    const uint8_t *const prob_inc = msac_prob_inc[n_symbols - 2];
+    const uint8_t *const prob_inc = msac_prob_inc[n_symbols - 1];
 
     assert(n_symbols <= 7);
 
