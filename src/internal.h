@@ -405,6 +405,11 @@ struct Dav1dTaskContext {
     Dav1dTileState *ts;
     int bx, by, cbx, cby, sdp_cfl_disallowed, intra_region;
     BlockContext l, *a;
+    uint64_t is_coded[64];
+    struct {
+        int col_end;
+        int row_end;
+    } pb;
     refmvs_tile rt;
     ALIGN(union, 64) {
         int16_t cf_8bpc [32 * 32];

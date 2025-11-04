@@ -200,8 +200,15 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         pixel *const top2 = &topleft_out[1 - e_stride];
 
         if (have_top) {
-            const int px_have = imin(tw, (w - x) << 2);
+            int px_have = imin(tw, (w - x) << 2);
             pixel_copy(top, dst_top, px_have);
+            if (e.needs_topright) {
+                const int have_topright = edge_flags & EDGE_I444_TOP_HAS_RIGHT;
+                if (have_topright) {
+                    pixel_copy(top + tw, dst_top + tw, tw);
+                    px_have += tw;
+                }
+            }
             if (px_have < sz)
                 pixel_set(top + px_have, top[px_have - 1], sz - px_have);
             if (mrl_idx) {

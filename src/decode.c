@@ -4000,6 +4000,8 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 lowest_px[n][m] = INT_MIN;
     }
 
+    memset(t->is_coded, 0, sizeof(t->is_coded));
+
     reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), t->frame_thread.pass);
     if (t->frame_thread.pass == 2) {
         const int off_2pass = c->n_tc > 1 ? f->sb256w * f->frame_hdr->tiling.rows : 0;

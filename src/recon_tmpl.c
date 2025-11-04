@@ -1403,7 +1403,18 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         pixel *dst = ((pixel *) f->cur.data[0]) +
             4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
-        const enum EdgeFlags edge_flags = 0;
+        int has_tr;
+        if (t->by > ts->tiling.row_start) {
+            if (t->by + t_dim->h > t->pb.row_end) {
+                has_tr = t->bx + t_dim->w < t->pb.col_end;
+            } else if (t->bx + t_dim->w < t->pb.col_end) {
+                has_tr = 1;
+            } else {
+                const int xpos = bx4 + t_dim->w;
+                has_tr = (t->is_coded[by4 - 1] >> (xpos & 63)) & 1;
+            }
+        }
+        const enum EdgeFlags edge_flags = has_tr ? EDGE_I444_TOP_HAS_RIGHT : 0;
         int angle = b->y_angle;
         const pixel *top_sb_edge = NULL;
         if (!(t->by & (f->sb_step - 1))) {
@@ -1478,6 +1489,11 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 hex_dump(dst, f->cur.stride[0], t_dim->w * 4, t_dim->h * 4, "recon");
             }
         }
+    }
+
+    const uint64_t mask = ((1ULL << t_dim->w) - 1) << bx4;
+    for (int y = 0; y < t_dim->h; y++) {
+        t->is_coded[by4 + y] |= mask;
     }
 
     b->y_mode = orig_y_mode;
@@ -1583,6 +1599,9 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
     // luma
     const enum RectTxfmSize tx = tp[b->tx_part];
+    const int bx = t->bx, by = t->by;
+    t->pb.col_end = bx + bw4;
+    t->pb.row_end = by + bh4;
     switch (b->tx_part) {
     case TX_PARTITION_NONE:
         recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
