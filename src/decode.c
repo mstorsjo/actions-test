@@ -2085,7 +2085,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 #endif
 
-            int jmvd_scale_mode;
+            int jmvd_scale_mode = 0;
             if (b->inter_mode == JOINT_NEWMV || b->inter_mode == OPFL_JOINT_NEWMV) {
                 jmvd_scale_mode = amvd ?
                     dav1d_msac_decode_symbol_adapt4(&ts->msac,
@@ -2296,7 +2296,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        b->wedge_sign : -1, ts->msac.rng);
             }
 
-            if (!b->refine_mv && /* FIXME no jmvd &&*/
+            if (!b->refine_mv && !jmvd_scale_mode &&
                 f->seq_hdr->cwp && b->comp_type == COMP_INTER_AVG &&
                 (b->inter_mode == NEARMV_NEARMV || b->inter_mode == JOINT_NEWMV))
             {
