@@ -6372,8 +6372,8 @@ static const CdfCoefContext default_coef_cdf[4] = {
 
 #define update_mv_cdfs(type, op) \
     update_cdf_1d(1, type, shell_set, op); \
-    update_cdf_2d(7, 7, type, shell_lower, op); \
-    update_cdf_2d(7, 7, type, shell_upper, op); \
+    update_cdf_2d(7, (9 + j) >> 1, type, shell_lower, op); \
+    update_cdf_2d(7, imin(10 + j, 14) >> 1, type, shell_upper, op); \
     update_cdf_2d(2, 1, type, shell_offset_low, op); \
     update_cdf_1d(1, type, shell_offset_cl2, op); \
     update_cdf_2d(16, 1, type, shell_offset_hi, op); \
