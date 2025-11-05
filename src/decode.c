@@ -110,15 +110,19 @@ static inline void read_mv_residual(Dav1dTileState *const ts,
                                     const int mv_prec)
 {
     int sh_class;
-    const int n_syms = (9 + mv_prec) >> 1;
+    const int n_syms = 9 + mv_prec, h_syms = n_syms >> 1;
 
     if (dav1d_msac_decode_bool_adapt(&ts->msac, cdf_mv->shell_set)) {
-        sh_class = 10 + mv_prec - n_syms +
-                   dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                       cdf_mv->shell_upper[mv_prec], n_syms);
+        const int h_syms2 = n_syms - h_syms;
+        sh_class = h_syms + 1 +
+            dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                cdf_mv->shell_upper[mv_prec], imin(h_syms2, 7));
+        if (mv_prec + sh_class == 21)
+            sh_class += dav1d_msac_decode_bool_adapt(&ts->msac,
+                                                     ts->cdf.mv.shell_tip);
     } else {
         sh_class = dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                       cdf_mv->shell_lower[mv_prec], n_syms);
+                       cdf_mv->shell_lower[mv_prec], h_syms);
     }
 
     int sh_index;

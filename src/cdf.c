@@ -1436,6 +1436,8 @@ static const CdfDefaultContext default_cdf = {
             { CDF7(20234, 28560, 30530, 31246, 31694, 32141, 32740), 0 << 8 },
             { CDF7(18126, 26500, 30750, 32100, 32185, 32400, 32740), 0 << 8 },
             { CDF7(16384, 24576, 28672, 29696, 29970, 30244, 30518), 0 << 8 },
+        }, .shell_tip = {
+            CDF1(16384), 0 << 8
         }, .shell_offset_low = {
             { CDF1( 3268),  1 << 8 },
             { CDF1(17309), 75 << 8 },
@@ -6374,6 +6376,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_1d(1, type, shell_set, op); \
     update_cdf_2d(7, (9 + j) >> 1, type, shell_lower, op); \
     update_cdf_2d(7, imin(10 + j, 14) >> 1, type, shell_upper, op); \
+    update_cdf_1d(1, type, shell_tip, op); \
     update_cdf_2d(2, 1, type, shell_offset_low, op); \
     update_cdf_1d(1, type, shell_offset_cl2, op); \
     update_cdf_2d(16, 1, type, shell_offset_hi, op); \

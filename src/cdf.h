@@ -183,6 +183,7 @@ typedef struct CdfMvContext {
     uint16_t shell_set[2];
     uint16_t shell_lower[7][8];
     uint16_t shell_upper[7][8];
+    uint16_t shell_tip[2];
     uint16_t shell_offset_low[2][2];
     uint16_t shell_offset_cl2[2];
     uint16_t shell_offset_hi[16][2];
