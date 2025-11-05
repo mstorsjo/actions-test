@@ -558,12 +558,60 @@ static void idif_z1_ibp_z3(pixel *dst, const ptrdiff_t stride,
 }
 
 static void idif_z3_ibp_z1(pixel *dst, const ptrdiff_t stride,
-                           const pixel *const topleft,
+                           const pixel *const left,
                            const int width, const int height,
                            const int delta, const uint8_t weights[16][16]
                            HIGHBD_DECL_SUFFIX)
 {
-    // WRITE ME
+    assert(delta > 0);
+    const int x_shift = width >> (4 + 1);
+    const int y_shift = height >> (4 + 1);
+    const int max_base_y = (width + height) - 1;
+
+    int y_pos = delta;
+    int x;
+    for (x = 0; x < width; x++, y_pos += delta) {
+        const int wx = x >> x_shift;
+        int base = y_pos >> 6;
+        if (base > max_base_y) {
+            break;
+        }
+
+        const int h = imin(height, max_base_y - base);
+        const int shift = (y_pos & 0x3F) >> 1;
+        const DRFilter4Tap *const f = &av1_dr_interp_filter[shift];
+        int y;
+        for (y = 0; y < h; y++, base++) {
+            const int wy = y >> y_shift;
+            const int weight = weights[wy][wx];
+
+            const int v = f->a * left[-(base - 1)] + f->b * left[-base] +
+                          f->c * left[-(base + 1)] + f->d * left[-(base + 2)];
+            const pixel pred = iclip_pixel((v + 64) >> 7);
+            const int blend =
+                dst[y * PXSTRIDE(stride) + x] * weight + pred * (128 - weight);
+            dst[y * PXSTRIDE(stride) + x] = (blend + 64) >> 7;
+        }
+
+        for (; y < height; y++) {
+            const int wy = y >> y_shift;
+            const int weight = weights[wy][wx];
+            const int blend = dst[y * PXSTRIDE(stride) + x] * weight +
+                              left[-max_base_y] * (128 - weight);
+            dst[y * PXSTRIDE(stride) + x] = (blend + 64) >> 7;
+        }
+    }
+
+    for (; x < width; x++) {
+        const int wx = x >> x_shift;
+        for (int y = 0; y < height; y++) {
+            const int wy = y >> y_shift;
+            const int weight = weights[wy][wx];
+            const int blend = dst[y * PXSTRIDE(stride) + x] * weight +
+                              left[-max_base_y] * (128 - weight);
+            dst[y * PXSTRIDE(stride) + x] = (blend + 64) >> 7;
+        }
+    }
 }
 
 static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
@@ -572,10 +620,11 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
+    const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+    const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
-    const int mrl_idx = (angle & ANGLE_MRL_IDX) >> 12;
+    const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
     angle &= 511;
     assert(angle < 90);
@@ -631,7 +680,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
 
     pixel top_out[64 + 64];
     const int filter_strength = enable_intra_edge_filter ?
-        get_filter_strength(width + height, 90 - angle, is_sm) : 0;
+        get_filter_strength(width + height, 90 - angle, is_sm_t) : 0;
     if (filter_strength) {
         filter_edge(top_out, width + height, 0, width + height,
                     &topleft_in[1], -1, width + imin(width, height),
@@ -642,28 +691,43 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         top = &topleft_in[1];
         max_base_x = (width + height) - 1 + (mrl_idx << 1);
     }
-
-    for (int y = 0, xpos = dx; y < height;
-         y++, dst += PXSTRIDE(stride), xpos += dx)
-    {
-        const int frac = xpos & 0x3E;
-
-        for (int x = 0, base = xpos >> 6; x < width; x++, base++) {
-            if (base < max_base_x) {
-                const int v = top[base] * (64 - frac) + top[base + 1] * frac;
-                dst[x] = (v + 32) >> 6;
-            } else {
+    for (int y = 0, xpos = dx; y < height; y++, xpos += dx) {
+        int base = xpos >> 6;
+        if (base > max_base_x) {
+            for (; y < height; y++) {
+                pixel_set(&dst[y * PXSTRIDE(stride)], top[max_base_x], width);
+            }
+            break;
+        }
+        const DRFilter4Tap f = av1_dr_interp_filter[(xpos & 0x3F) >> 1];
+        for (int x = 0; x < width; x++, base++) {
+            if (base > max_base_x) {
                 pixel_set(&dst[x], top[max_base_x], width - x);
                 break;
             }
+            const int v = f.a * top[base - 1] + f.b * top[base] +
+                          f.c * top[base + 1] + f.d * top[base + 2];
+            dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 64) >> 7);
         }
     }
 
     if (enable_ibp) {
-        const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 12];
+        const int mode_index = av1_angle_to_mode_index_z1[angle / 3 - 12];
         if (mode_index) {
-            const int delta = dav1d_dr_intra_derivative[90 - angle];
-            idif_z3_ibp_z1(dst, stride, topleft_in, width, height, delta,
+            const pixel *left = &topleft_in[-1];
+            pixel left_out[64 + 64];
+            const int filter_strength =
+                get_filter_strength(width + height, angle, is_sm_l);
+            if (filter_strength) {
+                filter_edge(&left_out[2], width + height + 1, 0, width + height,
+                            &topleft_in[-(width + height)],
+                            imax(width - height, 0), width + height + 1,
+                            filter_strength);
+                left_out[0] = left_out[1] = left_out[2];
+                left = &left_out[width + height + 1];
+            }
+            idif_z3_ibp_z1(dst, stride, left, width, height,
+                           dav1d_dr_intra_derivative[90 - angle],
                            dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
         }
     }
@@ -675,7 +739,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
+    const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+    const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     angle &= 511;
     assert(angle > 90 && angle < 180);
@@ -687,7 +752,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     pixel *const topleft = &edge[66];
 
     const int filter_strength_top = enable_intra_edge_filter ?
-        get_filter_strength(width + height, angle - 90, is_sm) : 0;
+        get_filter_strength(width + height, angle - 90, is_sm_t) : 0;
 
     if (filter_strength_top) {
         filter_edge(&topleft[1], width, 0, max_width,
@@ -699,7 +764,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     }
 
     const int filter_strength_left = enable_intra_edge_filter ?
-        get_filter_strength(width + height, 180 - angle, is_sm) : 0;
+        get_filter_strength(width + height, 180 - angle, is_sm_l) : 0;
 
     if (filter_strength_left) {
         filter_edge(&topleft[-height], height, height - max_height, height,
@@ -749,10 +814,11 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
+    const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
-    const int mrl_idx = (angle & ANGLE_MRL_IDX) >> 12;
+    const int mrl_idx =
+        (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
     angle &= 511;
     assert(angle > 180);
@@ -808,9 +874,9 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     }
 
     pixel left_out[64 + 64];
-    if (!mrl_idx) {
+  if (!mrl_idx) {
         const int filter_strength =
-            get_filter_strength(width + height, angle - 180, is_sm);
+            get_filter_strength(width + height, angle - 180, is_sm_l);
         if (filter_strength) {
             filter_edge(left_out, width + height + 1, 0, width + height,
                         &topleft_in[-(width + height)],

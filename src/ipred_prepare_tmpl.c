@@ -92,10 +92,11 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     int is_dir = 0;
     const int apply_dip = !!(intra_flags & ANGLE_DIP_FLAG);
     const int apply_ibp = !!(intra_flags & ANGLE_IBP_FLAG);
-    const int mrl_idx = (intra_flags & ANGLE_MRL_IDX) >> 12;
+    const int mrl_idx =
+        (intra_flags & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int mrl_mul = !!(intra_flags & ANGLE_MULTI_MRL_FLAG);
-    const int have_left = !!(intra_flags & ANGLE_HAS_LEFT);
-    const int have_top = !!(intra_flags & ANGLE_HAS_TOP);
+    const int have_left = !!(intra_flags & ANGLE_HAS_LEFT_FLAG);
+    const int have_top = !!(intra_flags & ANGLE_HAS_TOP_FLAG);
 
     switch (mode) {
     case VERT_PRED:
