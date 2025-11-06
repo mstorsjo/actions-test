@@ -4943,6 +4943,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                     furthest_future_refidx = i;
                 }
             }
+            f->refdir[TIP_FRAME] = 1;
             f->furthest_future_refidx = furthest_future_refidx;
         } else {
             memset(f->refpoc, 0, sizeof(f->refpoc));

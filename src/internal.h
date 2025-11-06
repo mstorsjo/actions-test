@@ -230,7 +230,7 @@ struct Dav1dFrameContext {
     const uint8_t *prev_segmap;
     int8_t ref_ns_wiener_filter[3 /* plane */][48 /* refidx */][32];
     uint8_t num_ref_ns_wiener_filters[2];
-    uint8_t refpoc[7], refrefpoc[7][7], refdir[7];
+    uint8_t refpoc[7], refrefpoc[7][7], refdir[7 + 1 /* tip */];
     int8_t furthest_future_refidx;
     uint8_t absrefdist[7];
     int8_t refdist[7];
