@@ -1917,15 +1917,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->ref[0] = f->skip_mode_refs[0];
             b->ref[1] = f->skip_mode_refs[1];
             for (int n = 0; n < idx; n++) {
-                if (nx[n]->ref[0][xoff[0]] == 7) {
+                if (nx[n]->ref[0][xoff[n]] == TIP_FRAME) {
                     b->ref[0] = imin(f->tip_refs[0], f->tip_refs[1]);
                     b->ref[1] = imax(f->tip_refs[0], f->tip_refs[1]);
                     break;
-                } else if (nx[n]->ref[1][xoff[0]] != -1) {
-                    b->ref[0] = nx[n]->ref[0][xoff[0]];
-                    b->ref[1] = nx[n]->ref[1][xoff[0]];
+                } else if (nx[n]->ref[1][xoff[n]] != -1) {
+                    b->ref[0] = nx[n]->ref[0][xoff[n]];
+                    b->ref[1] = nx[n]->ref[1][xoff[n]];
                     break;
-                }
+                } else if (nx[n]->ref[0][xoff[n]] != -1) break;
             }
             b->comp_type = COMP_INTER_AVG;
             b->inter_mode = NEARMV_NEARMV;
