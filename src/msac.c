@@ -93,7 +93,7 @@ int dav1d_msac_decode_subexp(MsacContext *const s, const int ref,
 {
     int v = 0;
     for (int i = 0, b = k, a = 1 << k;; v += a, b += !!i, a <<= !!i, i++) {
-        if (n <= v * 3 + a) {
+        if (n <= v + a * 3) {
             v += dav1d_msac_decode_uniform(s, n - v);
             break;
         } else if (!dav1d_msac_decode_bool_bypass(s)) {
