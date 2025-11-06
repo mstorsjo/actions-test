@@ -5152,7 +5152,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         for (int i = 0; i < 8; i++) {
             if (refresh_frame_flags & (1 << i)) {
                 for (int n = 0; n < n_classes; n++)
-                    memcpy(c->refs[n].ns_wiener_filter[p][n],
+                    memcpy(c->refs[i].ns_wiener_filter[p][n],
                            f->ns_wiener.filter[p][n], n_feat);
             }
         }
