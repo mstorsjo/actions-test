@@ -4487,7 +4487,7 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
     const Dav1dContext *const c = f->c;
     int retval = DAV1D_ERR(EINVAL);
 
-    if (f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE) {
+    if (f->use_pri_sec_cdf) {
         dav1d_cdf_pri_sec_average(f->in_cdf.data.cdf,
                                   &f->src_cdf[0], &f->src_cdf[1]);
     }
@@ -4614,9 +4614,7 @@ void dav1d_decode_frame_exit(Dav1dFrameContext *const f, int retval) {
     dav1d_picture_unref_internal(&f->cur);
     dav1d_thread_picture_unref(&f->sr_cur);
     dav1d_cdf_thread_unref(&f->in_cdf);
-    if (f->frame_hdr &&
-        f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE)
-    {
+    if (f->frame_hdr && f->use_pri_sec_cdf) {
         dav1d_cdf_thread_unref(&f->src_cdf[0]);
         dav1d_cdf_thread_unref(&f->src_cdf[1]);
     }
@@ -4845,7 +4843,10 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     } else {
         const int s_ref_idx = f->frame_hdr->secondary_ref_frame;
         const int pri_ref = f->frame_hdr->refidx[p_ref_idx];
-        if (s_ref_idx == DAV1D_PRIMARY_REF_NONE) {
+        f->use_pri_sec_cdf = s_ref_idx != DAV1D_PRIMARY_REF_NONE &&
+                             f->frame_hdr->frame_type == DAV1D_FRAME_TYPE_INTER &&
+                             f->seq_hdr->avg_cdf && !f->seq_hdr->avg_cdf_type;
+        if (!f->use_pri_sec_cdf) {
             dav1d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
         } else {
             const int sec_ref = f->frame_hdr->refidx[s_ref_idx];
@@ -5162,7 +5163,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 error:
     atomic_init(&f->task_thread.error, 1);
     dav1d_cdf_thread_unref(&f->in_cdf);
-    if (f->frame_hdr->secondary_ref_frame != DAV1D_PRIMARY_REF_NONE) {
+    if (f->use_pri_sec_cdf) {
         dav1d_cdf_thread_unref(&f->src_cdf[0]);
         dav1d_cdf_thread_unref(&f->src_cdf[1]);
     }

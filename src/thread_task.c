@@ -581,8 +581,7 @@ void *dav1d_worker_task(void *data) {
                     // pending Q, so maybe return the tasks, set init_done,
                     // and add to pending Q only then.
                     int p1;
-                    const Dav1dFrameHeader *const hdr = f->frame_hdr;
-                    if (hdr->secondary_ref_frame == DAV1D_PRIMARY_REF_NONE) {
+                    if (!f->use_pri_sec_cdf) {
                         p1 = f->in_cdf.progress ?
                              atomic_load(f->in_cdf.progress) : 1;
                     } else {
