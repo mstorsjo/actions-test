@@ -5039,26 +5039,32 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         const int n_refs = f->frame_hdr->n_ref_frames;
         if (n_refs > 1) {
             uint8_t order[7];
-            for (int n = 0; n < f->frame_hdr->n_ref_frames; n++) {
+            int n_past = 0;
+            // temporal ordering of refs
+            for (int n = 0; n < n_refs; n++) {
                 const int dist = f->refdist[n];
                 int m;
-                for (m = n; m > 0 && f->refdist[order[m]] > dist; m--)
+                for (m = n; m > 0 && f->refdist[order[m - 1]] > dist; m--)
                     order[m] = order[m - 1];
                 order[m] = n;
+                n_past += dist < 0;
             }
             if (f->furthest_future_refidx < 0) {
+                // all refs are in the past, select nearest (last) 2
+                assert(!f->refdir[order[n_refs - 1]]);
                 f->tip_refs[0] = order[n_refs - 1];
                 f->tip_refs[1] = order[n_refs - 2];
-            } else if (f->refdir[order[0]]) {
+            } else if (!n_past) {
+                // all refs are in the future, select nearest (first) 2
+                assert(f->refdir[order[0]]);
                 f->tip_refs[0] = order[0];
                 f->tip_refs[1] = order[1];
             } else {
-                int n;
-                for (n = 1; n < n_refs - 1; n++)
-                    if (!f->refdist[order[n]])
-                        break;
-                f->tip_refs[0] = order[n - 1];
-                f->tip_refs[1] = order[n];
+                // temporally mixed refs, select the closest to the current one
+                assert(n_past > 0 && n_past < n_refs);
+                assert(!f->refdir[order[n_past - 1]] && f->refdir[order[n_past]]);
+                f->tip_refs[0] = order[n_past - 1];
+                f->tip_refs[1] = order[n_past];
             }
         } else {
             f->tip_refs[0] = f->tip_refs[1] = 0;
