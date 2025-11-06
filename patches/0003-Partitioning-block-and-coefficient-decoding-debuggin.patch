@@ -1,4 +1,4 @@
-From ee4a3344b89c3684cd5c9161df87778075abba6c Mon Sep 17 00:00:00 2001
+From 12b74ff108b091040758a726ecd7870f09a56fd2 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
@@ -11,11 +11,11 @@ Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.c     |   5 +-
  av1/decoder/decoder.h     |  12 +-
- av1/decoder/decodetxb.c   | 219 +++++++++---
+ av1/decoder/decodetxb.c   | 220 +++++++++---
  av1/decoder/decodetxb.h   |  14 +-
  av1/decoder/detokenize.c  |   8 +-
  av1/decoder/detokenize.h  |   3 +-
- 10 files changed, 1014 insertions(+), 273 deletions(-)
+ 10 files changed, 1015 insertions(+), 273 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -2582,7 +2582,7 @@ index cafc137e53..6adbcad2a7 100644
                                     PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                     PARTITION_TREE *parent, int index);
 diff --git a/av1/decoder/decodetxb.c b/av1/decoder/decodetxb.c
-index 4f85230ef3..573b0d9d88 100644
+index 4f85230ef3..b3b669aa6f 100644
 --- a/av1/decoder/decodetxb.c
 +++ b/av1/decoder/decodetxb.c
 @@ -115,7 +115,11 @@ static int read_adaptive_hr(MACROBLOCKD *xd, aom_reader *r, int ctx) {
@@ -3150,14 +3150,15 @@ index 4f85230ef3..573b0d9d88 100644
                                  DecoderCodingBlock *dcb, aom_reader *const r,
                                  const int plane, const int row, const int col,
                                  const TX_SIZE tx_size) {
-@@ -1160,9 +1271,16 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
+@@ -1160,9 +1271,17 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
                    && cm->seq_params.enable_fsc_residual
  #endif  // CONFIG_FSC_RES_HLS
    );
 +#if DEBUG_BLOCK_INFO
 +    const int mi_row = xd->mi_row + row, mi_col = xd->mi_col + col;
 +    DEBUG_CF_printf("%*sdecode_cf[y=%d,x=%d,pl=%d,tx=%dx%d]: r=%d\n",
-+                    depth - 1, "", xd->mi_row + row, xd->mi_col + col, plane,
++                    depth - 1, "", xd->mi_row + (row << pd->subsampling_y),
++                    xd->mi_col + (col << pd->subsampling_x), plane,
 +                    tx_size_wide[tx_size], tx_size_high[tx_size], r->ec.rng);
 +#endif
  
@@ -3169,7 +3170,7 @@ index 4f85230ef3..573b0d9d88 100644
  
    const PLANE_TYPE plane_type = get_plane_type(plane);
    const TX_TYPE tx_type =
-@@ -1179,10 +1297,12 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
+@@ -1179,10 +1298,12 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
  #endif  // CONFIG_FSC_RES_HLS
      ) {
        cul_level =
@@ -3184,7 +3185,7 @@ index 4f85230ef3..573b0d9d88 100644
      }
    } else {
      av1_update_txk_skip_array(cm, xd->mi_row, xd->mi_col, xd->tree_type,
-@@ -1196,6 +1316,11 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
+@@ -1196,6 +1317,11 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
                          is_reduced_tx_set_used(cm, plane_type));
      update_txk_array(xd, row, col, tx_size, tx_type_inter);
    }
