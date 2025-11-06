@@ -113,8 +113,8 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         // ccoef[1][x], and U has been decoded before. Therefore, we can
         // go "up" 64 bytes in ca/cl and get the "skip" state of the U plane.
         const int offset = plane == 1 ? 7 :
-                           6 * (((uint8_t(*)[64]) a)[-1][0] != 0x40);
-        return offset + not_one_blk * 3 + ca + cl;
+            6 * (((uint8_t(*)[64]) a)[-1][0] != 0x40) + not_one_blk * 3;
+        return offset + ca + cl;
     } else if (b_dim[2] == t_dim->lw && b_dim[3] == t_dim->lh) {
         return 0;
     } else {
@@ -1739,7 +1739,7 @@ chroma: {}
                                                      (t->bx & 15)];
             const int eob = decode_coefs(t, DB_ONLY(depth + 1)
                                          &t->a->ccoef[pl][cbx4],
-                                         &t->l.ccoef[pl][cby4], uvtx, cbs,
+                                         &t->l.ccoef[pl][cby4], uvtx, b->bs,
                                          b, 1 + pl, cf, &txtp, &cf_ctx);
             DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
                                depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
