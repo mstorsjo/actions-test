@@ -95,8 +95,7 @@ static int stxfm4_c(coef *const cf, const enum RectTxfmSize tx, const int stx,
 
     memset(cf, 0, 8 * sizeof(coef));
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
-    const int idx = imin(t_dim->lw, 3);
-    const uint8_t *scan_out = stx_scan_orders_4x4[idx][transpose];
+    const uint8_t *scan_out = stx_scan_orders_4x4[transpose];
     const int min = -128 * (1 + BITDEPTH_MAX);
     const int max = 128 * (1 + BITDEPTH_MAX) - 1;
     for (int x = 0; x < 16; x++) {
