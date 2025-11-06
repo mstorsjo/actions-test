@@ -1401,9 +1401,26 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb) {
                     hdr->ccso.p[p].reuse = dav1d_get_bit(gb);
                     hdr->ccso.p[p].sb_reuse = dav1d_get_bit(gb);
                     if (hdr->ccso.p[p].reuse || hdr->ccso.p[p].sb_reuse) {
-                        // FIXME read ref frame index
-                        // FIXME if sb_reuse=1, assert that resolution matches,
-                        // along with layout (if p > 0)
+                        int ref = 0;
+                        const int n_bits = hdr->n_ref_frames <= 2 ?
+                                           hdr->n_ref_frames - 1 :
+                                           1 + ulog2(hdr->n_ref_frames - 1);
+                        if (n_bits) {
+                            hdr->ccso.p[p].refidx = ref =
+                                dav1d_get_bits(gb, n_bits);
+                            if (hdr->ccso.p[p].refidx >= hdr->n_ref_frames)
+                                goto error;
+                        }
+                        const Dav1dFrameHeader *const refhdr =
+                            c->refs[hdr->refidx[ref]].p.p.frame_hdr;
+                        if (!refhdr) goto error;
+                        if (hdr->ccso.p[p].reuse) {
+                            const int w4 = (hdr->width + 3) >> 2;
+                            const int h4 = (hdr->height + 3) >> 2;
+                            const int rw4 = (refhdr->width + 3) >> 2;
+                            const int rh4 = (refhdr->height + 3) >> 2;
+                            if (w4 != rw4 || h4 != rh4) goto error;
+                        }
                     }
                 }
                 static const uint16_t quant_sz[4][4] = {
