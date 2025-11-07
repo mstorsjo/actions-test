@@ -1521,10 +1521,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         [BS_64x128]  = {  BS_64x64, BS_64x64,  BS_64x128  },
     };
     if (imax(bw4, bh4) > 16) {
+        assert(t->cbx == t->bx && t->cby == t->by);
         const int y_start = t->by, y_end = imin(y_start + bh4, f->bh);
         const int x_start = t->bx, x_end = imin(x_start + bw4, f->bw);
-        for (int y = 0; t->by < y_end; t->by += 16, y++) {
-            for (int x = 0; t->bx < x_end; t->bx += 16, x++) {
+        for (int y = 0; t->by < y_end; t->cby = t->by += 16, y++) {
+            for (int x = 0; t->bx < x_end; t->cbx = t->bx += 16, x++) {
                 // FIXME it's possible we can call directly into a sub-function
                 // here that manages one transform-block, since tx_part=none
                 // (at least if not lossless)
@@ -1536,9 +1537,9 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 // have to be dealt with at 64x64 *subsampled* pixels (i.e.
                 // 128x128 luma pixels for 4:2:0), b/c of chroma-large-tx
             }
-            t->bx = x_start;
+            t->cbx = t->bx = x_start;
         }
-        t->by = y_start;
+        t->cby = t->by = y_start;
         return;
     }
     // FIXME lossless handling (i.e. where one prediction block contains
