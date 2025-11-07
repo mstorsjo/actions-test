@@ -312,24 +312,28 @@ static void ipred_cfl_128_c(pixel *dst, const ptrdiff_t stride,
 
 static void ipred_v_c(pixel *dst, const ptrdiff_t stride,
                       const pixel *const topleft,
-                      const int width, const int height, const int a,
+                      const int width, const int height, const int angle,
                       const int max_width, const int max_height
                       HIGHBD_DECL_SUFFIX)
 {
+    const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
+    const pixel *top = &topleft[mrl_idx + 1];
     for (int y = 0; y < height; y++) {
-        pixel_copy(dst, topleft + 1, width);
+        pixel_copy(dst, top, width);
         dst += PXSTRIDE(stride);
     }
 }
 
 static void ipred_h_c(pixel *dst, const ptrdiff_t stride,
                       const pixel *const topleft,
-                      const int width, const int height, const int a,
+                      const int width, const int height, const int angle,
                       const int max_width, const int max_height
                       HIGHBD_DECL_SUFFIX)
 {
+    const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
+    const pixel *left = &topleft[-(mrl_idx + 1)];
     for (int y = 0; y < height; y++) {
-        pixel_set(dst, topleft[-(1 + y)], width);
+        pixel_set(dst, left[-y], width);
         dst += PXSTRIDE(stride);
     }
 }
