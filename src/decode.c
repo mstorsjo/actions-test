@@ -1621,13 +1621,14 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                       ts->cdf.coef.dip[ctx]);
                 if (b->dip) {
-                    b->dip = 1 |
-                        (dav1d_msac_decode_bool_bypass(&ts->msac) << 1) |
-                        (dav1d_msac_decode_symbol_adapt8(&ts->msac,
-                                                         ts->cdf.m.dip_mode, 5) << 2);
+                    const int tp = dav1d_msac_decode_bool_bypass(&ts->msac);
+                    const int m =
+                        dav1d_msac_decode_symbol_adapt8(&ts->msac, ts->cdf.m.dip_mode, 5);
+                    b->dip = (tp << 4) | (m + 1);
                 }
-                DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d,%d]: r=%d\n",
-                                   depth, "", ctx, !!b->dip, ts->msac.rng);
+                DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d|%d,tp=%d,mode=%d]: r=%d\n",
+                                   depth, "", ctx, !!b->dip, b->dip >> 4,
+                                   (b->dip - !!b->dip) & 7, ts->msac.rng);
             }
 
             read_tx_part(t, DB_ONLY(depth) b, bs);
