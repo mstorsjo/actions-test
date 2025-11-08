@@ -5081,7 +5081,8 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         if (!f->frame_hdr->restoration.p[p].ns.frame_filters_on) continue;
         const int n_feat = 16 + 2 * !!p;
         int i = 0;
-        const int n_ref_filters = f->seq_hdr->rst_disable_mask[!!p] & 1 ? 16 : 48;
+        const int n_ref_filters = f->seq_hdr->rst_disable_mask[!!p] & 1 ? 16 :
+            48 - f->frame_hdr->restoration.p[p].ns.num_classes;
         for (int r = 0; r < f->frame_hdr->n_ref_frames; r++) {
             const Dav1dFrameHeader *const ref_hdr = f->refp[r].p.frame_hdr;
             for (int dir = (const int8_t[]){ 0, +1, -1 }[p], p2 = p;;
