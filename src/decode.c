@@ -2031,6 +2031,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
             }
             if (f->frame_hdr->opfl_refine_type == 1 /* switchable */ &&
+                b->inter_mode != GLOBALMV_GLOBALMV &&
                 imin(bw4, bh4) >= 2 && f->refdir[b->ref[0]] != f->refdir[b->ref[1]])
             {
                 const int ctx = b->inter_mode > NEARMV_NEARMV;
