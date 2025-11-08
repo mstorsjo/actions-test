@@ -691,7 +691,7 @@ static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
                         num[0] < num[1] ? furthest_idx[1] :
                         furthest_idx[maxpocdiff[0] < maxpocdiff[1]];
         if (idx < 7) {
-            memcpy(&sort_idx[idx], &sort_idx[idx + 1], 7 - idx);
+            memmove(&sort_idx[idx], &sort_idx[idx + 1], 7 - idx);
             sort_idx[7] = idx;
         }
     }
