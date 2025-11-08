@@ -2226,7 +2226,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         drl_idx[1] || nnzc < 3 * (end - start) - 2 ||
                         f->frame_hdr->allow_screen_content_tools ||
                         f->frame_hdr->mv_precision == 3 || mv_prec >= 5 ||
-                        !((1 << b->inter_mode) & BIDIR_NEWMV_MASK))
+                        !((1 << b->inter_mode) & BIDIR_NEWMV_MASK) ||
+                        b->motion_mode != MM_TRANSLATION)
                     {
                         // this means nnzc2 never reaches nnzc below, so the
                         // sign-derive condition is never invoked
