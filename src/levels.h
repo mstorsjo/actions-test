@@ -289,8 +289,8 @@ typedef struct Av1Block {
                     int16_t matrix[4];
                 };
             };
-            uint8_t comp_type, inter_mode, motion_mode, warp_ii, cwp_idx;
-            int8_t ref[2];
+            uint8_t comp_type, inter_mode, motion_mode, warp_ii;
+            int8_t cwp_idx, ref[2];
             uint8_t bawp[2], filter, refine_mv;
         }; // inter
     };
