@@ -263,6 +263,8 @@ COLD int dav1d_open(Dav1dContext **const c_out, const Dav1dSettings *const s) {
         }
         f->c = c;
         f->task_thread.ttd = &c->task_thread;
+        f->refdir_intra = -1;
+        f->refdir[TIP_FRAME] = 1;
     }
 
     for (unsigned m = 0; m < c->n_tc; m++) {

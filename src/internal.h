@@ -227,7 +227,14 @@ struct Dav1dFrameContext {
     Dav1dRef *cur_segmap_ref, *prev_segmap_ref;
     uint8_t *cur_segmap;
     const uint8_t *prev_segmap;
-    uint8_t refpoc[7], refrefpoc[7][7], refdir[7 + 1 /* tip */];
+    uint8_t refpoc[7], refrefpoc[7][7];
+    union {
+        int8_t refdir_with_intra[1 /* intra */ + 7 + 1 /* tip */];
+        struct {
+            int8_t refdir_intra;
+            uint8_t refdir[7 + 1 /* tip */];
+        };
+    };
     int8_t furthest_future_refidx;
     uint8_t absrefdist[7];
     int8_t refdist[7];
