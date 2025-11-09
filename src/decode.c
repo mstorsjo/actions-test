@@ -1490,7 +1490,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (has_chroma) {
             const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
             const int cfl_allowed = f->seq_hdr->cfl &&
-                (imin(bw4, bh4) >= 16 || !t->sdp_cfl_disallowed) &&
+                (imax(bw4, bh4) > 16 || !t->sdp_cfl_disallowed) &&
                 imax(cbw4, cbh4) <= (ll ? 1 : 16);
             int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
             if (cfl_allowed) {
@@ -4090,6 +4090,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
             }
         }
         int dir = 0;
+        t->sdp_cfl_disallowed = 0;
         if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
             return 1;
     }
