@@ -800,7 +800,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         } \
         DEBUG_CF_printf("%*sPost-eob_tok[pos=%d,ctx=%d|%d|%d,freq=%s,plane=%s,%d]: r=%d\n", \
                         depth, "", eob, t_dim->ctx, ctx, \
-                        tok < lim ? -1 : lim == 5 ? 7 : 0, \
+                        tok < lim || !hi_cdf ? -1 : lim == 5 ? 7 : 0, \
                         lim == 5 ? "lo" : "hi", chroma ? "uv" : "y", \
                         tok, ts->msac.rng); \
         tcq_state = tcq_next_state(tcq_state, tok); \
