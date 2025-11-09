@@ -381,8 +381,10 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     case sz: { \
         uint16_t *const eob_bin_cdf = ts->cdf.coef.eob_bin_##bin[eob_ctx]; \
         eob = dav1d_msac_decode_symbol_adapt8(&ts->msac, eob_bin_cdf, bits); \
-        if (eb && eob == 7) \
+        if (eb && eob == 7) { \
             eob += dav1d_msac_decode_bools_bypass(&ts->msac, eb); \
+            if (bin == 512 && eob == 10) return -1; /* FIXME set error bit */ \
+        } \
         break; \
     }
     case_sz(0,   16, 4, 0);
@@ -390,7 +392,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     case_sz(2,   64, 6, 0);
     case_sz(3,  128, 7, 0);
     case_sz(4,  256, 7, 1);
-    case_sz(5,  512, 7, 2); // FIXME if decode_bools(2) == 3, this may overflow
+    case_sz(5,  512, 7, 2);
     case_sz(6, 1024, 7, 2);
 #undef case_sz
     }
