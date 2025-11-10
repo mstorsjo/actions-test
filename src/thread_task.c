@@ -268,7 +268,7 @@ int dav1d_task_create_tile_sbrow(Dav1dFrameContext *const f, const int pass,
 {
     Dav1dTask *tasks = f->task_thread.tile_tasks[0];
     const int uses_2pass = f->c->n_fc > 1;
-    const int num_tasks = f->frame_hdr->tiling.cols * f->frame_hdr->tiling.rows;
+    const int num_tasks = f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows;
     if (pass < 2) {
         int alloc_num_tasks = num_tasks * (1 + uses_2pass);
         if (alloc_num_tasks > f->task_thread.num_tile_tasks) {
@@ -617,7 +617,7 @@ void *dav1d_worker_task(void *data) {
                     const int p = t->type == DAV1D_TASK_TYPE_ENTROPY_PROGRESS;
                     int error = atomic_load(&f->task_thread.error);
                     assert(!atomic_load(&f->task_thread.done[p]) || error);
-                    const int tile_row_base = f->frame_hdr->tiling.cols *
+                    const int tile_row_base = f->frame_hdr->tiling.t.cols *
                                               f->frame_thread.next_tile_row[p];
                     if (p) {
                         atomic_int *const prog = &f->frame_thread.entropy_progress;
@@ -625,7 +625,7 @@ void *dav1d_worker_task(void *data) {
                         if (p1 < t->sby) goto next;
                         atomic_fetch_or(&f->task_thread.error, p1 == TILE_ERROR);
                     }
-                    for (int tc = 0; tc < f->frame_hdr->tiling.cols; tc++) {
+                    for (int tc = 0; tc < f->frame_hdr->tiling.t.cols; tc++) {
                         Dav1dTileState *const ts = &f->ts[tile_row_base + tc];
                         const int p2 = atomic_load(&ts->progress[p]);
                         if (p2 < t->recon_progress) goto next;
@@ -637,7 +637,7 @@ void *dav1d_worker_task(void *data) {
                         *next_t = *t;
                         next_t->sby++;
                         const int ntr = f->frame_thread.next_tile_row[p] + 1;
-                        const int start = f->frame_hdr->tiling.row_start_sb[ntr];
+                        const int start = f->frame_hdr->tiling.t.row_start_sb[ntr];
                         if (next_t->sby == start)
                             f->frame_thread.next_tile_row[p] = ntr;
                         next_t->recon_progress = next_t->sby + 1;
@@ -742,8 +742,8 @@ void *dav1d_worker_task(void *data) {
                         atomic_store(&f->task_thread.done[2 - p], 1);
                         atomic_store(&f->task_thread.error, -1);
                         atomic_fetch_sub(&f->task_thread.task_counter,
-                                         f->frame_hdr->tiling.cols *
-                                         f->frame_hdr->tiling.rows + f->sbh);
+                                         f->frame_hdr->tiling.t.cols *
+                                         f->frame_hdr->tiling.t.rows + f->sbh);
                         atomic_store(&f->sr_cur.progress[p - 1], FRAME_ERROR);
                         if (p == 2 && atomic_load(&f->task_thread.done[1])) {
                             assert(!atomic_load(&f->task_thread.task_counter));
@@ -803,8 +803,8 @@ void *dav1d_worker_task(void *data) {
                     f->frame_hdr->tiling.update == tile_idx)
                 {
                     if (!error) {
-                        const int shift = f->frame_hdr->tiling.log2_cols +
-                                          f->frame_hdr->tiling.log2_rows;
+                        const int shift = f->frame_hdr->tiling.t.log2_cols +
+                                          f->frame_hdr->tiling.t.log2_rows;
                         if (shift && f->seq_hdr->avg_cdf_type) {
                             const int n_tiles = 1 << shift;
                             dav1d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);

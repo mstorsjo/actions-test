@@ -33,7 +33,7 @@ build-debian:
         - amd64
     script:
         - set -eo pipefail
-        - git clone -b research-v11.0.0 --depth 1 --shallow-submodules
+        - git clone -b research-v12.0.0 --depth 1 --shallow-submodules
               https://gitlab.com/AOMediaCodec/avm.git avm
         - |
           cd avm
@@ -62,7 +62,7 @@ build-debian:
         - meson test -v -C build
         - |
           for sdp in 0 1; do
-              file="media/avm-v11.0.0-sdp${sdp}.ivf"
+              file="media/avm-v12.0.0-sdp${sdp}.ivf"
               avm/x86-64/aomdec $file -o /dev/null > avm.sdp${sdp}.log
               build/tools/dav1d -i $file --muxer=null --threads=1 --quiet > dav1d.sdp${sdp}.log
               diff -uw {avm,dav1d}.sdp${sdp}.log
@@ -72,18 +72,18 @@ build-debian:
           cd avm
           sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' aom/debug.h
           sed -i 's|mi_row < 16|mi_row < 8|' aom/debug.h
-          sed -i 's|mi_col < 16|mi_col < 16|' aom/debug.h
+          sed -i 's|mi_col < 16|mi_col < 4|' aom/debug.h
           git diff
         - cd x86-64 && make -j$(nproc) aomdec && cd ../..
         - |
           sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
           sed -i 's|t->by < 16|t->by < 8|' src/debug.h
-          sed -i 's|t->bx < 16|t->bx < 16|' src/debug.h
+          sed -i 's|t->bx < 16|t->bx < 4|' src/debug.h
           git diff
         - ninja -C build
         - |
           for sdp in 0; do
-              file="media/avm-v11.0.0-sdp${sdp}.ivf"
+              file="media/avm-v12.0.0-sdp${sdp}.ivf"
               avm/x86-64/aomdec $file -o /dev/null > avm.sdp${sdp}.log
               build/tools/dav1d -i $file --muxer=null --threads=1 --quiet > dav1d.sdp${sdp}.log
               diff -uw {avm,dav1d}.sdp${sdp}.log
@@ -105,7 +105,7 @@ build-debian:
           git diff
         - ninja -C build
         - |
-          file="media/avm-v11.0.0-bus.64x64.l5.ivf"
+          file="media/avm-v12.0.0-bus.64x64.l5.ivf"
           # refmvs is not yet implemented, so discard these parts of the entropy debugging log
           avm/x86-64/aomdec $file -o /dev/null | grep -v ' mv\[' > avm.inter.log
           build/tools/dav1d -i $file --muxer=null --threads=1 --quiet | grep -v ' mv\[' > dav1d.inter.log

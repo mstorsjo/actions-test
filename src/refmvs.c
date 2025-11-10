@@ -833,7 +833,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
                             const int n_tile_threads, const int n_frame_threads)
 {
     const int rp_stride = ((frm_hdr->width + 127) & ~127) >> 3;
-    const int n_tile_rows = n_tile_threads > 1 ? frm_hdr->tiling.rows : 1;
+    const int n_tile_rows = n_tile_threads > 1 ? frm_hdr->tiling.t.rows : 1;
     const int n_blocks = rp_stride * n_tile_rows;
 
     rf->sbsz = 16 << frm_hdr->sb128;

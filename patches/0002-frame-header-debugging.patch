@@ -1,15 +1,15 @@
-From 5fc281ff0826d9d54dadc0910ef4dcb3d0731eb1 Mon Sep 17 00:00:00 2001
+From ec99adf91734ab9b301a8ed731cca84de0422910 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Wed, 27 Aug 2025 09:40:39 -0400
 Subject: [PATCH 2/4] frame header debugging
 
 ---
  aom/debug.h               |   1 +
- av1/decoder/decodeframe.c | 168 +++++++++++++++++++++++++++++++++++++-
- 2 files changed, 168 insertions(+), 1 deletion(-)
+ av1/decoder/decodeframe.c | 179 +++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 179 insertions(+), 1 deletion(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
-index 3339b3439..8c8847f1e 100644
+index 3339b3439f..8c8847f1eb 100644
 --- a/aom/debug.h
 +++ b/aom/debug.h
 @@ -30,5 +30,6 @@
@@ -20,12 +20,12 @@ index 3339b3439..8c8847f1e 100644
  
  #endif /* AOM_DEBUG_H */
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 6672bac17..24617f5bb 100644
+index 6a04bf6a0e..70e22ec4ea 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
-@@ -6375,6 +6375,11 @@ static AOM_INLINE void read_film_grain(AV1_COMMON *cm,
-       (cm->show_frame || cm->showable_frame)) {
- #endif
+@@ -6333,6 +6333,11 @@ static AOM_INLINE void read_film_grain(AV1_COMMON *cm,
+                                        struct aom_read_bit_buffer *rb) {
+   if (cm->seq_params.film_grain_params_present) {
      av1_read_film_grain_params(cm, rb);
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-filmgrain[%d]: off=%u\n",
@@ -35,9 +35,21 @@ index 6672bac17..24617f5bb 100644
    } else {
      memset(&cm->film_grain_params, 0, sizeof(cm->film_grain_params));
    }
-@@ -7759,6 +7764,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-   } else {
-     cm->show_existing_frame = aom_rb_read_bit(rb);
+@@ -8303,6 +8308,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+     }
+ #endif  // CONFIG_MULTI_FRAME_HEADER
+ #if CONFIG_CWG_F317
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-ids[f=%d,s=%d]: off=%u\n",
++           cm->cur_mfh_id, cm->mfh_params[cm->cur_mfh_id].mfh_seq_header_id,
++           rb->bit_offset);
++#endif
+   }
+ #endif  // CONFIG_CWG_F317
+ 
+@@ -8342,6 +8352,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+     }
+ #endif  // CONFIG_CWG_F317
      pbi->reset_decoder_state = 0;
 +#if DEBUG_FRAME_HDR
 +      printf("HDR: post-show_existing_frame[%d]: off=%u\n",
@@ -46,7 +58,7 @@ index 6672bac17..24617f5bb 100644
  
      if (cm->show_existing_frame) {
        if (pbi->sequence_header_changed) {
-@@ -7866,6 +7875,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -8418,6 +8432,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
        } else {
          current_frame->refresh_frame_flags = 0;
        }
@@ -57,21 +69,50 @@ index 6672bac17..24617f5bb 100644
  
        return 0;
      }
-@@ -7951,6 +7964,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-             ? 1
-             : aom_rb_read_bit(rb);
+@@ -8460,17 +8478,29 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ #if CONFIG_CWG_F317
+     }
+ #endif  // CONFIG_CWG_F317
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-frametype[%d]: off=%u\n",
++           current_frame->frame_type, rb->bit_offset);
++#endif
+ #if CONFIG_RANDOM_ACCESS_SWITCH_FRAME
+     current_frame->long_term_id = -1;
+     if (current_frame->frame_type == KEY_FRAME) {
+       current_frame->long_term_id =
+           aom_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-ltr_id[%d]: off=%u\n",
++           current_frame->long_term_id, rb->bit_offset);
++#endif
+     } else if (obu_type == OBU_RAS_FRAME) {
+       cm->num_ref_key_frames = aom_rb_read_literal(rb, 3);
+       for (int i = 0; i < cm->num_ref_key_frames; i++) {
+         cm->ref_long_term_ids[i] =
+             aom_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
+       }
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-ltr_setup[%d]: off=%u\n",
++           cm->num_ref_key_frames, rb->bit_offset);
++#endif
+     }
+ #endif  // CONFIG_RANDOM_ACCESS_SWITCH_FRAME
+     if (pbi->sequence_header_changed) {
+@@ -8570,6 +8600,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ #endif  // CONFIG_CWG_F317
+ #endif  // !CONFIG_F322_OBUER_ERM
    }
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-frametype_bits[%d,show=%d|%d,err_res=%d]: off=%u\n",
-+           current_frame->frame_type, cm->show_frame,
-+           cm->showable_frame, features->error_resilient_mode,
++    printf("HDR: post-frametype_bits[%d,show=%d|%d]: off=%u\n",
++           current_frame->frame_type, cm->show_frame, cm->showable_frame,
 +           rb->bit_offset);
 +#endif
  
    av1_set_frame_sb_size(cm, cm->seq_params.sb_size);
  
-@@ -8036,6 +8055,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-         features->primary_ref_frame = aom_rb_read_literal(rb, PRIMARY_REF_BITS);
+@@ -8629,6 +8664,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ #endif  // CONFIG_CWG_F317
      }
    }
 +#if DEBUG_FRAME_HDR
@@ -80,9 +121,9 @@ index 6672bac17..24617f5bb 100644
 +           pbi->signal_primary_ref_frame, rb->bit_offset);
 +#endif
  
+ #if !CONFIG_CWG_F293_BUFFER_REMOVAL_TIMING
    if (seq_params->decoder_model_info_present_flag) {
-     cm->buffer_removal_time_present = aom_rb_read_bit(rb);
-@@ -8067,6 +8091,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -8661,6 +8701,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
          }
        }
      }
@@ -91,10 +132,10 @@ index 6672bac17..24617f5bb 100644
 +               cm->buffer_removal_time_present, rb->bit_offset);
 +#endif
    }
- 
+ #endif  // CONFIG_CWG_F293_BUFFER_REMOVAL_TIMING
    if (current_frame->frame_type == KEY_FRAME) {
-@@ -8196,6 +8224,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- #endif  // CONFIG_REFRESH_FLAG
+@@ -8778,6 +8822,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+       }
      }
    }
 +#if DEBUG_FRAME_HDR
@@ -102,20 +143,9 @@ index 6672bac17..24617f5bb 100644
 +           current_frame->refresh_frame_flags, rb->bit_offset);
 +#endif
  
-   if (!frame_is_intra_only(cm) || current_frame->refresh_frame_flags !=
-                                       ((1 << seq_params->ref_frames) - 1)) {
-@@ -8275,6 +8307,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-       }
-     }
-   }
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-er_ref_info: off=%u\n",
-+           rb->bit_offset);
-+#endif
- 
- #if CONFIG_LF_SUB_PU
-   features->allow_lf_sub_pu = 0;
-@@ -8296,6 +8332,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ #if CONFIG_F322_OBUER_ERM
+ #if CONFIG_RANDOM_ACCESS_SWITCH_FRAME
+@@ -8884,6 +8932,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
  
      features->tip_frame_mode = TIP_FRAME_DISABLED;
      setup_frame_size(cm, frame_size_override_flag, rb);
@@ -123,10 +153,10 @@ index 6672bac17..24617f5bb 100644
 +    printf("HDR: post-framesize[%dx%d]: off=%u\n",
 +           cm->width, cm->height, rb->bit_offset);
 +#endif
- #if CONFIG_FRAME_HEADER_SIGNAL_OPT
      read_screen_content_params(cm, rb);
- #endif  // CONFIG_FRAME_HEADER_SIGNAL_OPT
-@@ -8311,6 +8351,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+     features->allow_intrabc = aom_rb_read_bit(rb);
+     if (features->allow_intrabc) {
+@@ -8897,6 +8949,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
      cm->prev_frame = NULL;
  
      cm->cur_frame->num_ref_frames = 0;
@@ -141,9 +171,9 @@ index 6672bac17..24617f5bb 100644
 +           rb->bit_offset);
 +#endif
    } else {
- #if CONFIG_NEW_OBU_HEADER
      cm->current_frame.temporal_layer_id = cm->tlayer_id;
-@@ -8330,6 +8380,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+     cm->current_frame.mlayer_id = cm->mlayer_id;
+@@ -8907,6 +8969,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
        cm->cur_frame->film_grain_params_present =
            seq_params->film_grain_params_present;
        setup_frame_size(cm, frame_size_override_flag, rb);
@@ -151,10 +181,10 @@ index 6672bac17..24617f5bb 100644
 +    printf("HDR: post-framesize[%dx%d]: off=%u\n",
 +           cm->width, cm->height, rb->bit_offset);
 +#endif
- #if CONFIG_FRAME_HEADER_SIGNAL_OPT
        read_screen_content_params(cm, rb);
- #endif  // CONFIG_FRAME_HEADER_SIGNAL_OPT
-@@ -8342,6 +8396,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+       features->allow_intrabc = aom_rb_read_bit(rb);
+       if (features->allow_intrabc) {
+@@ -8917,6 +8983,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
        }
  
        cm->cur_frame->num_ref_frames = 0;
@@ -171,7 +201,7 @@ index 6672bac17..24617f5bb 100644
  
      } else if (pbi->need_resync != 1) { /* Skip if need resync */
        // Implicitly derive the reference mapping
-@@ -8773,6 +8837,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9332,6 +9408,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
          if (features->allow_intrabc) {
            read_frame_max_bvp_drl_bits(cm, rb);
          }
@@ -188,29 +218,28 @@ index 6672bac17..24617f5bb 100644
  
          if (features->cur_frame_force_integer_mv) {
            features->fr_mv_precision = MV_PRECISION_ONE_PEL;
-@@ -8867,6 +8941,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9432,6 +9518,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
                                 "Reference frame has invalid dimensions");
          }
        }
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-frametype-specific-bits[hp:%d,flt:%d,sm:%d,u:%d]: off=%u\n",
-+           features->fr_mv_precision == MV_PRECISION_ONE_EIGHTH_PEL,
++    printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d]: off=%u\n",
++           features->fr_mv_precision - 3,
 +           features->interp_filter, features->enabled_motion_modes,
-+           features->opfl_refine_type, rb->bit_offset);
++           rb->bit_offset);
 +#endif
      }
    }
  
-@@ -9062,8 +9142,19 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-   } else {
-     features->refresh_frame_context = REFRESH_FRAME_CONTEXT_DISABLED;
+@@ -9641,8 +9733,18 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ #if CONFIG_CWG_F317
    }
+ #endif  // CONFIG_CWG_F317
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-refresh_context[%d,%d]: off=%u\n",
 +           features->disable_cdf_update, features->refresh_frame_context,
 +           rb->bit_offset);
 +#endif
-+
  
    read_tile_info(pbi, rb);
 +#if DEBUG_FRAME_HDR
@@ -221,7 +250,7 @@ index 6672bac17..24617f5bb 100644
    if (!av1_is_min_tile_width_satisfied(cm)) {
      aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
                         "Minimum tile width requirement not satisfied");
-@@ -9078,6 +9169,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9654,6 +9756,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
    cm->cur_frame->u_ac_delta_q = quant_params->u_ac_delta_q;
    cm->cur_frame->v_ac_delta_q = quant_params->v_ac_delta_q;
    xd->bd = (int)seq_params->bit_depth;
@@ -238,7 +267,7 @@ index 6672bac17..24617f5bb 100644
  
    set_primary_ref_frame_and_ctx(pbi);
  
-@@ -9095,11 +9196,21 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9671,12 +9783,22 @@ static int read_uncompressed_header(AV1Decoder *pbi,
    }
  
    setup_segmentation(cm, rb);
@@ -248,10 +277,11 @@ index 6672bac17..24617f5bb 100644
 +           rb->bit_offset);
 +#endif
  
- #if CONFIG_F311_QM_PARAMS
-   setup_qm_params(&cm->seq_params, quant_params, cm->seg.enabled,
-                   av1_num_planes(cm), rb);
- #endif  // CONFIG_F311_QM_PARAMS
+   setup_qm_params(&cm->seq_params,
+ #if CONFIG_CWG_E242_SEQ_HDR_ID
+                   pbi->active_seq,
+ #endif  // CONFIG_CWG_E242_SEQ_HDR_ID
+                   quant_params, cm->seg.enabled, av1_num_planes(cm), rb);
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-qm[%d]: off=%u\n",
 +           quant_params->using_qmatrix,
@@ -260,7 +290,7 @@ index 6672bac17..24617f5bb 100644
  
    cm->delta_q_info.delta_q_res = 1;
    cm->delta_q_info.delta_lf_res = 1;
-@@ -9117,6 +9228,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9694,6 +9816,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
        av1_reset_loop_filter_delta(xd, av1_num_planes(cm));
      }
    }
@@ -273,7 +303,7 @@ index 6672bac17..24617f5bb 100644
  
    xd->cur_frame_force_integer_mv = features->cur_frame_force_integer_mv;
  #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
-@@ -9189,6 +9306,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9754,6 +9882,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
      features->allow_parity_hiding = false;
    else
      features->allow_parity_hiding = aom_rb_read_bit(rb);
@@ -285,7 +315,7 @@ index 6672bac17..24617f5bb 100644
  
    setup_segmentation_dequant(cm, xd);
  
-@@ -9208,23 +9330,51 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9773,23 +9906,51 @@ static int read_uncompressed_header(AV1Decoder *pbi,
      cm->rst_info[2].frame_filters_on = 0;
    }
    setup_loopfilter(cm, rb);
@@ -337,7 +367,7 @@ index 6672bac17..24617f5bb 100644
    }
  
    features->tx_mode = read_tx_mode(rb, features->coded_lossless);
-@@ -9256,6 +9406,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9821,6 +9982,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
  #else
        aom_rb_read_bit(rb);
  #endif  // CONFIG_REDUCED_TX_SET_EXT
@@ -354,7 +384,7 @@ index 6672bac17..24617f5bb 100644
  
    if (features->allow_ref_frame_mvs && !frame_might_allow_ref_frame_mvs(cm)) {
      aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
-@@ -9267,7 +9427,13 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9832,7 +10003,13 @@ static int read_uncompressed_header(AV1Decoder *pbi,
                         "Frame wrongly requests TIP mode");
    }
  
@@ -370,5 +400,5 @@ index 6672bac17..24617f5bb 100644
    cm->cur_frame->film_grain_params_present =
        seq_params->film_grain_params_present;
 -- 
-2.43.0
+2.48.1
 

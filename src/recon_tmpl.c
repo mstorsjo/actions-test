@@ -667,7 +667,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const int cf_max = ~(~127U << (BITDEPTH == 8 ? 8 : f->cur.p.bpc));
     unsigned dc_sign_level = 1 << 6;
 
-    if (f->seq_hdr->fsc_residual && (!intra || b->fsc) &&
+    if (f->seq_hdr->fsc && (!intra || b->fsc) &&
         *txtp == IDTX && !chroma)
     {
         assert(!has_stx);

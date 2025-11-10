@@ -81,15 +81,9 @@ static int write_header(Y4m2OutputContext *const c, const Dav1dPicture *const p)
 
     const unsigned fw = p->p.w;
     const unsigned fh = p->p.h;
-    uint64_t aw = (uint64_t)fh * p->frame_hdr->render_width;
-    uint64_t ah = (uint64_t)fw * p->frame_hdr->render_height;
-    uint64_t gcd = ah;
-    for (uint64_t a = aw, b; (b = a % gcd); a = gcd, gcd = b);
-    aw /= gcd;
-    ah /= gcd;
 
-    fprintf(c->f, "YUV4MPEG2 W%u H%u F%u:%u Ip A%"PRIu64":%"PRIu64" C%s\n",
-            fw, fh, c->fps[0], c->fps[1], aw, ah, ss_name);
+    fprintf(c->f, "YUV4MPEG2 W%u H%u F%u:%u Ip A1:1 C%s\n",
+            fw, fh, c->fps[0], c->fps[1], ss_name);
 
     return 0;
 }

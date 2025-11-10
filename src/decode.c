@@ -1543,7 +1543,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                b->uv_angle, ts->msac.rng);
             if (b->uv_mode == CFL_PRED) {
                 memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
-                if (f->seq_hdr->mhccp && imax(cbw4, cbh4) <= 8 &&
+                if (f->seq_hdr->mhccp && imax(cbw4, cbh4) <= 8 && cbw4 * cbh4 > 1 &&
                     dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp))
                 {
                     const int sz_ctx = size_group_lookup[bs];
@@ -2294,7 +2294,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
                 !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
-                (b->inter_mode != GLOBALMV_GLOBALMV ||
+                (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1 ||
                  f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION ||
                  f->frame_hdr->gmv[b->ref[1]].type == DAV1D_WM_TYPE_TRANSLATION);
 
@@ -2722,7 +2722,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
-                (b->inter_mode != GLOBALMV ||
+                (b->inter_mode != GLOBALMV || imin(bw4, bh4) == 1 ||
                  f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION);
 
 #if 0
@@ -3717,10 +3717,10 @@ static void setup_tile(Dav1dTileState *const ts,
                        const int tile_row, const int tile_col,
                        const unsigned tile_start_off)
 {
-    const int col_sb_start = f->frame_hdr->tiling.col_start_sb[tile_col];
-    const int col_sb_end = f->frame_hdr->tiling.col_start_sb[tile_col + 1];
-    const int row_sb_start = f->frame_hdr->tiling.row_start_sb[tile_row];
-    const int row_sb_end = f->frame_hdr->tiling.row_start_sb[tile_row + 1];
+    const int col_sb_start = f->frame_hdr->tiling.t.col_start_sb[tile_col];
+    const int col_sb_end = f->frame_hdr->tiling.t.col_start_sb[tile_col + 1];
+    const int row_sb_start = f->frame_hdr->tiling.t.row_start_sb[tile_row];
+    const int row_sb_end = f->frame_hdr->tiling.t.row_start_sb[tile_row + 1];
     const int sb_shift = f->sb_shift;
 
     const uint8_t *const size_mul = ss_size_mul[f->cur.p.layout];
@@ -4003,7 +4003,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
 
     reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), t->frame_thread.pass);
     if (t->frame_thread.pass == 2) {
-        const int off_2pass = c->n_tc > 1 ? f->sb256w * f->frame_hdr->tiling.rows : 0;
+        const int off_2pass = c->n_tc > 1 ? f->sb256w * f->frame_hdr->tiling.t.rows : 0;
         for (t->bx = ts->tiling.col_start;
              t->bx < ts->tiling.col_end; t->bx += sb_step)
         {
@@ -4116,7 +4116,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     if (ts->msac.cnt <= -15) return 1;
 
     return c->strict_std_compliance &&
-           (t->by >> f->sb_shift) + 1 >= f->frame_hdr->tiling.row_start_sb[tile_row + 1] &&
+           (t->by >> f->sb_shift) + 1 >= f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] &&
            check_trailing_bits_after_symbol_coder(&ts->msac);
 }
 
@@ -4134,13 +4134,13 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         f->lf.start_of_tile_row_sz = f->sbh;
     }
     int sby = 0;
-    for (int tile_row = 0; tile_row < f->frame_hdr->tiling.rows; tile_row++) {
+    for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
         f->lf.start_of_tile_row[sby++] = tile_row;
-        while (sby < f->frame_hdr->tiling.row_start_sb[tile_row + 1])
+        while (sby < f->frame_hdr->tiling.t.row_start_sb[tile_row + 1])
             f->lf.start_of_tile_row[sby++] = 0;
     }
 
-    const int n_ts = f->frame_hdr->tiling.cols * f->frame_hdr->tiling.rows;
+    const int n_ts = f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows;
     if (n_ts != f->n_ts) {
         if (c->n_fc > 1) {
             dav1d_free(f->frame_thread.tile_start_off);
@@ -4157,7 +4157,7 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         f->n_ts = n_ts;
     }
 
-    const int a_sz = f->sb256w * f->frame_hdr->tiling.rows * (1 + (c->n_fc > 1 && c->n_tc > 1));
+    const int a_sz = f->sb256w * f->frame_hdr->tiling.t.rows * (1 + (c->n_fc > 1 && c->n_tc > 1));
     if (a_sz != f->a_sz) {
         dav1d_free(f->a);
         f->a = dav1d_malloc(ALLOC_TILE, sizeof(*f->a) * a_sz);
@@ -4174,18 +4174,18 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     if (c->n_fc > 1) {
         const unsigned sb_step4 = f->sb_step * 4;
         int tile_idx = 0;
-        for (int tile_row = 0; tile_row < f->frame_hdr->tiling.rows; tile_row++) {
-            const unsigned row_off = f->frame_hdr->tiling.row_start_sb[tile_row] *
+        for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
+            const unsigned row_off = f->frame_hdr->tiling.t.row_start_sb[tile_row] *
                                      sb_step4 * f->sb256w * 256;
-            const unsigned b_diff = (f->frame_hdr->tiling.row_start_sb[tile_row + 1] -
-                                     f->frame_hdr->tiling.row_start_sb[tile_row]) * sb_step4;
-            for (int tile_col = 0; tile_col < f->frame_hdr->tiling.cols; tile_col++) {
+            const unsigned b_diff = (f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] -
+                                     f->frame_hdr->tiling.t.row_start_sb[tile_row]) * sb_step4;
+            for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {
                 f->frame_thread.tile_start_off[tile_idx++] = row_off + b_diff *
-                    f->frame_hdr->tiling.col_start_sb[tile_col] * sb_step4;
+                    f->frame_hdr->tiling.t.col_start_sb[tile_col] * sb_step4;
             }
         }
 
-        const int lowest_pixel_mem_sz = f->frame_hdr->tiling.cols * f->sbh;
+        const int lowest_pixel_mem_sz = f->frame_hdr->tiling.t.cols * f->sbh;
         if (lowest_pixel_mem_sz != f->tile_thread.lowest_pixel_mem_sz) {
             dav1d_free(f->tile_thread.lowest_pixel_mem);
             f->tile_thread.lowest_pixel_mem =
@@ -4198,12 +4198,12 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
             f->tile_thread.lowest_pixel_mem_sz = lowest_pixel_mem_sz;
         }
         int (*lowest_pixel_ptr)[7][2] = f->tile_thread.lowest_pixel_mem;
-        for (int tile_row = 0, tile_row_base = 0; tile_row < f->frame_hdr->tiling.rows;
-             tile_row++, tile_row_base += f->frame_hdr->tiling.cols)
+        for (int tile_row = 0, tile_row_base = 0; tile_row < f->frame_hdr->tiling.t.rows;
+             tile_row++, tile_row_base += f->frame_hdr->tiling.t.cols)
         {
-            const int tile_row_sb_h = f->frame_hdr->tiling.row_start_sb[tile_row + 1] -
-                                      f->frame_hdr->tiling.row_start_sb[tile_row];
-            for (int tile_col = 0; tile_col < f->frame_hdr->tiling.cols; tile_col++) {
+            const int tile_row_sb_h = f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] -
+                                      f->frame_hdr->tiling.t.row_start_sb[tile_row];
+            for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {
                 f->ts[tile_row_base + tile_col].lowest_pixel = lowest_pixel_ptr;
                 lowest_pixel_ptr += tile_row_sb_h;
             }
@@ -4400,7 +4400,7 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         f->ipred_edge_sz = ipred_edge_sz;
     }
 
-    const int re_sz = f->sb256h * f->frame_hdr->tiling.cols;
+    const int re_sz = f->sb256h * f->frame_hdr->tiling.t.cols;
     if (re_sz != f->lf.re_sz) {
         dav1d_free(f->lf.tx_lpf_right_edge[0]);
         f->lf.tx_lpf_right_edge[0] = dav1d_malloc(ALLOC_LF, re_sz * 64 * 2);
@@ -4522,7 +4522,7 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
             setup_tile(&f->ts[j], f, data, tile_sz, tile_row, tile_col++,
                        c->n_fc > 1 ? f->frame_thread.tile_start_off[j] : 0);
 
-            if (tile_col == f->frame_hdr->tiling.cols) {
+            if (tile_col == f->frame_hdr->tiling.t.cols) {
                 tile_col = 0;
                 tile_row++;
             }
@@ -4535,9 +4535,9 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
 
     if (c->n_tc > 1) {
         const int uses_2pass = c->n_fc > 1;
-        for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.rows * (1 + uses_2pass); n++)
+        for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows * (1 + uses_2pass); n++)
             reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr),
-                          uses_2pass ? 1 + (n >= f->sb256w * f->frame_hdr->tiling.rows) : 0);
+                          uses_2pass ? 1 + (n >= f->sb256w * f->frame_hdr->tiling.t.rows) : 0);
     }
 
     retval = 0;
@@ -4555,15 +4555,15 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
     t->f = f;
     t->frame_thread.pass = 0;
 
-    for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.rows; n++)
+    for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)
         reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr), 0);
 
     // no threading - we explicitly interleave tile/sbrow decoding
     // and post-filtering, so that the full process runs in-line
-    for (int tile_row = 0; tile_row < f->frame_hdr->tiling.rows; tile_row++) {
+    for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
         const int sbh_end =
-            imin(f->frame_hdr->tiling.row_start_sb[tile_row + 1], f->sbh);
-        for (int sby = f->frame_hdr->tiling.row_start_sb[tile_row];
+            imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1], f->sbh);
+        for (int sby = f->frame_hdr->tiling.t.row_start_sb[tile_row];
              sby < sbh_end; sby++)
         {
             t->by = sby << (4 + f->frame_hdr->sb128);
@@ -4572,8 +4572,8 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
                 f->c->refmvs_dsp.load_tmvs(&f->rf, tile_row,
                                            0, f->bw >> 1, t->by >> 1, by_end);
             }
-            for (int tile_col = 0; tile_col < f->frame_hdr->tiling.cols; tile_col++) {
-                t->ts = &f->ts[tile_row * f->frame_hdr->tiling.cols + tile_col];
+            for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {
+                t->ts = &f->ts[tile_row * f->frame_hdr->tiling.t.cols + tile_col];
                 if (dav1d_decode_tile_sbrow(t)) goto error;
             }
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
@@ -4663,8 +4663,8 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
         } else {
             res = dav1d_decode_frame_main(f);
             if (!res && f->frame_hdr->refresh_context && f->task_thread.update_set) {
-                const int shift = f->frame_hdr->tiling.log2_cols +
-                                  f->frame_hdr->tiling.log2_rows;
+                const int shift = f->frame_hdr->tiling.t.log2_cols +
+                                  f->frame_hdr->tiling.t.log2_rows;
                 if (shift && f->seq_hdr->avg_cdf_type) {
                     const int n_tiles = 1 << shift;
                     dav1d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
@@ -4915,8 +4915,8 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     f->bitdepth_max = (1 << f->cur.p.bpc) - 1;
     atomic_init(&f->task_thread.error, 0);
     const int uses_2pass = c->n_fc > 1;
-    const int cols = f->frame_hdr->tiling.cols;
-    const int rows = f->frame_hdr->tiling.rows;
+    const int cols = f->frame_hdr->tiling.t.cols;
+    const int rows = f->frame_hdr->tiling.t.rows;
     atomic_store(&f->task_thread.task_counter,
                  (cols * rows + f->sbh) << uses_2pass);
 

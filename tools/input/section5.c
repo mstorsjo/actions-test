@@ -68,11 +68,9 @@ static int section5_probe(const uint8_t *data) {
         case DAV1D_OBU_SEQ_HDR:
             seq = 1;
             break;
-        case DAV1D_OBU_FRAME:
-        case DAV1D_OBU_FRAME_HDR:
+        case DAV1D_OBU_TILE_GRP:
             return seq;
         case DAV1D_OBU_TD:
-        case DAV1D_OBU_TILE_GRP:
             return 0;
         default:
             break;
