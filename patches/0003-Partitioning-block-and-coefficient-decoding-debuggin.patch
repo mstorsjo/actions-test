@@ -1,4 +1,4 @@
-From 8c0eae8f14ee6d5c85ab584f3d6929edb442ccaf Mon Sep 17 00:00:00 2001
+From 537f851d914f085c3919c36445935e198a9f433e Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
@@ -692,7 +692,7 @@ index 24617f5bb..ebead9679 100644
             features->enable_bawp,
             features->allow_warpmv_mode,
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 47abeeb4e..2e792c30c 100644
+index 47abeeb4e..609dd517b 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -47,7 +47,8 @@
@@ -1281,7 +1281,7 @@ index 47abeeb4e..2e792c30c 100644
      }
 +#if DEBUG_BLOCK_INFO
 +      int mi_row = xd->mi_row, mi_col = xd->mi_col;
-+      DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d|%d,tp=%d,mode=%d]: r=%d\n",
++      DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d,%d,tp=%d,mode=%d]: r=%d\n",
 +                         depth, "", ctx, mbmi->use_intra_dip, mbmi->intra_dip_mode >> 4,
 +                         mbmi->intra_dip_mode & 7, r->ec.rng);
 +#endif

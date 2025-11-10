@@ -1626,7 +1626,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         dav1d_msac_decode_symbol_adapt8(&ts->msac, ts->cdf.m.dip_mode, 5);
                     b->dip = (tp << 4) | (m + 1);
                 }
-                DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d|%d,tp=%d,mode=%d]: r=%d\n",
+                DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d,%d,tp=%d,mode=%d]: r=%d\n",
                                    depth, "", ctx, !!b->dip, b->dip >> 4,
                                    (b->dip - !!b->dip) & 7, ts->msac.rng);
             }
