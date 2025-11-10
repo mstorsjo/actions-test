@@ -75,21 +75,24 @@ static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
 
 enum IntraPredMode
 bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
-                                  const int x, const int have_left,
-                                  const int y, const int have_top,
+                                  const int x, const int y,
                                   const int w, const int h,
                                   const enum EdgeFlags edge_flags,
                                   const pixel *const dst,
                                   const ptrdiff_t stride,
                                   const pixel *prefilter_toplevel_sb_edge,
                                   enum IntraPredMode mode, int *const angle,
-                                  const int tw4, const int th4, const int filter_edge,
-                                  const int apply_ibp, const int mrl_idx,
+                                  const int tw4, const int th4,
+                                  const int intra_flags,
                                   pixel *const topleft_out HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth = bitdepth_from_max(bitdepth_max);
     assert(y < h && x < w);
     int is_dir = 0;
+    const int apply_ibp = !!(intra_flags & ANGLE_IBP_FLAG);
+    const int mrl_idx = (intra_flags & ANGLE_MRL_FLAGS) >> 12;
+    const int have_left = !!(intra_flags & ANGLE_HAS_LEFT);
+    const int have_top = !!(intra_flags & ANGLE_HAS_TOP);
 
     switch (mode) {
     case VERT_PRED:

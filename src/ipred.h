@@ -35,17 +35,21 @@
 #include "src/levels.h"
 
 // These flags are OR'ed with the angle parameter in intra predictors.
+// They encode intra mode features such as edge availability, MRL, IBP,
+// and filtering.
 //
-// ANGLE_USE_EDGE_FILTER_FLAG indicates that reference edges should be
-// filtered (convolved) before being used for prediction.
-//
-// ANGLE_SMOOTH_EDGE_FLAG indicates that the reference edges are smooth,
-// and thus a reduced filter strength should be applied.
-//
-// ANGLE_IBP_FLAG enables intra bi-prediction for the current block.
-#define ANGLE_IBP_FLAG             2048
-#define ANGLE_USE_EDGE_FILTER_FLAG 1024
-#define ANGLE_SMOOTH_EDGE_FLAG      512
+// ANGLE_HAS_TOP              – top reference edge is available for prediction
+// ANGLE_HAS_LEFT             – left reference edge is available for prediction
+// ANGLE_MRL_FLAGS            – multi-reference line (MRL) index bits
+// ANGLE_IBP_FLAG             – enables intra bi-prediction for the current block
+// ANGLE_USE_EDGE_FILTER_FLAG – apply edge filtering (convolution) to reference samples
+// ANGLE_SMOOTH_EDGE_FLAG     – indicates smooth edges; use reduced filter strength
+#define ANGLE_HAS_TOP              32768
+#define ANGLE_HAS_LEFT             16384
+#define ANGLE_MRL_FLAGS            12288
+#define ANGLE_IBP_FLAG              2048
+#define ANGLE_USE_EDGE_FILTER_FLAG  1024
+#define ANGLE_SMOOTH_EDGE_FLAG       512
 
 /*
  * Intra prediction.

@@ -592,10 +592,10 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const int is_sm = (angle >> 9) & 0x1;
-    const int enable_intra_edge_filter = (angle >> 10) & 0x1;
-    const int enable_ibp = (angle >> 11) & 0x1;
-    const int mrl_idx = (angle >> 12) & 0x3;
+    const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
+    const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
+    const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
+    const int mrl_idx = (angle & ANGLE_MRL_FLAGS) >> 12;
     angle &= 511;
     assert(angle < 90);
     int dx = dav1d_dr_intra_derivative[angle];
@@ -706,8 +706,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const int is_sm = (angle >> 9) & 0x1;
-    const int enable_intra_edge_filter = angle >> 10;
+    const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
+    const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     angle &= 511;
     assert(angle > 90 && angle < 180);
     int dy = dav1d_dr_intra_derivative[angle - 90];
@@ -800,9 +800,9 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const int is_sm = (angle >> 9) & 0x1;
-    const int enable_intra_edge_filter = (angle >> 10) & 0x1;
-    const int enable_ibp = (angle >> 11) & 0x1;
+    const int is_sm = !!(angle & ANGLE_SMOOTH_EDGE_FLAG);
+    const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
+    const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
     angle &= 511;
     assert(angle > 180);
     int dy = dav1d_dr_intra_derivative[270 - angle];

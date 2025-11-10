@@ -75,16 +75,18 @@
  * index. If edges are not available (because the edge position is outside the
  * tile dimensions or because edge_flags indicates lack of edge availability),
  * they will be extended from nearby edges as defined by the av1 spec.
+ *
+ * Intra flags is a bitmask indicating intra mode features such as top/left
+ * edge use, MRL mode, IBP, and edge filtering options (see ipred.h).
  */
 enum IntraPredMode
     bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
-                                      int x, int have_left, int y, int have_top,
-                                      int w, int h, enum EdgeFlags edge_flags,
+                                      int x, int y, int w, int h,
+                                      enum EdgeFlags edge_flags,
                                       const pixel *dst, ptrdiff_t stride,
                                       const pixel *prefilter_toplevel_sb_edge,
                                       enum IntraPredMode mode, int *angle,
-                                      int tw, int th, int filter_edge,
-                                      const int apply_ibp, const int mrl_idx,
+                                      int tw, int th, int intra_flags,
                                       pixel *topleft_out HIGHBD_DECL_SUFFIX);
 
 static inline int sm_flag(const BlockContext *const b, const int idx) {

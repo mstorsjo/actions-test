@@ -1432,23 +1432,20 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
         const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4;
-
-        const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
-            DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-            t->bx, t->bx > ts->tiling.col_start,
-            t->by, t->by > ts->tiling.row_start,
-            ts->tiling.col_end, ts->tiling.row_end, edge_flags, dst,
-            f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
-            t_dim->w, t_dim->h, f->seq_hdr->intra_edge_filter,
-            apply_ibp, mrl_idx,
-            edge HIGHBD_CALL_SUFFIX);
-
         const int intra_edge_filter_flag = f->seq_hdr->intra_edge_filter << 10;
-        const int intra_ibp_flag = apply_ibp << 11;
+        const int ibp_flag = apply_ibp << 11;
         const int mrl_flag = mrl_idx << 12;
+        const int have_left_flag = (t->bx > ts->tiling.col_start) << 14;
+        const int have_top_flag = (t->by > ts->tiling.row_start) << 15;
         const int intra_flags =
             sm_flag(t->a, bx4) | sm_flag(&t->l, by4) | intra_edge_filter_flag |
-            mrl_flag | intra_ibp_flag;
+            mrl_flag | ibp_flag | have_left_flag | have_top_flag;
+
+        const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
+            DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,
+            ts->tiling.col_end, ts->tiling.row_end, edge_flags, dst,
+            f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
+            t_dim->w, t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
 
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
                                  edge, tw, th, angle | intra_flags,
