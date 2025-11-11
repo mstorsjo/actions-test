@@ -76,12 +76,11 @@ static int annexb_probe(const uint8_t *data) {
     enum Dav1dObuType type;
     ret = parse_obu_header(data + cnt, imin(PROBE_SIZE - cnt, (int) obu_unit_size),
                            &obu_size, &type);
-    if (ret < 0 || type != DAV1D_OBU_TD || obu_size > 0)
+    if (ret < 0 || type != DAV1D_OBU_SEQ_HDR)
         return 0;
     cnt += (int)obu_unit_size;
 
     // look for first frame and accompanying sequence header
-    int seq = 0;
     while (cnt < PROBE_SIZE) {
         ret = leb(data + cnt, PROBE_SIZE - cnt, &obu_unit_size);
         if (ret < 0 || ((uint64_t)obu_unit_size + ret) > frame_unit_size)
@@ -97,11 +96,9 @@ static int annexb_probe(const uint8_t *data) {
         cnt += (int)obu_unit_size;
 
         switch (type) {
-        case DAV1D_OBU_SEQ_HDR:
-            seq = 1;
-            break;
         case DAV1D_OBU_TILE_GRP:
-            return seq;
+            return 1;
+        case DAV1D_OBU_SEQ_HDR:
         case DAV1D_OBU_TD:
             return 0;
         default:
@@ -114,7 +111,7 @@ static int annexb_probe(const uint8_t *data) {
             return 0;
     }
 
-    return seq;
+    return 1;
 }
 
 typedef struct DemuxerPriv {

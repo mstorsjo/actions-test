@@ -46,30 +46,25 @@
 static int section5_probe(const uint8_t *data) {
     int ret, cnt = 0;
 
-    // Check that the first OBU is a Temporal Delimiter.
+    // start with sequence header
     size_t obu_size;
     enum Dav1dObuType type;
     ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
                            &obu_size, &type);
-    if (ret < 0 || type != DAV1D_OBU_TD || obu_size > 0)
+    if (ret < 0 || type != DAV1D_OBU_SEQ_HDR)
         return 0;
     cnt += ret;
 
-    // look for first frame and accompanying sequence header
-    int seq = 0;
+    // look for first frame
     while (cnt < PROBE_SIZE) {
         ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
                                &obu_size, &type);
         if (ret < 0)
             return 0;
-        cnt += ret;
 
         switch (type) {
-        case DAV1D_OBU_SEQ_HDR:
-            seq = 1;
-            break;
         case DAV1D_OBU_TILE_GRP:
-            return seq;
+            return 1;
         case DAV1D_OBU_TD:
             return 0;
         default:
@@ -77,7 +72,7 @@ static int section5_probe(const uint8_t *data) {
         }
     }
 
-    return seq;
+    return 1;
 }
 
 typedef struct DemuxerPriv {
@@ -138,16 +133,8 @@ static int section5_read(Section5InputContext *const c, Dav1dData *const data) {
         if (fread(&byte[0], 1, 1, c->f) < 1)
             return -1;
         const enum Dav1dObuType obu_type = (byte[0] >> 2) & 0x1f;
-        if (first) {
-            if (obu_type != DAV1D_OBU_TD)
-                return -1;
-        } else {
-            if (obu_type == DAV1D_OBU_TD) {
-                // include TD in next packet
-                fseeko(c->f, -(1 + res), SEEK_CUR);
-                break;
-            }
-        }
+        if (first && obu_type == DAV1D_OBU_TD)
+            return -1;
         const int has_extension = byte[0] >> 7;
         if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
             return -1;
@@ -156,6 +143,7 @@ static int section5_read(Section5InputContext *const c, Dav1dData *const data) {
         len -= 1 + has_extension;
         total_bytes += 1U + has_extension + res + len;
         fseeko(c->f, len, SEEK_CUR); // skip packet, we'll read it below
+        if (obu_type == DAV1D_OBU_TD) break;
     }
 
     fseeko(c->f, -(off_t)total_bytes, SEEK_CUR);
