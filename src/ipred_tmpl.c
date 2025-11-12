@@ -1115,7 +1115,7 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
                         const int max_width, const int max_height
                         HIGHBD_DECL_SUFFIX)
 {
-    const int trans = mode > 15;
+    const int trans = !!(mode & 16);
     const int wd = width >> 2;
     const int hd = height >> 2;
     const int wl2 = ulog2(wd);
