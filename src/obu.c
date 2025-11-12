@@ -972,13 +972,15 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                           dav1d_get_bit(gb) ? DAV1D_FRAME_TYPE_INTER :
                           dav1d_get_bit(gb) ? DAV1D_FRAME_TYPE_KEY :
                                               DAV1D_FRAME_TYPE_INTRA;
-    }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-frametype[%d]: off=%td\n",
-           hdr->frame_type,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-frametype[%d]: off=%td\n",
+               hdr->frame_type,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
-    if (hdr->frame_type == DAV1D_FRAME_TYPE_KEY) {
+    }
+    if (!seqhdr->reduced_still_picture_header &&
+        hdr->frame_type == DAV1D_FRAME_TYPE_KEY)
+    {
         hdr->ltr_id = dav1d_get_bits(gb, seqhdr->number_of_bits_for_lt_frame_id);
 #if DEBUG_FRAME_HDR
         printf("HDR: post-ltr_id[%d]: off=%td\n",
@@ -1215,10 +1217,10 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
             hdr->motion_modes = seqhdr->motion_modes;
         }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d]: off=%td\n",
-           hdr->mv_precision, hdr->subpel_filter_mode,
-           hdr->motion_modes,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d]: off=%td\n",
+               hdr->mv_precision, hdr->subpel_filter_mode,
+               hdr->motion_modes,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
 
@@ -1498,23 +1500,25 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
 
     if (!hdr->all_lossless && seqhdr->gdf /* && not large-scale tiles */) {
         const int gdf_bs = 128 << (hdr->sb128 == 2);
-        hdr->gdf.enabled = dav1d_get_bit(gb);
+        hdr->gdf.enabled = seqhdr->reduced_still_picture_header ||
+                           dav1d_get_bit(gb);
         if (hdr->gdf.enabled) {
             if (imax(hdr->width, hdr->height) > gdf_bs)
                 hdr->gdf.enabled += dav1d_get_bit(gb);
             hdr->gdf.qp_idx = dav1d_get_bits(gb, 2);
             hdr->gdf.scale_idx = dav1d_get_bits(gb, 2);
         }
-    }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-gdf[%d]: off=%td\n",
-           hdr->gdf.enabled,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-gdf[%d]: off=%td\n",
+               hdr->gdf.enabled,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    }
 
     // cdef
     if (!hdr->all_lossless && seqhdr->cdef) {
-        hdr->cdef.enabled = dav1d_get_bit(gb);
+        hdr->cdef.enabled = seqhdr->reduced_still_picture_header ||
+                            dav1d_get_bit(gb);
         if (hdr->cdef.enabled) {
             hdr->cdef.damping = dav1d_get_bits(gb, 2) + 3;
             hdr->cdef.n_strengths = dav1d_get_bits(gb, 3) + 1;
@@ -1571,6 +1575,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                 hdr->restoration.unit_size[0] -=
                     2 + (!hdr->sb128 && !dav1d_get_bit(gb));
             }
+            assert(hdr->restoration.unit_size[0] >= 6 + hdr->sb128);
         }
 
         const int ss = seqhdr->layout != DAV1D_PIXEL_LAYOUT_I444;
@@ -1582,6 +1587,10 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                 hdr->restoration.unit_size[1] -=
                     2 + (!hdr->sb128 && !dav1d_get_bit(gb));
             }
+            // this can trigger for 422
+            if (hdr->restoration.unit_size[1] < 6 - seqhdr->ss_ver) goto error;
+            assert(hdr->restoration.unit_size[1] >= 6 + hdr->sb128 -
+                       imax(seqhdr->ss_hor, seqhdr->ss_ver));
         }
 
         for (int p = 0; p < 3; p++) {
@@ -1695,7 +1704,8 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
 #endif
 
     if (!hdr->all_lossless && seqhdr->ccso) {
-        hdr->ccso.enabled = dav1d_get_bit(gb);
+        hdr->ccso.enabled = seqhdr->reduced_still_picture_header ||
+                            dav1d_get_bit(gb);
         if (hdr->ccso.enabled) {
             const int n_planes = seqhdr->layout == DAV1D_PIXEL_LAYOUT_I400 ? 1 : 3;
             for (int p = 0; p < n_planes; p++) {
@@ -1770,9 +1780,9 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
             }
         }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-ccso[%d]: off=%td\n",
-           hdr->ccso.enabled,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-ccso[%d]: off=%td\n",
+               hdr->ccso.enabled,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
 
