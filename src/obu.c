@@ -1536,6 +1536,8 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
            hdr->cdef.enabled,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    const int n_bits = hdr->n_ref_frames <= 2 ? hdr->n_ref_frames - 1 :
+                       1 + ulog2(hdr->n_ref_frames - 1);
 
     // restoration
     if (!hdr->all_lossless && seqhdr->restoration) {
@@ -1550,19 +1552,34 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
             }
 
             if (hdr->restoration.p[p].type >= DAV1D_RESTORATION_NS_WIENER) {
-                hdr->restoration.p[p].ns.frame_filters_on = dav1d_get_bit(gb);
-                if (hdr->restoration.p[p].ns.frame_filters_on) {
+                struct Dav1dNSWienerPlane *const pd = &hdr->restoration.p[p].ns;
+                pd->frame_filters_on = dav1d_get_bit(gb);
+                if (pd->frame_filters_on) {
                     if (IS_INTER_OR_SWITCH(hdr))
-                        hdr->restoration.p[p].ns.temporal = dav1d_get_bit(gb);
-                    if (hdr->restoration.p[p].ns.temporal) {
-                        // FIXME find refidx
+                        pd->temporal = dav1d_get_bit(gb);
+                    if (pd->temporal) {
+                        int ref = 0;
+                        if (n_bits) {
+                            ref = hdr->restoration.p[p].ns.refidx =
+                                dav1d_get_bits(gb, n_bits);
+                            if (ref >= hdr->n_ref_frames) goto error;
+                        }
+                        const Dav1dFrameHeader *const refhdr =
+                            c->refs[hdr->refidx[ref]].p.p.frame_hdr;
+                        if (!refhdr) goto error;
+                        const struct Dav1dNSWienerPlane *rpd =
+                            &refhdr->restoration.p[p].ns;
+                        if (!rpd->frame_filters_on && p)
+                            rpd = &refhdr->restoration.p[3 - p].ns; // U <-> V
+                        if (!rpd->frame_filters_on) goto error;
+                        pd->num_classes = rpd->num_classes;
                     } else {
                         const int val = dav1d_get_bits(gb, 3);
-                        hdr->restoration.p[p].ns.num_classes =
+                        pd->num_classes =
                             1 + val + imax(val - 3, 0) + imax(val - 5, 0) * 2;
                     }
                 } else {
-                    hdr->restoration.p[p].ns.num_classes = 1;
+                    pd->num_classes = 1;
                 }
             }
         }
@@ -1595,31 +1612,46 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
 
         for (int p = 0; p < 3; p++) {
             int8_t ref_filters[48][18];
-            if (!hdr->restoration.p[p].ns.frame_filters_on) continue;
+            struct Dav1dNSWienerPlane *const pd = &hdr->restoration.p[p].ns;
+            if (!pd->frame_filters_on) continue;
             const int n_feat = 16 + 2 * !!p;
-            int i = 0;
             const int n_ref_filters = seqhdr->rst_disable_mask[!!p] & 1 ? 16 :
-                48 - hdr->restoration.p[p].ns.num_classes;
+                                      48 - pd->num_classes;
+
+            if (pd->temporal) {
+                const Dav1dFrameHeader *const ref_hdr =
+                    c->refs[hdr->refidx[pd->refidx]].p.p.frame_hdr;
+                const struct Dav1dNSWienerPlane *rpd =
+                    &ref_hdr->restoration.p[p].ns;
+                if (!rpd->frame_filters_on) {
+                    assert(p);
+                    rpd = &ref_hdr->restoration.p[3 - p].ns;
+                }
+                assert(rpd->frame_filters_on);
+                for (int n = 0; n < pd->num_classes; n++)
+                    memcpy(pd->filter[n], rpd->filter[n], n_feat);
+                continue;
+            }
+            int i = 0;
             for (int r = 0; r < hdr->n_ref_frames; r++) {
                 const Dav1dFrameHeader *const ref_hdr =
                     c->refs[hdr->refidx[r]].p.p.frame_hdr;
                 for (int dir = (const int8_t[]){ 0, +1, -1 }[p], p2 = p;;
                      p2 += dir, dir = 0)
                 {
-                    if (ref_hdr->restoration.p[p2].ns.frame_filters_on) {
+                    const struct Dav1dNSWienerPlane *const rpd =
+                        &ref_hdr->restoration.p[p2].ns;
+                    if (rpd->frame_filters_on) {
                         const int n_classes =
-                            imin(n_ref_filters - i,
-                                 ref_hdr->restoration.p[p2].ns.num_classes);
+                            imin(n_ref_filters - i, rpd->num_classes);
                         for (int n = 0; n < n_classes; n++)
-                            memcpy(ref_filters[i++],
-                                   ref_hdr->restoration.p[p2].ns.filter[n],
-                                   n_feat);
+                            memcpy(ref_filters[i++], rpd->filter[n], n_feat);
                     }
                     if (!dir) break;
                 }
             }
             const int n_filters = seqhdr->rst_disable_mask[!!p] & 1 ? 16 : 64;
-            const int n_classes = hdr->restoration.p[p].ns.num_classes;
+            const int n_classes = pd->num_classes;
             uint8_t grp_cnt[3], grp_ref_cnt[3] = { 0 };
             assert(n_classes > 0);
             grp_cnt[0] = n_classes;
@@ -1716,9 +1748,6 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                     hdr->ccso.p[p].sb_reuse = dav1d_get_bit(gb);
                     if (hdr->ccso.p[p].reuse || hdr->ccso.p[p].sb_reuse) {
                         int ref = 0;
-                        const int n_bits = hdr->n_ref_frames <= 2 ?
-                                           hdr->n_ref_frames - 1 :
-                                           1 + ulog2(hdr->n_ref_frames - 1);
                         if (n_bits) {
                             hdr->ccso.p[p].refidx = ref =
                                 dav1d_get_bits(gb, n_bits);

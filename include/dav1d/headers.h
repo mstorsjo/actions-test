@@ -516,9 +516,9 @@ typedef struct Dav1dFrameHeader {
     struct {
         struct {
             uint8_t /*enum Dav1dRestorationType*/ type;
-            struct {
+            struct Dav1dNSWienerPlane {
                 uint8_t frame_filters_on;
-                uint8_t num_classes, temporal;
+                uint8_t num_classes, temporal, refidx;
                 int8_t filter[16][18];
             } ns;
         } p[3 /* plane */];

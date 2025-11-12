@@ -3812,10 +3812,9 @@ static void read_restoration_info(Dav1dTaskContext *const t,
         lr->type = type ? frame_type : DAV1D_RESTORATION_NONE;
     }
 
-    if (lr->type == DAV1D_RESTORATION_NS_WIENER &&
-        !f->frame_hdr->restoration.p[p].ns.frame_filters_on)
-    {
-        const int n_classes = f->frame_hdr->restoration.p[p].ns.num_classes;
+    const struct Dav1dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[p].ns;
+    if (lr->type == DAV1D_RESTORATION_NS_WIENER && !pd->frame_filters_on) {
+        const int n_classes = pd->num_classes;
         unsigned exact_match_mask = 0;
         struct NsWienerBank *const bank = &ts->ns_wiener_bank[p];
         uint8_t bank_refs[16];
