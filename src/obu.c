@@ -76,10 +76,14 @@ static inline int tile_log2(const int sz, const int tgt) {
 }
 
 static NOINLINE void parse_tile_info(struct Dav1dTileInfo *const thdr,
-                                     GetBits *const gb,
-                                     const int sb128, const int w, const int h)
+                                     GetBits *const gb, const int sbmul,
+                                     const int sb128, const int seq_sb128,
+                                     const int w, const int h)
 {
     thdr->uniform = dav1d_get_bit(gb);
+
+    // the limits are calculated based on a frame's sb128, and rounded-up
+    // width/height variables (aligned to sbsz)
     const int sbsz_min1 = (64 << sb128) - 1;
     const int sbsz_log2 = 6 + sb128;
     const int sbw = (w + sbsz_min1) >> sbsz_log2;
@@ -91,24 +95,41 @@ static NOINLINE void parse_tile_info(struct Dav1dTileInfo *const thdr,
     thdr->max_log2_rows = tile_log2(1, imin(sbh, DAV1D_MAX_TILE_ROWS));
     const int min_log2_tiles = imax(tile_log2(max_tile_area_sb, sbw * sbh),
                                     thdr->min_log2_cols);
+
     if (thdr->uniform) {
+        // but the (uniform) tile distribution is done based on "full" SBs only,
+        // which can be less than the rounded-up versions above. Also, this is
+        // done based on the sequence header's sb128 (not the frame's), which
+        // can be different for keyframes
+        const int seq_sbsz_log2 = 6 + seq_sb128;
+        const int fsbw = imax(1, (w + 7) >> seq_sbsz_log2);
+        const int fsbh = imax(1, (h + 7) >> seq_sbsz_log2);
+
         for (thdr->log2_cols = thdr->min_log2_cols;
              thdr->log2_cols < thdr->max_log2_cols && dav1d_get_bit(gb);
              thdr->log2_cols++) ;
-        const int tile_w = 1 + ((sbw - 1) >> thdr->log2_cols);
+        const int tile_w = imax(1, fsbw >> thdr->log2_cols);
+        int extra = imax(0, fsbw - (tile_w << thdr->log2_cols));
         thdr->cols = 0;
-        for (int sbx = 0; sbx < sbw; sbx += tile_w, thdr->cols++)
-            thdr->col_start_sb[thdr->cols] = sbx;
+        for (int sbx = 0; sbx < fsbw;
+             sbx += tile_w + (extra > 0), thdr->cols++, extra--)
+        {
+            thdr->col_start_sb[thdr->cols] = sbx * sbmul;
+        }
         thdr->min_log2_rows =
             imax(min_log2_tiles - thdr->log2_cols, 0);
 
         for (thdr->log2_rows = thdr->min_log2_rows;
              thdr->log2_rows < thdr->max_log2_rows && dav1d_get_bit(gb);
              thdr->log2_rows++) ;
-        const int tile_h = 1 + ((sbh - 1) >> thdr->log2_rows);
+        const int tile_h = imax(1, fsbh >> thdr->log2_rows);
+        extra = imax(0, fsbh - (tile_h << thdr->log2_rows));
         thdr->rows = 0;
-        for (int sby = 0; sby < sbh; sby += tile_h, thdr->rows++)
-            thdr->row_start_sb[thdr->rows] = sby;
+        for (int sby = 0; sby < fsbh;
+             sby += tile_h + (extra > 0), thdr->rows++, extra--)
+        {
+            thdr->row_start_sb[thdr->rows] = sby * sbmul;
+        }
     } else {
         thdr->cols = 0;
         int widest_tile = 0, max_tile_area_sb = sbw * sbh;
@@ -640,7 +661,7 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
     hdr->tiling.present = dav1d_get_bit(gb);
     if (hdr->tiling.present) {
         hdr->tiling.present += dav1d_get_bit(gb);
-        parse_tile_info(&hdr->tiling.t, gb, hdr->sb128,
+        parse_tile_info(&hdr->tiling.t, gb, 1, hdr->sb128, hdr->sb128,
                         hdr->max_width, hdr->max_height);
     }
 #if DEBUG_SEQ_HDR
@@ -1217,8 +1238,31 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
         (seqhdr->tiling.present == DAV1D_ADAPTIVE && dav1d_get_bit(gb)))
     {
         hdr->tiling.t = seqhdr->tiling.t;
+        if (hdr->sb128 != seqhdr->sb128) {
+            assert(hdr->sb128 == 1 && seqhdr->sb128 == 2 &&
+                   IS_KEY_OR_INTRA(hdr));
+            int n;
+            for (n = 0; n < hdr->tiling.t.rows; n++)
+                hdr->tiling.t.row_start_sb[n] *= 2;
+            hdr->tiling.t.row_start_sb[n] = imin(hdr->tiling.t.row_start_sb[n] * 2,
+                                                 (hdr->height + 127) >> 7);
+            for (n = 0; n < hdr->tiling.t.cols; n++)
+                hdr->tiling.t.col_start_sb[n] *= 2;
+            hdr->tiling.t.col_start_sb[n] = imin(hdr->tiling.t.col_start_sb[n] * 2,
+                                                 (hdr->width + 127) >> 7);
+        }
     } else {
-        parse_tile_info(&hdr->tiling.t, gb, hdr->sb128, hdr->width, hdr->height);
+        const int sbmul = seqhdr->sb128 == 2 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
+        parse_tile_info(&hdr->tiling.t, gb, sbmul, hdr->sb128, seqhdr->sb128,
+                        hdr->width, hdr->height);
+        if (sbmul == 2) {
+            hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] =
+                imin(hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] * 2,
+                     (hdr->height + 127) >> 7);
+            hdr->tiling.t.col_start_sb[hdr->tiling.t.cols] =
+                imin(hdr->tiling.t.col_start_sb[hdr->tiling.t.cols] * 2,
+                     (hdr->width + 127) >> 7);
+        }
     }
     if (hdr->tiling.t.log2_cols || hdr->tiling.t.log2_rows) {
         if (!seqhdr->avg_cdf_type)
