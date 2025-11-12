@@ -3974,29 +3974,34 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
             if (!((f->lf.restore_planes >> p) & 1U))
                 continue;
 
-            const int x = 4 * t->bx >> ss_hor, y = t->by * 4 >> ss_ver;
+            const int tx = 4 * (t->bx - ts->tiling.col_start) >> ss_hor;
+            const int ty = 4 * (t->by - ts->tiling.row_start) >> ss_ver;
             const int unit_sz_log2 = f->frame_hdr->restoration.unit_size[!!p];
             const int unit_sz = 1 << unit_sz_log2;
             const unsigned mask = unit_sz - 1;
-            if ((x | y) & mask) continue;
-            const int w = f->bw * 4 >> ss_hor;
-            const int h = f->bh * 4 >> ss_ver;
+            if ((tx | ty) & mask) continue;
+            const int tw = ts->tiling.col_end * 4 >> ss_hor;
+            const int th = ts->tiling.row_end * 4 >> ss_ver;
             const int half_unit = unit_sz >> 1;
             // Round half up at frame boundaries, if there's more than one
             // restoration unit
-            if ((y && y + half_unit > h) || (x && x + half_unit > w)) continue;
+            const int fx = 4 * t->bx >> ss_hor, fy = t->by * 4 >> ss_ver;
+            if ((ty && fy + half_unit > th) || (tx && fx + half_unit > tw))
+                continue;
 
             const enum Dav1dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
 
             // FIXME many of these values can be pre-calculated at frame-level
             const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
-            const int lruw = imax(1, imin(w - x + half_unit, sbw) >> unit_sz_log2);
-            const int lruh = imax(1, imin(h - y + half_unit, sbh) >> unit_sz_log2);
+            const int lruw = imax(1, imin(tw - fx + half_unit, sbw) >> unit_sz_log2);
+            const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
             const int vsh = unit_sz_log2 - 7 + ss_ver;
             const int hsh = unit_sz_log2 - 7 + ss_hor;
             int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
+            // FIXME I think lruh is always 1, so this loop may be eliminated
             for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
                 for (int x = 0; x < lruw; x++) {
+                    // FIXME [0] is probably not correct
                     Av1RestorationUnit *const lr =
                         &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][0];
                     read_restoration_info(t, lr, p, frame_type);
