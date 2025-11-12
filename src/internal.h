@@ -171,7 +171,6 @@ struct Dav1dContext {
         Dav1dRef *segmap;
         Dav1dRef *refmvs;
         uint8_t refpoc[7];
-        int8_t ns_wiener_filter[3 /* plane */][16 /* class */][32];
     } refs[8];
     Dav1dMemPool *cdf_pool;
     CdfThreadContext cdf[8];
@@ -228,8 +227,6 @@ struct Dav1dFrameContext {
     Dav1dRef *cur_segmap_ref, *prev_segmap_ref;
     uint8_t *cur_segmap;
     const uint8_t *prev_segmap;
-    int8_t ref_ns_wiener_filter[3 /* plane */][48 /* refidx */][32];
-    uint8_t num_ref_ns_wiener_filters[2];
     uint8_t refpoc[7], refrefpoc[7][7], refdir[7 + 1 /* tip */];
     int8_t furthest_future_refidx;
     uint8_t absrefdist[7];

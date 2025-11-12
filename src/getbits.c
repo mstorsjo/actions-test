@@ -135,16 +135,17 @@ unsigned dav1d_get_vlc(GetBits *const c) {
     return ((1U << n_bits) - 1) + dav1d_get_bits(c, n_bits);
 }
 
-static unsigned get_bits_subexp_u(GetBits *const c, const unsigned ref,
-                                  const unsigned n)
+unsigned dav1d_get_bits_subexp_u(GetBits *const c, const unsigned ref,
+                                 const unsigned n, const int k)
 {
     unsigned v = 0;
 
     for (int i = 0;; i++) {
-        const int b = i ? 3 + i - 1 : 3;
+        const int b = i ? k + i - 1 : k;
+        const int a = 1 << b;
 
-        if (n < v + 3 * (1 << b)) {
-            v += dav1d_get_uniform(c, n - v + 1);
+        if (n <= v + 3 * a) {
+            v += dav1d_get_uniform(c, n - v);
             break;
         }
 
@@ -153,12 +154,14 @@ static unsigned get_bits_subexp_u(GetBits *const c, const unsigned ref,
             break;
         }
 
-        v += 1 << b;
+        v += a;
     }
 
-    return ref * 2 <= n ? inv_recenter(ref, v) : n - inv_recenter(n - ref, v);
+    return ref * 2 <= n ? inv_recenter(ref, v) :
+                          n - 1 - inv_recenter(n - 1 - ref, v);
 }
 
 int dav1d_get_bits_subexp(GetBits *const c, const int ref, const unsigned n) {
-    return (int) get_bits_subexp_u(c, ref + (1 << n), 2 << n) - (1 << n);
+    const int off = n - 1, n2 = n + off;
+    return (int) dav1d_get_bits_subexp_u(c, ref + off, n2, 3) - off;
 }

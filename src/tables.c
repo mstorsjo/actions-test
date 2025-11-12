@@ -248,6 +248,9 @@ const int8_t dav1d_cdef_directions[2 + 8 + 2 /* dir */][2 /* pass */] = {
     {  0 * 12 + 1, -1 * 12 + 2 }, // 1
 };
 
+const unsigned dav1d_subset_masks_y[4] = { 0x3f, 0xfc3, 0xfff, 0xffff };
+const unsigned dav1d_subset_masks_uv[3] = { 0x3f, 0x3ff, 0x3ffff };
+
 const int8_t dav1d_wiener_ns_filters[64][16] = {
     {  39,  39, -14, -14, -16, -16,   7,   7,  -1,  -3,   1,   7 },
     {  -1,   3,   1,  -1,  -2,  -1,   0,   0,   1,   0,   0,   0 },

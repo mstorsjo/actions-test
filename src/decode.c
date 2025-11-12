@@ -3794,88 +3794,6 @@ static void read_restoration_info(Dav1dTaskContext *const t,
     const Dav1dFrameContext *const f = t->f;
     Dav1dTileState *const ts = t->ts;
 
-    static const unsigned subset_masks_y[] = { 0x3f, 0xfc3, 0xfff, 0xffff };
-    static const unsigned subset_masks_uv[] = { 0x3f, 0xfff, 0x3ffff };
-
-    if (!t->bx && !t->by && frame_type >= DAV1D_RESTORATION_NS_WIENER &&
-        f->frame_hdr->restoration.p[p].ns.frame_filters_on)
-    {
-        const int n_ref_filters = f->seq_hdr->rst_disable_mask[!!p] & 1 ? 16 : 64;
-        const int n_classes = f->frame_hdr->restoration.p[p].ns.num_classes;
-        uint8_t grp_cnt[3], grp_ref_cnt[3] = { 0 };
-        assert(n_classes > 0);
-        grp_cnt[0] = n_classes;
-        grp_cnt[1] = f->num_ref_ns_wiener_filters[!!p];
-        grp_cnt[2] = n_ref_filters - (grp_cnt[0] + grp_cnt[1]);
-        uint8_t filter_refs[64];
-        int pred_grp = 2 - (grp_cnt[1] > 2);
-        const int nnz_grps = 1 + !!grp_cnt[1] + !!grp_cnt[2];
-        for (int n = 0; n < n_classes; n++) {
-            int group;
-            if (nnz_grps == 1 || !dav1d_msac_decode_bool_bypass(&ts->msac)) {
-                group = pred_grp;
-            } else if (nnz_grps == 2) {
-                group = 2 - !grp_cnt[2] - pred_grp;
-            } else if (dav1d_msac_decode_bool_bypass(&ts->msac)) {
-                group = 2 - (pred_grp == 2);
-            } else {
-                group = pred_grp == 0;
-            }
-            if (++grp_ref_cnt[group] + (group < pred_grp) > grp_ref_cnt[pred_grp])
-                pred_grp = group;
-            const int base = grp_cnt[0] * !!group + grp_cnt[1] * (group == 2);
-            const int range = group ? grp_cnt[group] : n + 1;
-            filter_refs[n] = base + (range == 1 ? 0 :
-                dav1d_msac_decode_subexp(&ts->msac, range >> 1, range, 4));
-        }
-        unsigned exact_match_mask = 0;
-        for (int n = 0, mask = 1; n < n_classes; n++, mask <<= 1) {
-            exact_match_mask |= mask * dav1d_msac_decode_bool_bypass(&ts->msac);
-        }
-        const unsigned *const masks = p ? subset_masks_uv : subset_masks_y;
-        const int8_t (*const cf_range)[2] = p ? dav1d_ns_wiener_coef_range_uv :
-                                                dav1d_ns_wiener_coef_range_y;
-        static const uint8_t shuffled_index[] = {
-            16, 7,  58, 21, 12, 61, 26, 38, 18, 30, 50, 45, 23, 49, 43, 62,
-            42, 54, 27, 36, 17, 44, 32, 34, 4,  24, 52, 31, 37, 11, 33, 19,
-            35, 6,  22, 53, 63, 25, 41, 47, 1,  59, 0,  28, 40, 55, 48, 8,
-            5,  51, 9,  46, 56, 60, 15, 2,  13, 14, 57, 29, 3,  20, 39, 10
-        };
-        static const int8_t zero[18] = { 0 };
-        for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
-            const int r = filter_refs[n];
-            // FIXME this cast isn't very pretty
-            int8_t *const filter = (int8_t *) f->ns_wiener.filter[p][n];
-            const int8_t *const ref_filter = !r ? zero :
-                r < n_classes ? f->ns_wiener.filter[p][r - 1] :
-                r < n_classes + grp_cnt[1] ?
-                                f->ref_ns_wiener_filter[p][r - n_classes] :
-                dav1d_wiener_ns_filters[shuffled_index[r - n_classes - grp_cnt[1]]];
-            if (exact_match_mask & 1) {
-                memcpy(filter, ref_filter, 16 + 2 * !!p);
-                continue;
-            }
-            int s;
-            for (s = 0; s < 3 - !!p; s++) {
-                const int found = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                      ts->cdf.m.wiener_ns_len[!!p]);
-                if (!found) break;
-            }
-            const unsigned mask = masks[s];
-            // FIXME read sym bit (chroma only) if ref filter subset "s" is
-            // assymetric and has space
-            for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
-                if (!(m & 1)) continue;
-                filter[i] = dav1d_msac_decode_4way(&ts->msac,
-                                ref_filter[i] - cf_range[i][1],
-                                ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
-                            cf_range[i][1];
-                // FIXME if sym is set and this coef is assymetric, insert an
-                // extra coef here
-            }
-        }
-    }
-
     if (frame_type == DAV1D_RESTORATION_SWITCHABLE) {
         assert(!p);
         if (dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.rst_switchable[0])) {
@@ -3914,7 +3832,7 @@ static void read_restoration_info(Dav1dTaskContext *const t,
             bank_refs[n] = r;
         }
 
-        const unsigned *const masks = p ? subset_masks_uv : subset_masks_y;
+        const unsigned *const masks = p ? dav1d_subset_masks_uv : dav1d_subset_masks_y;
         const int8_t (*const cf_range)[2] = p ? dav1d_ns_wiener_coef_range_uv :
                                                 dav1d_ns_wiener_coef_range_y;
         for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
@@ -3927,6 +3845,7 @@ static void read_restoration_info(Dav1dTaskContext *const t,
                     bank->bank_size[n] = 1;
                 continue;
             }
+            memset(filter, 0, 16 + !!p * 2);
             int s;
             for (s = 0; s < 3 - !!p; s++) {
                 const int found = dav1d_msac_decode_bool_adapt(&ts->msac,
@@ -5076,37 +4995,6 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         }
     }
 
-    // frame-wide ref filters
-    for (int p = 0; p < 3; p++) {
-        if (!f->frame_hdr->restoration.p[p].ns.frame_filters_on) continue;
-        const int n_feat = 16 + 2 * !!p;
-        int i = 0;
-        const int n_ref_filters = f->seq_hdr->rst_disable_mask[!!p] & 1 ? 16 :
-            48 - f->frame_hdr->restoration.p[p].ns.num_classes;
-        for (int r = 0; r < f->frame_hdr->n_ref_frames; r++) {
-            const Dav1dFrameHeader *const ref_hdr = f->refp[r].p.frame_hdr;
-            for (int dir = (const int8_t[]){ 0, +1, -1 }[p], p2 = p;;
-                 p2 += dir, dir = 0)
-            {
-                if (ref_hdr->restoration.p[p2].ns.frame_filters_on) {
-                    const int n_classes =
-                        imin(n_ref_filters - i,
-                             ref_hdr->restoration.p[p2].ns.num_classes);
-                    for (int n = 0; n < n_classes; n++)
-                        memcpy(f->ref_ns_wiener_filter[p][i++],
-                               c->refs[f->frame_hdr->refidx[r]].ns_wiener_filter[p2][n],
-                               n_feat);
-                }
-                if (!dir) break;
-            }
-        }
-        if (p == 2) {
-            assert(i == f->num_ref_ns_wiener_filters[1]);
-        } else {
-            f->num_ref_ns_wiener_filters[p] = i;
-        }
-    }
-
     // update references etc.
     const unsigned refresh_frame_flags = f->frame_hdr->refresh_frame_flags;
     for (int i = 0; i < 8; i++) {
@@ -5153,22 +5041,6 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     } else {
         dav1d_task_frame_init(f);
         pthread_mutex_unlock(&c->task_thread.lock);
-    }
-
-    /* this isn't compatible with frame-threading, but this should be fixed
-     * in v12 (where frame-wide ns_wiener filter setup is part of the frame
-     * header?), so it's an acceptable short-term workaround. */
-    for (int p = 0; p < 3; p++) {
-        if (!f->frame_hdr->restoration.p[p].ns.frame_filters_on) continue;
-        const int n_classes = f->frame_hdr->restoration.p[p].ns.num_classes;
-        const int n_feat = 16 + 2 * !!p;
-        for (int i = 0; i < 8; i++) {
-            if (refresh_frame_flags & (1 << i)) {
-                for (int n = 0; n < n_classes; n++)
-                    memcpy(c->refs[i].ns_wiener_filter[p][n],
-                           f->ns_wiener.filter[p][n], n_feat);
-            }
-        }
     }
 
     return 0;

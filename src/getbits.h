@@ -46,6 +46,7 @@ unsigned dav1d_get_uleb128(GetBits *c);
 // Output in range 0..max-1
 unsigned dav1d_get_uniform(GetBits *c, unsigned max);
 unsigned dav1d_get_vlc(GetBits *c);
+unsigned dav1d_get_bits_subexp_u(GetBits *c, unsigned ref, unsigned n, int k);
 int dav1d_get_bits_subexp(GetBits *c, int ref, unsigned n);
 
 static inline unsigned dav1d_get_ref_uniform(GetBits *c, const unsigned max,

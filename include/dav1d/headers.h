@@ -519,6 +519,7 @@ typedef struct Dav1dFrameHeader {
             struct {
                 uint8_t frame_filters_on;
                 uint8_t num_classes, temporal;
+                int8_t filter[16][18];
             } ns;
         } p[3 /* plane */];
         uint8_t unit_size[2 /* y, uv */];
