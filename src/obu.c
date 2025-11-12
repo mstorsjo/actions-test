@@ -1970,11 +1970,6 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
             break;
         }
 
-        // This is the frame header at the start of a frame OBU.
-        // There's no trailing bit at the end to skip, but we do need
-        // to align to the next byte.
-        dav1d_bytealign_get_bits(&gb);
-
         if (c->n_tile_data_alloc < c->n_tile_data + 1) {
             if ((c->n_tile_data + 1) > INT_MAX / (int)sizeof(*c->tile)) goto error;
             struct Dav1dTileGroup *tile = dav1d_realloc(ALLOC_TILE, c->tile,
