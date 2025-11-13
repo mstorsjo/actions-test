@@ -1,7 +1,7 @@
-From ec99adf91734ab9b301a8ed731cca84de0422910 Mon Sep 17 00:00:00 2001
+From c51ac229d792ee8ae84abb1d8e1a6611a7a625d3 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Wed, 27 Aug 2025 09:40:39 -0400
-Subject: [PATCH 2/4] frame header debugging
+Subject: [PATCH 2/5] frame header debugging
 
 ---
  aom/debug.h               |   1 +

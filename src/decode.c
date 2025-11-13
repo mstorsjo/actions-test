@@ -1931,8 +1931,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->ref[1] = f->skip_mode_refs[1];
             for (int n = 0; n < idx; n++) {
                 if (nx[n]->ref[0][xoff[n]] == TIP_FRAME) {
-                    b->ref[0] = imin(f->tip_refs[0], f->tip_refs[1]);
-                    b->ref[1] = imax(f->tip_refs[0], f->tip_refs[1]);
+                    b->ref[0] = imin(f->frame_hdr->tip.refs[0],
+                                     f->frame_hdr->tip.refs[1]);
+                    b->ref[1] = imax(f->frame_hdr->tip.refs[0],
+                                     f->frame_hdr->tip.refs[1]);
                     break;
                 } else if (nx[n]->ref[1][xoff[n]] != -1) {
                     b->ref[0] = nx[n]->ref[0][xoff[n]];
@@ -2024,7 +2026,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int comp_ctx =
                 get_compref_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
                                 have_top_right, have_bottom_left, b_dim,
-                                b->ref, f->tip_refs);
+                                b->ref, f->frame_hdr->tip.refs);
             if (b->ref[0] == b->ref[1]) {
                 b->inter_mode = NEARMV_NEARMV +
                     dav1d_msac_decode_symbol_adapt4(&ts->msac,
@@ -5048,43 +5050,6 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                            f->frame_hdr->n_ref_frames > 1 &&
                            abs(f->absrefdist[0] - f->absrefdist[1]) <= 1;
 
-    // tip
-    if (f->frame_hdr->tip.frame_mode) {
-        const int n_refs = f->frame_hdr->n_ref_frames;
-        if (n_refs > 1) {
-            uint8_t order[7];
-            int n_past = 0;
-            // temporal ordering of refs
-            for (int n = 0; n < n_refs; n++) {
-                const int dist = f->refdist[n];
-                int m;
-                for (m = n; m > 0 && f->refdist[order[m - 1]] > dist; m--)
-                    order[m] = order[m - 1];
-                order[m] = n;
-                n_past += dist < 0;
-            }
-            if (f->furthest_future_refidx < 0) {
-                // all refs are in the past, select nearest (last) 2
-                assert(!f->refdir[order[n_refs - 1]]);
-                f->tip_refs[0] = order[n_refs - 1];
-                f->tip_refs[1] = order[n_refs - 2];
-            } else if (!n_past) {
-                // all refs are in the future, select nearest (first) 2
-                assert(f->refdir[order[0]]);
-                f->tip_refs[0] = order[0];
-                f->tip_refs[1] = order[1];
-            } else {
-                // temporally mixed refs, select the closest to the current one
-                assert(n_past > 0 && n_past < n_refs);
-                assert(!f->refdir[order[n_past - 1]] && f->refdir[order[n_past]]);
-                f->tip_refs[0] = order[n_past - 1];
-                f->tip_refs[1] = order[n_past];
-            }
-        } else {
-            f->tip_refs[0] = f->tip_refs[1] = 0;
-        }
-    }
-
     // update references etc.
     const unsigned refresh_frame_flags = f->frame_hdr->refresh_frame_flags;
     for (int i = 0; i < 8; i++) {
@@ -5114,7 +5079,26 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         }
     }
 
-    if (c->n_fc == 1) {
+    if (f->frame_hdr->tip.frame_mode == 2) {
+        // FIXME run actual reconstruction
+        // this will likely be like a pass=2-only reconstruction,
+        // once that is implemented
+        dav1d_cdf_thread_unref(&f->in_cdf);
+        assert(!f->use_pri_sec_cdf);
+        assert(!f->frame_hdr->refresh_context);
+        for (int i = 0; i < 7; i++) {
+            if (f->refp[i].p.frame_hdr)
+                dav1d_thread_picture_unref(&f->refp[i]);
+            dav1d_ref_dec(&f->ref_mvs_ref[i]);
+        }
+        dav1d_thread_picture_unref(&c->out);
+        dav1d_picture_unref_internal(&f->cur);
+        dav1d_thread_picture_unref(&f->sr_cur);
+        dav1d_ref_dec(&f->mvs_ref);
+        dav1d_ref_dec(&f->seq_hdr_ref);
+        dav1d_ref_dec(&f->frame_hdr_ref);
+        dav1d_data_props_copy(&c->cached_error_props, &c->in.m);
+    } else if (c->n_fc == 1) {
         if ((res = dav1d_decode_frame(f)) < 0) {
             dav1d_thread_picture_unref(&c->out);
             for (int i = 0; i < 8; i++) {

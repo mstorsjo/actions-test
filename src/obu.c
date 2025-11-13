@@ -895,6 +895,47 @@ static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
     return imin(7, n_refs);
 }
 
+static void find_tip_ref_frames(const Dav1dContext *const c,
+                                Dav1dFrameHeader *const hdr,
+                                const Dav1dSequenceHeader *const seqhdr)
+{
+    // tip
+    const int n_refs = hdr->n_ref_frames;
+    if (n_refs == 1) {
+        hdr->tip.refs[0] = hdr->tip.refs[1] = 0;
+        return;
+    }
+
+    const unsigned poc = hdr->frame_offset;
+    uint8_t order[7];
+    int8_t refdist[7];
+    int n_past = 0;
+    // temporal ordering of refs
+    for (int n = 0; n < n_refs; n++) {
+        const unsigned refpoc = c->refs[hdr->refidx[n]].p.p.frame_hdr->frame_offset;
+        const int dist = refdist[n] = get_poc_diff(seqhdr->order_hint_n_bits,
+                                                   refpoc, poc);
+        int m;
+        for (m = n; m > 0 && refdist[order[m - 1]] > dist; m--)
+            order[m] = order[m - 1];
+        order[m] = n;
+        n_past += dist < 0;
+    }
+    if (n_past == n_refs) {
+        // all refs are in the past, select nearest (last) 2
+        hdr->tip.refs[0] = order[n_refs - 1];
+        hdr->tip.refs[1] = order[n_refs - 2];
+    } else if (!n_past) {
+        // all refs are in the future, select nearest (first) 2
+        hdr->tip.refs[0] = order[0];
+        hdr->tip.refs[1] = order[1];
+    } else {
+        // temporally mixed refs, select the closest to the current one
+        hdr->tip.refs[0] = order[n_past - 1];
+        hdr->tip.refs[1] = order[n_past];
+    }
+}
+
 static void derive_pri_sec_ref(const Dav1dContext *const c, int refs[2]) {
     const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
     const Dav1dFrameHeader *const hdr = c->frame_hdr;
@@ -930,13 +971,54 @@ static void derive_pri_sec_ref(const Dav1dContext *const c, int refs[2]) {
     }
 }
 
+static NOINLINE int parse_tile_info_frmhdr(Dav1dFrameHeader *const hdr,
+                                           const Dav1dSequenceHeader *const seqhdr,
+                                           GetBits *const gb)
+{
+    // tile data
+    hdr->sb128 = IS_INTER_OR_SWITCH(hdr) ? seqhdr->sb128 : !!seqhdr->sb128;
+    int sbmul;
+    if (seqhdr->tiling.present == 1 ||
+        (seqhdr->tiling.present == DAV1D_ADAPTIVE && dav1d_get_bit(gb)))
+    {
+        hdr->tiling.t = seqhdr->tiling.t;
+        if (hdr->sb128 != seqhdr->sb128) {
+            assert(hdr->sb128 == 1 && seqhdr->sb128 == 2 &&
+                   IS_KEY_OR_INTRA(hdr));
+            sbmul = 2;
+            for (int n = 0; n < hdr->tiling.t.rows; n++)
+                hdr->tiling.t.row_start_sb[n] *= 2;
+            for (int n = 0; n < hdr->tiling.t.cols; n++)
+                hdr->tiling.t.col_start_sb[n] *= 2;
+        } else sbmul = 1;
+    } else {
+        sbmul = seqhdr->sb128 == 2 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
+        parse_tile_info(&hdr->tiling.t, gb, sbmul, hdr->sb128, seqhdr->sb128,
+                        hdr->width, hdr->height);
+    }
+    if (sbmul == 2) {
+        hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] = (hdr->height + 127) >> 7;
+        hdr->tiling.t.col_start_sb[hdr->tiling.t.cols] = (hdr->width + 127) >> 7;
+    }
+    if (hdr->tiling.t.log2_cols || hdr->tiling.t.log2_rows) {
+        if (!seqhdr->avg_cdf_type)
+            hdr->tiling.update = dav1d_get_bits(gb, hdr->tiling.t.log2_cols +
+                                                    hdr->tiling.t.log2_rows);
+        if (hdr->tiling.update >= hdr->tiling.t.cols * hdr->tiling.t.rows)
+            return -1;
+        hdr->tiling.n_bytes = dav1d_get_bits(gb, 2) + 1;
+    }
+
+    return 0;
+}
+
 static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                            const enum Dav1dObuType obu_type)
 {
 #define DEBUG_FRAME_HDR 0
 
 #if DEBUG_FRAME_HDR
-    const uint8_t *const init_ptr = &gb->ptr[-1];
+    const uint8_t *const init_ptr = &gb->ptr[-!!(gb->bits_left & 7)];
 #endif
     const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
     Dav1dFrameHeader *const hdr = c->frame_hdr;
@@ -1164,6 +1246,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                                             DAV1D_FILTER_8TAP_SMOOTH;
                 }
             }
+            find_tip_ref_frames(c, hdr, seqhdr);
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-tip[refmvs:%d,tmvp:%d,lfsubpu:%d,tip:%d]: off=%td\n",
@@ -1171,6 +1254,34 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                hdr->loopfilter.lf_sub_pu, hdr->tip.frame_mode,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+
+        if (hdr->tip.frame_mode == 2) {
+            if (seqhdr->tip_explicit_qp) {
+                // FIXME yac and (sometimes) u/v ac delta
+            } else {
+                const Dav1dFrameHeader *const ref1hdr =
+                    c->refs[hdr->refidx[hdr->tip.refs[0]]].p.p.frame_hdr;
+                const Dav1dFrameHeader *const ref2hdr =
+                    c->refs[hdr->refidx[hdr->tip.refs[1]]].p.p.frame_hdr;
+                hdr->quant.yac = (ref1hdr->quant.yac + ref2hdr->quant.yac + 1) >> 1;
+            }
+
+            if (hdr->tip.filter_level) {
+                if (parse_tile_info_frmhdr(hdr, seqhdr, gb) < 0) goto error;
+#if DEBUG_FRAME_HDR
+                printf("HDR: post-tiling[%dx%dtiles,%dbytes]: off=%td\n",
+                       hdr->tiling.t.cols, hdr->tiling.t.rows, hdr->tiling.n_bytes,
+                       (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+            }
+
+            hdr->disable_cdf_update = 1;
+            int refs[2];
+            derive_pri_sec_ref(c, refs);
+            hdr->primary_ref_frame = refs[0];
+            hdr->secondary_ref_frame = refs[1];
+            return 0;
+        }
     }
 
     hdr->allow_screen_content_tools =
@@ -1238,46 +1349,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
-    // tile data
-    hdr->sb128 = IS_INTER_OR_SWITCH(hdr) ? seqhdr->sb128 : !!seqhdr->sb128;
-    if (seqhdr->tiling.present == 1 ||
-        (seqhdr->tiling.present == DAV1D_ADAPTIVE && dav1d_get_bit(gb)))
-    {
-        hdr->tiling.t = seqhdr->tiling.t;
-        if (hdr->sb128 != seqhdr->sb128) {
-            assert(hdr->sb128 == 1 && seqhdr->sb128 == 2 &&
-                   IS_KEY_OR_INTRA(hdr));
-            int n;
-            for (n = 0; n < hdr->tiling.t.rows; n++)
-                hdr->tiling.t.row_start_sb[n] *= 2;
-            hdr->tiling.t.row_start_sb[n] = imin(hdr->tiling.t.row_start_sb[n] * 2,
-                                                 (hdr->height + 127) >> 7);
-            for (n = 0; n < hdr->tiling.t.cols; n++)
-                hdr->tiling.t.col_start_sb[n] *= 2;
-            hdr->tiling.t.col_start_sb[n] = imin(hdr->tiling.t.col_start_sb[n] * 2,
-                                                 (hdr->width + 127) >> 7);
-        }
-    } else {
-        const int sbmul = seqhdr->sb128 == 2 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
-        parse_tile_info(&hdr->tiling.t, gb, sbmul, hdr->sb128, seqhdr->sb128,
-                        hdr->width, hdr->height);
-        if (sbmul == 2) {
-            hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] =
-                imin(hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] * 2,
-                     (hdr->height + 127) >> 7);
-            hdr->tiling.t.col_start_sb[hdr->tiling.t.cols] =
-                imin(hdr->tiling.t.col_start_sb[hdr->tiling.t.cols] * 2,
-                     (hdr->width + 127) >> 7);
-        }
-    }
-    if (hdr->tiling.t.log2_cols || hdr->tiling.t.log2_rows) {
-        if (!seqhdr->avg_cdf_type)
-            hdr->tiling.update = dav1d_get_bits(gb, hdr->tiling.t.log2_cols +
-                                                    hdr->tiling.t.log2_rows);
-        if (hdr->tiling.update >= hdr->tiling.t.cols * hdr->tiling.t.rows)
-            goto error;
-        hdr->tiling.n_bytes = dav1d_get_bits(gb, 2) + 1;
-    }
+    if (parse_tile_info_frmhdr(hdr, seqhdr, gb) < 0) goto error;
 #if DEBUG_FRAME_HDR
     printf("HDR: post-tiling[%dx%dtiles,%dbytes]: off=%td\n",
            hdr->tiling.t.cols, hdr->tiling.t.rows, hdr->tiling.n_bytes,
@@ -2366,6 +2438,8 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
     }
 
     if (c->seq_hdr && c->frame_hdr) {
+        // FIXME handle bridge/bru also
+        const int frame_without_data = c->frame_hdr->tip.frame_mode == 2;
         if (c->frame_hdr->show_existing_frame) {
             if (!c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr) goto error;
             switch (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type) {
@@ -2478,7 +2552,8 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
             }
             c->frame_hdr = NULL;
         } else if (c->n_tiles == c->frame_hdr->tiling.t.cols *
-                                 c->frame_hdr->tiling.t.rows)
+                                 c->frame_hdr->tiling.t.rows ||
+                   frame_without_data)
         {
             switch (c->frame_hdr->frame_type) {
             case DAV1D_FRAME_TYPE_INTER:
@@ -2497,7 +2572,7 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
             default:
                 break;
             }
-            if (!c->n_tile_data)
+            if (!frame_without_data && !c->n_tile_data)
                 goto error;
             if ((res = dav1d_submit_frame(c)) < 0)
                 return res;

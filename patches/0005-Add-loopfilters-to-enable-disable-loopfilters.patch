@@ -1,4 +1,4 @@
-From 1133e44e50b2be388b45b5091da0be82fcea234b Mon Sep 17 00:00:00 2001
+From 6b10e8a5a3fcb8bd725bddb6ec6d43d3683f57e0 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
@@ -190,10 +190,10 @@ index be11305845..7d0ae14c4e 100644
    { AV1D_ENABLE_SUBGOP_STATS, ctrl_enable_subgop_stats },
  
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 43669107fa..2fc2caf27d 100644
+index ebbffda271..8284145dc7 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
-@@ -10885,8 +10885,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10897,8 +10897,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
      }
    }
  
@@ -211,7 +211,7 @@ index 43669107fa..2fc2caf27d 100644
        if (pbi->num_workers > 1) {
          av1_loop_filter_frame_mt(&cm->cur_frame->buf, cm, &pbi->dcb.xd, 0,
                                   num_planes, 0, pbi->tile_workers,
-@@ -10897,7 +10905,7 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10909,7 +10917,7 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
        }
      }
  
@@ -220,7 +220,7 @@ index 43669107fa..2fc2caf27d 100644
          !pbi->skip_loop_filter && !cm->features.coded_lossless &&
          (cm->ccso_info.ccso_enable[0] || cm->ccso_info.ccso_enable[1] ||
           cm->ccso_info.ccso_enable[2]);
-@@ -10920,16 +10928,17 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10932,16 +10940,17 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
        extend_ccso_border(&cm->cur_frame->buf, ext_rec_y, CCSO_PADDING_SIZE);
      }
  
@@ -255,5 +255,5 @@ index 232423f86a..725b1f94ab 100644
    int inv_tile_order;
    int need_resync;  // wait for key/intra-only frame.
 -- 
-2.43.0
+2.48.1
 

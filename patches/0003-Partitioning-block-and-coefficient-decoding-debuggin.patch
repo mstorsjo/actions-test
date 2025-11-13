@@ -1,12 +1,12 @@
-From 6f2fef49036ff9d0f730f25b9af1aa4c75ead6ab Mon Sep 17 00:00:00 2001
+From 51a5abdc72b9db79668e3ebc393445c778951157 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
-Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
+Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  helpers.
 
 ---
  aom/debug.h               |  16 +
- av1/decoder/decodeframe.c | 258 ++++++++++----
+ av1/decoder/decodeframe.c | 282 +++++++++++----
  av1/decoder/decodemv.c    | 729 +++++++++++++++++++++++++++++++-------
  av1/decoder/decodemv.h    |  18 +-
  av1/decoder/decoder.c     |   5 +-
@@ -15,7 +15,7 @@ Subject: [PATCH 3/4] Partitioning, block and coefficient decoding debugging
  av1/decoder/decodetxb.h   |  14 +-
  av1/decoder/detokenize.c  |   8 +-
  av1/decoder/detokenize.h  |   3 +-
- 10 files changed, 1011 insertions(+), 266 deletions(-)
+ 10 files changed, 1029 insertions(+), 272 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -44,7 +44,7 @@ index 8c8847f1eb..b203c56cfa 100644
  
  #endif /* AOM_DEBUG_H */
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 70e22ec4ea..bc3ce815af 100644
+index 70e22ec4ea..a9dff1b78d 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -225,7 +225,7 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -668,7 +668,57 @@ index 70e22ec4ea..bc3ce815af 100644
             rb->bit_offset);
  #endif
  
-@@ -9985,7 +10109,7 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+@@ -9468,6 +9592,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+               cm->seq_params.seq_enabled_motion_modes;
+         }
+ #endif  // CONFIG_MOTION_MODE_FRAME_HEADERS_OPT
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d]: off=%u\n",
++           features->fr_mv_precision - 3,
++           features->interp_filter, features->enabled_motion_modes,
++           rb->bit_offset);
++#endif
+ 
+ #if !CONFIG_FIX_OPFL_AUTO
+         if (cm->seq_params.enable_opfl_refine == AOM_OPFL_REFINE_AUTO) {
+@@ -9518,12 +9648,6 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+                                "Reference frame has invalid dimensions");
+         }
+       }
+-#if DEBUG_FRAME_HDR
+-    printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d]: off=%u\n",
+-           features->fr_mv_precision - 3,
+-           features->interp_filter, features->enabled_motion_modes,
+-           rb->bit_offset);
+-#endif
+     }
+   }
+ 
+@@ -9694,11 +9818,23 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+       cm->cur_frame->base_qindex = cm->quant_params.base_qindex;
+       cm->cur_frame->u_ac_delta_q = cm->quant_params.u_ac_delta_q;
+       cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q;
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-quant[yac:%d,deltas=uac:%d,vac:%d]: off=%u\n",
++           cm->quant_params.base_qindex,
++           cm->quant_params.u_ac_delta_q,
++           cm->quant_params.v_ac_delta_q,
++           rb->bit_offset);
++#endif
+     }
+     features->refresh_frame_context = REFRESH_FRAME_CONTEXT_DISABLED;
+     if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu &&
+         cm->lf.tip_filter_level) {
+       read_tile_info(pbi, rb);
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-tiling[%dx%dtiles,%dbytes]: off=%u\n",
++           pbi->common.tiles.cols, pbi->common.tiles.rows, pbi->tile_size_bytes,
++           rb->bit_offset);
++#endif
+     }
+     features->disable_cdf_update = 1;
+     cm->cur_frame->film_grain_params_present =
+@@ -9985,7 +10121,7 @@ static int read_uncompressed_header(AV1Decoder *pbi,
  #if DEBUG_FRAME_HDR
      printf("HDR: post-modebits[tx:%d,refmode:%d,skipmode:%d,bawp:%d,warp:%d,redtxset:%d]: off=%u\n",
             features->tx_mode,
