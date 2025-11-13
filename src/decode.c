@@ -3071,6 +3071,17 @@ static int checked_decode_b(Dav1dTaskContext *const t, const enum BlockSize bs) 
 
 #endif /* defined(__has_feature) */
 
+// dir_ptr is a limited recursive partition tree indicator for (ext)sdp as well
+// as sdp/cfl delay limits.
+// For partitions with luma, the 24th bit indicates whether the parent partition
+// prohibits extsdp in child partitions.
+// Also for luma, the lower 24 bits are aggregated as the split-direction of
+// the child partitions (1: hor, 2: ver, 3: mixed, -1: none] in bit 0-7, the
+// next sub-partition (1: hor, 2: ver, 3: mixed, -1: none) in bit 16-23, and
+// the child's partition choices in bit 8-15.
+// For chroma, these choices can then be used to infer the partition/direction.
+// sdp/cfl delay restrictions can also be calculated using these values.
+
 static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                      const enum BlockSize lbs, enum BlockSize cbs,
                      int *const dir_ptr)
@@ -3274,11 +3285,11 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                        f->frame_hdr->frame_offset, t->by, t->bx, bs, ts->msac.rng);
 #endif
             if (cbs == BS_64x64 && lbs == BS_INVALID &&
-                (*dir_ptr == -1 || (*dir_ptr & 0x30003) == 0x10002 ||
-                                   (*dir_ptr & 0x30003) == 0x20001))
+                ((*dir_ptr & 0xff) == 0xff || (*dir_ptr & 0x30003) == 0x10002 ||
+                                              (*dir_ptr & 0x30003) == 0x20001))
             {
                 // F164: infer SDP chroma partitioning at 64x64 level
-                if (*dir_ptr == -1) {
+                if ((*dir_ptr & 0xff) == 0xff) {
                     bp = PARTITION_NONE; // if luma did not split, don't split chroma
                 } else {
                     // if luma split one way, and all children split another way,
@@ -3395,10 +3406,11 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         // F157 "limit SDP-imposed CfL delay"
         if (lbs == BS_INVALID && cbs == BS_64x64)
             t->sdp_cfl_disallowed = dir != -1 && dir != (*dir_ptr & 0x3);
-        *dir_ptr |= dir | (bp << 8);
+        *dir_ptr |= (uint8_t) dir | (bp << 8);
 
         if (IS_INTER_OR_SWITCH(f->frame_hdr) && f->seq_hdr->ext_sdp &&
             (cbs | lbs) != BS_INVALID && bp != PARTITION_NONE &&
+            !(*dir_ptr & (1 << 24)) && // parent partition limits recursive extsdp
             bp < PARTITION_H4A && imin(bw4, bh4) >= 2 && imax(bw4, bh4) <= 16)
         {
             const int sz = b_dim[2] + b_dim[3];
@@ -3418,7 +3430,21 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         t->cbx = t->bx;
         t->cby = t->by;
     }
-    int child_dir = 0;
+    // can child partitions split?
+    static const uint8_t lim[][2] = {
+        [PARTITION_NONE]  = { 1, 1 },
+        [PARTITION_H]     = { 1, 2 },
+        [PARTITION_V]     = { 2, 1 },
+        [PARTITION_H3]    = { 2, 4 },
+        [PARTITION_V3]    = { 4, 2 },
+        [PARTITION_H4A]   = { 1, 8 },
+        [PARTITION_H4B]   = { 1, 8 },
+        [PARTITION_V4A]   = { 8, 1 },
+        [PARTITION_V4B]   = { 8, 1 },
+        [PARTITION_SPLIT] = { 2, 2 },
+    };
+    const uint8_t *const l = lim[bp];
+    int child_dir = (bw4 <= l[0] || bh4 <= l[1]) << 24;
     switch (bp) {
     case PARTITION_NONE:
         if (decode_b(t, DB_ONLY(depth + 1) lbs, cbs)) return -1;
@@ -3667,8 +3693,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         assert(0);
     }
 
-    // Bits can be shifted out, this is intentional as those are unused
-    *dir_ptr |= (unsigned)child_dir << 16;
+    *dir_ptr |= (child_dir & 0xff) << 16;
 
     if (t->intra_region && cbs_orig != BS_INVALID) {
         t->cbx = t->bx;
