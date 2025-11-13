@@ -2104,16 +2104,19 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             {
                 const int is_sb_boundary = !(t->by & (f->sb_step - 1));
                 const int ref1 = b->ref[0], ref2 = b->ref[1];
-                const unsigned mask = ~(unsigned) is_sb_boundary;
 #define match_ref(dir, off, refidx) \
                 (t->dir ref[0][off] == refidx || t->dir ref[1][off] == refidx)
 #define match_refs(refidx) \
                 (match_ref(l., by4, refidx) || \
-                 (by4 + bh4 <= ts->tiling.row_end && \
+                 (t->by + bh4 <= ts->tiling.row_end && \
                   match_ref(l., by4 + bh4 - 1, refidx)) || \
-                 match_ref(a->, bx4 & mask, refidx) || \
-                 (bx4 + bw4 - is_sb_boundary <= ts->tiling.col_end && \
-                  match_ref(a->, (bx4 + bw4 - 1 - is_sb_boundary) & mask, refidx)))
+                 (is_sb_boundary ? \
+                  (match_ref(a_sb_cache., bx4 & ~1, refidx) || \
+                   (((t->bx + bw4 - 2) & ~1) < ts->tiling.col_end && \
+                    match_ref(a_sb_cache., (bx4 + bw4 - 2) & ~1, refidx))) : \
+                  (match_ref(a->, bx4, refidx) || \
+                   (t->bx + bw4 <= ts->tiling.col_end && \
+                    match_ref(a->, bx4 + bw4 - 1, refidx)))))
                 if (match_refs(ref1) && match_refs(ref2)) {
 #undef match_refs
 #undef match_ref
@@ -2419,8 +2422,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 int allow_warp = 0;
                 if (imin(bw4, bh4) >= 2 && f->frame_hdr->warp_motion) {
                     const int ctx =
-                        get_warp_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
-                                     have_top_right, have_bottom_left,
+                        get_warp_ctx(t->a, &t->a_sb_cache,
+                                     &t->l, by4, bx4, have_top, have_left,
+                                     is_sb_boundary ? ((t->bx + bw4 - 2) & ~1) <
+                                        ts->tiling.col_end : have_top_right,
+                                        have_bottom_left,
                                      is_sb_boundary, b_dim, b->ref[0]);
                     allow_warp = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                               ts->cdf.m.warp[ctx]);
@@ -2525,13 +2531,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const int ref = b->ref[0];
 #define match_ref(dir, off) \
                     (t->dir ref[0][off] == ref || t->dir ref[1][off] == ref)
-                    const unsigned mask = ~(unsigned) is_sb_boundary;
                     const int has_cs_ext = match_ref(l., by4) ||
-                        (by4 + bh4 <= ts->tiling.row_end &&
+                        (t->by + bh4 <= ts->tiling.row_end &&
                          match_ref(l., by4 + bh4 - 1)) ||
-                        match_ref(a->, bx4 & mask) ||
-                        (bx4 + bw4 - is_sb_boundary <= ts->tiling.col_end &&
-                         match_ref(a->, (bx4 + bw4 - 1 - is_sb_boundary) & mask));
+                        (is_sb_boundary ?
+                         (match_ref(a_sb_cache., bx4 & ~1) ||
+                          (((t->bx + bw4 - 2) & ~1) < ts->tiling.col_end &&
+                           match_ref(a_sb_cache., (bx4 + bw4 - 2) & ~1))) :
+                         (match_ref(a->, bx4) ||
+                          (t->bx + bw4 <= ts->tiling.col_end &&
+                           match_ref(a->, bx4 + bw4 - 1))));
 #undef match_ref
                     b->motion_mode = MM_WARP_DELTA;
                     if (has_cs_ext) {
@@ -4051,6 +4060,20 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         }
         int dir = 0;
         t->sdp_cfl_disallowed = 0;
+        if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
+            // for some contexts related to warp-motion, AVM uses 8x8 (instead
+            // of 4x4) context resolution when we cross SB boundaries. However,
+            // the way this is implemented means we sometimes go outside the
+            // bounds of our own block into data that has already been written
+            // into by our neighbour blocks. For example, if we access "top" at
+            // 8x8 resolution for x=25, this may round to x=24 (which our left-
+            // neighbour just overwrote). To workaround this, we keep a copy of
+            // all affected context bits at SB boundaries. See AVM #1091.
+            memcpy(t->a_sb_cache.ref[0], t->a->ref[0], 64);
+            memcpy(t->a_sb_cache.ref[1], t->a->ref[1], 64);
+            if (t->by > ts->tiling.row_start)
+                memcpy(t->a_sb_cache.motion_mode, t->a->motion_mode, 64);
+        }
         if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
             return 1;
     }

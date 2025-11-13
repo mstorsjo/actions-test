@@ -409,6 +409,7 @@ struct Dav1dTaskContext {
     Dav1dTileState *ts;
     int bx, by, cbx, cby, sdp_cfl_disallowed, intra_region;
     BlockContext l, *a;
+    struct SBEdgeCtx a_sb_cache;
     uint64_t is_coded[64];
     struct {
         int col_end;

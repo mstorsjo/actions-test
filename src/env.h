@@ -64,6 +64,11 @@ typedef struct BlockContext {
     uint8_t ALIGN(pal_sz[64], 8);
 } BlockContext;
 
+struct SBEdgeCtx {
+    uint8_t ref[2][64];
+    uint8_t motion_mode[64];
+};
+
 static inline int get_intra_ctx(const BlockContext *nx[2],
                                 const int xoff[2], const int n_ctx)
 {
@@ -153,6 +158,7 @@ static inline int get_comp_ctx(const BlockContext *nx[2],
 }
 
 static inline int get_warp_ctx(const BlockContext *const a,
+                               const struct SBEdgeCtx *const a_sb_cache,
                                const BlockContext *const l,
                                const int yb4, const int xb4,
                                const int have_top, const int have_left,
@@ -167,10 +173,15 @@ static inline int get_warp_ctx(const BlockContext *const a,
            dir->motion_mode[idx] >= 2; \
 } while (0)
     if (have_top) {
-        const unsigned mask = ~top_is_at_tile_boundary;
-        add_matching(a, xb4 & mask);
-        if (have_top_right && (b_dim[0] >= 4 || !top_is_at_tile_boundary))
-            add_matching(a, (xb4 + b_dim[0] - 1 - top_is_at_tile_boundary) & mask);
+        if (top_is_at_tile_boundary) {
+            add_matching(a_sb_cache, xb4 & ~1);
+            if (have_top_right && b_dim[0] >= 4)
+                add_matching(a_sb_cache, (xb4 + b_dim[0] - 2) & ~1);
+        } else {
+            add_matching(a, xb4);
+            if (have_top_right)
+                add_matching(a, xb4 + b_dim[0] - 1);
+        }
     }
     if (have_left) {
         add_matching(l, yb4);
