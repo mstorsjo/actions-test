@@ -2466,7 +2466,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #endif
 
             int warp_ref_idx = 0, warpmv_with_mvd = 0;
-            b->bawp[0] = 0;
+            b->bawp[0] = b->bawp[1] = 0;
             if (is_tip) {
                 /* do nothing */
             } else if (b->inter_mode <= NEWMV) {
@@ -2487,8 +2487,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         if (has_chroma)
                             b->bawp[1] = dav1d_msac_decode_bool_adapt(&ts->msac,
                                              ts->cdf.m.bawp[1]);
-                    } else
-                        b->bawp[1] = 0;
+                    }
                     DEBUG_BLOCK_printf("%*sPost-bawp[%d,%d]: r=%d\n",
                                        depth, "", b->bawp[0], b->bawp[1], ts->msac.rng);
                 }
