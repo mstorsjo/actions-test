@@ -2504,8 +2504,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         b->motion_mode = MM_INTERINTRA;
                         b->interintra_mode = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                 ts->cdf.m.interintra_mode[ctx], 3);
-                        b->wedge_idx = dav1d_msac_decode_bool_adapt(&ts->msac,
-                            ts->cdf.m.interintra_wedge) ? read_wedge_idx(ts) : -1;
+                        b->wedge_idx = -1;
+                        if (imin(bw4, bh4) > 1 &&
+                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.m.interintra_wedge))
+                        {
+                            b->wedge_idx = read_wedge_idx(ts);
+                        }
                     }
                     DEBUG_BLOCK_printf("%*sPost-interintra[%d,%d,%d]: r=%d\n",
                                        depth, "", b->motion_mode,
