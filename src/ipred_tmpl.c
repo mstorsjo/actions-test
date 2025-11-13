@@ -526,12 +526,12 @@ static void idif_z1_ibp_z3(pixel *dst, const ptrdiff_t stride,
 
         const int wy = y >> y_shift;
         const int shift = (x_pos & 0x3F) >> 1;
-        const DRFilter4Tap *const f = &av1_dr_interp_filter[shift];
+        const DRFilter4Tap f = av1_dr_interp_filter[shift];
         const int w = imin(width, max_base_x - base);
         int x;
         for (x = 0; x < w; x++, base++) {
-            const int v = f->a * topleft[base - 1] + f->b * topleft[base] +
-                          f->c * topleft[base + 1] + f->d * topleft[base + 2];
+            const int v = f.a * topleft[base - 1] + f.b * topleft[base] +
+                          f.c * topleft[base + 1] + f.d * topleft[base + 2];
             const pixel pred = iclip_pixel((v + 64) >> 7);
 
             const int wx = x >> x_shift;
@@ -583,14 +583,14 @@ static void idif_z3_ibp_z1(pixel *dst, const ptrdiff_t stride,
 
         const int h = imin(height, max_base_y - base);
         const int shift = (y_pos & 0x3F) >> 1;
-        const DRFilter4Tap *const f = &av1_dr_interp_filter[shift];
+        const DRFilter4Tap f = av1_dr_interp_filter[shift];
         int y;
         for (y = 0; y < h; y++, base++) {
             const int wy = y >> y_shift;
             const int weight = weights[wy][wx];
 
-            const int v = f->a * left[-(base - 1)] + f->b * left[-base] +
-                          f->c * left[-(base + 1)] + f->d * left[-(base + 2)];
+            const int v = f.a * left[-(base - 1)] + f.b * left[-base] +
+                          f.c * left[-(base + 1)] + f.d * left[-(base + 2)];
             const pixel pred = iclip_pixel((v + 64) >> 7);
             const int blend =
                 dst[y * PXSTRIDE(stride) + x] * weight + pred * (128 - weight);
@@ -819,7 +819,9 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
                        HIGHBD_DECL_SUFFIX)
 {
     const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
-    const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
+    const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
+    const int have_left = !!(angle & ANGLE_HAS_LEFT_FLAG);
+    const int have_top = !!(angle & ANGLE_HAS_TOP_FLAG);
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
     const int mrl_idx =
         (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
@@ -827,13 +829,14 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     angle &= 511;
     assert(angle > 180);
     const int dy = dav1d_dr_intra_derivative[270 - angle];
+    const int n_px = width + height;
     int max_base_y = height + imin(width, height) - 1 + (mrl_idx << 1);
 
     const pixel *left = &topleft_in[-(mrl_idx + 1)];
     int ypos = dy * (1 + mrl_idx);
     if (mrl_mul) {
         // Safe maximum size for edge buffers
-        const int e_stride = mrl_idx ? (width + height + (mrl_idx << 1) + 3) * 2 : 0;
+        const int e_stride = mrl_idx ? (n_px + (mrl_idx << 1) + 3) * 2 : 0;
         const pixel *left2 = &topleft_in[-(1 + e_stride)];
         const int max_base_y2 = height + imin(width, height) - 1;
         int ypos2 = dy;
@@ -877,30 +880,25 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         return;
     }
 
-    pixel left_out[64 + 64];
-  if (!mrl_idx) {
-        const int filter_strength =
-            get_filter_strength(width + height, angle - 180, is_sm_l);
-        if (filter_strength) {
-            filter_edge(left_out, width + height + 1, 0, width + height,
-                        &topleft_in[-(width + height)],
-                        imax(width - height, 0), width + height + 1,
-                        filter_strength);
-            left = &left_out[width + height - 1];
-            max_base_y = width + height - 1;
+    pixel filt_edge[64 + 1 + 64];
+    if (!mrl_idx) {
+        assert(have_left);
+        const int str = get_filter_strength(n_px, angle - 180, is_sm_l);
+        if (str) {
+            filter_edge(filt_edge, n_px + 1, 0, n_px,
+                        &topleft_in[-n_px], imax(width - height, 0),
+                        n_px + 1, str);
+            left = &filt_edge[n_px - 1];
+            max_base_y = n_px - 1;
         }
     }
 
     for (int x = 0; x < width; x++, ypos += dy) {
-        const int shift = (ypos & 0x3F) >> 1;
+        const DRFilter4Tap f = av1_dr_interp_filter[(ypos & 0x3F) >> 1];
         for (int y = 0, base = ypos >> 6; y < height; y++, base++) {
             if (base <= max_base_y) {
-                const int v =
-                    av1_dr_interp_filter[shift].a * left[-(base - 1)] +
-                    av1_dr_interp_filter[shift].b * left[-base] +
-                    av1_dr_interp_filter[shift].c * left[-(base + 1)] +
-                    av1_dr_interp_filter[shift].d * left[-(base + 2)];
-
+                const int v = f.a * left[-(base - 1)] + f.b * left[-base] +
+                              f.c * left[-(base + 1)] + f.d * left[-(base + 2)];
                 dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 64) >> 7);
             } else {
                 do {
@@ -911,12 +909,23 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         }
     }
 
-    if (enable_ibp && !mrl_idx) {
-        const int mode_index = av1_angle_to_mode_index_z3[angle / 3 - 57];
-        if (mode_index) {
-            idif_z1_ibp_z3(dst, stride, topleft_in, width, height,
-                           dav1d_dr_intra_derivative[angle - 180],
-                           dav1d_ibp_weights[mode_index - 1] HIGHBD_TAIL_SUFFIX);
+    if (enable_ibp) {
+        assert(!mrl_idx);
+        const int mode_idx = av1_angle_to_mode_index_z3[angle / 3 - 57];
+        if (mode_idx) {
+            const pixel *top = &topleft_in[1];
+            if (have_top) {
+                const int str = get_filter_strength(n_px, angle - 180, is_sm_t);
+                if (str) {
+                    filter_edge(filt_edge, n_px + 1, 1, n_px, &top[-1],
+                                imax(width - height, 0), n_px + 1, str);
+                    filt_edge[n_px + 2] = filt_edge[n_px + 1] = filt_edge[n_px];
+                    top = &filt_edge[1];
+                }
+            }
+            idif_z1_ibp_z3(dst, stride, top, width, height,
+                dav1d_dr_intra_derivative[angle - 180],
+                dav1d_ibp_weights[mode_idx - 1] HIGHBD_TAIL_SUFFIX);
         }
     }
 }

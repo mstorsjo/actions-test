@@ -90,6 +90,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     const int bitdepth = bitdepth_from_max(bitdepth_max);
     assert(y < h && x < w);
     int is_dir = 0;
+    const int enable_edge_filter = !!(intra_flags & ANGLE_USE_EDGE_FILTER_FLAG);
     const int apply_dip = !!(intra_flags & ANGLE_DIP_FLAG);
     const int apply_ibp = !!(intra_flags & ANGLE_IBP_FLAG);
     const int mrl_idx =
@@ -291,6 +292,14 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
             }
         }
 #endif
+
+        if (is_dir && e.needs_top && e.needs_left && !mrl_idx &&
+            enable_edge_filter && tw + th > 24)
+        {
+            const int c = topleft_out[0] +
+                (topleft_out[-1] + topleft_out[0] + topleft_out[1]) * 5;
+            topleft_out[0] = (c + 8) >> 4;
+        }
     }
 
     if (apply_ibp) {
