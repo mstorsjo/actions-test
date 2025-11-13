@@ -1564,18 +1564,29 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         [BS_64x128]  = {  BS_64x64, BS_64x64,  BS_64x128  },
     };
     if (imax(bw4, bh4) > 16) {
+        assert(bw4 * 2 >= bh4 && bh4 * 2 >= bw4); // 1:2, 1:1 or 2:1 ratios only
         assert(t->cbx == t->bx && t->cby == t->by);
         const int y_start = t->by, y_end = imin(y_start + bh4, f->bh);
         const int x_start = t->bx, x_end = imin(x_start + bw4, f->bw);
-        for (int y = 0; t->by < y_end; t->cby = t->by += 16, y++) {
-            for (int x = 0; t->bx < x_end; t->cbx = t->bx += 16, x++) {
+        int step;
+        enum BlockSize lbs2, cbs2i;
+        if (imax(bw4, bh4) == 64) {
+            step = 32;
+            lbs2 = lbs == BS_INVALID ? BS_INVALID : BS_128x128;
+            cbs2i = cbs == BS_INVALID ? BS_INVALID : BS_128x128;
+        } else {
+            step = 16;
+            lbs2 = lbs == BS_INVALID ? BS_INVALID : BS_64x64;
+            cbs2i = cbs == BS_INVALID ? BS_INVALID : csplit[cbs][ss_hor + ss_ver];
+        }
+        for (int y = 0; t->by < y_end; t->cby = t->by += step, y++) {
+            for (int x = 0; t->bx < x_end; t->cbx = t->bx += step, x++) {
                 // FIXME it's possible we can call directly into a sub-function
                 // here that manages one transform-block, since tx_part=none
                 // (at least if not lossless)
-                bytefn(dav1d_recon_b)(t, DB_ONLY(depth)
-                    lbs == BS_INVALID ? BS_INVALID : BS_64x64,
-                    cbs == BS_INVALID || y & ss_ver || x & ss_hor ?
-                        BS_INVALID : csplit[cbs][ss_hor + ss_ver], b);
+                const enum BlockSize cbs2 = step == 32 ||
+                    !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
+                bytefn(dav1d_recon_b)(t, DB_ONLY(depth) lbs2, cbs2, b);
                 // FIXME this may be correct only for luma, whereas chroma may
                 // have to be dealt with at 64x64 *subsampled* pixels (i.e.
                 // 128x128 luma pixels for 4:2:0), b/c of chroma-large-tx
