@@ -833,8 +833,6 @@ static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
         r->poc = refhdr->frame_offset;
         r->pocdiff = get_poc_diff(seqhdr->order_hint_n_bits, poc, r->poc);
         r->qidx = refhdr->quant.yac;
-        maxq = imax(r->qidx, maxq);
-        minq = imin(r->qidx, minq);
         const unsigned tdist = abs(r->pocdiff) + mlayer - r->mlayer;
         r->score = have_fwd_refs ? (tdist << 6) :
                    128 - (128 >> (imin(tdist, 6))) + imax(tdist - 6, 0);
@@ -849,6 +847,8 @@ static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
             }
         }
         if (m < n_refs) continue; // ref already exists
+        maxq = imax(r->qidx, maxq);
+        minq = imin(r->qidx, minq);
         for (; m > 0; m--) {
             const int idx = sort_idx[m - 1];
             const struct Score *const r2 = &ref_info[idx];
@@ -882,7 +882,7 @@ static int get_ref_frames(Dav1dContext *const c, const int have_resolution) {
         }
         const int idx = num[0] > num[1] ? furthest_idx[0] :
                         num[0] < num[1] ? furthest_idx[1] :
-                        furthest_idx[maxpocdiff[0] < maxpocdiff[1]];
+                        furthest_idx[maxpocdiff[0] < -maxpocdiff[1]];
         if (idx < 7) {
             memmove(&sort_idx[idx], &sort_idx[idx + 1], 7 - idx);
             sort_idx[7] = idx;
