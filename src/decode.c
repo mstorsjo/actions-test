@@ -4830,6 +4830,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     const int p_ref_idx = f->frame_hdr->primary_ref_frame;
     if (p_ref_idx == DAV1D_PRIMARY_REF_NONE) {
         dav1d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac);
+        f->use_pri_sec_cdf = 0;
     } else {
         const int s_ref_idx = f->frame_hdr->secondary_ref_frame;
         const int pri_ref = f->frame_hdr->refidx[p_ref_idx];
