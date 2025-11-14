@@ -899,21 +899,25 @@ static void derive_pri_sec_ref(const Dav1dContext *const c, int refs[2]) {
     const Dav1dSequenceHeader *const seqhdr = c->seq_hdr;
     const Dav1dFrameHeader *const hdr = c->frame_hdr;
     refs[0] = DAV1D_PRIMARY_REF_NONE;
-    int best_qdiff[2], best_pocdiff[2], best = 0;
+    int best_qdiff[2], best_pocdiff[2], best_poc[2], best = 0;
     const int qidx = hdr->quant.yac, poc = hdr->frame_offset;
+    const int nbits = seqhdr->order_hint_n_bits;
     for (int i = 0; i < hdr->n_ref_frames; i++) {
         const Dav1dFrameHeader *const refhdr = c->refs[hdr->refidx[i]].p.p.frame_hdr;
         if (!refhdr || IS_KEY_OR_INTRA(refhdr)) continue;
         const int ref_qidx = refhdr->quant.yac, qdiff = abs(ref_qidx - qidx);
-        const int ref_poc = refhdr->frame_offset, pocdiff =
-            abs(get_poc_diff(seqhdr->order_hint_n_bits, poc, ref_poc));
+        const int ref_poc = refhdr->frame_offset;
+        const int pocdiff = abs(get_poc_diff(nbits, poc, ref_poc));
         for (int n = 0, m = best; n < 2; n++, m = !m) {
             if (refs[m] == DAV1D_PRIMARY_REF_NONE || qdiff < best_qdiff[m] ||
-                (qdiff == best_qdiff[m] && pocdiff < best_pocdiff[m]))
+                (qdiff == best_qdiff[m] && (pocdiff < best_pocdiff[m] ||
+                 (pocdiff == best_pocdiff[m] && get_poc_diff(nbits, best_poc[m],
+                                                             ref_poc) < 0))))
             {
                 refs[!best] = i;
                 best_pocdiff[!best] = pocdiff;
                 best_qdiff[!best] = qdiff;
+                best_poc[!best] = ref_poc;
                 if (!n) best = !best;
                 break;
             }
