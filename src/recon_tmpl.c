@@ -427,7 +427,8 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         // inferred from either the luma txtp (inter) or a LUT (intra)
         if (intra) *txtp = dav1d_txtp_from_uvmode[b->uv_mode];
         if ((t_dim->w >= 8 && dav1d_tx1d_types[*txtp][1] & 1) ||
-            (t_dim->h >= 8 && dav1d_tx1d_types[*txtp][0] & 1))
+            (t_dim->h >= 8 && dav1d_tx1d_types[*txtp][0] & 1) ||
+            (tx == (int) TX_16X16 && *txtp >= V_ADST))
         {
             *txtp = DCT_DCT;
         }
