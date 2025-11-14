@@ -113,11 +113,11 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         *angle += (mrl_idx == 1) - (mrl_idx == 2);
 
         if (*angle <= 90)
-            mode = *angle < 90 && have_top ? Z1_PRED : VERT_PRED;
+            mode = *angle < 90 && (have_top || apply_ibp) ? Z1_PRED : VERT_PRED;
         else if (*angle < 180)
             mode = Z2_PRED;
         else
-            mode = *angle > 180 && have_left ? Z3_PRED : HOR_PRED;
+            mode = *angle > 180 && (have_left || apply_ibp) ? Z3_PRED : HOR_PRED;
         break;
     }
     case DC_PRED:
