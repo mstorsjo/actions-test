@@ -293,8 +293,8 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         }
 #endif
 
-        if (is_dir && e.needs_top && e.needs_left && !mrl_idx &&
-            enable_edge_filter && tw + th > 24)
+        if (is_dir && *angle != 90 && *angle != 180 && e.needs_top &&
+            e.needs_left && !mrl_idx && enable_edge_filter && tw + th >= 24)
         {
             const int c = topleft_out[0] +
                 (topleft_out[-1] + topleft_out[0] + topleft_out[1]) * 5;

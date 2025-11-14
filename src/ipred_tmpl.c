@@ -915,10 +915,10 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         if (mode_idx) {
             const pixel *top = &topleft_in[1];
             if (have_top) {
-                const int str = get_filter_strength(n_px, angle - 180, is_sm_t);
+                const int str = get_filter_strength(n_px, 270 - angle, is_sm_t);
                 if (str) {
                     filter_edge(filt_edge, n_px + 1, 1, n_px, &top[-1],
-                                imax(width - height, 0), n_px + 1, str);
+                                0, n_px, str);
                     filt_edge[n_px + 2] = filt_edge[n_px + 1] = filt_edge[n_px];
                     top = &filt_edge[1];
                 }
