@@ -1,4 +1,4 @@
-From f6f488746ed4f8720dcfd3a30eef1f042622a532 Mon Sep 17 00:00:00 2001
+From 8aaa73aec64a72f08ada4beaee6eb23141965a62 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/4] Print Intra Prediction, DQ coeffs and inverse transform
@@ -182,7 +182,7 @@ index 419319c47..d97b0a9cd 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index 68d4b6f03..8b112420d 100644
+index 68d4b6f03..957673aa7 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -287,7 +287,7 @@ index 68d4b6f03..8b112420d 100644
 +    int print_l = need_left;
 +    int print_t = need_above;
 +    int print_tl = need_above_left && !is_just_hor;
-+    if (mode == DC_PRED) {
++    if (mode == DC_PRED && !use_intra_dip) {
 +      print_l = !!n_left_px;
 +      print_t = !!n_top_px;
 +      print_tl = !!n_left_px && !!n_top_px;
