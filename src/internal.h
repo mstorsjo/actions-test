@@ -442,13 +442,6 @@ struct Dav1dTaskContext {
         };
         struct {
             union {
-                int8_t levels[33 * 33];
-                struct {
-                    uint8_t pal_order[64][8];
-                    uint8_t pal_ctx[64];
-                };
-            };
-            union {
                 int16_t ac[64 * 64]; // intra-only
                 uint8_t txtp_map[16 * 16]; // inter-only
             };
@@ -465,6 +458,13 @@ struct Dav1dTaskContext {
                     // worst case: edge buffer size: 644+1 (adjacent) + 644+32+1 (MRL)
                     uint16_t edge_16bpc[644 + 1 + 644 + 32 + 1];
                     ALIGN(uint16_t pal_16bpc[8 /* palette_idx */], 16);
+                };
+            };
+            union {
+                int8_t levels[33 * 33];
+                struct {
+                    uint8_t pal_order[64][8];
+                    uint8_t pal_ctx[64];
                 };
             };
         };
