@@ -442,7 +442,7 @@ struct Dav1dTaskContext {
         };
         struct {
             union {
-                int8_t levels[32 * 34];
+                int8_t levels[33 * 33];
                 struct {
                     uint8_t pal_order[64][8];
                     uint8_t pal_ctx[64];
