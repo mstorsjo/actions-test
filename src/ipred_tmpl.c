@@ -909,8 +909,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         }
     }
 
-    if (enable_ibp) {
-        assert(!mrl_idx);
+    if (enable_ibp && !mrl_idx) {
         const int mode_idx = av1_angle_to_mode_index_z3[angle / 3 - 57];
         if (mode_idx) {
             const pixel *top = &topleft_in[1];
