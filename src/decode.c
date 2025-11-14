@@ -3350,12 +3350,23 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             // FIXME do we need to keep track of mix_inter and
                             // resulting block sizes here to ensure we don't
                             // get 4x4 blocks?
+                            const int bwh4ss2[2] = { bw4 >> f->ss_hor,
+                                                     bh4 >> f->ss_ver };
                             const int has_hv3 = f->seq_hdr->ext_partitions &&
                                 bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2 &&
-                                b_dim[!dir] * aspect >= b_dim[dir] * 4;
+                                b_dim[!dir] * aspect >= b_dim[dir] * 4 &&
+                                (cbs != lbs || (bwh4ss2[!dir] >= 4 &&
+                                                bwh4ss2[dir] >= 2) || (dir ?
+                                 (lbs == BS_32x8 ? have_v_split :
+                                  t->bx + qw4 * 3 < f->bw) :
+                                 (lbs == BS_8x32 ? have_h_split :
+                                  t->by + qh4 * 3 < f->bh)));
                             const int has_hv4ab = bwh4ss[!dir] >= 8 &&
                                 f->seq_hdr->uneven_4way_partitions &&
-                                b_dim[!dir] * aspect >= b_dim[dir] * 8;
+                                b_dim[!dir] * aspect >= b_dim[dir] * 8 &&
+                                (cbs != lbs || bwh4ss2[!dir] >= 8 || (dir ?
+                                 (t->bx + (qw4 >> 1) * 7 < f->bw) :
+                                 (t->by + (qh4 >> 1) * 7 < f->bh)));
                             if (has_hv3 || has_hv4ab) {
                                 assert(pcc->part[dir][1] != -1);
                                 const int ctx5 =
