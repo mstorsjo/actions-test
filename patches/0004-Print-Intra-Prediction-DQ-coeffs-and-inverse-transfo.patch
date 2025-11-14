@@ -1,18 +1,18 @@
-From 518682a9ff79b82fd4e86ae5cd2f2711e57b4354 Mon Sep 17 00:00:00 2001
+From f6f488746ed4f8720dcfd3a30eef1f042622a532 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/4] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- aom/debug.h               |  48 +++++++++++++++++
- av1/common/idct.c         |  20 +++++--
- av1/common/idct.h         |   7 ++-
- av1/common/reconintra.c   | 110 ++++++++++++++++++++++++++++++++++++--
- av1/decoder/decodeframe.c |  16 +++++-
- av1/encoder/encodemb.c    |  10 ++--
+ aom/debug.h               |  48 +++++++++++++
+ av1/common/idct.c         |  20 +++++-
+ av1/common/idct.h         |   7 +-
+ av1/common/reconintra.c   | 137 ++++++++++++++++++++++++++++++++++++--
+ av1/decoder/decodeframe.c |  16 ++++-
+ av1/encoder/encodemb.c    |  10 +--
  av1/encoder/tpl_model.c   |   2 +-
  av1/encoder/tx_search.c   |   8 +--
- 8 files changed, 201 insertions(+), 20 deletions(-)
+ 8 files changed, 226 insertions(+), 22 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index b203c56cf..9fcfc55c6 100644
@@ -182,7 +182,7 @@ index 419319c47..d97b0a9cd 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index 68d4b6f03..84b7ccbd9 100644
+index 68d4b6f03..8b112420d 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -203,7 +203,48 @@ index 68d4b6f03..84b7ccbd9 100644
      const MACROBLOCKD *xd, const uint16_t *ref, int ref_stride, uint16_t *dst,
      int dst_stride, PREDICTION_MODE mode, int angle_delta, TX_SIZE tx_size,
      int disable_edge_filter, int n_top_px, int n_topright_px, int n_left_px,
-@@ -1231,13 +1233,14 @@ static void build_intra_predictors_high(
+@@ -1135,6 +1137,11 @@ static void build_intra_predictors_high(
+   uint16_t *const above_row_2nd = above_data_2nd + 32;
+   uint16_t *const left_col_2nd = left_data_2nd + 32;
+ 
++#if DEBUG_BLOCK_INFO
++  const int mi_row = xd->mi_row;
++  const int mi_col = xd->mi_col;
++#endif
++
+   uint16_t *const second_pred = second_pred_data + 16;
+   uint16_t *dst_mrl_line_0 = mrl_line_0_data + 16;
+   const int txwpx = tx_size_wide[tx_size];
+@@ -1224,20 +1231,41 @@ static void build_intra_predictors_high(
+       val = (n_left_px > 0) ? left_ref_1st[0] : base - 1;
+     }
+     for (i = 0; i < txhpx; ++i) {
+-      aom_memset16(dst, val, txwpx);
+-      dst += dst_stride;
++      aom_memset16(&dst[i * dst_stride], val, txwpx);
++    }
++#if DEBUG_B_PIXELS
++    if (BLOCK_TO_DEBUG) {
++      // FIXME only print luma for now
++      if (plane == AOM_PLANE_Y) {
++        if (need_left) {
++          int num_left_pixels_needed = txhpx + 3 + (mrl_index << 1);
++          printf("l\n");
++          for (int x = 0; x < num_left_pixels_needed; x++)
++            printf(" %02x", val);
++          printf("\n");
++        } else {
++          int num_left_pixels_needed = txwpx + (mrl_index << 1);
++          printf("t\n");
++          for (int x = 0; x < num_left_pixels_needed; x++)
++            printf(" %02x", val);
++          printf("\n");
++        }
++        hex_dump(dst, dst_stride, txwpx, txhpx, "y-intra-pred");
++      }
+     }
++#endif
+     return;
    }
  
    // NEED_LEFT
@@ -219,7 +260,7 @@ index 68d4b6f03..84b7ccbd9 100644
          txhpx + (need_bottom ? txwpx : 3) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires left edge + 1/4 tx height for overhang feature.
-@@ -1269,12 +1272,13 @@ static void build_intra_predictors_high(
+@@ -1269,12 +1297,13 @@ static void build_intra_predictors_high(
    }
  
    // NEED_ABOVE
@@ -234,13 +275,11 @@ index 68d4b6f03..84b7ccbd9 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1329,6 +1333,63 @@ static void build_intra_predictors_high(
+@@ -1329,6 +1358,61 @@ static void build_intra_predictors_high(
      }
    }
  
 +#if DEBUG_BLOCK_INFO
-+  const int mi_row = xd->mi_row;
-+  const int mi_col = xd->mi_col;
 +  if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
 +    // Not sure, why but HOR pred requires TL (when it doesn't?)
 +    int is_just_hor = p_angle == 180 && !use_intra_dip &&
@@ -298,7 +337,7 @@ index 68d4b6f03..84b7ccbd9 100644
    if (use_intra_dip) {
      av1_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1337,6 +1398,14 @@ static void build_intra_predictors_high(
+@@ -1337,6 +1421,14 @@ static void build_intra_predictors_high(
                                     mbmi->intra_dip_features
  #endif  // CONFIG_DIP_EXT_PRUNING
      );
@@ -313,7 +352,7 @@ index 68d4b6f03..84b7ccbd9 100644
      return;
    }
  
-@@ -1458,11 +1527,28 @@ static void build_intra_predictors_high(
+@@ -1458,11 +1550,28 @@ static void build_intra_predictors_high(
        }
      }
  
@@ -342,7 +381,7 @@ index 68d4b6f03..84b7ccbd9 100644
      }
      return;
    }
-@@ -1485,6 +1571,14 @@ static void build_intra_predictors_high(
+@@ -1485,6 +1594,14 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -357,7 +396,7 @@ index 68d4b6f03..84b7ccbd9 100644
  
    // Apply sub-block based filter for DC/smooth intra mode
    apply_sub_block_based_refinement_filter &=
-@@ -1492,6 +1586,14 @@ static void build_intra_predictors_high(
+@@ -1492,6 +1609,14 @@ static void build_intra_predictors_high(
    if (apply_sub_block_based_refinement_filter) {
      av1_apply_orip_4x4subblock_hbd(dst, dst_stride, tx_size, above_row_1st,
                                     left_col_1st, mode, xd->bd);
@@ -372,7 +411,7 @@ index 68d4b6f03..84b7ccbd9 100644
    }
  }
  
-@@ -1575,7 +1677,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1575,7 +1700,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  
