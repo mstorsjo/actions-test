@@ -4836,7 +4836,8 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         const int pri_ref = f->frame_hdr->refidx[p_ref_idx];
         f->use_pri_sec_cdf = s_ref_idx != DAV1D_PRIMARY_REF_NONE &&
                              f->frame_hdr->frame_type == DAV1D_FRAME_TYPE_INTER &&
-                             f->seq_hdr->avg_cdf && !f->seq_hdr->avg_cdf_type;
+                             f->seq_hdr->avg_cdf && !f->seq_hdr->avg_cdf_type &&
+                             f->frame_hdr->tip.frame_mode != 2;
         if (!f->use_pri_sec_cdf) {
             dav1d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
         } else {
