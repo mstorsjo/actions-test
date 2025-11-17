@@ -184,6 +184,7 @@ static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
         }
         dst -= stride * height;
         width -= w;
+        dst += w;
     }
 
     splat_dc(dst, stride, width, height, dc);
