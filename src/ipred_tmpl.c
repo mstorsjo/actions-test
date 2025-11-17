@@ -349,7 +349,21 @@ static void ipred_h_c(pixel *dst, const ptrdiff_t stride,
                       HIGHBD_DECL_SUFFIX)
 {
     const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
+    const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
     const pixel *left = &topleft[-(mrl_idx + 1)];
+
+    if (mrl_mul) {
+        // Safe maximum size for edge buffers
+        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
+        const pixel *left2 = &topleft[-(1 + e_stride)];
+        for (int y = 0; y < height; y++) {
+            const int v = (left[-y] + left2[-y]) >> 1;
+            pixel_set(dst, v, width);
+            dst += PXSTRIDE(stride);
+        }
+        return;
+    }
+
     for (int y = 0; y < height; y++) {
         pixel_set(dst, left[-y], width);
         dst += PXSTRIDE(stride);
