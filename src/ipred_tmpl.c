@@ -139,7 +139,7 @@ static void ipred_dc_top_c(pixel *dst, const ptrdiff_t stride,
             for (int x = 0; x < width; x++) {
                 dst[x] = (topleft[x + 1] * wy + dc_wy + 64) >> 7;
             }
-            dst += stride;
+            dst += PXSTRIDE(stride);
         }
         height -= h;
     }
@@ -180,9 +180,9 @@ static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
             for (int x = 0; x < w; x++) {
                 dst[x] = (left * (128 - w_x[x]) + dc * w_x[x] + 64) >> 7;
             }
-            dst += stride;
+            dst += PXSTRIDE(stride);
         }
-        dst -= stride * height;
+        dst -= PXSTRIDE(stride) * height;
         width -= w;
         dst += w;
     }
