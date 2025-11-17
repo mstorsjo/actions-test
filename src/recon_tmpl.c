@@ -581,7 +581,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const enum TxClass tx_class = dav1d_tx_type_class[*txtp];
 
     // secondary transform
-    int has_stx = 0;
+    int stx_type = 0;
     if (f->seq_hdr->ist[!intra] && !chroma) {
         if (intra) {
             if (eob >= 1 && b->y_mode != PAETH_PRED &&
@@ -594,15 +594,15 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     lim = *txtp == DCT_DCT ? 32 : 20;
                 else
                     lim = 8;
-                has_stx = eob < lim;
+                stx_type = eob < lim;
             }
         } else {
-            has_stx = t_dim->min >= TX_16X16 && *txtp == DCT_DCT &&
-                      eob >= 3 && eob < 32;
+            stx_type = t_dim->min >= TX_16X16 && *txtp == DCT_DCT &&
+                       eob >= 3 && eob < 32;
         }
-        if (has_stx) {
-            const int stx_type = dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                                     ts->cdf.m.stx[!intra][t_dim->min], 3);
+        if (stx_type) {
+            stx_type = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                ts->cdf.m.stx[!intra][t_dim->min], 3);
             int stx_set = 0;
             if (stx_type && intra) {
                 if (t_dim->min >= TX_8X8 && *txtp == ADST_ADST) {
@@ -673,7 +673,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (f->seq_hdr->fsc && (!intra || b->fsc) &&
         *txtp == IDTX && !chroma)
     {
-        assert(!has_stx);
+        assert(!stx_type);
         int8_t *const levels = t->scratch.levels;
         const ptrdiff_t stride = 1 + (4 << slh);
         memset(levels, 0, stride * ((4 << slw) + 1));
@@ -936,7 +936,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned mask = (4 << slh) - 1;
             memset(levels, 0, stride * ((4 << slw) + 2));
             const int hi_to_low_tx = chroma ? 1 : 10;
-            if (has_stx) {
+            if (stx_type) {
                 DECODE_COEFS_CLASS(TX_CLASS_2D, x + y, 1);
             } else {
                 DECODE_COEFS_CLASS(TX_CLASS_2D, x + y, 0);
