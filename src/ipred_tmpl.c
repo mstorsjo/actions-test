@@ -755,30 +755,28 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     pixel edge[64 + 64 + 5];
     pixel *const topleft = &edge[66];
 
-    const int filter_strength_top = enable_intra_edge_filter ?
+    const int n_px_t = width + 1;
+    const int str_t = enable_intra_edge_filter ?
         get_filter_strength(width + height, angle - 90, is_sm_t) : 0;
-
-    if (filter_strength_top) {
-        filter_edge(&topleft[1], width, 0, max_width,
-                    &topleft_in[1], -1, width,
-                    filter_strength_top);
+    if (str_t) {
+        filter_edge(&topleft[1], n_px_t + 1, 1, n_px_t, &topleft_in[0],
+                    0, n_px_t, str_t);
     } else {
-        topleft[0] = topleft_in[0];
-        pixel_copy(&topleft[1], &topleft_in[0], width + 1);
+        pixel_copy(&topleft[1], &topleft_in[0], n_px_t);
     }
+    topleft[0] = topleft[1];
+    topleft[n_px_t + 1] = topleft[n_px_t];
 
-    const int filter_strength_left = enable_intra_edge_filter ?
+    const int n_px_l = height + 1;
+    const int str_l = enable_intra_edge_filter ?
         get_filter_strength(width + height, 180 - angle, is_sm_l) : 0;
-
-    if (filter_strength_left) {
+    if (str_l) {
         filter_edge(&topleft[-height], height, height - max_height, height,
-                    &topleft_in[-height],
-                    0, height + 1, filter_strength_left);
+                    &topleft_in[-height], 0, height + 1, str_l);
     } else {
-        topleft[0] = topleft_in[0];
-        pixel_copy(&topleft[-(height + 2)], &topleft_in[-(height + 1)], height + 2);
+        pixel_copy(&topleft[-n_px_l], &topleft_in[-height], n_px_l);
     }
-    *topleft = *topleft_in;
+    topleft[-(n_px_l + 1)] = topleft[-n_px_l];
 
     for (int y = 0; y < height; y++) {
         const int ypos = y + 1;
