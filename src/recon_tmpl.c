@@ -1490,7 +1490,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
         }
 
-        const int has_orip = !mrl_idx && (
+        const int has_orip = !mrl_idx && tx && (
             m == VERT_PRED ? t_dim->w < 8 : m == HOR_PRED ? t_dim->h < 8 :
                 m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8);
         if (has_orip) {
