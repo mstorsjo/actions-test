@@ -114,7 +114,8 @@ void checkasm_check_riscv(void)
     check_clobber(registers_safe);
 
 #if ARCH_RV64
-    checkasm_should_fail(1);
+    if (!checkasm_should_fail(1))
+        return;
     checkasm_test_noop(get_sigill_riscv(), "sigill");
     checkasm_test_noop(get_corrupt_stack_riscv(), "corrupt_stack");
     check_clobber(registers_unsafe);

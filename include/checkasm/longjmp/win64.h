@@ -46,10 +46,15 @@ typedef struct {
   #define checkasm_load_context(ctx)                                                     \
       ((ctx)->status = 1, RtlRestoreContext(&(ctx)->c, NULL))
 
+  #define CHECKASM_WORKING_SIGNAL_HANDLER 1
+
 #else /* !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP) */
 typedef int checkasm_jmp_buf;
   #define checkasm_save_context(ctx) 0
   #define checkasm_load_context(ctx)
+
+  #define CHECKASM_WORKING_SIGNAL_HANDLER 0
+
 #endif
 
 #endif /* CHECKASM_SIGNAL_WIN64_H */

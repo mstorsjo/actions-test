@@ -991,9 +991,16 @@ void *checkasm_check_func(void *const func, const char *const name, ...)
 DEF_FAIL_FUNC(checkasm_fail_func);
 DEF_FAIL_FUNC(checkasm_fail_internal);
 
-void checkasm_should_fail(int s)
+int checkasm_should_fail(int s)
 {
     state.should_fail = !!s;
+#if !CHECKASM_WORKING_SIGNAL_HANDLER
+    /* If our signal handler isn't working, we shouldn't run tests that
+     * are expected to fail, as they may rely on the signal handler. */
+    if (s)
+        return 0;
+#endif
+    return 1;
 }
 
 /* Print the outcome of all tests performed since

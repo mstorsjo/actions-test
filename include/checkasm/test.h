@@ -50,8 +50,12 @@ CHECKASM_API checkasm_jmp_buf *checkasm_get_context(void);
 
 /* Mark a block of tests as expected to fail. If this is set, all tested
  * functions must must be marked as failed, otherwise the whole test will
- * be marked as failed. This state does not persist between tests. */
-CHECKASM_API void checkasm_should_fail(int);
+ * be marked as failed. This state does not persist between tests.
+ *
+ * Returns a nonzero value if tests failure tests are expected to work,
+ * zero if such tests should be skipped (if signal handling isn't
+ * supported). */
+CHECKASM_API int checkasm_should_fail(int);
 
 /* Decide whether or not the specified function needs to be tested */
 #define check_func(func, ...)                                                            \

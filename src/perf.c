@@ -57,7 +57,7 @@ const CheckasmPerf *checkasm_get_perf(void)
 
 COLD int checkasm_perf_init(void)
 {
-#ifdef CHECKASM_PERF_ASM
+#if defined(CHECKASM_PERF_ASM) && CHECKASM_WORKING_SIGNAL_HANDLER
     if (!checkasm_save_context(checkasm_get_context())) {
         /* Try calling the asm timer to see if it works */
         checkasm_set_signal_handler_state(1);

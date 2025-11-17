@@ -323,7 +323,8 @@ void checkasm_check_aarch64(void)
 #endif
     check_clobber_arg_upper();
 
-    checkasm_should_fail(1);
+    if (!checkasm_should_fail(1))
+        return;
     checkasm_test_noop(get_sigill_aarch64(), "sigill");
     checkasm_test_many_args(get_clobber_stack_aarch64(), "clobber_stack");
     check_clobber_x(19, 30);

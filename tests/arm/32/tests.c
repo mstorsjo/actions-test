@@ -202,7 +202,8 @@ void checkasm_check_arm(void)
     check_clobber_d(16, 32);
     checkasm_test_many_args(get_clobber_stack_args_arm(), "clobber_stack_args");
 
-    checkasm_should_fail(1);
+    if (!checkasm_should_fail(1))
+        return;
     checkasm_test_noop(get_sigill_arm(), "sigill");
     checkasm_test_many_args(get_clobber_stack_arm(), "clobber_stack");
     checkasm_test_noop(get_clobber_fpscr_vfp(), "clobber_fpscr");

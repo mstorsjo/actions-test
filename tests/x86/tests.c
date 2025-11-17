@@ -186,7 +186,8 @@ void checkasm_check_x86(void)
     test_copy_emms(get_copy_noemms_mmx(), "copy_noemms");
     check_clobber(0, NUM_SAFE);
 
-    checkasm_should_fail(1);
+    if (!checkasm_should_fail(1))
+        return;
     checkasm_test_noop(get_sigill_x86(), "sigill");
     checkasm_test_noop(get_corrupt_stack_x86(), "corrupt_stack");
     checkasm_test_copy(get_copy_noemms_mmx(), "noemms", 8);

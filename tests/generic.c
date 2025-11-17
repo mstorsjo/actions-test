@@ -202,7 +202,9 @@ void checkasm_check_generic(void)
     checkasm_test_float_arg();
     checkasm_test_retval();
 
-    checkasm_should_fail(1);
+    if (!checkasm_should_fail(1))
+        return;
+
     checkasm_test_copy(get_memset(), "memset", 1);
     checkasm_test_copy(get_overwrite_left(), "overwrite_left", 1);
     checkasm_test_copy(get_overwrite_right(), "overwrite_right", 1);
