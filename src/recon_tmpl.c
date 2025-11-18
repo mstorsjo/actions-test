@@ -1438,7 +1438,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 has_bl = 0;
             } else if (t->bx + t_dim->w > t->pb.col_end) {
                 has_bl = 0;
-            } else if (t->by + t_dim->h > t->pb.row_end) {
+            } else if (t->by + t_dim->h < t->pb.row_end) {
                 has_bl = 1;
             } else {
                 const int xpos = bx4 - 1;
