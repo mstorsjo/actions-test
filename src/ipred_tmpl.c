@@ -319,20 +319,21 @@ static void ipred_v_c(pixel *dst, const ptrdiff_t stride,
 {
     const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
-    const pixel *top = &topleft[mrl_idx + 1];
+    const pixel *const top = &topleft[mrl_idx + 1];
 
     if (mrl_mul) {
         // Safe maximum size for edge buffers
         const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
-        pixel edge[64];
-        const pixel *top2 = &topleft[1 - e_stride];
+        const pixel *const top2 = &topleft[1 - e_stride];
         for (int x = 0; x < width; x++) {
-            edge[x] = (top[x] + top2[x]) >> 1;
+            dst[x] = (top[x] + top2[x]) >> 1;
         }
-        for (int y = 0; y < height; y++) {
-            pixel_copy(dst, edge, width);
+        const pixel *const edge = dst;
+        int y = 1;
+        do {
             dst += PXSTRIDE(stride);
-        }
+            pixel_copy(dst, edge, width);
+        } while (++y < height);
         return;
     }
 
