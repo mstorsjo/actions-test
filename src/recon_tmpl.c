@@ -1370,6 +1370,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const Dav1dDSPContext *const dsp = f->dsp;
     Dav1dTileState *const ts = t->ts;
     const int bx4 = t->bx & 63, by4 = t->by & 63;
+    const int sb_sz = 1 << (3 + f->sbh);
+    const int sbx = t->bx & (sb_sz - 1);
+    const int sby = t->by & (sb_sz - 1);
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
@@ -1415,39 +1418,51 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int is_hv5 = b->tx_part == TX_PARTITION_H5 || b->tx_part == TX_PARTITION_V5;
         const uint8_t *const b_dim = dav1d_block_dimensions[b->bs];
         const int bw4 = b_dim[0], bh4 = b_dim[1];
-        int has_tr = 0, has_bl = 0;
-        if (t->by > ts->tiling.row_start ) {
+        int n_tr = 0, n_bl = 0;
+        if (t->by > ts->tiling.row_start) {
+            const int start = t->bx >> (3 + f->sbh);
+            const int end = imin(sb_sz, ts->tiling.row_end - start);
+            const int w = imin(t_dim->w, end - sbx - t_dim->w);
             if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
                            t->bx + bw4 > t->pb.col_end))
             {
-                has_tr = 0;
+                n_tr = 0;
             } else if (t->by + t_dim->h > t->pb.row_end) {
-                has_tr = t->bx + t_dim->w < t->pb.col_end;
+                n_tr = t->bx + t_dim->w < t->pb.col_end;
             } else if (t->bx + t_dim->w < t->pb.col_end) {
-                has_tr = 1;
+                n_tr = w;
             } else {
-                const int xpos = bx4 + t_dim->w;
-                has_tr = (t->is_coded[by4 - 1] >> (xpos & 63)) & 1;
+                const int xpos = sbx + t_dim->w;
+                const int bits =
+                    (t->is_coded[sby - 1] >> (xpos & 63)) & ((1 << w) - 1);
+                n_tr = ctz(~bits);
             }
         }
 
         if (t->bx > ts->tiling.col_start) {
+            const int start = t->by >> (3 + f->sbh);
+            const int end = imin(sb_sz, ts->tiling.col_end - start);
+            const int h = imin(t_dim->h, end - sby - t_dim->h);
             if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
                            t->bx + bw4 > t->pb.col_end))
             {
-                has_bl = 0;
-            } else if (t->bx + t_dim->w > t->pb.col_end) {
-                has_bl = 0;
+                n_bl = 0;
+            } else if (t->bx + bw4 > t->pb.col_end ||
+                       t->bx + t_dim->w > t->pb.col_end)
+            {
+                n_bl = 0;
             } else if (t->by + t_dim->h < t->pb.row_end) {
-                has_bl = 1;
+                n_bl = h;
             } else {
-                const int xpos = bx4 - 1;
-                has_bl = (t->is_coded[by4 + t_dim->h] >> (xpos & 63)) & 1;
+                const int xpos = sbx - 1;
+                int y = 0;
+                do {
+                    if (!((t->is_coded[sby + y + t_dim->h] >> (xpos & 63)) & 1))
+                        break;
+                } while (++y < h);
+                n_bl = y;
             }
         }
-        const enum EdgeFlags edge_flags =
-            (has_tr ? EDGE_I444_TOP_HAS_RIGHT : 0) |
-            (has_bl ? EDGE_I444_LEFT_HAS_BOTTOM : 0);
 
         const pixel *top_sb_edge = NULL;
         if (!(t->by & (f->sb_step - 1))) {
@@ -1476,7 +1491,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,
-            ts->tiling.col_end, ts->tiling.row_end, edge_flags, dst,
+            ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
             f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
             t_dim->w, t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
 
@@ -1530,9 +1545,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
 
-    const uint64_t mask = ((1ULL << t_dim->w) - 1) << bx4;
+    const uint64_t mask = ((1ULL << t_dim->w) - 1) << sbx;
     for (int y = 0; y < t_dim->h; y++) {
-        t->is_coded[by4 + y] |= mask;
+        t->is_coded[sby + y] |= mask;
     }
 
     b->y_mode = orig_y_mode;

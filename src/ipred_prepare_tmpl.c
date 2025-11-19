@@ -78,7 +78,7 @@ enum IntraPredMode
 bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                   const int x, const int y,
                                   const int w, const int h,
-                                  const enum EdgeFlags edge_flags,
+                                  const int n_tr, const int n_bl,
                                   const pixel *const dst,
                                   const ptrdiff_t stride,
                                   const pixel *prefilter_toplevel_sb_edge,
@@ -163,12 +163,9 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
             for (i = 0; i < px_have; i++)
                 left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
             if (e.needs_bottomleft) {
-                const int have_bot = edge_flags & EDGE_I444_LEFT_HAS_BOTTOM;
-                if (have_bot) {
-                    px_have += th;
-                    for (; i < px_have; i++)
-                        left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
-                }
+                px_have += n_bl << 2;
+                for (; i < px_have; i++)
+                    left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
             }
             if (px_have < sz)
                 pixel_set(left, left[sz - px_have], sz - px_have);
@@ -221,12 +218,9 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         if (have_top) {
             int px_have = imin(tw, (w - x) << 2);
             pixel_copy(top, dst_top, px_have);
-            if (e.needs_topright) {
-                const int have_topright = edge_flags & EDGE_I444_TOP_HAS_RIGHT;
-                if (have_topright) {
-                    pixel_copy(top + tw, dst_top + tw, tw);
-                    px_have += tw;
-                }
+            if (e.needs_topright && n_tr) {
+                px_have += n_tr << 2;
+                pixel_copy(top + tw, dst_top + tw, n_tr << 2);
             }
             if (px_have < sz)
                 pixel_set(top + px_have, top[px_have - 1], sz - px_have);

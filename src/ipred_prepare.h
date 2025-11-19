@@ -82,7 +82,7 @@
 enum IntraPredMode
     bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                       int x, int y, int w, int h,
-                                      enum EdgeFlags edge_flags,
+                                      int n_tr, int n_bl,
                                       const pixel *dst, ptrdiff_t stride,
                                       const pixel *prefilter_toplevel_sb_edge,
                                       enum IntraPredMode mode, int *angle,
