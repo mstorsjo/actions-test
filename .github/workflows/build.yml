@@ -162,14 +162,14 @@ jobs:
           path: /opt/msvc
           key: msvc-arm64-17.13
       - name: Checkout msvc-wine
-        if: ${{ !steps.cache-msvc.outputs.cache-hit }}
+        if: steps.cache-msvc.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: mstorsjo/msvc-wine
           ref: 91759aa0131a166f17602f81012737a6f353d608
           path: msvc-wine
       - name: Install msvc-wine
-        if: ${{ !steps.cache-msvc.outputs.cache-hit }}
+        if: steps.cache-msvc.outputs.cache-hit != 'true'
         run: |
           apt-get update && apt-get install -y --no-install-recommends python3 msitools ca-certificates winbind
           wine wineboot
