@@ -42,6 +42,9 @@ typedef struct MsacContext {
     int allow_update_cdf;
 } MsacContext;
 
+EXTERN const uint8_t dav1d_msac_rate[125 /* para */][3 /* count */];
+EXTERN const uint16_t dav1d_msac_min_prob[7 /* n_symbols*/][8];
+
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/msac.h"

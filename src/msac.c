@@ -33,9 +33,7 @@
 
 #include "src/msac.h"
 
-#define EC_PROB_SHIFT 7
-
-static const uint8_t msac_rate[125 /* para */][3 /* count */] = {
+const uint8_t dav1d_msac_rate[125][3] = {
     { 4, 5, 6 }, { 4, 5, 5 }, { 4, 5, 4 }, { 4, 5, 7 }, { 4, 5, 7 },
     { 4, 4, 6 }, { 4, 4, 5 }, { 4, 4, 4 }, { 4, 4, 7 }, { 4, 4, 7 },
     { 4, 3, 6 }, { 4, 3, 5 }, { 4, 3, 4 }, { 4, 3, 7 }, { 4, 3, 7 },
@@ -63,14 +61,14 @@ static const uint8_t msac_rate[125 /* para */][3 /* count */] = {
     { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
 };
 
-static const uint8_t msac_prob_inc[7][8] = {
-    {  8,  0,  0,  0,  0,  0,  0,  0 },
-    { 10,  5,  0,  0,  0,  0,  0,  0 },
-    { 12,  8,  4,  0,  0,  0,  0,  0 },
-    { 12,  9,  6,  3,  0,  0,  0,  0 },
-    { 13, 10,  8,  5,  2,  0,  0,  0 },
-    { 13, 11,  9,  6,  4,  2,  0,  0 },
-    { 14, 12, 10,  8,  6,  4,  2,  0 },
+const uint16_t ALIGN(dav1d_msac_min_prob[7][8], 16) = {
+    {    63, 65535, 65535, 65535, 65535, 65535, 65535, 65535 },
+    {    47,    87, 65535, 65535, 65535, 65535, 65535, 65535 },
+    {    31,    63,    95, 65535, 65535, 65535, 65535, 65535 },
+    {    31,    55,    79,   103, 65535, 65535, 65535, 65535 },
+    {    23,    47,    63,    87,   111, 65535, 65535, 65535 },
+    {    23,    39,    55,    79,    95,   111, 65535, 65535 },
+    {    15,    31,    47,    63,    79,    95,   111, 65535 },
 };
 
 static inline void ctx_refill(MsacContext *const s) {
@@ -200,8 +198,8 @@ static unsigned dav1d_msac_decode_bool_c(MsacContext *const s, const unsigned f)
     const unsigned r = s->rng;
     uint64_t dif = s->dif;
     assert((dif >> 48) < r);
-    const int p = ((f >> EC_PROB_SHIFT) << 4) + 8;
-    unsigned v = ((r >> 8) * p >> (14 - EC_PROB_SHIFT)) << 3;
+    const unsigned p = ((f >> 7) << 4) + 8;
+    unsigned v = ((r >> 8) * p >> 7) << 3;
     const uint64_t vw = (uint64_t)v << 48;
     const unsigned ret = dif >= vw;
     dif -= ret * vw;
@@ -218,19 +216,15 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
 {
     const unsigned c = s->dif >> 48, r = s->rng >> 8;
     unsigned u, v = s->rng, val = -1;
-    const uint8_t *const prob_inc = msac_prob_inc[n_symbols - 1];
+    const uint16_t *const min_prob = dav1d_msac_min_prob[n_symbols - 1];
 
     assert(n_symbols <= 7);
 
     do {
         val++;
         u = v;
-        if (val == n_symbols) {
-            v = 0;
-            break;
-        }
-        const int p = ((cdf[val] >> EC_PROB_SHIFT) << 4) + prob_inc[val];
-        v = (r * p >> (14 - EC_PROB_SHIFT)) << 3;
+        const unsigned p = imax((cdf[val] | 127) - min_prob[val], 0);
+        v = (r * p >> 10) << 3;
     } while (c < v);
 
     assert(u <= s->rng);
@@ -241,7 +235,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
         const unsigned pc = cdf[n_symbols];
         const unsigned count = (uint8_t)pc;
         assert(count <= 32);
-        const int rate = msac_rate[pc >> 8][count >> 4] + (n_symbols > 2);
+        const int rate = dav1d_msac_rate[pc >> 8][count >> 4] + (n_symbols > 2);
         unsigned i;
         for (i = 0; i < val; i++)
             cdf[i] += (32768 - cdf[i]) >> rate;
@@ -262,7 +256,7 @@ unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
         // update_cdf() specialized for boolean CDFs
         const unsigned pc = cdf[1];
         const unsigned count = (uint8_t)pc;
-        const int rate = msac_rate[pc >> 8][count >> 4];
+        const int rate = dav1d_msac_rate[pc >> 8][count >> 4];
         if (bit)
             cdf[0] += (32768 - cdf[0]) >> rate;
         else
