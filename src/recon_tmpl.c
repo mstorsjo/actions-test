@@ -400,11 +400,12 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     depth, "", 16 << tx2dszctx, eob_ctx, eob, ts->msac.rng);
 
     if (eob > 1) {
-        const int eob_bin = eob - 2;
         const int eob_hi_bit = dav1d_msac_decode_bool_adapt(&ts->msac,
                                    ts->cdf.coef.eob_hi_bit);
-        eob = ((eob_hi_bit | 2) << eob_bin) |
-              dav1d_msac_decode_bools_bypass(&ts->msac, eob_bin);
+        const int eob_bin = eob - 2;
+        eob = eob_hi_bit | 2;
+        if (eob_bin)
+            eob = (eob << eob_bin) | dav1d_msac_decode_bools_bypass(&ts->msac, eob_bin);
         DEBUG_CF_printf("%*sPost-eob[%d]: r=%d\n", depth, "", eob, ts->msac.rng);
     }
     assert(eob >= 0 && eob < (16 << tx2dszctx));
