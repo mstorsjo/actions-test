@@ -264,6 +264,7 @@ void checkasm_check_msac(void) {
     if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_SSE2) {
         c.decode_symbol_adapt4 = dav1d_msac_decode_symbol_adapt4_sse2;
         c.decode_symbol_adapt8 = dav1d_msac_decode_symbol_adapt8_sse2;
+        c.decode_bool_adapt    = dav1d_msac_decode_bool_adapt_sse2;
     }
 #endif
 #endif

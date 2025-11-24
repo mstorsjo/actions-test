@@ -121,8 +121,10 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
     sub           r2d, r1d ; rng
     shl            r1, gprsize*8-16
     add            r4, r1  ; ~dif
+.renorm2:
     mov           r1d, [r0+msac.cnt]
     movifnidn      t0, r0
+.renorm3:
     bsr           ecx, r2d
     xor           ecx, 15  ; d
     shl           r2d, cl
@@ -187,3 +189,55 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
 INIT_XMM sse2
 DECODE_SYMBOL_ADAPT 4, q
 DECODE_SYMBOL_ADAPT 8, a
+
+cglobal msac_decode_bool_adapt, 2, 7, 0
+    movzx         eax, word [r1]
+    movzx         r3d, byte [r0+msac.rng+1]
+    mov            r4, [r0+msac.dif]
+    mov           r2d, [r0+msac.rng]
+    shr           eax, 7
+    imul          eax, r3d
+    shr           r3d, 1
+    mov            r5, r4
+    add           eax, r3d
+    and           eax, ~7  ; v
+    mov           r3d, eax
+    shl           rax, 48  ; vw
+    sub           r2d, r3d ; r - v
+    sub            r4, rax ; dif - vw
+    setb           al
+    cmovb         r2d, r3d
+    mov           r3d, [r0+msac.update_cdf]
+    cmovb          r4, r5
+    not            r4
+    test          r3d, r3d
+    jz m(msac_decode_symbol_adapt4).renorm2
+    movzx         r5d, word [r1+2]
+%if WIN64
+    push           r7
+    movifnidn      t0, r0
+%endif
+    lea           ecx, [r5*3]
+    movzx         r7d, r5b
+    shr           ecx, 8  ; para * sizeof(*msac_rate)
+    shr           r7d, 4  ; count >> 4
+    cmp           r5b, 32
+    adc           r5d, 0
+    mov        [r1+2], r5w
+    lea            r5, [msac_rate]
+    add           ecx, r7d
+    movzx         r7d, word [r1]
+    movzx         ecx, byte [r5+rcx]
+    imul          r5d, eax, -32769
+    add           r5d, r7d ; if (bit)
+    sub           r7d, eax ;     cdf[0] -= ((cdf[0] - 32769) >> rate) + 1;
+    sar           r5d, cl  ; else
+    sub           r7d, r5d ;     cdf[0] -= cdf[0] >> rate;
+    mov          [r1], r7w
+%if WIN64
+    mov           r1d, [t0+msac.cnt]
+    pop            r7
+    jmp m(msac_decode_symbol_adapt4).renorm3
+%else
+    jmp m(msac_decode_symbol_adapt4).renorm2
+%endif
