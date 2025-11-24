@@ -916,10 +916,11 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         assert(have_left);
         const int str = get_filter_strength(n_px, angle - 180, is_sm_l);
         if (str) {
-            filter_edge(filt_edge, n_px + 1, 0, n_px,
+            filter_edge(&filt_edge[2], n_px + 1, 0, n_px,
                         &topleft_in[-n_px], imax(width - height, 0),
                         n_px + 1, str);
-            left = &filt_edge[n_px - 1];
+            filt_edge[0] = filt_edge[1] = filt_edge[2];
+            left = &filt_edge[n_px + 1];
             max_base_y = n_px - 1;
         }
     }

@@ -1339,25 +1339,31 @@ static int warp_affine(Dav1dTaskContext *const t,
 }
 
 static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
-                                           const enum IntraPredMode mode,
-                                           const int angle_delta, const int mrl_adj)
+                                           enum IntraPredMode mode,
+                                           int *const angle,
+                                           const int mrl_idx)
 {
     if ((unsigned) mode - 1 > VERT_LEFT_PRED - 1) return mode;
 
     // map directional modes
-    const int angle = av1_mode_to_angle_map[mode - 1] + angle_delta * 3 + mrl_adj;
+    const int mrl_adj = (mrl_idx == 1) - (mrl_idx == 2);
+    *angle = av1_mode_to_angle_map[mode - 1] + *angle * 3 + mrl_adj;
     static const uint8_t thresh[] = { 61, 73, 82, 86 };
     const int rect = t_dim->lw - t_dim->lh;
     // FIXME below, we should return 180 +/- angle after mode remapping,
     // otherwise the actual intra prediction won't work correctly
     if (rect > 0) {
         assert(rect <= 4);
-        if (angle > 270 - thresh[rect - 1])
+        if (*angle > 270 - thresh[rect - 1]){
+            *angle -= 180;
             return DIAG_DOWN_LEFT_PRED;
+        }
     } else if (rect < 0) {
         assert(rect >= -4);
-        if (angle < thresh[-1 - rect])
+        if (*angle < thresh[-1 - rect]) {
+            *angle += 180;
             return HOR_UP_PRED;
+        }
     }
 
     return mode;
@@ -1377,9 +1383,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     const int tw = t_dim->w * 4, th = t_dim->h * 4;
 
     const enum IntraPredMode orig_y_mode = b->y_mode;
+    int angle = b->y_angle;
     if (b->intra)
-        b->y_mode = wide_angle_remap(t_dim, b->y_mode, b->y_angle,
-                                     (b->mrl_index == 1) - (b->mrl_index == 2));
+        b->y_mode = wide_angle_remap(t_dim, b->y_mode, &angle, b->mrl_index);
 
     // decode coefficients
     uint8_t cf_ctx;
@@ -1487,7 +1493,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ((t->bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
             ((t->by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0) |
             (dip ? ANGLE_DIP_FLAG : 0);
-        int angle = dip ? dip : b->y_angle;
+        angle = dip ? dip : angle;
 
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,
@@ -1813,8 +1819,9 @@ chroma: {}
     int ctw = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     int cth = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
     const enum IntraPredMode orig_uv_mode = b->uv_mode;
+    int angle = b->uv_angle;
     if (b->intra)
-        b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, b->uv_angle, 0);
+        b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
     for (int pl = 0; pl < 2; pl++) {
         uint8_t cf_ctx;
         if (b->skip_txfm) {

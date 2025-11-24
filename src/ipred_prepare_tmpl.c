@@ -109,9 +109,6 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     case HOR_UP_PRED:
     case VERT_LEFT_PRED: {
         is_dir = 1;
-        *angle = av1_mode_to_angle_map[mode - VERT_PRED] + 3 * *angle;
-        *angle += (mrl_idx == 1) - (mrl_idx == 2);
-
         if (*angle <= 90)
             mode = *angle < 90 && (have_top || apply_ibp) ? Z1_PRED : VERT_PRED;
         else if (*angle < 180)
