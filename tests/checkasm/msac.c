@@ -120,9 +120,11 @@ static void msac_dump(unsigned c_res, unsigned a_res,
                     if (c_res != a_res || msac_cmp(&s_c, &s_a) ||          \
                         memcmp(cdf[0], cdf[1], sizeof(**cdf) * (ns + 1)))  \
                     {                                                      \
-                        if (fail())                                        \
+                        if (fail()) {                                      \
+                            fprintf(stderr, "n_symbols = %d\n", ns);       \
                             msac_dump(c_res, a_res, &s_c, &s_a,            \
                                       cdf[0], cdf[1], ns);                 \
+                        }                                                  \
                     }                                                      \
                 }                                                          \
                 if (cdf_update && ns == n - 1)                             \
@@ -234,28 +236,36 @@ static void check_decode_adapt(MsacDSPContext *const c, uint8_t *const buf) {
     report("decode_adapt");
 }
 
-static void check_decode_unary(MsacDSPContext *const c, uint8_t *const buf) {
+static void check_decode_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     check_decode_bool_bypass(c, buf);
     check_decode_bools_bypass(c, buf);
     check_decode_unary_bypass(c, buf);
-    report("decode_unary");
+    report("decode_bypass");
 }
 
 void checkasm_check_msac(void) {
+    /* For performance reasons entropy decoding functions are called directly
+     * instead of through function pointers. For testing purposes however we
+     * do want to use functions pointers . */
     MsacDSPContext c;
-    c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt_c;
-    c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt_c;
-    c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_c;
-    c.decode_bool_bypass    = dav1d_msac_decode_bool_bypass_c;
-    c.decode_bools_bypass   = dav1d_msac_decode_bools_bypass_c;
-    c.decode_unary_bypass   = dav1d_msac_decode_unary_bypass_c;
+    c.decode_symbol_adapt4 = dav1d_msac_decode_symbol_adapt_c;
+    c.decode_symbol_adapt8 = dav1d_msac_decode_symbol_adapt_c;
+    c.decode_bool_adapt    = dav1d_msac_decode_bool_adapt_c;
+    c.decode_bool_bypass   = dav1d_msac_decode_bool_bypass_c;
+    c.decode_bools_bypass  = dav1d_msac_decode_bools_bypass_c;
+    c.decode_unary_bypass  = dav1d_msac_decode_unary_bypass_c;
 
-#if ARCH_X86 && HAVE_ASM && 0
-    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_SSE2) {
-        c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt4_sse2;
-        c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt8_sse2;
-        c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_sse2;
+#if HAVE_ASM
+#if ARCH_AARCH64
+    if (dav1d_get_cpu_flags() & DAV1D_ARM_CPU_FLAG_NEON) {
+
     }
+#elif ARCH_X86_64
+    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_SSE2) {
+        c.decode_symbol_adapt4 = dav1d_msac_decode_symbol_adapt4_sse2;
+        c.decode_symbol_adapt8 = dav1d_msac_decode_symbol_adapt8_sse2;
+    }
+#endif
 #endif
 
     uint8_t buf[BUF_SIZE];
@@ -263,5 +273,5 @@ void checkasm_check_msac(void) {
         buf[i] = rnd();
 
     check_decode_adapt(&c, buf);
-    check_decode_unary(&c, buf);
+    check_decode_bypass(&c, buf);
 }
