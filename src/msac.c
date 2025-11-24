@@ -115,10 +115,6 @@ int dav1d_msac_decode_4way(MsacContext *const s, const int ref,
                           n - 1 - inv_recenter(n - 1 - ref, v);
 }
 
-#if !(HAVE_ASM && TRIM_DSP_FUNCTIONS && ( \
-  ARCH_AARCH64 || \
-  (ARCH_ARM && (defined(__ARM_NEON) || defined(__APPLE__) || defined(_WIN32))) \
-))
 static inline void ctx_norm_bypass(MsacContext *const s, uint64_t dif,
                                    const unsigned n_bits)
 {
@@ -266,7 +262,6 @@ unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
 
     return bit;
 }
-#endif
 
 void dav1d_msac_init(MsacContext *const s, const uint8_t *const data,
                      const size_t sz, const int disable_cdf_update_flag)
