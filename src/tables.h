@@ -74,6 +74,7 @@ EXTERN const int8_t dav1d_resize_filter[64][8];
 
 EXTERN const uint8_t dav1d_avm_sm_weights[3][64];
 EXTERN const uint16_t dav1d_dr_intra_derivative[90];
+EXTERN const uint16_t dav1d_div_recip[128 + 1];
 EXTERN const int8_t dav1d_filter_intra_taps[5][64];
 
 EXTERN const uint8_t dav1d_obmc_masks[64];

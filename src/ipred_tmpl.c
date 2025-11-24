@@ -210,22 +210,29 @@ static void ipred_cfl_left_c(pixel *dst, const ptrdiff_t stride,
 #define BASE_SHIFT 17
 #endif
 
+static inline unsigned fast_div32_dc(const unsigned num, const unsigned den) {
+    assert(den > 0 && den <= 255);
+    int shift = ulog2(den);
+    const int rem = den - (1 << shift);
+    const int idx = rem << (7 - shift);
+    assert(idx <= 128);
+    shift += 9;
+    return ((num * dav1d_div_recip[idx]) + ((1 << shift) >> 1)) >> shift;
+}
+
 static unsigned dc_gen(const pixel *const topleft,
                        const int width, const int height)
 {
-    unsigned dc = (width + height) >> 1;
+    const int n_pel = width + height;
+    unsigned dc = 0;
     for (int i = 0; i < width; i++)
        dc += topleft[i + 1];
     for (int i = 0; i < height; i++)
        dc += topleft[-(i + 1)];
-    dc >>= ctz(width + height);
+    if (width == height)
+        return (dc + width) >> ctz(n_pel);
 
-    if (width != height) {
-        dc *= (width > height * 2 || height > width * 2) ? MULTIPLIER_1x4 :
-                                                           MULTIPLIER_1x2;
-        dc >>= BASE_SHIFT;
-    }
-    return dc;
+    return fast_div32_dc(dc, n_pel);
 }
 
 static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
