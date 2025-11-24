@@ -48,8 +48,7 @@ EXTERN const uint8_t /* enum TxfmType */
 
 EXTERN const uint8_t av1_mode_to_angle_map[8];
 
-EXTERN const uint8_t av1_angle_to_mode_index_z1[22];
-EXTERN const uint8_t av1_angle_to_mode_index_z3[19];
+EXTERN const uint8_t av1_angle_to_mode_index[22];
 
 EXTERN const uint8_t /* enum InterPredMode */
                      dav1d_comp_inter_pred_modes[][2];

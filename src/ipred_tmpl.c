@@ -749,7 +749,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     }
 
     if (enable_ibp) {
-        const int mode_index = av1_angle_to_mode_index_z1[angle / 3 - 12];
+        const int mode_index = av1_angle_to_mode_index[angle / 3 - 12];
         if (mode_index) {
             const pixel *left = &topleft_in[-1];
             pixel left_out[64 + 64];
@@ -942,7 +942,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     }
 
     if (enable_ibp && !mrl_idx) {
-        const int mode_idx = av1_angle_to_mode_index_z3[angle / 3 - 57];
+        const int mode_idx = av1_angle_to_mode_index[78 - ((angle + 2) / 3)];
         if (mode_idx) {
             const pixel *top = &topleft_in[1];
             if (have_top) {
