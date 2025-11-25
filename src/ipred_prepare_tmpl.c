@@ -195,9 +195,9 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 #endif
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
-            hex_dump(left, sz, sz, 1, "l");
+            hex_dump(left, 0, sz, 1, "l");
             if (mrl_mul) {
-                hex_dump(left2, sz, sz, 1, "l2");
+                hex_dump(left2, 0, sz, 1, "l2");
             }
         }
 #endif
@@ -249,9 +249,9 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 #endif
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
-            hex_dump(top, sz, sz, 1, "t");
+            hex_dump(top, 0, sz, 1, "t");
             if (mrl_mul) {
-                hex_dump(top2, sz, sz, 1, "t2");
+                hex_dump(top2, 0, sz, 1, "t2");
             }
         }
 #endif
