@@ -255,20 +255,20 @@ static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
             for (int x = x_start; x < width; x++) {
                 dst[x] = (topleft[x + 1] * wy + dc_wy + 64) >> 7;
             }
-            dst += stride;
+            dst += PXSTRIDE(stride);
         }
 
         const int y_start = width >= height ? h : 0;
-        dst = p_dst + y_start * stride;
+        dst = p_dst + y_start * PXSTRIDE(stride);
         const uint8_t *const w_x = &ibp_weights[w];
         for (int y = y_start; y < height; y++) {
             const int left = topleft[-(y + 1)];
             for (int x = 0; x < w; x++) {
                 dst[x] = (left * (128 - w_x[x]) + dc * w_x[x] + 64) >> 7;
             }
-            dst += stride;
+            dst += PXSTRIDE(stride);
         }
-        dst = p_dst + (h * stride + w);
+        dst = p_dst + (h * PXSTRIDE(stride) + w);
         width -= w;
         height -= h;
     }
