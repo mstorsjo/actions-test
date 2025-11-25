@@ -726,10 +726,11 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     const int filter_strength = enable_intra_edge_filter ?
         get_filter_strength(width + height, 90 - angle, is_sm_t) : 0;
     if (filter_strength) {
-        filter_edge(top_out, width + height, 0, width + height,
+        filter_edge(&top_out[2], width + height, 0, width + height,
                     &topleft_in[1], -1, width + imin(width, height),
                     filter_strength);
-        top = top_out;
+        top_out[0] = top_out[1] = top_out[2];
+        top = &top_out[2];
         max_base_x = width + height - 1;
     } else {
         top = &topleft_in[1];
