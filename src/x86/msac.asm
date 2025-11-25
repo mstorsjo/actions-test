@@ -132,12 +132,7 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
     mov [t0+msac.rng], r2d
     not            r4
     sub           r1d, ecx
-%if 1 ; FIXME: Determine exact constraints and adjust cnt offset
-    cmp           r1d, 8
-    jge .end
-%else
     jae .end ; no refill required
-%endif
 
 ; refill:
     mov            r2, [t0+msac.buf]

@@ -118,14 +118,20 @@ int dav1d_msac_decode_4way(MsacContext *const s, const int ref,
 static inline void ctx_norm_bypass(MsacContext *const s, uint64_t dif,
                                    const unsigned n_bits)
 {
-    s->cnt -= n_bits;
+    const unsigned cnt = s->cnt;
     s->dif = ((dif + 1) << n_bits) - 1;
-    if (s->cnt < 8) ctx_refill(s);
+    s->cnt = cnt - n_bits;
+    if (cnt < n_bits)
+        ctx_refill(s);
 }
 
 unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
                                           const unsigned n_bits)
 {
+    assert(n_bits > 0 && n_bits <= 32);
+    if ((unsigned)s->cnt < n_bits - 1)
+        ctx_refill(s);
+
     const unsigned r = s->rng;
     uint64_t dif = s->dif;
     assert((dif >> 48) < r);
@@ -145,15 +151,17 @@ unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
 }
 
 unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
-                                          const int max_bits)
+                                          const unsigned max_bits)
 {
     assert(max_bits > 0 && max_bits <= 32);
-    if (s->cnt < max_bits - 1) ctx_refill(s);
+    if ((unsigned)s->cnt < max_bits - 1)
+        ctx_refill(s);
+
     const unsigned r = s->rng;
     uint64_t dif = s->dif;
     assert((dif >> 48) < r);
     uint64_t vw = (uint64_t)r << 48;
-    int ret = 0, bit;
+    unsigned ret = 0, bit;
     for (bit = 0; bit < max_bits; bit++) {
         vw >>= 1;
         if (dif >= vw) {
@@ -176,14 +184,13 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
 static inline void ctx_norm(MsacContext *const s, const uint64_t dif,
                             const unsigned rng)
 {
-    const int d = 15 ^ (31 ^ clz(rng));
-    const int cnt = s->cnt;
+    const unsigned d = 15 ^ (31 ^ clz(rng));
+    const unsigned cnt = s->cnt;
     assert(rng <= 65535U);
     s->dif = ((dif + 1) << d) - 1;
     s->rng = rng << d;
     s->cnt = cnt - d;
-    // unsigned compare avoids redundant refills at eob
-    if (s->cnt < 8)
+    if (cnt < d) // unsigned compare avoids redundant refills at eob
         ctx_refill(s);
 }
 

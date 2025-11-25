@@ -60,8 +60,8 @@ void dav1d_msac_init(MsacContext *s, const uint8_t *data, size_t sz,
 unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *s, uint16_t *cdf,
                                           size_t n_symbols);
 unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *s, uint16_t *cdf);
-unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *s, unsigned n);
-unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, int max_bits);
+unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *s, unsigned n_bits);
+unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, unsigned max_bits);
 int dav1d_msac_decode_subexp(MsacContext *s, int ref, int n, unsigned k);
 int dav1d_msac_decode_4way(MsacContext *s, int ref, uint16_t *cdf, int n_bits);
 

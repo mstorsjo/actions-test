@@ -40,8 +40,8 @@ typedef unsigned (*decode_symbol_adapt_fn)(MsacContext *s, uint16_t *cdf,
                                            size_t n_symbols);
 typedef unsigned (*decode_adapt_fn)(MsacContext *s, uint16_t *cdf);
 typedef unsigned (*decode_bool_bypass_fn)(MsacContext *s);
-typedef unsigned (*decode_bools_bypass_fn)(MsacContext *s, unsigned n);
-typedef unsigned (*decode_unary_bypass_fn)(MsacContext *s, int max_bits);
+typedef unsigned (*decode_bools_bypass_fn)(MsacContext *s, unsigned n_bits);
+typedef unsigned (*decode_unary_bypass_fn)(MsacContext *s, unsigned max_bits);
 
 typedef struct {
     decode_symbol_adapt_fn decode_symbol_adapt4;
@@ -193,12 +193,12 @@ static void check_decode_bool_bypass(MsacDSPContext *const c, uint8_t *const buf
 static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
-    declare_func(unsigned, MsacContext *s, unsigned f);
+    declare_func(unsigned, MsacContext *s, unsigned n_bits);
     if (check_func(c->decode_bools_bypass, "msac_decode_bools_bypass")) {
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
-            const int n_bits = 1 + (rnd() & 15);
+            const int n_bits = 1 + (rnd() & 31);
             unsigned c_res = call_ref(&s_c, n_bits);
             unsigned a_res = call_new(&s_a, n_bits);
             if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
@@ -213,7 +213,7 @@ static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const bu
 static void check_decode_unary_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
-    declare_func(unsigned, MsacContext *s, unsigned f);
+    declare_func(unsigned, MsacContext *s, unsigned max_bits);
     if (check_func(c->decode_unary_bypass, "msac_decode_unary_bypass")) {
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
