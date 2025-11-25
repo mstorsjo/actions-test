@@ -1215,61 +1215,70 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
         dwl2 = -uwl2;
         uwl2 = 0;
     }
-    int mx = 1 << uwl2;
-    int dw = 1 << dwl2;
+    const int step_x = 1 << uwl2;
+    const int dw = 1 << dwl2;
     int uhl2 = hl2 - 1;
     int dhl2 = 0;
     if (uhl2 < 0) {
         dhl2 = -uhl2;
         uhl2 = 0;
     }
-    int my = 1 << uhl2;
-    int dh = 1 << dhl2;
-    const int bh = 8 >> dhl2;
-    const int bw = 8 >> dwl2;
+    const int step_y = 1 << uhl2;
+    const int dh = 1 << dhl2;
+    const int grid_h = 8 >> dhl2;
+    const int grid_w = 8 >> dwl2;
 
-    for (int y = 0; y < bh; y++) {
-        const int dy = y * my + (my - 1);
-        const int oy = y * dh;
-        for (int x = 0; x < bw; x++) {
-            const int dx = x * mx + (mx - 1);
-            const int ox = x * dw;
-            const int idx = trans ? (ox * 8 + oy) : (oy * 8 + ox);
+    // Run DIP prediction at each coarse grid position
+    int y = step_y - 1;
+    for (int gy = 0; gy < grid_h; gy++) {
+        const int iy = gy * dh;
+        int x = step_x - 1;
+        for (int gx = 0; gx < grid_w; gx++) {
+            const int ix = gx * dw;
+            const int idx = trans ? (ix * 8 + iy) : (iy * 8 + ix);
             int sum = 0;
             for (int i = 0; i < 11; i++) {
                 sum += dav1d_dip_weights[m][idx][i] * in[i];
             }
-            dst[dy * PXSTRIDE(stride) + dx] = ((sum + 2048) >> 12) - in_sum;
+            dst[y * PXSTRIDE(stride) + x] = ((sum + 2048) >> 12) - in_sum;
+            x += step_x;
         }
+        y += step_y;
     }
-    if (mx > 1) {
-        for (int y = 0; y < bh; y++) {
-            const int dy = y * my + (my - 1);
-            int p1 = topleft[-(dy + 1)];
-            for (int x = 0; x < bw; x++) {
-                const int dx = x * mx;
-                int p0 = p1;
-                p1 = dst[dy * PXSTRIDE(stride) + dx + mx - 1];
-                for (int z = 0; z < mx - 1; z++) {
-                    int z1 = z + 1;
-                    dst[dy * PXSTRIDE(stride) + dx + z] =
-                        (p0 * (mx - z1) + (p1 * z1)) >> uwl2;
+
+    if (step_x > 1) {
+        // Horizontal interpolation between coarse DIP samples
+        y = step_y - 1;
+        for (int gy = 0; gy < grid_h; gy++) {
+            int p1 = topleft[-(y + 1)];
+            int x = 0;
+            for (int gx = 0; gx < grid_w; gx++) {
+                const int p0 = p1;
+                p1 = dst[y * PXSTRIDE(stride) + x + step_x - 1];
+                for (int z = 0; z < step_x - 1; z++) {
+                    const int z1 = z + 1;
+                    dst[y * PXSTRIDE(stride) + x + z] =
+                        (p0 * (step_x - z1) + (p1 * z1)) >> uwl2;
                 }
+                x += step_x;
             }
+            y += step_y;
         }
     }
-    if (my > 1) {
+    if (step_y > 1) {
+        // Vertical interpolation between coarse DIP samples.
         for (int x = 0; x < width; x++) {
             int p1 = topleft[x + 1];
-            for (int y = 0; y < bh; y++) {
-                int dy = y * my;
-                int p0 = p1;
-                p1 = dst[(dy + my - 1) * PXSTRIDE(stride) + x];
-                for (int z = 0; z < my - 1; z++) {
-                    int z1 = z + 1;
-                    dst[(dy + z) * PXSTRIDE(stride) + x] =
-                        (p0 * (my - z1) + (p1 * z1)) >> uhl2;
+            y = 0;
+            for (int gy = 0; gy < grid_h; gy++) {
+                const int p0 = p1;
+                p1 = dst[(y + step_y - 1) * PXSTRIDE(stride) + x];
+                for (int z = 0; z < step_y - 1; z++) {
+                    const int z1 = z + 1;
+                    dst[(y + z) * PXSTRIDE(stride) + x] =
+                        (p0 * (step_y - z1) + (p1 * z1)) >> uhl2;
                 }
+                y += step_y;
             }
         }
     }
