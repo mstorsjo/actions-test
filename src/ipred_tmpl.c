@@ -811,11 +811,12 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     const int str_l = enable_intra_edge_filter ?
         get_filter_strength(width + height, 180 - angle, is_sm_l) : 0;
     if (str_l) {
-        filter_edge(&topleft[-height], height, height - max_height, height,
+        filter_edge(&topleft[-n_px_l], height, height - max_height, height,
                     &topleft_in[-height], 0, height + 1, str_l);
     } else {
         pixel_copy(&topleft[-n_px_l], &topleft_in[-height], n_px_l);
     }
+    topleft[-1] = topleft[0];
     topleft[-(n_px_l + 1)] = topleft[-n_px_l];
 
     for (int y = 0; y < height; y++) {
