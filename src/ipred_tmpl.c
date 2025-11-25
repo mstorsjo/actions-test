@@ -1245,7 +1245,7 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
     if (mx > 1) {
         for (int y = 0; y < bh; y++) {
             const int dy = y * my + (my - 1);
-            int p1 = topleft[-(y + 1)];
+            int p1 = topleft[-(dy + 1)];
             for (int x = 0; x < bw; x++) {
                 const int dx = x * mx;
                 int p0 = p1;
@@ -1259,12 +1259,12 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
         }
     }
     if (my > 1) {
-        for (int x = 0; x < bw; x++) {
+        for (int x = 0; x < width; x++) {
             int p1 = topleft[x + 1];
             for (int y = 0; y < bh; y++) {
                 int dy = y * my;
                 int p0 = p1;
-                p1 = dst[(y + my - 1) * PXSTRIDE(stride) + x];
+                p1 = dst[(dy + my - 1) * PXSTRIDE(stride) + x];
                 for (int z = 0; z < my - 1; z++) {
                     int z1 = z + 1;
                     dst[(dy + z) * PXSTRIDE(stride) + x] =
