@@ -8,9 +8,11 @@ jobs:
   inspect:
     runs-on: windows-11-arm
     steps:
-      - name: Inspect cpu features
+      - name: Run testcase
         run: |
-          curl -LO https://martin.st/temp/winpf2.exe
-          curl -LO https://martin.st/temp/cpuname-aarch64.exe
-          ./winpf2.exe
-          ./cpuname-aarch64.exe
+          curl -LO https://martin.st/temp/unwind-packed-bugs.exe
+          ./unwind-packed-bugs.exe
+      - name: Check version
+        shell: cmd
+        run: |
+          ver
