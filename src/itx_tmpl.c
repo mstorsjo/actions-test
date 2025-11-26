@@ -79,7 +79,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     assert(h >= 4 && h <= 64);
     assert(eob >= 0);
 
-    const int is_rect2 = w * 2 == h || h * 2 == w;
+    const int is_rect2 = (t_dim->lw + t_dim->lh) & 1;
 #if 0
     // FIXME Disabled for now
     const int has_dconly = txtp == DCT_DCT;
