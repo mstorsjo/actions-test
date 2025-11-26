@@ -1517,7 +1517,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8);
         if (has_orip) {
             const unsigned th_mask = ((m == VERT_PRED) << 1) | (m == HOR_PRED);
-            dsp->ipred.orip(dst, PXSTRIDE(f->cur.stride[0]), edge, th_mask,
+            dsp->ipred.orip(dst, f->cur.stride[0], edge, th_mask,
                             tw, th HIGHBD_CALL_SUFFIX);
 
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
