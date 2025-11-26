@@ -31,12 +31,12 @@
 #include "common/bitdepth.h"
 
 #define decl_stx_fn(name) \
-int (name)(coef *cf, enum RectTxfmSize tx, int stx, int eob, \
-            int transpose HIGHBD_DECL_SUFFIX)
+void (name)(coef *cf_out, const coef *cf, const int8_t *kernel, int stride, \
+            int eob HIGHBD_DECL_SUFFIX)
 typedef decl_stx_fn(*stx_fn);
 
 typedef struct Dav1dStxDSPContext {
-    stx_fn stxfm[2];
+    stx_fn stxfm;
 } Dav1dStxDSPContext;
 
 bitfn_decls(void dav1d_stx_dsp_init, Dav1dStxDSPContext *c);
