@@ -725,12 +725,12 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     }
 
     pixel top_out[64 + 64];
-    const int filter_strength = enable_intra_edge_filter && have_top ?
-        get_filter_strength(width + height, 90 - angle, is_sm_t) : 0;
-    if (filter_strength) {
+    const int str = enable_intra_edge_filter && have_top && !mrl_idx ?
+            get_filter_strength(width + height, 90 - angle, is_sm_t) : 0;
+    if (str) {
         filter_edge(&top_out[2], width + height, 0, width + height,
                     &topleft_in[1], -1, width + imin(width, height),
-                    filter_strength);
+                    str);
         top_out[0] = top_out[1] = top_out[2];
         top = &top_out[2];
         max_base_x = width + height - 1;
@@ -758,7 +758,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         }
     }
 
-    if (enable_ibp) {
+    if (enable_ibp && !mrl_idx) {
         const int mode_index = av1_angle_to_mode_index[angle / 3 - 12];
         if (mode_index) {
             const pixel *left = &topleft_in[-1];
@@ -790,6 +790,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
     const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
+    const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int have_top = !!(angle & ANGLE_HAS_TOP_FLAG);
     const int have_left = !!(angle & ANGLE_HAS_LEFT_FLAG);
     angle &= 511;
@@ -802,7 +803,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     pixel *const topleft = &edge[66];
 
     const int n_px_t = width + 1;
-    const int str_t = enable_intra_edge_filter && have_top ?
+    const int str_t = enable_intra_edge_filter && have_top && !mrl_idx ?
         get_filter_strength(width + height, angle - 90, is_sm_t) : 0;
     if (str_t) {
         filter_edge(&topleft[1], n_px_t + 1, 1, n_px_t, &topleft_in[0],
@@ -814,7 +815,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     topleft[n_px_t + 1] = topleft[n_px_t];
 
     const int n_px_l = height + 1;
-    const int str_l = enable_intra_edge_filter && have_left ?
+    const int str_l = enable_intra_edge_filter && have_left && !mrl_idx ?
         get_filter_strength(width + height, 180 - angle, is_sm_l) : 0;
     if (str_l) {
         filter_edge(&topleft[-n_px_l], height, height - max_height, height,
@@ -927,17 +928,16 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     }
 
     pixel filt_edge[64 + 1 + 64];
-    if (!mrl_idx) {
-        assert(have_left);
-        const int str = get_filter_strength(n_px, angle - 180, is_sm_l);
-        if (str) {
-            filter_edge(&filt_edge[2], n_px + 1, 0, n_px,
-                        &topleft_in[-n_px], imax(width - height, 0),
-                        n_px + 1, str);
-            filt_edge[0] = filt_edge[1] = filt_edge[2];
-            left = &filt_edge[n_px + 1];
-            max_base_y = n_px - 1;
-        }
+    assert(have_left);
+    const int str = enable_intra_edge_filter && !mrl_idx ?
+        get_filter_strength(n_px, angle - 180, is_sm_l) : 0;
+    if (str) {
+        filter_edge(&filt_edge[2], n_px + 1, 0, n_px,
+                    &topleft_in[-n_px], imax(width - height, 0),
+                    n_px + 1, str);
+        filt_edge[0] = filt_edge[1] = filt_edge[2];
+        left = &filt_edge[n_px + 1];
+        max_base_y = n_px - 1;
     }
 
     for (int x = 0; x < width; x++, ypos += dy) {
