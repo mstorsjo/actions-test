@@ -115,38 +115,28 @@ int dav1d_msac_decode_4way(MsacContext *const s, const int ref,
                           n - 1 - inv_recenter(n - 1 - ref, v);
 }
 
-static inline void ctx_norm_bypass(MsacContext *const s, uint64_t dif,
-                                   const unsigned n_bits)
-{
-    const unsigned cnt = s->cnt;
-    s->dif = ((dif + 1) << n_bits) - 1;
-    s->cnt = cnt - n_bits;
-    if (cnt < n_bits)
-        ctx_refill(s);
-}
-
 unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
                                           const unsigned n_bits)
 {
     assert(n_bits > 0 && n_bits <= 32);
-    if ((unsigned)s->cnt < n_bits - 1)
+    if ((unsigned)s->cnt < n_bits)
         ctx_refill(s);
 
-    const unsigned r = s->rng;
+    const uint64_t r = s->rng;
     uint64_t dif = s->dif;
     assert((dif >> 48) < r);
-    uint64_t vw = (uint64_t)r << 48;
+    uint64_t vw = r << 47;
     unsigned ret = 0;
     for (unsigned n = 0; n < n_bits; n++) {
-        vw >>= 1;
         ret <<= 1;
-        if (dif >= vw) {
+        if (dif >= vw)
             dif -= vw;
-        } else {
+        else
             ret |= 1;
-        }
+        vw >>= 1;
     }
-    ctx_norm_bypass(s, dif, n_bits);
+    s->dif = ((dif + 1) << n_bits) - 1;
+    s->cnt -= n_bits;
     return ret;
 }
 
@@ -154,25 +144,26 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
                                           const unsigned max_bits)
 {
     assert(max_bits > 0 && max_bits <= 32);
-    if ((unsigned)s->cnt < max_bits - 1)
+    if ((unsigned)s->cnt < max_bits)
         ctx_refill(s);
 
-    const unsigned r = s->rng;
+    const uint64_t r = s->rng;
     uint64_t dif = s->dif;
     assert((dif >> 48) < r);
-    uint64_t vw = (uint64_t)r << 48;
+    uint64_t vw = r << 47;
     unsigned ret = 0, bit;
     for (bit = 0; bit < max_bits; bit++) {
-        vw >>= 1;
         if (dif >= vw) {
             dif -= vw;
+            vw >>= 1;
             ret++;
         } else {
             bit++;
             break;
         }
     }
-    ctx_norm_bypass(s, dif, bit);
+    s->dif = ((dif + 1) << bit) - 1;
+    s->cnt -= bit;
     return ret;
 }
 
