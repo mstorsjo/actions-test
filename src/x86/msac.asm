@@ -57,7 +57,7 @@ DECLARE_REG_TMP 0
 %define base rax-$$
 
 %macro DECODE_SYMBOL_ADAPT 2 ; n, sz
-cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
+cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     movd           m2, [sq+msac.rng]
     lea           rax, [$$]
     mov%2          m0, [cdfq]
@@ -112,7 +112,7 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
 %else
 .renorm:
     pmovmskb      eax, m1
-    mov            r4, [r0+msac.dif]
+    mov            r4, [sq+msac.dif]
     tzcnt         eax, eax
     movzx         r1d, word [buf+rax+16] ; v
     movzx         r2d, word [buf+rax+14] ; u
@@ -122,8 +122,8 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
     shl            r1, gprsize*8-16
     add            r4, r1  ; ~dif
 .renorm2:
-    mov           r1d, [r0+msac.cnt]
-    movifnidn      t0, r0
+    mov           r1d, [sq+msac.cnt]
+    movifnidn      t0, sq
 .renorm3:
     bsr           ecx, r2d
     xor           ecx, 15  ; d
@@ -133,8 +133,7 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 6, s, cdf, ns
     not            r4
     sub           r1d, ecx
     jae .end ; no refill required
-
-; refill:
+.refill:
     mov            r2, [t0+msac.buf]
     mov           rcx, [t0+msac.end]
     lea            r5, [r2+gprsize]
@@ -185,11 +184,11 @@ INIT_XMM sse2
 DECODE_SYMBOL_ADAPT 4, q
 DECODE_SYMBOL_ADAPT 8, a
 
-cglobal msac_decode_bool_adapt, 2, 7, 0
-    movzx         eax, word [r1]
-    movzx         r3d, byte [r0+msac.rng+1]
-    mov            r4, [r0+msac.dif]
-    mov           r2d, [r0+msac.rng]
+cglobal msac_decode_bool_adapt, 2, 7, 0, s, cdf
+    movzx         eax, word [cdfq]
+    movzx         r3d, byte [sq+msac.rng+1]
+    mov            r4, [sq+msac.dif]
+    mov           r2d, [sq+msac.rng]
     shr           eax, 7
     imul          eax, r3d
     shr           r3d, 1
@@ -202,15 +201,15 @@ cglobal msac_decode_bool_adapt, 2, 7, 0
     sub            r4, rax ; dif - vw
     setb           al
     cmovb         r2d, r3d
-    mov           r3d, [r0+msac.update_cdf]
+    mov           r3d, [sq+msac.update_cdf]
     cmovb          r4, r5
     not            r4
     test          r3d, r3d
     jz m(msac_decode_symbol_adapt4).renorm2
-    movzx         r5d, word [r1+2]
+    movzx         r5d, word [cdfq+2]
 %if WIN64
     push           r7
-    movifnidn      t0, r0
+    mov            t0, sq
 %endif
     lea           ecx, [r5*3]
     movzx         r7d, r5b
@@ -218,7 +217,7 @@ cglobal msac_decode_bool_adapt, 2, 7, 0
     shr           r7d, 4  ; count >> 4
     cmp           r5b, 32
     adc           r5d, 0
-    mov        [r1+2], r5w
+    mov      [cdfq+2], r5w
     lea            r5, [msac_rate]
     add           ecx, r7d
     movzx         r7d, word [r1]
@@ -228,7 +227,7 @@ cglobal msac_decode_bool_adapt, 2, 7, 0
     sub           r7d, eax ;     cdf[0] -= ((cdf[0] - 32769) >> rate) + 1;
     sar           r5d, cl  ; else
     sub           r7d, r5d ;     cdf[0] -= cdf[0] >> rate;
-    mov          [r1], r7w
+    mov        [cdfq], r7w
 %if WIN64
     mov           r1d, [t0+msac.cnt]
     pop            r7
@@ -236,3 +235,20 @@ cglobal msac_decode_bool_adapt, 2, 7, 0
 %else
     jmp m(msac_decode_symbol_adapt4).renorm2
 %endif
+
+cglobal msac_decode_bool_bypass, 1, 7, 0, s
+    mov           eax, [sq+msac.rng]
+    mov            r4, [sq+msac.dif]
+    mov           r1d, [sq+msac.cnt]
+    shl           rax, 47
+    mov            r2, r4
+    sub            r4, rax      ; dif - vw
+    cmovb          r4, r2
+    setb           al
+    movifnidn      t0, sq
+    lea            r4, [r4*2+1] ; dif
+    sub           r1d, 1        ; cnt
+    jb m(msac_decode_symbol_adapt4).refill
+    mov [sq+msac.cnt], r1d
+    mov [sq+msac.dif], r4
+    RET
