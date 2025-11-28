@@ -56,6 +56,60 @@ DECLARE_REG_TMP 0
 
 %define base rax-$$
 
+%macro REFILL 2 ; cnt_reg, is_early_refill
+    mov            r2, [t0+msac.buf]
+    mov           rcx, [t0+msac.end]
+    lea            r5, [r2+8]
+    cmp            r5, rcx
+    ja %%refill_eob
+    mov            r2, [r2]
+    lea           ecx, [%1+23]
+    add           %1d, 16
+    shr           ecx, 3   ; shift_bytes
+    bswap          r2
+    sub            r5, rcx
+    shl           ecx, 3   ; shift_bits
+    shr            r2, cl
+    sub           ecx, %1d ; shift_bits - 16 - cnt
+    mov           %1d, 48
+    shl            r2, cl
+    mov [t0+msac.buf], r5
+    sub           %1d, ecx ; cnt + 64 - shift_bits
+    xor            r4, r2
+%if %2
+    ret
+%else
+.end:
+    mov [t0+msac.cnt], %1d
+    mov [t0+msac.dif], r4
+    RET
+%endif
+%%refill_eob: ; avoid overreading the input buffer
+    mov            r5, rcx
+    mov           ecx, 40
+    sub           ecx, %1d ; c
+%%refill_eob_loop:
+    cmp            r2, r5
+    jae %%refill_eob_end   ; eob reached
+    movzx         %1d, byte [r2]
+    inc            r2
+    shl            %1, cl
+    xor            r4, %1
+    sub           ecx, 8
+    jge %%refill_eob_loop
+%%refill_eob_end:
+    mov           %1d, 40
+    sub           %1d, ecx
+    mov [t0+msac.buf], r2
+%if %2
+    ret
+%else
+    mov [t0+msac.dif], r4
+    mov [t0+msac.cnt], %1d
+    RET
+%endif
+%endmacro
+
 %macro DECODE_SYMBOL_ADAPT 2 ; n, sz
 cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     movd           m2, [sq+msac.rng]
@@ -134,49 +188,7 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     sub           r1d, ecx
     jae .end ; no refill required
 .refill:
-    mov            r2, [t0+msac.buf]
-    mov           rcx, [t0+msac.end]
-    lea            r5, [r2+gprsize]
-    cmp            r5, rcx
-    ja .refill_eob
-    mov            r2, [r2]
-    lea           ecx, [r1+23]
-    add           r1d, 16
-    shr           ecx, 3   ; shift_bytes
-    bswap          r2
-    sub            r5, rcx
-    shl           ecx, 3   ; shift_bits
-    shr            r2, cl
-    sub           ecx, r1d ; shift_bits - 16 - cnt
-    mov           r1d, gprsize*8-16
-    shl            r2, cl
-    mov [t0+msac.buf], r5
-    sub           r1d, ecx ; cnt + gprsize*8 - shift_bits
-    xor            r4, r2
-.end:
-    mov [t0+msac.cnt], r1d
-    mov [t0+msac.dif], r4
-    RET
-.refill_eob: ; avoid overreading the input buffer
-    mov            r5, rcx
-    mov           ecx, gprsize*8-24
-    sub           ecx, r1d ; c
-.refill_eob_loop:
-    cmp            r2, r5
-    jae .refill_eob_end    ; eob reached
-    movzx         r1d, byte [r2]
-    inc            r2
-    shl            r1, cl
-    xor            r4, r1
-    sub           ecx, 8
-    jge .refill_eob_loop
-.refill_eob_end:
-    mov           r1d, gprsize*8-24
-    sub           r1d, ecx
-    mov [t0+msac.buf], r2
-    mov [t0+msac.dif], r4
-    mov [t0+msac.cnt], r1d
-    RET
+    REFILL         r1, 0
 %endif
 %endmacro
 
@@ -252,3 +264,33 @@ cglobal msac_decode_bool_bypass, 1, 7, 0, s
     mov [sq+msac.cnt], r1d
     mov [sq+msac.dif], r4
     RET
+
+cglobal msac_decode_bools_bypass, 2, 7, 0, s, n
+    mov           eax, [sq+msac.cnt]
+    mov            r4, [sq+msac.dif]
+    movifnidn      t0, sq
+    cmp           eax, nd
+    jae .main
+    call .refill
+.main:
+    mov           r2d, [t0+msac.rng]
+    not            r4
+    sub           eax, nd
+    shl            r2, 47
+    mov [t0+msac.cnt], eax
+    xor           eax, eax
+    mov           ecx, nd
+.loop:
+    mov            r5, r4
+    add            r4, r2  ; dif - vw
+    cmovb          r4, r5
+    adc           eax, eax ; ret = (ret << 1) + (dif < vw)
+    shr            r2, 1
+    dec            nd
+    jg .loop
+    shl            r4, cl
+    not            r4
+    mov [t0+msac.dif], r4
+    RET
+.refill:
+    REFILL         r6, 1

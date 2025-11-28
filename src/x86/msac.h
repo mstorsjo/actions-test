@@ -36,10 +36,12 @@ unsigned dav1d_msac_decode_symbol_adapt8_sse2(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
 unsigned dav1d_msac_decode_bool_adapt_sse2(MsacContext *s, uint16_t *cdf);
 unsigned dav1d_msac_decode_bool_bypass_sse2(MsacContext *s);
+unsigned dav1d_msac_decode_bools_bypass_sse2(MsacContext *s, unsigned n_bits);
 
 #define dav1d_msac_decode_symbol_adapt4 dav1d_msac_decode_symbol_adapt4_sse2
 #define dav1d_msac_decode_symbol_adapt8 dav1d_msac_decode_symbol_adapt8_sse2
 #define dav1d_msac_decode_bool_adapt    dav1d_msac_decode_bool_adapt_sse2
 #define dav1d_msac_decode_bool_bypass   dav1d_msac_decode_bool_bypass_sse2
+#define dav1d_msac_decode_bools_bypass  dav1d_msac_decode_bools_bypass_sse2
 
 #endif /* DAV1D_SRC_X86_MSAC_H */

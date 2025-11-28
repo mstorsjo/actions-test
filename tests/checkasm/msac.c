@@ -285,6 +285,7 @@ void checkasm_check_msac(void) {
         c.decode_symbol_adapt8 = dav1d_msac_decode_symbol_adapt8_sse2;
         c.decode_bool_adapt    = dav1d_msac_decode_bool_adapt_sse2;
         c.decode_bool_bypass   = dav1d_msac_decode_bool_bypass_sse2;
+        c.decode_bools_bypass  = dav1d_msac_decode_bools_bypass_sse2;
     }
 #endif
 #endif
