@@ -1,0 +1,259 @@
+From 1133e44e50b2be388b45b5091da0be82fcea234b Mon Sep 17 00:00:00 2001
+From: Luc Trudeau <ltrudeau@twoorioles.com>
+Date: Fri, 28 Nov 2025 09:52:45 -0500
+Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
+
+---
+ aom/aom_codec.h           | 10 ++++++++++
+ aom/aomdx.h               | 11 +++++++++++
+ apps/aomdec.c             | 33 +++++++++++++++++++++++++++++++++
+ av1/av1_dx_iface.c        | 16 ++++++++++++++++
+ av1/decoder/decodeframe.c | 19 ++++++++++++++-----
+ av1/decoder/decoder.h     |  2 ++
+ 6 files changed, 86 insertions(+), 5 deletions(-)
+
+diff --git a/aom/aom_codec.h b/aom/aom_codec.h
+index a338ed5614..5cda54d2d6 100644
+--- a/aom/aom_codec.h
++++ b/aom/aom_codec.h
+@@ -635,6 +635,16 @@ typedef enum {
+ 
+ } OBU_METADATA_TYPE;
+ 
++enum InloopFilterType {
++    INLOOPFILTER_NONE        = 0,
++    INLOOPFILTER_DEBLOCK     = 1 << 0,
++    INLOOPFILTER_CDEF        = 1 << 1,
++    INLOOPFILTER_RESTORATION = 1 << 2,
++    INLOOPFILTER_CCSO        = 1 << 3,
++    INLOOPFILTER_GDF         = 1 << 4,
++    INLOOPFILTER_ALL         = -1,
++};
++
+ /*!\brief Returns string representation of OBU_TYPE.
+  *
+  * \param[in]     type            The OBU_TYPE to convert to string.
+diff --git a/aom/aomdx.h b/aom/aomdx.h
+index b5d454c67d..8adc78cbbf 100644
+--- a/aom/aomdx.h
++++ b/aom/aomdx.h
+@@ -342,6 +342,14 @@ enum aom_dec_control_id {
+    */
+   AV1D_SET_SKIP_FILM_GRAIN,
+ 
++  /*!\brief Codec control function to set the inloop filters, int
++   * parameter
++   *
++   * Valid values are integers. The decoder will skip inloop filters when its
++   * value is set to nonzero. The default value is INLOOPFILTER_ALL.
++   */
++  AV1D_SET_INLOOP_FILTERS,
++
+   AV1D_SET_BRU_OPT_MODE,
+ 
+   AOM_DECODER_CTRL_ID_MAX,
+@@ -497,6 +505,9 @@ AOM_CTRL_USE_TYPE(AV1D_SET_ROW_MT, unsigned int)
+ AOM_CTRL_USE_TYPE(AV1D_SET_SKIP_FILM_GRAIN, int)
+ #define AOM_CTRL_AV1D_SET_SKIP_FILM_GRAIN
+ 
++AOM_CTRL_USE_TYPE(AV1D_SET_INLOOP_FILTERS, int)
++#define AOM_CTRL_AV1D_SET_DUMP_INTRA_FILE
++
+ AOM_CTRL_USE_TYPE(AV1D_SET_BRU_OPT_MODE, int)
+ #define AOM_CTRL_AV1D_SET_BRU_OPT_MODE
+ 
+diff --git a/apps/aomdec.c b/apps/aomdec.c
+index 43aa5753dd..af4f2c2db4 100644
+--- a/apps/aomdec.c
++++ b/apps/aomdec.c
+@@ -61,6 +61,26 @@ struct AvxDecInputContext {
+   struct WebmInputContext *webm_ctx;
+ };
+ 
++static const struct arg_enum_list inloop_filters_tbl[] = {
++    { "none",                          INLOOPFILTER_NONE },
++    { "deblock",                       INLOOPFILTER_DEBLOCK },
++    { "nodeblock",                     INLOOPFILTER_ALL - INLOOPFILTER_DEBLOCK },
++    { "cdef",                          INLOOPFILTER_CDEF },
++    { "deblock+cdef",                  INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF },
++    { "nocdef",                        INLOOPFILTER_ALL - INLOOPFILTER_CDEF },
++    { "restoration",                   INLOOPFILTER_RESTORATION },
++    { "deblock+cdef+restoration",      INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
++                                       INLOOPFILTER_RESTORATION },
++    { "norestoration",                 INLOOPFILTER_ALL - INLOOPFILTER_RESTORATION },
++    { "ccso",                          INLOOPFILTER_CCSO },
++    { "deblock+cdef+restoration+ccso", INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
++                                       INLOOPFILTER_RESTORATION | INLOOPFILTER_CCSO },
++    { "noccso",                        INLOOPFILTER_ALL - INLOOPFILTER_CCSO },
++    { "gdf",                           INLOOPFILTER_GDF },
++    { "nogdf",                         INLOOPFILTER_ALL - INLOOPFILTER_GDF },
++    { "all",                           INLOOPFILTER_ALL },
++};
++
+ static const arg_def_t help =
+     ARG_DEF(NULL, "help", 0, "Show usage options and exit");
+ static const arg_def_t looparg =
+@@ -123,6 +143,8 @@ static const arg_def_t outallarg = ARG_DEF(
+     NULL, "all-layers", 0, "Output all decoded frames of a scalable bitstream");
+ static const arg_def_t skipfilmgrain =
+     ARG_DEF(NULL, "skip-film-grain", 0, "Skip film grain application");
++static const arg_def_t inloopfiltersarg =
++    ARG_DEF_ENUM(NULL, "inloopfilters", 1, "Which in-loop filters to enable", inloop_filters_tbl);
+ static const arg_def_t bruoptmodearg =
+     ARG_DEF(NULL, "bru-opt-mode", 0, "Use BRU optimized decode mode");
+ #if CONFIG_ICC_METADATA
+@@ -158,6 +180,7 @@ static const arg_def_t *all_args[] = { &help,
+                                        &oppointarg,
+                                        &outallarg,
+                                        &skipfilmgrain,
++                                       &inloopfiltersarg,
+                                        &bruoptmodearg,
+ #if CONFIG_ICC_METADATA
+                                        &icc_file,
+@@ -647,6 +670,7 @@ static int main_loop(int argc, const char **argv_) {
+   int operating_point = 0;
+   int output_all_layers = 0;
+   int skip_film_grain = 0;
++  enum InloopFilterType inloop_filters = INLOOPFILTER_ALL;
+   int bru_opt_mode = 0;
+   aom_image_t *scaled_img = NULL;
+   aom_image_t *img_shifted = NULL;
+@@ -798,6 +822,8 @@ static int main_loop(int argc, const char **argv_) {
+       output_all_layers = 1;
+     } else if (arg_match(&arg, &skipfilmgrain, argi)) {
+       skip_film_grain = 1;
++    } else if (arg_match(&arg, &inloopfiltersarg, argi)) {
++      inloop_filters = arg_parse_enum(&arg);
+     } else if (arg_match(&arg, &bruoptmodearg, argi)) {
+       bru_opt_mode = 1;
+ #if CONFIG_ICC_METADATA
+@@ -945,6 +971,13 @@ static int main_loop(int argc, const char **argv_) {
+     goto fail;
+   }
+ 
++  if (AOM_CODEC_CONTROL_TYPECHECKED(&decoder, AV1D_SET_INLOOP_FILTERS,
++                                    inloop_filters)) {
++    fprintf(stderr, "Failed to set inloop_filters: %s\n",
++            aom_codec_error(&decoder));
++    goto fail;
++  }
++
+   if (AOM_CODEC_CONTROL_TYPECHECKED(&decoder, AV1D_SET_BRU_OPT_MODE,
+                                     bru_opt_mode)) {
+     fprintf(stderr, "Failed to set bru_opt_mode: %s\n",
+diff --git a/av1/av1_dx_iface.c b/av1/av1_dx_iface.c
+index be11305845..7d0ae14c4e 100644
+--- a/av1/av1_dx_iface.c
++++ b/av1/av1_dx_iface.c
+@@ -51,6 +51,7 @@ struct aom_codec_alg_priv {
+   int byte_alignment;
+   int skip_loop_filter;
+   int skip_film_grain;
++  int inloop_filters;
+   int bru_opt_mode;
+   unsigned int row_mt;
+   EXTERNAL_REFERENCES ext_refs;
+@@ -629,6 +630,7 @@ static void init_buffer_callbacks(aom_codec_alg_priv_t *ctx) {
+   cm->features.byte_alignment = ctx->byte_alignment;
+   pbi->skip_loop_filter = ctx->skip_loop_filter;
+   pbi->skip_film_grain = ctx->skip_film_grain;
++  pbi->inloop_filters = ctx->inloop_filters;
+   pbi->bru_opt_mode = ctx->bru_opt_mode;
+ 
+   if (ctx->get_ext_fb_cb != NULL && ctx->release_ext_fb_cb != NULL) {
+@@ -1715,6 +1717,19 @@ static aom_codec_err_t ctrl_set_skip_film_grain(aom_codec_alg_priv_t *ctx,
+   return AOM_CODEC_OK;
+ }
+ 
++static aom_codec_err_t ctrl_set_inloop_filters(aom_codec_alg_priv_t *ctx,
++                                               va_list args) {
++  ctx->inloop_filters = va_arg(args, int);
++
++  if (ctx->frame_worker) {
++    AVxWorker *const worker = ctx->frame_worker;
++    FrameWorkerData *const frame_worker_data = (FrameWorkerData *)worker->data1;
++    frame_worker_data->pbi->inloop_filters = ctx->inloop_filters;
++  }
++
++  return AOM_CODEC_OK;
++}
++
+ static aom_codec_err_t ctrl_set_bru_opt_mode(aom_codec_alg_priv_t *ctx,
+                                              va_list args) {
+   ctx->bru_opt_mode = va_arg(args, int);
+@@ -1802,6 +1817,7 @@ static aom_codec_ctrl_fn_map_t decoder_ctrl_maps[] = {
+   { AV1D_SET_ROW_MT, ctrl_set_row_mt },
+   { AV1D_SET_EXT_REF_PTR, ctrl_set_ext_ref_ptr },
+   { AV1D_SET_SKIP_FILM_GRAIN, ctrl_set_skip_film_grain },
++  { AV1D_SET_INLOOP_FILTERS, ctrl_set_inloop_filters },
+   { AV1D_SET_BRU_OPT_MODE, ctrl_set_bru_opt_mode },
+   { AV1D_ENABLE_SUBGOP_STATS, ctrl_enable_subgop_stats },
+ 
+diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
+index 43669107fa..2fc2caf27d 100644
+--- a/av1/decoder/decodeframe.c
++++ b/av1/decoder/decodeframe.c
+@@ -10885,8 +10885,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+     }
+   }
+ 
++  const int filters = pbi->inloop_filters;
++  const int enable_deblock = filters & INLOOPFILTER_DEBLOCK;
++  const int enable_cdef = filters & INLOOPFILTER_CDEF;
++  const int enable_restoration = filters & INLOOPFILTER_RESTORATION;
++  const int enable_ccso = filters & INLOOPFILTER_CCSO;
++  const int enable_gdf = filters & INLOOPFILTER_GDF;
++
+   if (!cm->bru.frame_inactive_flag) {
+-    if (cm->lf.filter_level[0] || cm->lf.filter_level[1]) {
++    if (enable_deblock &&
++        (cm->lf.filter_level[0] || cm->lf.filter_level[1])) {
+       if (pbi->num_workers > 1) {
+         av1_loop_filter_frame_mt(&cm->cur_frame->buf, cm, &pbi->dcb.xd, 0,
+                                  num_planes, 0, pbi->tile_workers,
+@@ -10897,7 +10905,7 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+       }
+     }
+ 
+-    const int use_ccso =
++    const int use_ccso = enable_ccso &&
+         !pbi->skip_loop_filter && !cm->features.coded_lossless &&
+         (cm->ccso_info.ccso_enable[0] || cm->ccso_info.ccso_enable[1] ||
+          cm->ccso_info.ccso_enable[2]);
+@@ -10920,16 +10928,17 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+       extend_ccso_border(&cm->cur_frame->buf, ext_rec_y, CCSO_PADDING_SIZE);
+     }
+ 
+-    const int do_loop_restoration =
++    const int do_loop_restoration = enable_restoration &&
+         cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
+         (cm->rst_info[1].frame_restoration_type != RESTORE_NONE &&
+          !cm->seq_params.monochrome) ||
+         (cm->rst_info[2].frame_restoration_type != RESTORE_NONE &&
+          !cm->seq_params.monochrome);
+-    const int do_cdef = !pbi->skip_loop_filter &&
++    const int do_cdef = enable_cdef &&
++                        !pbi->skip_loop_filter &&
+                         !cm->features.coded_lossless &&
+                         cm->cdef_info.cdef_frame_enable;
+-    const int do_gdf = is_gdf_enabled(cm);
++    const int do_gdf = enable_gdf && is_gdf_enabled(cm);
+     const int optimized_loop_restoration =
+ #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
+         !cm->seq_params.disable_loopfilters_across_tiles &&
+diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
+index 232423f86a..725b1f94ab 100644
+--- a/av1/decoder/decoder.h
++++ b/av1/decoder/decoder.h
+@@ -322,6 +322,8 @@ typedef struct AV1Decoder {
+   // So we track whether this is the first frame or not.
+   int decoding_first_frame;
+ 
++  int inloop_filters;
++
+   int max_threads;
+   int inv_tile_order;
+   int need_resync;  // wait for key/intra-only frame.
+-- 
+2.43.0
+

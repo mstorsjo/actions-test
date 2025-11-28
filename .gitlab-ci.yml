@@ -103,3 +103,33 @@ build-debian:
           build/tools/dav1d -i $file --muxer=null --threads=1 --quiet | grep -v ' mv\[' > dav1d.inter.log
           diff -uw {avm,dav1d}.inter.log
           wc -l avm.inter.log
+        - |
+          cd avm
+          git reset --hard
+        - cd x86-64 && make -j$(nproc) aomdec && cd ../..
+        - |
+          git reset --hard
+        - ninja -C build
+        - |
+          echo "[CI] Running AVM vs DAV2D MD5 regression test"
+          files=(
+              "./media/avm-v12.0.0-sdp0.ivf"
+              "./media/avm-v12.0.0-sdp1.ivf"
+              "./media/avm-v12.0.0-bus.64x64.l5.ivf"
+          )
+          for file in "${files[@]}"; do
+              base="$(basename "$file")"
+              a_file="/tmp/${base}.avm.y4m"
+              d_file="/tmp/${base}.dav2d.y4m"
+              ./avm/x86-64/aomdec "$file" -o "$a_file" --limit=1 --inloopfilters=none
+              ./build/tools/dav1d -i "$file" -o "$d_file" --limit=1 --inloopfilters=none --threads=1 --quiet
+              a_md5=$(tail -n +3 "$a_file" | head -c "$((64 * 64))" | md5sum | cut -d' ' -f1)
+              d_md5=$(tail -n +3 "$d_file" | head -c "$((64 * 64))" | md5sum | cut -d' ' -f1)
+              if [[ "$a_md5" == "$d_md5" ]]; then
+                  echo $base "[OK] md5:$a_md5"
+              else
+                  echo $base "[FAILED!]"
+                  diff <(echo "$a_md5") <(echo "$d_md5")
+              fi
+          done
+

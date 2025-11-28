@@ -270,6 +270,7 @@ static const EnumParseTable inloop_filters_tbl[] = {
     { "deblock",       DAV1D_INLOOPFILTER_DEBLOCK },
     { "nodeblock",     DAV1D_INLOOPFILTER_ALL - DAV1D_INLOOPFILTER_DEBLOCK },
     { "cdef",          DAV1D_INLOOPFILTER_CDEF },
+    { "deblock+cdef",  DAV1D_INLOOPFILTER_DEBLOCK | DAV1D_INLOOPFILTER_CDEF },
     { "nocdef",        DAV1D_INLOOPFILTER_ALL - DAV1D_INLOOPFILTER_CDEF },
     { "restoration",   DAV1D_INLOOPFILTER_RESTORATION },
     { "norestoration", DAV1D_INLOOPFILTER_ALL - DAV1D_INLOOPFILTER_RESTORATION },
