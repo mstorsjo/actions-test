@@ -85,6 +85,35 @@ static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
     }
 }
 
+static uint16_t deblock_quant_thr(const int hbd, const int qidx) {
+    const int qmax = 255 + 2 * hbd;
+    return (dq_lookup(hbd, iclip(qidx, 0, qmax)) + 4) >> (3 + 6);
+}
+
+static uint16_t deblock_side_thr(const int hbd, const int qidx) {
+    const int bitdepth_min_8 = 2 * hbd;
+    const int q_ind = imin(imax(qidx - 24 * bitdepth_min_8, 0), 296 - 1);
+    const int side_thr = dav1d_deblock_side_thresholds[q_ind];
+    return imax(side_thr + (1 << 4 >> bitdepth_min_8), 0) >> (5 - bitdepth_min_8);
+}
+
+static void init_deblock_lut(const Dav1dSequenceHeader *const seq_hdr,
+                             const Dav1dFrameHeader *const frame_hdr,
+                             const int qidx, Av1FilterLUT *const lut)
+{
+    const int bitdepth_min_8 = 2 * seq_hdr->hbd;
+    const int qmax = 255 + bitdepth_min_8;
+    for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
+        const int yac = frame_hdr->segmentation.enabled ?
+            iclip(qidx + frame_hdr->segmentation.seg_data.d[i].delta_q, 0, qmax) : qidx;
+        for (int dir = 0; dir < 2; dir++) {
+            const int dir_yac = yac + 8 * frame_hdr->loopfilter.delta_q_y[dir];
+            lut->thr[dir][0][i] = deblock_quant_thr(seq_hdr->hbd, dir_yac);
+            lut->thr[dir][1][i] = deblock_side_thr(seq_hdr->hbd, dir_yac);
+        }
+    }
+}
+
 static inline void read_amvd(Dav1dTileState *const ts, mv *const mv) {
     const int joint = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                           ts->cdf.m.amvd_joint, 3);
@@ -1639,20 +1668,21 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
         }
 
-        if (f->frame_hdr->loopfilter.level_y[0] ||
-            f->frame_hdr->loopfilter.level_y[1])
-        {
-            dav1d_create_lf_mask_intra(t->lf_mask, f->lf.level, f->b4_stride,
-                                       (const uint8_t (*)[8][2])
-                                       &ts->lflvl[b->seg_id][0][0][0],
-                                       t->bx, t->by, f->w4, f->h4, bs,
-                                       0 /*b->tx*/, b->uvtx, f->cur.p.layout,
-                                       &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
-                                       has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
-                                       has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
-        }
-        // update contexts
         if (has_luma) {
+            if (f->frame_hdr->loopfilter.level_y[0] ||
+                f->frame_hdr->loopfilter.level_y[1])
+            {
+                dav1d_create_lf_mask_intra(t->lf_mask, f->lf.level, f->b4_stride,
+                                           (const uint8_t (*)[8][2])
+                                           &ts->lflvl[b->seg_id][0][0][0],
+                                           t->bx, t->by, f->w4, f->h4, bs,
+                                           b->tx_part, b->uvtx, f->cur.p.layout,
+                                           &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
+                                           has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
+                                           has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
+            }
+
+            // update contexts
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
 #define set_ctx(rep_macro) \
@@ -4380,6 +4410,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         ((f->frame_hdr->restoration.p[0].type != DAV1D_RESTORATION_NONE) << 0) +
         ((f->frame_hdr->restoration.p[1].type != DAV1D_RESTORATION_NONE) << 1) +
         ((f->frame_hdr->restoration.p[2].type != DAV1D_RESTORATION_NONE) << 2);
+    if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
+        init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
+    }
     dav1d_calc_lf_values(f->lf.lvl, f->frame_hdr, (int8_t[4]) { 0, 0, 0, 0 });
     memset(f->lf.mask, 0, sizeof(*f->lf.mask) * num_sb256);
 

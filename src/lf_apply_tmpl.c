@@ -137,12 +137,15 @@ static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
                                        const int have_left,
                                        const uint8_t (*lvl)[4],
                                        const ptrdiff_t b4_stride,
-                                       const uint16_t (*const mask)[3][4],
+                                       const uint16_t (*const mask)[4][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
                                        const int starty4, const int endy4)
 {
     const Dav1dDSPContext *const dsp = f->dsp;
+
+    const unsigned q_thr = f->lf.thr_lut.thr[0][0][0];
+    const unsigned side_thr = f->lf.thr_lut.thr[0][1][0];
 
     // filter edges between columns (e.g. block1 | block2)
     for (int x = 0; x < w; x++) {
@@ -152,20 +155,22 @@ static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
             hmask[0] = mask[x][0][0];
             hmask[1] = mask[x][1][0];
             hmask[2] = mask[x][2][0];
+            hmask[3] = mask[x][3][0];
             if (endy4 > 16) {
                 hmask[0] |= (unsigned) mask[x][0][1] << 16;
                 hmask[1] |= (unsigned) mask[x][1][1] << 16;
                 hmask[2] |= (unsigned) mask[x][2][1] << 16;
+                hmask[3] |= (unsigned) mask[x][3][1] << 16;
             }
         } else {
             hmask[0] = mask[x][0][1];
             hmask[1] = mask[x][1][1];
             hmask[2] = mask[x][2][1];
+            hmask[3] = mask[x][3][1];
         }
-        hmask[3] = 0;
-        dsp->lf.loop_filter_sb[0][0](&dst[x * 4], ls, hmask,
-                                     (const uint8_t(*)[4]) &lvl[x][0], b4_stride,
-                                     &f->lf.lim_lut, endy4 - starty4 HIGHBD_CALL_SUFFIX);
+
+        dsp->lf.loop_filter_sb[0][0](&dst[x * 4], ls, hmask, q_thr, side_thr,
+                                     &f->lf.thr_lut, endy4 - starty4 HIGHBD_CALL_SUFFIX);
     }
 }
 
@@ -173,29 +178,28 @@ static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
                                        const int have_top,
                                        const uint8_t (*lvl)[4],
                                        const ptrdiff_t b4_stride,
-                                       const uint16_t (*const mask)[3][4],
+                                       const uint16_t (*const mask)[4][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
                                        const int starty4, const int endy4)
 {
     const Dav1dDSPContext *const dsp = f->dsp;
 
+    const unsigned q_thr = f->lf.thr_lut.thr[0][0][0];
+    const unsigned side_thr = f->lf.thr_lut.thr[0][1][0];
     //                                 block1
     // filter edges between rows (e.g. ------)
     //                                 block2
-    for (int y = starty4; y < endy4;
-         y++, dst += 4 * PXSTRIDE(ls), lvl += b4_stride)
-    {
+    for (int y = starty4; y < endy4; y++, dst += 4 * PXSTRIDE(ls)) {
         if (!have_top && !y) continue;
         const uint32_t vmask[4] = {
             mask[y][0][0] | ((unsigned) mask[y][0][1] << 16),
             mask[y][1][0] | ((unsigned) mask[y][1][1] << 16),
             mask[y][2][0] | ((unsigned) mask[y][2][1] << 16),
-            0,
+            mask[y][3][0] | ((unsigned) mask[y][3][1] << 16),
         };
-        dsp->lf.loop_filter_sb[0][1](dst, ls, vmask,
-                                     (const uint8_t(*)[4]) &lvl[0][1], b4_stride,
-                                     &f->lf.lim_lut, w HIGHBD_CALL_SUFFIX);
+        dsp->lf.loop_filter_sb[0][1](dst, ls, vmask, q_thr, side_thr,
+                                     &f->lf.thr_lut, w HIGHBD_CALL_SUFFIX);
     }
 }
 
@@ -209,6 +213,7 @@ static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
                                         const int starty4, const int endy4,
                                         const int ss_ver)
 {
+#if 0
     const Dav1dDSPContext *const dsp = f->dsp;
 
     // filter edges between columns (e.g. block1 | block2)
@@ -234,6 +239,7 @@ static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
                                      (const uint8_t(*)[4]) &lvl[x][3], b4_stride,
                                      &f->lf.lim_lut, endy4 - starty4 HIGHBD_CALL_SUFFIX);
     }
+#endif
 }
 
 static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
@@ -246,6 +252,7 @@ static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
                                         const int starty4, const int endy4,
                                         const int ss_hor)
 {
+#if 0
     const Dav1dDSPContext *const dsp = f->dsp;
     ptrdiff_t off_l = 0;
 
@@ -268,6 +275,7 @@ static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
                                      (const uint8_t(*)[4]) &lvl[0][3], b4_stride,
                                      &f->lf.lim_lut, w HIGHBD_CALL_SUFFIX);
     }
+#endif
 }
 
 void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
@@ -287,6 +295,10 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     const unsigned vmax = 1U << vmask, hmax = 1U << hmask;
     const unsigned endy4 = starty4 + imin(f->h4 - sby * sbsz, sbsz);
     const unsigned uv_endy4 = (endy4 + ss_ver) >> ss_ver;
+
+    if (f->frame_hdr->segmentation.enabled) {
+        fprintf(stderr, "segmentation not supported for deblocking\n");
+    }
 
     // fix lpf strength at tile col boundaries
     const uint8_t *lpf_y = &f->lf.tx_lpf_right_edge[0][sby << sbl2];

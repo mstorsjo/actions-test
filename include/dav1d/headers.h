@@ -390,11 +390,6 @@ typedef struct Dav1dSegmentationDataSet {
     int8_t last_active_segid;
 } Dav1dSegmentationDataSet;
 
-typedef struct Dav1dLoopfilterModeRefDeltas {
-    int8_t mode_delta[2 /* is_zeromv */];
-    int8_t ref_delta[DAV1D_TOTAL_REFS_PER_FRAME];
-} Dav1dLoopfilterModeRefDeltas;
-
 typedef struct Dav1dFilmGrainData {
     unsigned seed;
     int num_y_points;

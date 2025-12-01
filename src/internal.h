@@ -312,7 +312,7 @@ struct Dav1dFrameContext {
         int cdef_buf_sbh;
         int lr_buf_plane_sz[2]; /* (stride*sbh*4) << sb128 if n_tc > 1, else stride*4 */
         int re_sz /* h */;
-        ALIGN(Av1FilterLUT lim_lut, 16);
+        ALIGN(Av1FilterLUT thr_lut, 16);
         ALIGN(uint8_t lvl[8 /* seg_id */][4 /* dir */][8 /* ref */][2 /* is_gmv */], 16);
         uint8_t *tx_lpf_right_edge[2];
         uint8_t *cdef_line_buf, *lr_line_buf;
@@ -392,6 +392,7 @@ struct Dav1dTileState {
         int8_t i8[4];
         uint32_t u32;
     } last_delta_lf;
+    // TODO: removeme
     ALIGN(uint8_t lflvlmem[8 /* seg_id */][4 /* dir */][8 /* ref */][2 /* is_gmv */], 16);
     const uint8_t (*lflvl)[4][8][2];
 

@@ -1647,51 +1647,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
     if (lbs == BS_INVALID) goto chroma;
 
-    // order: split, horz, vert, horz4, vert4, horz5[small], ver5[small]
-    // the big ones in horz5 and vert5 are identical to horz or vert
-    static const int8_t tx_part_tbl[][8] = {
-        [BS_4x4]   = { TX_4X4, -1, -1, -1, -1, -1, -1, -1 },
-        [BS_4x8]   = { RTX_4X8, -1, TX_4X4, -1, -1, -1, -1, -1 },
-        [BS_4x16]  = { RTX_4X16, -1, RTX_4X8, -1, TX_4X4, -1, -1, -1 },
-        [BS_4x32]  = { RTX_4X32, -1, RTX_4X16, -1, RTX_4X8, -1, -1, -1 },
-        [BS_4x64]  = { RTX_4X64, -1, RTX_4X32, -1, RTX_4X16, -1, -1, -1 },
-        [BS_8x4]   = { RTX_8X4, -1, -1, TX_4X4, -1, -1, -1, -1 },
-        [BS_8x8]   = { TX_8X8, TX_4X4, RTX_8X4, RTX_4X8, -1, -1, -1, -1 },
-        [BS_8x16]  = { RTX_8X16, RTX_4X8, TX_8X8, RTX_4X16,
-                       RTX_8X4, -1, TX_4X4, -1 },
-        [BS_8x32]  = { RTX_8X32, RTX_4X16, RTX_8X16, RTX_4X32,
-                       TX_8X8, -1, RTX_4X8, -1 },
-        [BS_8x64]  = { RTX_8X64, RTX_4X32, RTX_8X32, RTX_4X64,
-                       RTX_8X16, -1, RTX_4X16, -1 },
-        [BS_16x4]  = { RTX_16X4, -1, -1, RTX_8X4, -1, TX_4X4, -1, -1 },
-        [BS_16x8]  = { RTX_16X8, RTX_8X4, RTX_16X4, TX_8X8,
-                       -1, RTX_4X8, -1, TX_4X4 },
-        [BS_16x16] = { TX_16X16, TX_8X8, RTX_16X8, RTX_8X16,
-                       RTX_16X4, RTX_4X16, RTX_8X4, RTX_4X8 },
-        [BS_16x32] = { RTX_16X32, RTX_8X16, TX_16X16, RTX_8X32,
-                       RTX_16X8, RTX_4X32, TX_8X8, RTX_4X16 },
-        [BS_16x64] = { RTX_16X64, RTX_8X32, RTX_16X32, RTX_8X64,
-                       TX_16X16, RTX_4X64, RTX_8X16, RTX_4X32 },
-        [BS_32x4]  = { RTX_32X4, -1, -1, RTX_16X4, -1, RTX_8X4, -1, -1 },
-        [BS_32x8]  = { RTX_32X8, RTX_16X4, RTX_32X4, RTX_16X8,
-                       -1, TX_8X8, -1, RTX_8X4 },
-        [BS_32x16] = { RTX_32X16, RTX_16X8, RTX_32X8, TX_16X16,
-                       RTX_32X4, RTX_8X16, RTX_16X4, TX_8X8 },
-        [BS_32x32] = { TX_32X32, TX_16X16, RTX_32X16, RTX_16X32,
-                       RTX_32X8, RTX_8X32, RTX_16X8, RTX_8X16 },
-        [BS_32x64] = { RTX_32X64, RTX_16X32, TX_32X32, RTX_16X64,
-                       RTX_32X16, RTX_8X64, TX_16X16, RTX_8X32 },
-        [BS_64x4]  = { RTX_64X4, -1, -1, RTX_32X4, -1, RTX_16X4, -1, -1 },
-        [BS_64x8]  = { RTX_64X8, RTX_32X4, RTX_64X4, RTX_32X8,
-                       -1, RTX_16X8, -1, RTX_16X4 },
-        [BS_64x16] = { RTX_64X16, RTX_32X8, RTX_64X8, RTX_32X16,
-                       RTX_64X4, TX_16X16, RTX_32X4, RTX_16X8 },
-        [BS_64x32] = { RTX_64X32, RTX_32X16, RTX_64X16, TX_32X32,
-                       RTX_64X8, RTX_16X32, RTX_32X8, TX_16X16 },
-        [BS_64x64] = { TX_64X64, TX_32X32, RTX_64X32, RTX_32X64,
-                       RTX_64X16, RTX_16X64, RTX_32X16, RTX_16X32 },
-    };
-    const int8_t *const tp = tx_part_tbl[bs];
+    const int8_t *const tp = dav1d_tx_part_tbl[bs];
     // FIXME do error reporting, to shortcut further decoding
     if (tp[b->tx_part] == -1) return;
 
@@ -2730,9 +2686,9 @@ void bytefn(dav1d_filter_sbrow_lr)(Dav1dFrameContext *const f, const int sby) {
 }
 
 void bytefn(dav1d_filter_sbrow)(Dav1dFrameContext *const f, const int sby) {
-#if 0
     bytefn(dav1d_filter_sbrow_deblock_cols)(f, sby);
     bytefn(dav1d_filter_sbrow_deblock_rows)(f, sby);
+#if 0
     if (f->seq_hdr->cdef)
         bytefn(dav1d_filter_sbrow_cdef)(f->c->tc, sby);
     if (f->lf.restore_planes)

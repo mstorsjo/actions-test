@@ -76,7 +76,7 @@ static void decomp_tx(uint8_t (*const txa)[2 /* txsz, step */][32 /* y */][32 /*
     }
 }
 
-static inline void mask_edges_inter(uint16_t (*const masks)[64][3][4],
+static inline void mask_edges_inter(uint16_t (*const masks)[64][4][4],
                                     const int by4, const int bx4,
                                     const int w4, const int h4, const int skip,
                                     const enum RectTxfmSize max_tx,
@@ -144,7 +144,7 @@ static inline void mask_edges_inter(uint16_t (*const masks)[64][3][4],
     memcpy(a, txa[1][0][h4 - 1], w4);
 }
 
-static inline void mask_edges_intra(uint16_t (*const masks)[64][3][4],
+static inline void mask_edges_intra(uint16_t (*const masks)[64][4][4],
                                     const int by4, const int bx4,
                                     const int w4, const int h4,
                                     const enum RectTxfmSize tx,
@@ -152,12 +152,14 @@ static inline void mask_edges_intra(uint16_t (*const masks)[64][3][4],
 {
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const int twl4 = t_dim->lw, thl4 = t_dim->lh;
-    const int twl4c = imin(2, twl4), thl4c = imin(2, thl4);
+    const int twl4c = imin(3, twl4), thl4c = imin(3, thl4);
     int y, x;
 
+    // TODO: Limit filter size on sb edges.
     // left block edge
     unsigned mask = 1U << by4;
     for (y = 0; y < h4; y++, mask <<= 1) {
+        // FIXME: sidx is broken on larger blocks
         const int sidx = mask >= 0x10000;
         const unsigned smask = mask >> (sidx << 4);
         masks[0][bx4][imin(twl4c, l[y])][sidx] |= smask;
@@ -263,18 +265,19 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
                                 const int bx, const int by,
                                 const int iw, const int ih,
                                 const enum BlockSize bs,
-                                const enum RectTxfmSize ytx,
+                                const enum TxPartition tx_part,
                                 const enum RectTxfmSize uvtx,
                                 const enum Dav1dPixelLayout layout,
-                                uint8_t *const ay, uint8_t *const ly,
+                                uint8_t *ay, uint8_t *ly,
                                 uint8_t *const auv, uint8_t *const luv)
 {
-    return;
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const int8_t *const tp = dav1d_tx_part_tbl[bs];
+    const enum RectTxfmSize tx = tp[tx_part];
     const int bw4 = imin(iw - bx, b_dim[0]);
     const int bh4 = imin(ih - by, b_dim[1]);
-    const int bx4 = bx & 31;
-    const int by4 = by & 31;
+    const int bx4 = bx & 63;
+    const int by4 = by & 63;
     assert(bw4 >= 0 && bh4 >= 0);
 
     if (bw4 && bh4) {
@@ -287,9 +290,55 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
             level_cache_ptr += b4_stride;
         }
 
-        mask_edges_intra(lflvl->filter_y, by4, bx4, bw4, bh4, ytx, ay, ly);
+        if (tx_part < TX_PARTITION_H5) {
+            mask_edges_intra(lflvl->filter_y, by4, bx4, bw4, bh4, tx, ay, ly);
+        } else if (tx_part == TX_PARTITION_H5) {
+            const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
+            const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
+                           *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
+            const int th4_small = t_dim_small->h;
+            const int th4_big = t_dim_big->h;
+            int cby4 = by4;
+            int rem_h4 = bh4; // remaining height
+            mask_edges_intra(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
+
+            rem_h4 -= th4_small;
+            if (rem_h4 > 0) {
+                cby4 += th4_small;
+                ly += th4_small >> 2;
+                mask_edges_intra(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_big), tx_big, ay, ly);
+                rem_h4 -= th4_big;
+                if (rem_h4 > 0) {
+                    cby4 += th4_big;
+                    ly += th4_big >> 2;
+                    mask_edges_intra(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
+                }
+            }
+        } else if (tx_part == TX_PARTITION_V5) {
+            const enum RectTxfmSize tx_big = tp[TX_PARTITION_V];
+            const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
+                           *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
+            const int tw4_small = t_dim_small->w;
+            const int tw4_big = t_dim_big->w;
+            int cbx4 = bx4;
+            int rem_w4 = bw4; // remaining width
+            mask_edges_intra(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
+            rem_w4 -= tw4_small;
+            if (rem_w4 > 0) {
+                cbx4 += tw4_small;
+                ay += tw4_small >> 2;
+                mask_edges_intra(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_big), bh4, tx_big, ay, ly);
+                rem_w4 -= tw4_big;
+                if (rem_w4 > 0) {
+                    cbx4 += tw4_big;
+                    ay += tw4_big >> 2;
+                    mask_edges_intra(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
+                }
+            }
+        }
     }
 
+    return;
     if (!auv) return;
 
     const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
@@ -333,7 +382,6 @@ void dav1d_create_lf_mask_inter(Av1Filter *const lflvl,
                                 uint8_t *const ay, uint8_t *const ly,
                                 uint8_t *const auv, uint8_t *const luv)
 {
-    return;
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
     const int bw4 = imin(iw - bx, b_dim[0]);
     const int bh4 = imin(ih - by, b_dim[1]);
@@ -382,25 +430,6 @@ void dav1d_create_lf_mask_inter(Av1Filter *const lflvl,
 
     mask_edges_chroma(lflvl->filter_uv, cby4, cbx4, cbw4, cbh4, skip, uvtx,
                       auv, luv, ss_hor, ss_ver);
-}
-
-void dav1d_calc_eih(Av1FilterLUT *const lim_lut, const int filter_sharpness) {
-    // set E/I/H values from loopfilter level
-    const int sharp = filter_sharpness;
-    for (int level = 0; level < 64; level++) {
-        int limit = level;
-
-        if (sharp > 0) {
-            limit >>= (sharp + 3) >> 2;
-            limit = imin(limit, 9 - sharp);
-        }
-        limit = imax(limit, 1);
-
-        lim_lut->i[level] = limit;
-        lim_lut->e[level] = 2 * (level + 2) + limit;
-    }
-    lim_lut->sharp[0] = (sharp + 3) >> 2;
-    lim_lut->sharp[1] = sharp ? 9 - sharp : 0xff;
 }
 
 static void calc_lf_value(uint8_t (*const lflvl_values)[2],

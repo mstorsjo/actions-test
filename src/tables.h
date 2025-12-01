@@ -43,6 +43,11 @@ typedef struct TxfmInfo {
 EXTERN const TxfmInfo dav1d_txfm_dimensions[N_RECT_TX_SIZES];
 EXTERN const uint8_t /* enum (Rect)TxfmSize */
                      dav1d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */];
+
+// order: split, horz, vert, horz4, vert4, horz5[small], ver5[small]
+// the big transforms in horz5 and vert5 are identical to horz or vert
+EXTERN const int8_t dav1d_tx_part_tbl[N_BS_SIZES][8];
+
 EXTERN const uint8_t /* enum TxfmType */
                      dav1d_txtp_from_uvmode[N_UV_INTRA_PRED_MODES];
 
@@ -57,6 +62,8 @@ EXTERN const uint8_t /* enum TxClass */
                      dav1d_tx_type_class[N_TX_TYPES_PLUS_LL];
 
 EXTERN const Dav1dWarpedMotionParams dav1d_default_wm_params;
+
+EXTERN const int16_t dav1d_deblock_side_thresholds[296];
 
 EXTERN const int8_t dav1d_cdef_directions[12][2];
 

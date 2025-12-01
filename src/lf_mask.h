@@ -34,9 +34,7 @@
 #include "src/levels.h"
 
 typedef struct Av1FilterLUT {
-    uint8_t e[64];
-    uint8_t i[64];
-    uint64_t sharp[2];
+    uint16_t thr[2 /* 0=col, 1=row */][2 /* 0 = q_thr, 1 = side_thr */][16];
 } Av1FilterLUT;
 
 typedef struct Av1RestorationUnit {
@@ -47,7 +45,7 @@ typedef struct Av1RestorationUnit {
 // each struct describes one 256x256 area
 typedef struct Av1Filter {
     // each bit is 1 col
-    uint16_t filter_y[2 /* 0=col, 1=row */][64][3][4];
+    uint16_t filter_y[2 /* 0=col, 1=row */][64][4][4];
     uint16_t filter_uv[2 /* 0=col, 1=row */][64][2][4];
     uint8_t gdf[4];
     int8_t cdef_idx[16]; // -1 means "unset"
@@ -64,7 +62,7 @@ void dav1d_create_lf_mask_intra(Av1Filter *lflvl, uint8_t (*level_cache)[4],
                                 const ptrdiff_t b4_stride,
                                 const uint8_t (*level)[8][2], int bx, int by,
                                 int iw, int ih, enum BlockSize bs,
-                                enum RectTxfmSize ytx, enum RectTxfmSize uvtx,
+                                const enum TxPartition tx_part, enum RectTxfmSize uvtx,
                                 enum Dav1dPixelLayout layout, uint8_t *ay,
                                 uint8_t *ly, uint8_t *auv, uint8_t *luv);
 void dav1d_create_lf_mask_inter(Av1Filter *lflvl, uint8_t (*level_cache)[4],
@@ -75,7 +73,6 @@ void dav1d_create_lf_mask_inter(Av1Filter *lflvl, uint8_t (*level_cache)[4],
                                 const uint16_t *tx_mask, enum RectTxfmSize uvtx,
                                 enum Dav1dPixelLayout layout, uint8_t *ay,
                                 uint8_t *ly, uint8_t *auv, uint8_t *luv);
-void dav1d_calc_eih(Av1FilterLUT *lim_lut, int filter_sharpness);
 void dav1d_calc_lf_values(uint8_t (*values)[4][8][2], const Dav1dFrameHeader *hdr,
                           const int8_t lf_delta[4]);
 
