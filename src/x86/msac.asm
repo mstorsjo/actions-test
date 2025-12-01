@@ -26,7 +26,11 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-SECTION_RODATA 16
+SECTION_RODATA 64
+
+unary_mul32: dd 0x8000, 0xc000, 0xe000, 0xf000, 0xf800, 0xfc00, 0xfe00, 0xff00
+             dd 0xff80, 0xffc0, 0xffe0, 0xfff0, 0xfff8, 0xfffc, 0xfffe, 0xffff
+unary_mul64: dq 0xffff8000, 0xffffc000, 0xffffe000, 0xfffff000, 0xfffff800, 0
 
 pw_127: times 8 dw 127
 
@@ -56,27 +60,27 @@ DECLARE_REG_TMP 0
 
 %define base rax-$$
 
-%macro REFILL 2 ; cnt_reg, is_early_refill
-    mov            r2, [t0+msac.buf]
+%macro REFILL 3 ; cnt, tmp, is_early_refill
+    mov            %2, [t0+msac.buf]
     mov           rcx, [t0+msac.end]
-    lea            r5, [r2+8]
+    lea            r5, [%2+8]
     cmp            r5, rcx
     ja %%refill_eob
-    mov            r2, [r2]
+    mov            %2, [%2]
     lea           ecx, [%1+23]
     add           %1d, 16
     shr           ecx, 3   ; shift_bytes
-    bswap          r2
+    bswap          %2
     sub            r5, rcx
     shl           ecx, 3   ; shift_bits
-    shr            r2, cl
+    shr            %2, cl
     sub           ecx, %1d ; shift_bits - 16 - cnt
     mov           %1d, 48
-    shl            r2, cl
+    shl            %2, cl
     mov [t0+msac.buf], r5
     sub           %1d, ecx ; cnt + 64 - shift_bits
-    xor            r4, r2
-%if %2
+    xor            r4, %2
+%if %3
     ret
 %else
 .end:
@@ -89,10 +93,10 @@ DECLARE_REG_TMP 0
     mov           ecx, 40
     sub           ecx, %1d ; c
 %%refill_eob_loop:
-    cmp            r2, r5
+    cmp            %2, r5
     jae %%refill_eob_end   ; eob reached
-    movzx         %1d, byte [r2]
-    inc            r2
+    movzx         %1d, byte [%2]
+    inc            %2
     shl            %1, cl
     xor            r4, %1
     sub           ecx, 8
@@ -100,8 +104,8 @@ DECLARE_REG_TMP 0
 %%refill_eob_end:
     mov           %1d, 40
     sub           %1d, ecx
-    mov [t0+msac.buf], r2
-%if %2
+    mov [t0+msac.buf], %2
+%if %3
     ret
 %else
     mov [t0+msac.dif], r4
@@ -188,7 +192,7 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     sub           r1d, ecx
     jae .end ; no refill required
 .refill:
-    REFILL         r1, 0
+    REFILL         r1, r2, 0
 %endif
 %endmacro
 
@@ -266,26 +270,26 @@ cglobal msac_decode_bool_bypass, 1, 7, 0, s
     RET
 
 cglobal msac_decode_bools_bypass, 2, 7, 0, s, n
-    mov           eax, [sq+msac.cnt]
+    mov           r2d, [sq+msac.cnt]
     mov            r4, [sq+msac.dif]
     movifnidn      t0, sq
-    cmp           eax, nd
+    cmp           r2d, nd
     jae .main
     call .refill
 .main:
-    mov           r2d, [t0+msac.rng]
+    mov           r5d, [t0+msac.rng]
     not            r4
-    sub           eax, nd
-    shl            r2, 47
-    mov [t0+msac.cnt], eax
+    sub           r2d, nd
+    shl            r5, 47
+    mov [t0+msac.cnt], r2d
     xor           eax, eax
     mov           ecx, nd
 .loop:
-    mov            r5, r4
-    add            r4, r2  ; dif - vw
-    cmovb          r4, r5
+    mov            r2, r4
+    add            r4, r5  ; dif - vw
+    cmovb          r4, r2
     adc           eax, eax ; ret = (ret << 1) + (dif < vw)
-    shr            r2, 1
+    shr            r5, 1
     dec            nd
     jg .loop
     shl            r4, cl
@@ -293,4 +297,119 @@ cglobal msac_decode_bools_bypass, 2, 7, 0, s, n
     mov [t0+msac.dif], r4
     RET
 .refill:
-    REFILL         r6, 1
+    REFILL         r2, r6, 1
+
+INIT_YMM avx2
+cglobal msac_decode_unary_bypass6, 2, 7, 5, s, n
+    vpbroadcastd   m0, [sq+msac.rng]
+    psrld          m0, 1
+    pmulld         m0, [unary_mul32]
+    mov           r2d, [sq+msac.cnt]
+    mov            r4, [sq+msac.dif]
+    movifnidn      t0, sq
+    cmp           r2d, nd
+    jb .refill
+    vpbroadcastd   m1, [t0+msac.dif+4]
+    psrld          m1, 1
+.main:
+    mov           r5d, [t0+msac.rng]
+    psubd          m1, m0
+    movmskps      eax, m1
+    rorx          ecx, nd, 32-5
+    or            eax, ecx ; clip to max_bits (5 or 6)
+.end:
+    vzeroupper
+.end2:
+    tzcnt         eax, eax
+    mov           ecx, -1
+    shl           r5d, 16
+    shrx          ecx, ecx, eax
+    not            r4
+    not           ecx
+    imul           r5, rcx ; vw_sum
+    xor           ecx, ecx
+    add            r4, r5  ; dif - vw_sum
+    cmp           eax, nd
+    adc           ecx, eax ; bit = ret + (ret < max_bits)
+    shlx           r4, r4, rcx
+    sub           r2d, ecx
+    not            r4
+    mov [t0+msac.cnt], r2d
+    mov [t0+msac.dif], r4
+    ret ; no epilogue (vzeroupper already performed)
+.refill:
+    call mangle(private_prefix %+ _msac_decode_bools_bypass_sse2).refill
+    movq          xm1, r4
+    psrlq         xm1, 33
+    vpbroadcastd   m1, xm1
+    jmp .main
+
+cglobal msac_decode_unary_bypass21, 1, 7, 5, s, n
+    vpbroadcastd   m2, [sq+msac.rng]
+    psrld          m2, 1
+    pmuludq        m0, m2, [unary_mul64]
+    pmulld         m1, m2, [unary_mul32+32*1]
+    pmulld         m2, [unary_mul32+32*0]
+    mov           r2d, [sq+msac.cnt]
+    mov            nd, 21
+    mov            r4, [sq+msac.dif]
+    movifnidn      t0, sq
+    cmp           r2d, nd
+    jb .refill
+    vpbroadcastq   m3, [t0+msac.dif]
+    vpbroadcastd   m4, [t0+msac.dif+4]
+    psrlq          m3, 17
+    psrld          m4, 1
+.main:
+    mov           r5d, [t0+msac.rng]
+    mov           rcx, 0xfffff8000000
+    psubq          m0, m3, m0
+    imul          rcx, r5 ; vw[20]
+    psubd          m1, m4, m1
+    movmskpd      eax, m0
+    psubd          m2, m4, m2
+    cmp            r4, rcx
+    lea           ecx, [rax+16]
+    cmovb         eax, ecx
+    movmskps      ecx, m1
+    shl           eax, 16
+    mov            ah, cl
+    movmskps      ecx, m2
+    lea           eax, [rax+rcx+(1<<21)]
+    jmp mangle(private_prefix %+ _msac_decode_unary_bypass6_avx2).end
+.refill:
+    call mangle(private_prefix %+ _msac_decode_bools_bypass_sse2).refill
+    movq          xm4, r4
+    psrlq         xm3, xm4, 17
+    psrlq         xm4, 33
+    vpbroadcastq   m3, xm3
+    vpbroadcastd   m4, xm4
+    jmp .main
+
+INIT_ZMM avx512icl
+cglobal msac_decode_unary_bypass21, 1, 7, 5, s, n
+    vpbroadcastd   m1, [sq+msac.rng]
+    pmulld         m0, m1, [unary_mul32]
+    pmuludq        m1, [unary_mul64]
+    mov           r2d, [sq+msac.cnt]
+    mov            nd, 21
+    mov            r4, [sq+msac.dif]
+    movifnidn      t0, sq
+    cmp           r2d, nd
+    jb .refill
+    vpbroadcastq   m3, [sq+msac.dif]
+    vpbroadcastd   m2, [sq+msac.dif+4]
+.main:
+    mov           r5d, [t0+msac.rng]
+    psrlq          m3, 16
+    vpcmpud        k1, m0, m2, 6 ; vw > dif
+    vpcmpuq        k2, m1, m3, 6
+    kunpckwd       k1, k2, k1
+    kmovd         eax, k1
+    or            eax, 1<<21
+    jmp mangle(private_prefix %+ _msac_decode_unary_bypass6_avx2).end2
+.refill:
+    call mangle(private_prefix %+ _msac_decode_bools_bypass_sse2).refill
+    vpbroadcastq   m3, r4
+    pshufd         m2, m3, q3311
+    jmp .main

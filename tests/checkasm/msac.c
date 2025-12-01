@@ -308,11 +308,18 @@ void checkasm_check_msac(void) {
     }
 #elif ARCH_X86_64
     if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_SSE2) {
-        c.decode_symbol_adapt4 = dav1d_msac_decode_symbol_adapt4_sse2;
-        c.decode_symbol_adapt8 = dav1d_msac_decode_symbol_adapt8_sse2;
-        c.decode_bool_adapt    = dav1d_msac_decode_bool_adapt_sse2;
-        c.decode_bool_bypass   = dav1d_msac_decode_bool_bypass_sse2;
-        c.decode_bools_bypass  = dav1d_msac_decode_bools_bypass_sse2;
+        c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt4_sse2;
+        c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt8_sse2;
+        c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_sse2;
+        c.decode_bool_bypass    = dav1d_msac_decode_bool_bypass_sse2;
+        c.decode_bools_bypass   = dav1d_msac_decode_bools_bypass_sse2;
+    }
+    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_AVX2) {
+        c.decode_unary_bypass6  = dav1d_msac_decode_unary_bypass6_avx2;
+        c.decode_unary_bypass21 = dav1d_msac_decode_unary_bypass21_avx2;
+    }
+    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_AVX512ICL) {
+        c.decode_unary_bypass21 = dav1d_msac_decode_unary_bypass21_avx512icl;
     }
 #endif
 #endif

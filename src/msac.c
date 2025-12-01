@@ -242,4 +242,10 @@ void dav1d_msac_init(MsacContext *const s, const uint8_t *const data,
     s->cnt = -15;
     s->allow_update_cdf = !disable_cdf_update_flag;
     ctx_refill(s);
+
+#if HAVE_ASM && ARCH_X86_64
+    s->unary_bypass6  = dav1d_msac_decode_unary_bypass_c;
+    s->unary_bypass21 = dav1d_msac_decode_unary_bypass21_c;
+    msac_dsp_init_x86(s);
+#endif
 }

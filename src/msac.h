@@ -40,6 +40,11 @@ typedef struct MsacContext {
     unsigned rng;
     int cnt;
     int allow_update_cdf;
+
+#if HAVE_ASM && ARCH_X86_64
+    unsigned (*unary_bypass6)(struct MsacContext *s, unsigned max_bits);
+    unsigned (*unary_bypass21)(struct MsacContext *s);
+#endif
 } MsacContext;
 
 EXTERN const uint8_t dav1d_msac_rate[125 /* para */][3 /* count */];
