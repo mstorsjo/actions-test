@@ -42,15 +42,17 @@ typedef unsigned (*decode_symbol_adapt_fn)(MsacContext *s, uint16_t *cdf,
 typedef unsigned (*decode_adapt_fn)(MsacContext *s, uint16_t *cdf);
 typedef unsigned (*decode_bool_bypass_fn)(MsacContext *s);
 typedef unsigned (*decode_bools_bypass_fn)(MsacContext *s, unsigned n_bits);
-typedef unsigned (*decode_unary_bypass_fn)(MsacContext *s, unsigned max_bits);
+typedef unsigned (*decode_unary_bypass6_fn)(MsacContext *s, unsigned max_bits);
+typedef unsigned (*decode_unary_bypass21_fn)(MsacContext *s);
 
 typedef struct {
-    decode_symbol_adapt_fn decode_symbol_adapt4;
-    decode_symbol_adapt_fn decode_symbol_adapt8;
-    decode_adapt_fn        decode_bool_adapt;
-    decode_bool_bypass_fn  decode_bool_bypass;
-    decode_bools_bypass_fn decode_bools_bypass;
-    decode_unary_bypass_fn decode_unary_bypass;
+    decode_symbol_adapt_fn   decode_symbol_adapt4;
+    decode_symbol_adapt_fn   decode_symbol_adapt8;
+    decode_adapt_fn          decode_bool_adapt;
+    decode_bool_bypass_fn    decode_bool_bypass;
+    decode_bools_bypass_fn   decode_bools_bypass;
+    decode_unary_bypass6_fn  decode_unary_bypass6;
+    decode_unary_bypass21_fn decode_unary_bypass21;
 } MsacDSPContext;
 
 static void randomize_cdf(uint16_t *const cdf, int n) {
@@ -223,16 +225,16 @@ static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const bu
     }
 }
 
-static void check_decode_unary_bypass(MsacDSPContext *const c, uint8_t *const buf) {
+static void check_decode_unary_bypass6(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
     declare_func(unsigned, MsacContext *s, unsigned max_bits);
-    if (check_func(c->decode_unary_bypass, "msac_decode_unary_bypass")) {
+    if (check_func(c->decode_unary_bypass6, "msac_decode_unary_bypass6")) {
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
             s_a.rng = s_c.rng = 0x8000 | (rnd() & 0x7ffe);
-            const int max_bits = 1 + (rnd() & 31);
+            const int max_bits = 5 + (rnd() & 1);
             unsigned c_res = call_ref(&s_c, max_bits);
             unsigned a_res = call_new(&s_a, max_bits);
             if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
@@ -245,7 +247,30 @@ static void check_decode_unary_bypass(MsacDSPContext *const c, uint8_t *const bu
         }
         s_c.rng = 0xfc92;
         s_a.rng = 0xdb6e;
-        bench_new(alternate(&s_c, &s_a), 16);
+        bench_new(alternate(&s_c, &s_a), 6);
+    }
+}
+
+static void check_decode_unary_bypass21(MsacDSPContext *const c, uint8_t *const buf) {
+    MsacContext s_c, s_a;
+
+    declare_func(unsigned, MsacContext *s);
+    if (check_func(c->decode_unary_bypass21, "msac_decode_unary_bypass21")) {
+        dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
+        s_a = s_c;
+        while (s_c.cnt >= 0) {
+            s_a.rng = s_c.rng = 0x8000 | (rnd() & 0x7ffe);
+            unsigned c_res = call_ref(&s_c);
+            unsigned a_res = call_new(&s_a);
+            if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
+                if (fail())
+                    msac_dump(c_res, a_res, &s_c, &s_a, NULL, NULL, 0);
+                break;
+            }
+        }
+        s_c.rng = 0xfc92;
+        s_a.rng = 0xdb6e;
+        bench_new(alternate(&s_c, &s_a));
     }
 }
 
@@ -258,7 +283,8 @@ static void check_decode_adapt(MsacDSPContext *const c, uint8_t *const buf) {
 static void check_decode_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     check_decode_bool_bypass(c, buf);
     check_decode_bools_bypass(c, buf);
-    check_decode_unary_bypass(c, buf);
+    check_decode_unary_bypass6(c, buf);
+    check_decode_unary_bypass21(c, buf);
     report("decode_bypass");
 }
 
@@ -267,12 +293,13 @@ void checkasm_check_msac(void) {
      * instead of through function pointers. For testing purposes however we
      * do want to use functions pointers . */
     MsacDSPContext c;
-    c.decode_symbol_adapt4 = dav1d_msac_decode_symbol_adapt_c;
-    c.decode_symbol_adapt8 = dav1d_msac_decode_symbol_adapt_c;
-    c.decode_bool_adapt    = dav1d_msac_decode_bool_adapt_c;
-    c.decode_bool_bypass   = dav1d_msac_decode_bool_bypass_c;
-    c.decode_bools_bypass  = dav1d_msac_decode_bools_bypass_c;
-    c.decode_unary_bypass  = dav1d_msac_decode_unary_bypass_c;
+    c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt_c;
+    c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt_c;
+    c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_c;
+    c.decode_bool_bypass    = dav1d_msac_decode_bool_bypass_c;
+    c.decode_bools_bypass   = dav1d_msac_decode_bools_bypass_c;
+    c.decode_unary_bypass6  = dav1d_msac_decode_unary_bypass_c;
+    c.decode_unary_bypass21 = dav1d_msac_decode_unary_bypass21_c;
 
 #if HAVE_ASM
 #if ARCH_AARCH64

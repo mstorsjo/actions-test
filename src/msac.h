@@ -79,14 +79,20 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, unsigned max_bits);
 #ifndef dav1d_msac_decode_bools_bypass
 #define dav1d_msac_decode_bools_bypass   dav1d_msac_decode_bools_bypass_c
 #endif
-#ifndef dav1d_msac_decode_unary_bypass
-#define dav1d_msac_decode_unary_bypass   dav1d_msac_decode_unary_bypass_c
+#ifndef dav1d_msac_decode_unary_bypass6
+#define dav1d_msac_decode_unary_bypass6  dav1d_msac_decode_unary_bypass_c
+#endif
+#ifndef dav1d_msac_decode_unary_bypass21
+#define dav1d_msac_decode_unary_bypass21 dav1d_msac_decode_unary_bypass21_c
 #endif
 
 static inline unsigned dav1d_msac_decode_bool_bypass_c(MsacContext *const s) {
     return dav1d_msac_decode_bools_bypass_c(s, 1);
 }
 
+static inline unsigned dav1d_msac_decode_unary_bypass21_c(MsacContext *const s) {
+    return dav1d_msac_decode_unary_bypass_c(s, 21);
+}
 static inline int dav1d_msac_decode_uniform(MsacContext *const s, const unsigned n) {
     assert(n > 0);
     const int l = ulog2(n) + 1;

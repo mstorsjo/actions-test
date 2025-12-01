@@ -49,7 +49,7 @@
 #include "src/wedge.h"
 
 static inline int decode_exp_golomb(MsacContext *const s, const int k) {
-    const int length = dav1d_msac_decode_unary_bypass(s, 21) + k;
+    const int length = dav1d_msac_decode_unary_bypass21(s) + k;
     const int x = (1 << length) + dav1d_msac_decode_bools_bypass(s, length);
     return x - (1 << k);
 }
@@ -57,7 +57,7 @@ static inline int decode_exp_golomb(MsacContext *const s, const int k) {
 static inline int decode_hr(MsacContext *const s, const int hr_avg) {
     const int m = ulog2(iclip(hr_avg, 2, 64)); // 1..6
     const int cmax = imin(m + 4, 6); // 5 or 6
-    const int q = dav1d_msac_decode_unary_bypass(s, cmax);
+    const int q = dav1d_msac_decode_unary_bypass6(s, cmax);
     const int rem = (q == cmax) ? decode_exp_golomb(s, m + 1) :
                                   dav1d_msac_decode_bools_bypass(s, m);
     return rem + (q << m);

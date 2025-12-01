@@ -114,7 +114,7 @@ unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
 unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
                                           const unsigned max_bits)
 {
-    assert(max_bits > 0 && max_bits <= 32);
+    assert(max_bits == 5 || max_bits == 6 || max_bits == 21);
     if ((unsigned)s->cnt < max_bits)
         ctx_refill(s);
 
