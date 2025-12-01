@@ -86,23 +86,6 @@ static inline void ctx_refill(MsacContext *const s) {
     s->buf_pos = buf_pos;
 }
 
-int dav1d_msac_decode_subexp(MsacContext *const s, const int ref,
-                             const int n, unsigned k)
-{
-    int v = 0;
-    for (int i = 0, b = k, a = 1 << k;; v += a, b += !!i, a <<= !!i, i++) {
-        if (n <= v + a * 3) {
-            v += dav1d_msac_decode_uniform(s, n - v);
-            break;
-        } else if (!dav1d_msac_decode_bool_bypass(s)) {
-            v += dav1d_msac_decode_bools_bypass(s, b);
-            break;
-        }
-    }
-    return ref * 2 <= n ? inv_recenter(ref, v) :
-                          n - 1 - inv_recenter(n - 1 - ref, v);
-}
-
 int dav1d_msac_decode_4way(MsacContext *const s, const int ref,
                            uint16_t *const cdf, int n_bits)
 {

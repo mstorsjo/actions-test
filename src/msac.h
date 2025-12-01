@@ -62,7 +62,6 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *s, uint16_t *cdf,
 unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *s, uint16_t *cdf);
 unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *s, unsigned n_bits);
 unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, unsigned max_bits);
-int dav1d_msac_decode_subexp(MsacContext *s, int ref, int n, unsigned k);
 int dav1d_msac_decode_4way(MsacContext *s, int ref, uint16_t *cdf, int n_bits);
 
 /* Supported n_symbols ranges: adapt4: 1-3, adapt8: 1-7 */
