@@ -86,18 +86,6 @@ static inline void ctx_refill(MsacContext *const s) {
     s->buf_pos = buf_pos;
 }
 
-int dav1d_msac_decode_4way(MsacContext *const s, const int ref,
-                           uint16_t *const cdf, int n_bits)
-{
-    assert(n_bits >= 3);
-    const int bin = dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
-    const int rem = dav1d_msac_decode_bools_bypass(s, n_bits + bin + !bin - 4);
-    const int v = (bin ? (1 << (n_bits + bin - 4)) : 0) + rem;
-    const int n = 1 << n_bits;
-    return ref * 2 <= n ? inv_recenter(ref, v) :
-                          n - 1 - inv_recenter(n - 1 - ref, v);
-}
-
 unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
                                           const unsigned n_bits)
 {

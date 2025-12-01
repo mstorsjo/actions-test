@@ -3836,6 +3836,18 @@ static void setup_tile(Dav1dTileState *const ts,
     }
 }
 
+static inline int decode_4way(MsacContext *const s, const int ref,
+                              uint16_t *const cdf, int n_bits)
+{
+    assert(n_bits >= 4);
+    const int bin = dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
+    const int rem = dav1d_msac_decode_bools_bypass(s, n_bits + bin + !bin - 4);
+    const int v = (bin ? (1 << (n_bits + bin - 4)) : 0) + rem;
+    const int n = 1 << n_bits;
+    return ref * 2 <= n ? inv_recenter(ref, v) :
+                          n - 1 - inv_recenter(n - 1 - ref, v);
+}
+
 static void read_restoration_info(Dav1dTaskContext *const t,
                                   Av1RestorationUnit *const lr, const int p,
                                   const enum Dav1dRestorationType frame_type)
@@ -3905,9 +3917,8 @@ static void read_restoration_info(Dav1dTaskContext *const t,
                 dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
             for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
                 if (!(m & 1)) continue;
-                filter[i] = dav1d_msac_decode_4way(&ts->msac,
-                                ref_filter[i] - cf_range[i][1],
-                                ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
+                filter[i] = decode_4way(&ts->msac, ref_filter[i] - cf_range[i][1],
+                                        ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
                             cf_range[i][1];
                 if (asym && i >= 6) {
                     filter[i + 1] = filter[i];
