@@ -37,7 +37,8 @@ unsigned dav2d_msac_decode_bool_adapt_neon(MsacContext *s, uint16_t *cdf);
 unsigned dav2d_msac_decode_bool_equi_neon(MsacContext *s);
 unsigned dav2d_msac_decode_bool_neon(MsacContext *s, unsigned f);
 
-#if defined(__ARM_NEON) || defined(__APPLE__) || defined(_WIN32) || ARCH_AARCH64
+#if ARCH_AARCH64
+#define dav2d_msac_decode_bool_adapt     dav2d_msac_decode_bool_adapt_neon
 #endif
 
 #endif /* DAV2D_SRC_ARM_MSAC_H */
