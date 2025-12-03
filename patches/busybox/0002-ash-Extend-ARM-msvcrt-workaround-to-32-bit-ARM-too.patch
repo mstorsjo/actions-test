@@ -1,0 +1,31 @@
+From 8c9e890260c4d862bfd6d3d3b11389b223cc5a66 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 3 Dec 2025 15:45:01 +0200
+Subject: [PATCH 2/4] ash: Extend ARM msvcrt workaround to 32 bit ARM too
+
+This the fact that "environ" is not assignable goes the same for
+both 32 and 64 bit ARM on msvcrt; this is not an issue on UCRT
+as noted in c44f23f4acbbd854eccd962110e41343d8f03296.
+
+Extend the original workaround from
+ea8742bc1657cd0aae32ac555560c8228795488f to 32 bit ARM too.
+---
+ shell/ash.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/shell/ash.c b/shell/ash.c
+index 12c95c338..aeb496c7a 100644
+--- a/shell/ash.c
++++ b/shell/ash.c
+@@ -11967,7 +11967,7 @@ evalcommand(union node *cmd, int flags)
+ #if ENABLE_FEATURE_SH_STANDALONE \
+  && ENABLE_FEATURE_SH_NOFORK \
+  && NUM_APPLETS > 1 \
+- && !(defined(_ARM64_) && !defined(_UCRT) && ENABLE_PLATFORM_MINGW32)
++ && !((defined(_ARM64_) || defined(_ARM_)) && !defined(_UCRT) && ENABLE_PLATFORM_MINGW32)
+ /* (1) BUG: if variables are set, we need to fork, or save/restore them
+  *     around run_nofork_applet() call.
+  * (2) Should this check also be done in forkshell()?
+-- 
+2.43.0
+
