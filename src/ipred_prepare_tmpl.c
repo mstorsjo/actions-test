@@ -295,13 +295,10 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 
     if (apply_ibp) {
         const int max_base = tw + th;
-        if (*angle <= 90) {
-            topleft_out[-(max_base + 1)] = topleft_out[-max_base];
-            topleft_out[-(max_base + 2)] = topleft_out[-max_base];
-        } else if (*angle > 180) {
-            topleft_out[max_base + 1] = topleft_out[max_base];
-            topleft_out[max_base + 2] = topleft_out[max_base];
-        }
+        topleft_out[-(max_base + 1)] = topleft_out[-max_base];
+        topleft_out[-(max_base + 2)] = topleft_out[-max_base];
+        topleft_out[max_base + 1] = topleft_out[max_base];
+        topleft_out[max_base + 2] = topleft_out[max_base];
     }
 
     return mode;

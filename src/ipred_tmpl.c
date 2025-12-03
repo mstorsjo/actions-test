@@ -733,6 +733,8 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
                     &topleft_in[1], -1, width + imin(width, height),
                     str);
         filt[0] = filt[1] = filt[2];
+        const int end = 2 + width + height;
+        filt[end + 2] = filt[end + 1] = filt[end];
         top = &filt[2];
         max_base_x = width + height - 1;
     } else {
@@ -750,7 +752,8 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         const DRFilter4Tap f = av1_dr_interp_filter[(xpos & 0x3F) >> 1];
         for (int x = 0; x < width; x++, base++) {
             if (base > max_base_x) {
-                pixel_set(&dst[x], top[max_base_x], width - x);
+                pixel_set(&dst[y * PXSTRIDE(stride) + x], top[max_base_x],
+                          width - x);
                 break;
             }
             const int v = f.a * top[base - 1] + f.b * top[base] +
@@ -772,6 +775,8 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
                             imax(width - height, 0), width + height + 1,
                             filter_strength);
                 filt[0] = filt[1] = filt[2];
+                const int end = 2 + width + height;
+                filt[end + 2] = filt[end + 1] = filt[end];
                 left = &filt[width + height + 1];
             }
             idif_z3_ibp_z1(dst, stride, left, width, height,
@@ -937,6 +942,8 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
                     &topleft_in[-n_px], imax(width - height, 0),
                     n_px + 1, str);
         filt[0] = filt[1] = filt[2];
+        const int end = 2 + n_px;
+        filt[end + 2] = filt[end + 1] = filt[end];
         left = &filt[n_px + 1];
         max_base_y = n_px - 1;
     }
