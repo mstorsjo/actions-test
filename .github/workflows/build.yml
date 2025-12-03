@@ -19,7 +19,7 @@ jobs:
   # slightly more, when we know a separate build of the same version but with
   # assertions enabled, has passed some amount of tests.
   prepare:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
+    if: false
     runs-on: ubuntu-latest
     outputs:
       LLVM_VERSION: ${{steps.get-versions.outputs.LLVM_VERSION}}
@@ -387,7 +387,6 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
-    needs: [linux-stage1, linux-profile, prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -398,52 +397,31 @@ jobs:
           - { arch: armv7, crt: ucrt }
           - { arch: aarch64, crt: ucrt }
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-stage1-${{matrix.crt}}-x86_64-toolchain
-      - name: Unpack cross toolchain
+      - name: Set up cross toolchain
         run: |
+          DISTRO=ubuntu-22.04-x86_64
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20251202/llvm-mingw-20251202-${{matrix.crt}}-$DISTRO.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: profile
-      - name: Cache downloads
-        id: cache-tarballs
-        uses: actions/cache@v4
-        with:
-          path: /opt/cache
-          key: tarballs-${{ hashFiles('build-make.sh') }}
-      - name: Restore cache
-        if: steps.cache-tarballs.outputs.cache-hit != ''
+      - name: Build busybox in existing toolchain
         run: |
-          ln -s /opt/cache/*.tar.* .
-      - name: Build
-        env:
-          LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
-          MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
-          PYTHON_VERSION_MINGW: ${{needs.prepare.outputs.PYTHON_VERSION_MINGW}}
-          TAG: ${{needs.prepare.outputs.TAG}}
-          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
-          BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
-        run: |
-          sudo apt-get update && sudo apt-get install libltdl-dev swig autoconf-archive
-          ./build-cross-tools.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw ${{matrix.arch}} --with-python --with-busybox --thinlto --pgo
-          .github/workflows/store-version.sh install/llvm-mingw/versions.txt
+          mkdir install
           cd install
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20251202/llvm-mingw-20251202-${{matrix.crt}}-${{matrix.arch}}.zip
+          unzip -q llvm-mingw-*.zip
+          rm llvm-mingw-*.zip
+          mv llvm-mingw* llvm-mingw
+          cd ..
+          ./build-busybox.sh $(pwd)/install/llvm-mingw/busybox --host=${{matrix.arch}}-w64-mingw32
+          cp $(pwd)/install/llvm-mingw/bin/mingw32-make.exe $(pwd)/install/llvm-mingw/busybox/bin/make.exe
+          cd install
+          TAG=20251202
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
           mv llvm-mingw $NAME
           zip -9rq ../$NAME.zip $NAME
-      - name: Save cache
-        if: steps.cache-tarballs.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p /opt/cache
-          for i in make-*.tar.*; do
-              if [ ! -L $i ]; then cp -a $i /opt/cache; fi
-          done
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{matrix.crt}}-${{matrix.arch}}-toolchain
