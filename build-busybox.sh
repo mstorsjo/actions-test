@@ -64,6 +64,7 @@ cd busybox-w32
 if [ -n "$SYNC" ] || [ -n "$CHECKOUT" ]; then
     [ -z "$SYNC" ] || git fetch
     git checkout $BUSYBOX_VERSION
+    GIT_COMMITTER_NAME="LLVM MinGW" GIT_COMMITTER_EMAIL="root@localhost" git am -3 ../patches/busybox/*.patch
 fi
 
 [ -z "$CHECKOUT_ONLY" ] || exit 0

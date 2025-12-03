@@ -1,0 +1,33 @@
+From e8a808778c33edddebdf186fb133a1240df30342 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 3 Dec 2025 19:37:10 +0200
+Subject: [PATCH 3/4] WIP: Don't error out if the utf8 manifest didn't have
+ effect
+
+It only has an effect on Windows 10 1903 or newer; Windows
+Server 2019 is version 1809.
+---
+ libbb/appletlib.c | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/libbb/appletlib.c b/libbb/appletlib.c
+index 496d320cd..bbaf1d5dd 100644
+--- a/libbb/appletlib.c
++++ b/libbb/appletlib.c
+@@ -1346,13 +1346,6 @@ int main(int argc UNUSED_PARAM, char **argv)
+ 	}
+ #endif
+ #if ENABLE_PLATFORM_MINGW32
+-# if ENABLE_FEATURE_UTF8_MANIFEST
+-	if (GetACP() != CP_UTF8) {
+-		full_write2_str(bb_basename(argv[0]));
+-		full_write2_str(": UTF8 manifest not supported\n");
+-		return 1;
+-	}
+-# endif
+ 
+ 	/* detect if we're running an interpreted script */
+ 	if (argv[0][1] == ':' && argv[0][2] == '/') {
+-- 
+2.43.0
+

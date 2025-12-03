@@ -1,0 +1,28 @@
+From 48a17b53be4072e3850370bd427f6429b43a9097 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 3 Dec 2025 23:47:23 +0200
+Subject: [PATCH 4/4] WIP: Add armv7 case to uname
+
+---
+ win32/uname.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/win32/uname.c b/win32/uname.c
+index 9474e5c04..65cacadfa 100644
+--- a/win32/uname.c
++++ b/win32/uname.c
+@@ -33,6 +33,11 @@ int uname(struct utsname *name)
+ 			name->machine[1] = '3';
+ 		}
+ 		break;
++#if defined(PROCESSOR_ARCHITECTURE_ARM)
++	case PROCESSOR_ARCHITECTURE_ARM:
++		strcpy(name->machine, "armv7");
++		break;
++#endif
+ #if defined(PROCESSOR_ARCHITECTURE_ARM64)
+ 	case PROCESSOR_ARCHITECTURE_ARM64:
+ 		strcpy(name->machine, "aarch64");
+-- 
+2.43.0
+
