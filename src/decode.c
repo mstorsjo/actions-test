@@ -1390,7 +1390,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             mask |= 1ULL << amidx;
                         }
                     }
-                    long n_dirs = ptr - custom_mode_list_y;
+                    int n_dirs = (int)(ptr - custom_mode_list_y);
                     if (n_dirs > 0) {
                         reorder = custom_mode_list_y;
                         if (bw4 * bh4 > 4 && dir_y_mode_idx >= n_dirs) {
@@ -1410,7 +1410,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             }
                         }
 
-                        n_dirs = ptr - custom_mode_list_y;
+                        n_dirs = (int)(ptr - custom_mode_list_y);
                         if (dir_y_mode_idx >= n_dirs) {
                             // remainder of modes in default order
                             for (unsigned long n = 0;

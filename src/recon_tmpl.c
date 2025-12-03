@@ -438,7 +438,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             *txtp = DCT_DCT;
         } else if (b->fsc) {
             *txtp = IDTX;
-        } else if (!eob /* dc-only */ || tx == TX_32X32) {
+        } else if (!eob /* dc-only */ || tx == (enum RectTxfmSize)TX_32X32) {
             *txtp = DCT_DCT;
         } else if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
             // long64/32
@@ -534,7 +534,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // transform dimensions are not truncated for tx64 (to tx32) here,
             // see AVM bug #943
             const int ctx = xy < 2 ? 1 : xy > 4 * (t_dim->w + t_dim->h) - 4 ? 2 : 0;
-            if (tx == TX_32X32) {
+            if (tx == (enum RectTxfmSize)TX_32X32) {
                 *txtp = dav1d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.txtp_inter_dct_idtx[ctx][TX_32X32]) ?
                         DCT_DCT : IDTX;
@@ -554,7 +554,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 // FIXME EXT_TX_SET_DCT_IDTX
                 printf("FIXME\n");
             } else {
-                const int setidx = tx == TX_16X16;
+                const int setidx = tx == (enum RectTxfmSize)TX_16X16;
                 const int set = dav1d_msac_decode_bool_adapt(&ts->msac,
                                     ts->cdf.m.txtp_inter_tx_set[setidx][ctx]
                                                                [t_dim->min]);
@@ -589,7 +589,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 (*txtp == DCT_DCT || *txtp == ADST_ADST))
             {
                 int lim;
-                if (tx == TX_8X8 && *txtp == DCT_DCT)
+                if (tx == (enum RectTxfmSize)TX_8X8 && *txtp == DCT_DCT)
                     lim = 20;
                 else if (t_dim->min >= TX_8X8)
                     lim = *txtp == DCT_DCT ? 32 : 20;

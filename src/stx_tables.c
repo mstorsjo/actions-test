@@ -25,6 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
+
 #include "src/stx_tables.h"
 
 // Scan order of primary transform coefficients for 4x4 IST

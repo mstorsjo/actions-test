@@ -2045,7 +2045,7 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
     }
 #define DEBUG_OBU_HDR 0
     if (DEBUG_OBU_HDR)
-        printf("OBU type=%d size=%ld\n",
+        printf("OBU type=%d size=%td\n",
                type, gb.ptr_end - gb.ptr);
 
     switch (type) {

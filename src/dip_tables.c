@@ -25,7 +25,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include "src/dip_tables.h"
+#include "config.h"
+
+#include "src/dip_tables.h"
 
 const uint16_t dav1d_dip_weights[6][64][11] = {
     {
