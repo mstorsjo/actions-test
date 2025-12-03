@@ -73,6 +73,7 @@ fi
 mkdir -p $BUILDDIR
 make mingw64a_defconfig O=$BUILDDIR -j$CORES
 cd $BUILDDIR
+sed -ri 's/^(CONFIG_AR)=y/\1=n/' .config
 $MAKE -j$CORES CROSS_COMPILE=$HOST-
 cp ../LICENSE $PREFIX/LICENSE.txt
 mkdir -p $PREFIX/bin
