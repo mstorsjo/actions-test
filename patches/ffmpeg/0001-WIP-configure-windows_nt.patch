@@ -1,0 +1,36 @@
+From cf74870561dd0f88fdaf42057056d511e1e01180 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 3 Dec 2025 21:10:25 +0000
+Subject: [PATCH 1/2] WIP: configure: windows_nt
+
+For the target, this can be done with --target-os=mingw32, but
+that doesn't help for the HOSTEXESUF.
+---
+ configure | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/configure b/configure
+index 883539e361..c7eca53c61 100755
+--- a/configure
++++ b/configure
+@@ -4897,7 +4897,7 @@ fi
+ 
+ exesuf() {
+     case $1 in
+-        mingw32*|mingw64*|msys*|win32|win64|cygwin*|*-dos|freedos|opendos|os/2*|symbian) echo .exe ;;
++        mingw32*|mingw64*|msys*|win32|win64|cygwin*|*-dos|freedos|opendos|os/2*|symbian|windows_nt) echo .exe ;;
+     esac
+ }
+ 
+@@ -6013,7 +6013,7 @@ case $target_os in
+     msys*)
+         die "Native MSYS builds are discouraged, please use the MINGW environment."
+         ;;
+-    mingw32*|mingw64*)
++    mingw32*|mingw64*|windows_nt*)
+         target_os=mingw32
+         LIBTARGET=i386
+         if enabled x86_64; then
+-- 
+2.43.0
+
