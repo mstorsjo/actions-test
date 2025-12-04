@@ -387,6 +387,7 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
+    if: false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -720,8 +721,6 @@ jobs:
   # compiler itself, but that only show up at runtime. This is only done
   # for scheduled builds.
   test-ffmpeg:
-    if: true
-    needs: [linux-cross-windows]
     runs-on: windows-latest
     steps:
       - name: Install prerequisites
@@ -732,11 +731,9 @@ jobs:
       - name: Avoid git checking out files with CRLF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-ucrt-x86_64-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-busybox-ucrt-x86_64.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
