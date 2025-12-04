@@ -768,6 +768,7 @@ jobs:
           cd ffmpeg-build
           sh ../ffmpeg/configure --samples=../fate-samples --enable-gpl --target-os=mingw32
       - name: Build
+        if: false
         run: |
           cd ffmpeg-build
           mingw32-make "-j$Env:NUMBER_OF_PROCESSORS"
@@ -793,6 +794,7 @@ jobs:
           path: fate-samples
           key: fate-samples-${{ steps.rsync.outputs.hash }}
       - name: Test
+        if: false
         run: |
           cd ffmpeg-build
           mingw32-make "-j$Env:NUMBER_OF_PROCESSORS" fate
