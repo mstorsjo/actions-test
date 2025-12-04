@@ -1,0 +1,37 @@
+From 5aab14130c8634336281c1256caa4f2c217b121d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Storsj=C3=B6?= <martin@martin.st>
+Date: Wed, 3 Dec 2025 21:36:45 +0000
+Subject: [PATCH 2/2] tests: Fix fate-run.sh to handle busybox-w32 absolute
+ paths
+
+---
+ tests/fate-run.sh | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/tests/fate-run.sh b/tests/fate-run.sh
+index 6d1fe1185c..0e0c11ac3b 100755
+--- a/tests/fate-run.sh
++++ b/tests/fate-run.sh
+@@ -43,8 +43,17 @@ esac
+ 
+ 
+ target_path(){
+-    test ${1} = ${1#/} && p=${target_path}/
+-    echo ${p}${1}
++    case ${1} in
++    [a-zA-Z]:/*)
++        echo ${1}
++        ;;
++    /*)
++        echo ${1}
++        ;;
++    *)
++        echo ${target_path}/${1}
++        ;;
++    esac
+ }
+ 
+ # $1=value1, $2=value2, $3=threshold
+-- 
+2.43.0
+
