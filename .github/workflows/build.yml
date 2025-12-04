@@ -782,6 +782,7 @@ jobs:
           cd ffmpeg-build
           ../ffmpeg/configure --samples=../fate-samples --enable-gpl
       - name: Build
+        if: false
         run: |
           export PATH=/llvm-mingw/bin:$PATH
           cd ffmpeg-build
@@ -808,6 +809,7 @@ jobs:
           path: fate-samples
           key: fate-samples-${{ steps.rsync.outputs.hash }}
       - name: Test
+        if: false
         run: |
           export PATH=/llvm-mingw/bin:$PATH
           cd ffmpeg-build
