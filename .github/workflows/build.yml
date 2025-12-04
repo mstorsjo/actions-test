@@ -786,10 +786,27 @@ jobs:
           export PATH=/llvm-mingw/bin:$PATH
           cd ffmpeg-build
           make -j$(nproc)
+      - name: Restore Cached Fate-Suite
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: fate-samples
+          key: fate-samples
+          restore-keys: |
+            fate-samples-
       - name: Fetch test samples
+        id: rsync
         run: |
           cd ffmpeg-build
           make fate-rsync
+          cd ..
+          echo "hash=$(find fate-samples -type f -printf "%P %s %T@\n" | sort | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+      - name: Cache Fate-Suite
+        uses: actions/cache/save@v4
+        if: ${{ format('fate-samples-{0}', steps.rsync.outputs.hash) != steps.cache.outputs.cache-matched-key }}
+        with:
+          path: fate-samples
+          key: fate-samples-${{ steps.rsync.outputs.hash }}
       - name: Test
         run: |
           export PATH=/llvm-mingw/bin:$PATH
