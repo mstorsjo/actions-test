@@ -785,7 +785,7 @@ jobs:
           cd ffmpeg-build
           mingw32-make fate-rsync
           cd ..
-          echo "hash=$(find fate-samples -type f -printf "%P %s %T@\n" | sort | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "hash=$(sh -c "find fate-samples -type f | sort | sha256sum | cut -d' ' -f1")" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Cache Fate-Suite
         uses: actions/cache/save@v4
         if: ${{ format('fate-samples-{0}', steps.rsync.outputs.hash) != steps.cache.outputs.cache-matched-key }}
