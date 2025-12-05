@@ -431,6 +431,7 @@ jobs:
 
   # Run llvm-mingw's tests with the cross-built toolchains from above.
   test-toolchain:
+    needs: [linux-cross-windows]
     strategy:
       fail-fast: false
       matrix:
@@ -440,9 +441,11 @@ jobs:
           - aarch64
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-busybox-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
@@ -712,7 +715,6 @@ jobs:
   # compiler itself, but that only show up at runtime. This is only done
   # for scheduled builds.
   test-ffmpeg:
-    if: false
     runs-on: windows-latest
     steps:
       - name: Install prerequisites
