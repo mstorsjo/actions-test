@@ -740,14 +740,6 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v4
-      - name: Restore Cached Fate-Suite
-        id: cache
-        uses: actions/cache/restore@v4
-        with:
-          path: fate-samples
-          key: fate-samples
-          restore-keys: |
-            fate-samples-
       - name: Unpack toolchain
         run: |
           curl -LO https://martin.st/temp/llvm-mingw-busybox-ucrt-${{matrix.arch}}.zip
@@ -756,6 +748,14 @@ jobs:
           mv llvm-mingw-* c:\llvm-mingw
           echo "c:\llvm-mingw\busybox\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Restore Cached Fate-Suite
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: fate-samples
+          key: fate-samples
+          restore-keys: |
+            fate-samples-
       - name: Checkout ffmpeg
         uses: actions/checkout@v4
         with:
