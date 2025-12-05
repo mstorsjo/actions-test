@@ -387,6 +387,7 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
+    if: false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -721,7 +722,6 @@ jobs:
   # for scheduled builds.
   test-ffmpeg:
     if: true
-    needs: [linux-cross-windows]
     strategy:
       fail-fast: false
       matrix:
@@ -739,11 +739,9 @@ jobs:
       - name: Avoid git checking out files with CRLF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-busybox-ucrt-${{matrix.arch}}.zip
           Expand-Archive llvm-mingw-*.zip -DestinationPath .
           del llvm-mingw-*.zip
           mv llvm-mingw-* c:\llvm-mingw
