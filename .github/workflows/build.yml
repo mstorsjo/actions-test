@@ -757,22 +757,26 @@ jobs:
           git config --global user.email root@localhost
           bash -c "git am -3 ../patches/ffmpeg/*.patch"
       - name: Configure
+        shell: sh
         run: |
           mkdir ffmpeg-build
           cd ffmpeg-build
-          sh ../ffmpeg/configure --samples=../fate-samples --enable-gpl --target-os=mingw32
+          ../ffmpeg/configure --samples=../fate-samples --enable-gpl --target-os=mingw32
       - name: Build
+        shell: sh
         run: |
           cd ffmpeg-build
-          mingw32-make "-j$Env:NUMBER_OF_PROCESSORS"
+          mingw32-make -j$(nproc)
       - name: Fetch test samples
+        shell: sh
         run: |
           cd ffmpeg-build
           mingw32-make fate-rsync
       - name: Test
+        shell: sh
         run: |
           cd ffmpeg-build
-          mingw32-make "-j$Env:NUMBER_OF_PROCESSORS" fate
+          mingw32-make -j$(nproc) fate
 
   upload-nightly:
     if: github.event_name == 'schedule'
