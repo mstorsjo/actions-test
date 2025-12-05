@@ -135,8 +135,6 @@ void bytefn(dav1d_copy_lpf)(Dav1dFrameContext *const f,
 
 static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
                                        const int have_left,
-                                       const uint8_t (*lvl)[4],
-                                       const ptrdiff_t b4_stride,
                                        const uint16_t (*const mask)[4][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
@@ -176,8 +174,6 @@ static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
 
 static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
                                        const int have_top,
-                                       const uint8_t (*lvl)[4],
-                                       const ptrdiff_t b4_stride,
                                        const uint16_t (*const mask)[4][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
@@ -205,8 +201,6 @@ static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
 
 static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
                                         const int have_left,
-                                        const uint8_t (*lvl)[4],
-                                        const ptrdiff_t b4_stride,
                                         const uint16_t (*const mask)[2][4],
                                         pixel *const u, pixel *const v,
                                         const ptrdiff_t ls, const int w,
@@ -244,8 +238,6 @@ static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
 
 static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
                                         const int have_top,
-                                        const uint8_t (*lvl)[4],
-                                        const ptrdiff_t b4_stride,
                                         const uint16_t (*const mask)[2][4],
                                         pixel *const u, pixel *const v,
                                         const ptrdiff_t ls, const int w,
@@ -373,12 +365,10 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     }
 
     pixel *ptr;
-    uint8_t (*level_ptr)[4] = f->lf.level + f->b4_stride * sby * sbsz;
     for (ptr = p[0], have_left = 0, x = 0; x < f->sb256w;
-         x++, have_left = 1, ptr += 256, level_ptr += 64)
+         x++, have_left = 1, ptr += 256)
     {
-        filter_plane_cols_y(f, have_left, level_ptr, f->b4_stride,
-                            lflvl[x].filter_y[0], ptr, f->cur.stride[0],
+        filter_plane_cols_y(f, have_left, lflvl[x].filter_y[0], ptr, f->cur.stride[0],
                             imin(64, f->w4 - x * 64), starty4, endy4);
     }
 
@@ -386,12 +376,10 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
         return;
 
     ptrdiff_t uv_off;
-    level_ptr = f->lf.level + f->b4_stride * (sby * sbsz >> ss_ver);
     for (uv_off = 0, have_left = 0, x = 0; x < f->sb256w;
-         x++, have_left = 1, uv_off += 256 >> ss_hor, level_ptr += 64 >> ss_hor)
+         x++, have_left = 1, uv_off += 256 >> ss_hor)
     {
-        filter_plane_cols_uv(f, have_left, level_ptr, f->b4_stride,
-                             lflvl[x].filter_uv[0],
+        filter_plane_cols_uv(f, have_left, lflvl[x].filter_uv[0],
                              &p[1][uv_off], &p[2][uv_off], f->cur.stride[1],
                              (imin(64, f->w4 - x * 64) + ss_hor) >> ss_hor,
                              starty4 >> ss_ver, uv_endy4, ss_ver);
@@ -413,10 +401,8 @@ void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *const f,
     const unsigned uv_endy4 = (endy4 + ss_ver) >> ss_ver;
 
     pixel *ptr;
-    uint8_t (*level_ptr)[4] = f->lf.level + f->b4_stride * sby * sbsz;
-    for (ptr = p[0], x = 0; x < f->sb256w; x++, ptr += 256, level_ptr += 64) {
-        filter_plane_rows_y(f, have_top, level_ptr, f->b4_stride,
-                            lflvl[x].filter_y[1], ptr, f->cur.stride[0],
+    for (ptr = p[0], x = 0; x < f->sb256w; x++, ptr += 256) {
+        filter_plane_rows_y(f, have_top, lflvl[x].filter_y[1], ptr, f->cur.stride[0],
                             imin(64, f->w4 - x * 64), starty4, endy4);
     }
 
@@ -424,12 +410,8 @@ void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *const f,
         return;
 
     ptrdiff_t uv_off;
-    level_ptr = f->lf.level + f->b4_stride * (sby * sbsz >> ss_ver);
-    for (uv_off = 0, x = 0; x < f->sb256w;
-         x++, uv_off += 256 >> ss_hor, level_ptr += 64 >> ss_hor)
-    {
-        filter_plane_rows_uv(f, have_top, level_ptr, f->b4_stride,
-                             lflvl[x].filter_uv[1],
+    for (uv_off = 0, x = 0; x < f->sb256w; x++, uv_off += 256 >> ss_hor) {
+        filter_plane_rows_uv(f, have_top, lflvl[x].filter_uv[1],
                              &p[1][uv_off], &p[2][uv_off], f->cur.stride[1],
                              (imin(64, f->w4 - x * 64) + ss_hor) >> ss_hor,
                              starty4 >> ss_ver, uv_endy4, ss_hor);

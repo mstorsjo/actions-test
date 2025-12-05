@@ -661,7 +661,6 @@ static COLD void close_internal(Dav1dContext **const c_out, int flush) {
         dav1d_free(f->a);
         dav1d_free(f->tile);
         dav1d_free(f->lf.mask);
-        dav1d_free(f->lf.level);
         dav1d_free(f->lf.lr_mask);
         dav1d_free(f->lf.tx_lpf_right_edge[0]);
         dav1d_free(f->lf.start_of_tile_row);

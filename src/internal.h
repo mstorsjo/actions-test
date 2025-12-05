@@ -304,7 +304,6 @@ struct Dav1dFrameContext {
 
     // loopfilter
     struct {
-        uint8_t (*level)[4];
         Av1Filter *mask;
         Av1Restoration *lr_mask;
         int mask_sz /* w*h */, lr_mask_sz;
@@ -387,14 +386,6 @@ struct Dav1dTileState {
     uint16_t dqmem[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint16_t (*dq)[3][2];
     int last_qidx;
-
-    union {
-        int8_t i8[4];
-        uint32_t u32;
-    } last_delta_lf;
-    // TODO: removeme
-    ALIGN(uint8_t lflvlmem[8 /* seg_id */][4 /* dir */][8 /* ref */][2 /* is_gmv */], 16);
-    const uint8_t (*lflvl)[4][8][2];
 
     Av1RestorationUnit *lr_ref[3];
 

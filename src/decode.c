@@ -1294,8 +1294,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int have_delta_q = f->frame_hdr->delta.q.present &&
                                  (bs != f->root_bs || !b->skip_txfm);
 
-        uint32_t prev_delta_lf = ts->last_delta_lf.u32;
-
         if (have_delta_q) {
             int delta_q = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                                           ts->cdf.m.delta_q, 3);
@@ -1313,6 +1311,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 printf("Post-delta_q[%d->%d]: r=%d\n",
                        delta_q, ts->last_qidx, ts->msac.rng);
 
+            // TODO: will be removed in v13
             if (f->frame_hdr->delta.lf.present) {
                 const int n_lfs = f->frame_hdr->delta.lf.multi ?
                     f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 ? 4 : 2 : 1;
@@ -1330,8 +1329,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             delta_lf = -delta_lf;
                         delta_lf *= 1 << f->frame_hdr->delta.lf.res_log2;
                     }
-                    ts->last_delta_lf.i8[i] =
-                        iclip(ts->last_delta_lf.i8[i] + delta_lf, -63, 63);
                     if (have_delta_q && DEBUG_BLOCK_INFO)
                         printf("Post-delta_lf[%d:%d]: r=%d\n", i, delta_lf,
                                ts->msac.rng);
@@ -1345,14 +1342,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // find sb-specific quant parameters
             init_quant_tables(f->seq_hdr, f->frame_hdr, ts->last_qidx, ts->dqmem);
             ts->dq = ts->dqmem;
-        }
-        if (!ts->last_delta_lf.u32) {
-            // assign frame-wide lf values to this sb
-            ts->lflvl = f->lf.lvl;
-        } else if (ts->last_delta_lf.u32 != prev_delta_lf) {
-            // find sb-specific lf lvl parameters
-            ts->lflvl = ts->lflvlmem;
-            dav1d_calc_lf_values(ts->lflvlmem, f->frame_hdr, ts->last_delta_lf.i8);
         }
     }
 
@@ -1672,10 +1661,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (f->frame_hdr->loopfilter.level_y[0] ||
                 f->frame_hdr->loopfilter.level_y[1])
             {
-                dav1d_create_lf_mask_intra(t->lf_mask, f->lf.level, f->b4_stride,
-                                           (const uint8_t (*)[8][2])
-                                           &ts->lflvl[b->seg_id][0][0][0],
-                                           t->bx, t->by, f->w4, f->h4, bs,
+                dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->w4, f->h4, bs,
                                            b->tx_part, b->uvtx, f->cur.p.layout,
                                            &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                            has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
@@ -2864,18 +2850,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (f->frame_hdr->loopfilter.level_y[0] ||
             f->frame_hdr->loopfilter.level_y[1])
         {
-            const int is_globalmv =
-                b->inter_mode == (is_comp ? GLOBALMV_GLOBALMV : GLOBALMV);
-            const uint8_t (*const lf_lvls)[8][2] = (const uint8_t (*)[8][2])
-                &ts->lflvl[b->seg_id][0][b->ref[0] + 1][!is_globalmv];
             const uint16_t tx_split[2] = { 0, 0 };
             enum RectTxfmSize ytx = dav1d_max_txfm_size_for_bs[bs][0], uvtx = b->uvtx;
             if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
                 ytx  = (enum RectTxfmSize) TX_4X4;
                 uvtx = (enum RectTxfmSize) TX_4X4;
             }
-            dav1d_create_lf_mask_inter(t->lf_mask, f->lf.level, f->b4_stride, lf_lvls,
-                                       t->bx, t->by, f->w4, f->h4, b->skip_txfm,
+            dav1d_create_lf_mask_inter(t->lf_mask, t->bx, t->by, f->w4, f->h4, b->skip_txfm,
                                        bs, ytx, tx_split, uvtx, f->cur.p.layout,
                                        &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                        has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
@@ -3818,7 +3799,6 @@ static void setup_tile(Dav1dTileState *const ts,
 
     dav1d_cdf_thread_copy(&ts->cdf, &f->in_cdf);
     ts->last_qidx = f->frame_hdr->quant.yac;
-    ts->last_delta_lf.u32 = 0;
 
     dav1d_msac_init(&ts->msac, data, sz, f->frame_hdr->disable_cdf_update);
 #if DEBUG_BLOCK_INFO
@@ -4375,12 +4355,10 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     // update allocation for loopfilter masks
     if (num_sb256 != f->lf.mask_sz) {
         dav1d_free(f->lf.mask);
-        dav1d_free(f->lf.level);
         f->lf.mask = dav1d_malloc(ALLOC_LF, sizeof(*f->lf.mask) * num_sb256);
         // over-allocate by 3 bytes since some of the SIMD implementations
         // index this from the level type and can thus over-read by up to 3
-        f->lf.level = dav1d_malloc(ALLOC_LF, sizeof(*f->lf.level) * num_sb256 * 64 * 64 + 3);
-        if (!f->lf.mask || !f->lf.level) {
+        if (!f->lf.mask) {
             f->lf.mask_sz = 0;
             goto error;
         }
