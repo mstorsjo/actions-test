@@ -416,6 +416,7 @@ jobs:
           mv llvm-mingw* llvm-mingw
           cd ..
           ./build-busybox.sh $(pwd)/install/llvm-mingw/busybox --host=${{matrix.arch}}-w64-mingw32
+          cp $(pwd)/install/llvm-mingw/bin/mingw32-make.exe $(pwd)/install/llvm-mingw/busybox/bin/make.exe
           cd install
           TAG=20251202
           NAME=llvm-mingw-$TAG-${{matrix.crt}}-${{matrix.arch}}
