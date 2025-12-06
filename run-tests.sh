@@ -33,12 +33,6 @@ MAKE=make
 if command -v gmake >/dev/null; then
     MAKE=gmake
 fi
-if [ "$(uname)" = "Windows_NT" ]; then
-    # In busybox, prefer our mingw32-make. The plain "make" may be busybox's
-    # primitive make (unless we disable that), and "gmake" can be a different
-    # build from e.g. Strawberry Perl further back in PATH.
-    MAKE=mingw32-make
-fi
 
 case $(uname) in
 Darwin)
