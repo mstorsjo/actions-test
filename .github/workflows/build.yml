@@ -766,17 +766,17 @@ jobs:
         shell: sh
         run: |
           cd ffmpeg-build
-          mingw32-make -j$(nproc)
+          make -j$(nproc)
       - name: Fetch test samples
         shell: sh
         run: |
           cd ffmpeg-build
-          mingw32-make fate-rsync
+          make fate-rsync
       - name: Test
         shell: sh
         run: |
           cd ffmpeg-build
-          mingw32-make -j$(nproc) fate
+          make -j$(nproc) fate
 
   upload-nightly:
     if: github.event_name == 'schedule'
