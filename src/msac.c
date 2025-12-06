@@ -95,6 +95,7 @@ unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
 
     const uint64_t r = s->rng;
     uint64_t dif = s->dif;
+    assert(!(r & 1));
     assert((dif >> 48) < r);
     uint64_t vw = r << 47;
     unsigned ret = 0;
@@ -120,6 +121,7 @@ unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
 
     const uint64_t r = s->rng;
     uint64_t dif = s->dif;
+    assert(!(r & 1));
     assert((dif >> 48) < r);
     uint64_t vw = r << 47;
     unsigned ret = 0, bit;
