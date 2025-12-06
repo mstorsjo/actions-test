@@ -73,11 +73,7 @@ fi
 mkdir -p $BUILDDIR
 make mingw64a_defconfig O=$BUILDDIR -j$CORES
 cd $BUILDDIR
-
 sed -ri 's/^(CONFIG_AR)=y/\1=n/' .config
-sed -ri 's/^(CONFIG_FEATURE_UTF8_MANIFEST)=y/\1=n/' .config
-sed -ri 's/.*(CONFIG_FEATURE_APP_MANIFEST).*/\1=y/' .config
-
 $MAKE -j$CORES CROSS_COMPILE=$HOST-
 cp ../LICENSE $PREFIX/LICENSE.txt
 mkdir -p $PREFIX/bin
