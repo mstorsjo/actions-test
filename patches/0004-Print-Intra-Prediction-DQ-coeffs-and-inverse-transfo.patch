@@ -1,4 +1,4 @@
-From f6929644434d01ed9ec3263f8924866751226cb9 Mon Sep 17 00:00:00 2001
+From bd327ef82738d4cc65e0e4069904bcdbf29ac843 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -15,7 +15,7 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
  8 files changed, 226 insertions(+), 22 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
-index b203c56cfa..9fcfc55c69 100644
+index b203c56cf..9fcfc55c6 100644
 --- a/aom/debug.h
 +++ b/aom/debug.h
 @@ -28,10 +28,15 @@
@@ -85,7 +85,7 @@ index b203c56cfa..9fcfc55c69 100644
  #define DB_ONLY(x...)
  #define BLOCK_TO_DEBUG 0
 diff --git a/av1/common/idct.c b/av1/common/idct.c
-index 958b80d9b1..f970e6370c 100644
+index 958b80d9b..f970e6370 100644
 --- a/av1/common/idct.c
 +++ b/av1/common/idct.c
 @@ -995,7 +995,8 @@ static void av1_highbd_inv_txfm_add_master(const tran_low_t *input,
@@ -150,7 +150,7 @@ index 958b80d9b1..f970e6370c 100644
    }
  }
 diff --git a/av1/common/idct.h b/av1/common/idct.h
-index 419319c472..d97b0a9cd0 100644
+index 419319c47..d97b0a9cd 100644
 --- a/av1/common/idct.h
 +++ b/av1/common/idct.h
 @@ -21,6 +21,8 @@
@@ -182,7 +182,7 @@ index 419319c472..d97b0a9cd0 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index 68d4b6f035..957673aa74 100644
+index 68d4b6f03..957673aa7 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -421,7 +421,7 @@ index 68d4b6f035..957673aa74 100644
        disable_edge_filter, have_top ? AOMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index a9dff1b78d..ebbffda271 100644
+index a9dff1b78..73b21114e 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -212,11 +212,25 @@ static AOM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -434,8 +434,8 @@ index a9dff1b78d..ebbffda271 100644
 +  const int mi_col = dcb->xd.mi_col;
 +  const int print = BLOCK_TO_DEBUG && DEBUG_B_PIXELS && plane == AOM_PLANE_Y;
 +  if (print && !(tx_type >> 4)) {
-+    coef_dump_transpose(dqcoeff, tx_size_wide[tx_size], tx_size_high[tx_size],
-+                        3, "dq");
++    coef_dump_transpose(dqcoeff, AOMMIN(tx_size_wide[tx_size], 32),
++                        AOMMIN(tx_size_high[tx_size], 32), 3, "dq");
 +  }
 +#endif
 +  av1_inverse_transform_block(DB_ONLY(print)
@@ -452,7 +452,7 @@ index a9dff1b78d..ebbffda271 100644
    const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
    const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
 diff --git a/av1/encoder/encodemb.c b/av1/encoder/encodemb.c
-index 9877e25132..6b509f24e1 100644
+index 9877e2513..6b509f24e 100644
 --- a/av1/encoder/encodemb.c
 +++ b/av1/encoder/encodemb.c
 @@ -1044,7 +1044,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
@@ -499,7 +499,7 @@ index 9877e25132..6b509f24e1 100644
          AOMMAX(*eob_c1, *eob_c2),
          replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
 diff --git a/av1/encoder/tpl_model.c b/av1/encoder/tpl_model.c
-index 10de3e6adc..98ecd5edcd 100644
+index 10de3e6ad..98ecd5edc 100644
 --- a/av1/encoder/tpl_model.c
 +++ b/av1/encoder/tpl_model.c
 @@ -187,7 +187,7 @@ static AOM_INLINE void txfm_quant_rdcost(
@@ -512,7 +512,7 @@ index 10de3e6adc..98ecd5edcd 100644
  }
  
 diff --git a/av1/encoder/tx_search.c b/av1/encoder/tx_search.c
-index 2c2ca12103..12b7990516 100644
+index 2c2ca1210..12b799051 100644
 --- a/av1/encoder/tx_search.c
 +++ b/av1/encoder/tx_search.c
 @@ -922,7 +922,7 @@ static AOM_INLINE void inverse_transform_block_facade(
@@ -550,5 +550,5 @@ index 2c2ca12103..12b7990516 100644
        max_chroma_eob,
        replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
 -- 
-2.48.1
+2.39.5 (Apple Git-154)
 
