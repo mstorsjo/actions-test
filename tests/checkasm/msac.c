@@ -176,6 +176,15 @@ static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf)
     }
 }
 
+static unsigned generate_bypass_rng(const MsacContext *const s) {
+    const unsigned dif = (unsigned)(s->dif >> 48);
+    const unsigned r = rnd();
+    assert(dif < 0xfffe);
+    if (dif & 0x8000)
+        return (dif + (r % (0xfffe - dif)) + 2) & 0xfffe;
+    return 0x8000 | (r & 0x7ffe);
+}
+
 static void check_decode_bool_bypass(MsacDSPContext *const c, uint8_t *const buf) {
     MsacContext s_c, s_a;
 
@@ -184,7 +193,7 @@ static void check_decode_bool_bypass(MsacDSPContext *const c, uint8_t *const buf
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
-            s_a.rng = s_c.rng = 0x8000 | (rnd() & 0x7ffe);
+            s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
             unsigned c_res = call_ref(&s_c);
             unsigned a_res = call_new(&s_a);
             if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
@@ -193,6 +202,7 @@ static void check_decode_bool_bypass(MsacDSPContext *const c, uint8_t *const buf
                 break;
             }
         }
+        s_a.dif = s_c.dif >>= 1;
         s_c.rng = 0xfc92; // Somewhat arbitrarily chosen to produce
         s_a.rng = 0xdb6e; // a reasonably diverse branch pattern.
         bench_new(alternate(&s_c, &s_a));
@@ -207,7 +217,7 @@ static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const bu
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
-            s_a.rng = s_c.rng = 0x8000 | (rnd() & 0x7ffe);
+            s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
             const int n_bits = 1 + (rnd() & 31);
             unsigned c_res = call_ref(&s_c, n_bits);
             unsigned a_res = call_new(&s_a, n_bits);
@@ -219,6 +229,7 @@ static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const bu
                 break;
             }
         }
+        s_a.dif = s_c.dif >>= 1;
         s_c.rng = 0xfc92;
         s_a.rng = 0xdb6e;
         bench_new(alternate(&s_c, &s_a), 8);
@@ -233,7 +244,7 @@ static void check_decode_unary_bypass6(MsacDSPContext *const c, uint8_t *const b
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
-            s_a.rng = s_c.rng = 0x8000 | (rnd() & 0x7ffe);
+            s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
             const int max_bits = 5 + (rnd() & 1);
             unsigned c_res = call_ref(&s_c, max_bits);
             unsigned a_res = call_new(&s_a, max_bits);
@@ -245,6 +256,7 @@ static void check_decode_unary_bypass6(MsacDSPContext *const c, uint8_t *const b
                 break;
             }
         }
+        s_a.dif = s_c.dif >>= 1;
         s_c.rng = 0xfc92;
         s_a.rng = 0xdb6e;
         bench_new(alternate(&s_c, &s_a), 6);
@@ -259,7 +271,7 @@ static void check_decode_unary_bypass21(MsacDSPContext *const c, uint8_t *const 
         dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
-            s_a.rng = s_c.rng = 0x8000 | (rnd() & 0x7ffe);
+            s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
             unsigned c_res = call_ref(&s_c);
             unsigned a_res = call_new(&s_a);
             if (c_res != a_res || msac_cmp(&s_c, &s_a)) {
@@ -268,6 +280,7 @@ static void check_decode_unary_bypass21(MsacDSPContext *const c, uint8_t *const 
                 break;
             }
         }
+        s_a.dif = s_c.dif >>= 1;
         s_c.rng = 0xfc92;
         s_a.rng = 0xdb6e;
         bench_new(alternate(&s_c, &s_a));
