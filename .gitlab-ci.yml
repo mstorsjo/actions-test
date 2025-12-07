@@ -131,6 +131,7 @@ build-debian:
               "./media/avm-v12.0.0-sdp0.ivf"
               "./media/avm-v12.0.0-sdp1.ivf"
               "./media/avm-v12.0.0-bus.64x64.l5.ivf"
+              "./media/avm-v12.0.0-bus.64x64.l5.opfl0-refinemv0.ivf"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"

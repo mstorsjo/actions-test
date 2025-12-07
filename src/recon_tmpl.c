@@ -1445,13 +1445,13 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->h, f->bh - t->by));
     t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xff;
 
+    pixel *dst = ((pixel *) f->cur.data[0]) +
+        4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
     if (b->intra && !b->intrabc && !b->pal_sz) {
         const int sbsz = f->sb_step;
         const int mrl_idx = b->mrl_index;
         const int mrl_mul = b->multi_mrl;
         pixel *const edge = bitfn(t->scratch.edge) + (mrl_idx ? 384 : 128);
-        pixel *dst = ((pixel *) f->cur.data[0]) +
-            4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
 
         const int is_hv5 = b->tx_part == TX_PARTITION_H5 || b->tx_part == TX_PARTITION_V5;
         const uint8_t *const b_dim = dav1d_block_dimensions[b->bs];
@@ -1525,7 +1525,6 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ((t->by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0) |
             (dip ? ANGLE_DIP_FLAG : 0);
         angle = dip ? dip : angle;
-
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,
             ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
@@ -1553,65 +1552,65 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                 hex_dump(dst, f->cur.stride[0], tw, th, "orip");
         }
+    }
 
-        if (eob != -1) {
-            if (stx) {
-                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    coef_dump(cf, 8, 8, 3, "dq");
-                }
-                const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
-                                 (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
-                const int transpose = !((mask >> b->y_mode) & 1);
-                const int type = (stx & 3) - 1;
-                const int set = (stx >> 2) & 15;
-                if (tw >= 8 && th >= 8) {
-                    const int8_t *kernel = &stx_8x8_kernel[set][type][0][0];
-                    coef sums[48];
-                    dsp->stx.stxfm(sums, cf, kernel, 48, eob HIGHBD_CALL_SUFFIX);
-                    memset(cf, 0, 32 * sizeof(coef));
-                    // Subtract 1 to map {8,16,32} to idx {0,1,2}
-                    const int idx = imin(t_dim->lh, 3) - 1;
-                    // FIXME I'm not sure why we don't need to do this for stxfm4_c
-                    const int t = tw >= th ? transpose : !transpose;
-                    const uint8_t *scan_out = stx_scan_orders_8x8[idx][t];
-                    const uint8_t *mapping = coeff8x8_mapping[set * 3 + type];
-                    for (int x = 0; x < 48; x++) {
-                        cf[scan_out[mapping[x]]] = sums[x];
-                    }
-                    eob = (uint8_t[]){ 63, 119, 231 }[idx];
-                } else {
-                    const int8_t *kernel = &stx_4x4_kernel[set][type][0][0];
-                    coef sums[16];
-                    dsp->stx.stxfm(sums, cf, kernel, 16, eob HIGHBD_CALL_SUFFIX);
-                    const int idx = imin(t_dim->lh, 3);
-                    const uint8_t *scan_out = stx_scan_orders_4x4[idx][transpose];
-                    memset(&cf[4], 0, 4 * sizeof(coef));
-                    for (int x = 0; x < 16; x++) {
-                        cf[scan_out[x]] = sums[x];
-                    }
-                    eob = (uint8_t[]){ 15, 15, 51, 99 }[idx];
-                }
-                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    coef_dump(cf, imin(t_dim->h, 8) * 4,
-                              imin(t_dim->w, 8) * 4, 3, "stx");
-                }
-            } else {
-                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    coef_dump(cf, imin(t_dim->h, 8) * 4,
-                              imin(t_dim->w, 8) * 4, 3, "dq");
-                }
-            }
-            if (f->seq_hdr->inter_ddt && !b->intra) {
-                if (t_dim->w > 1 && (txtp & 0x01))
-                    txtp += 0x03; // (flip)adst -> (f)ddt - horizontally
-                if (t_dim->h > 1 && (txtp & 0x20))
-                    txtp += 0x60; // (flip)adst -> (f)ddt - vertically
-            }
-            dsp->itx.itxfm_add[tx](dst, f->cur.stride[0],
-                                   cf, txtp, eob HIGHBD_CALL_SUFFIX);
+    if (eob != -1) {
+        if (stx) {
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                hex_dump(dst, f->cur.stride[0], t_dim->w * 4, t_dim->h * 4, "recon");
+                coef_dump(cf, 8, 8, 3, "dq");
             }
+            const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
+                             (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
+            const int transpose = !((mask >> b->y_mode) & 1);
+            const int type = (stx & 3) - 1;
+            const int set = (stx >> 2) & 15;
+            if (tw >= 8 && th >= 8) {
+                const int8_t *kernel = &stx_8x8_kernel[set][type][0][0];
+                coef sums[48];
+                dsp->stx.stxfm(sums, cf, kernel, 48, eob HIGHBD_CALL_SUFFIX);
+                memset(cf, 0, 32 * sizeof(coef));
+                // Subtract 1 to map {8,16,32} to idx {0,1,2}
+                const int idx = imin(t_dim->lh, 3) - 1;
+                // FIXME I'm not sure why we don't need to do this for stxfm4_c
+                const int t = tw >= th ? transpose : !transpose;
+                const uint8_t *scan_out = stx_scan_orders_8x8[idx][t];
+                const uint8_t *mapping = coeff8x8_mapping[set * 3 + type];
+                for (int x = 0; x < 48; x++) {
+                    cf[scan_out[mapping[x]]] = sums[x];
+                }
+                eob = (uint8_t[]){ 63, 119, 231 }[idx];
+            } else {
+                const int8_t *kernel = &stx_4x4_kernel[set][type][0][0];
+                coef sums[16];
+                dsp->stx.stxfm(sums, cf, kernel, 16, eob HIGHBD_CALL_SUFFIX);
+                const int idx = imin(t_dim->lh, 3);
+                const uint8_t *scan_out = stx_scan_orders_4x4[idx][transpose];
+                memset(&cf[4], 0, 4 * sizeof(coef));
+                for (int x = 0; x < 16; x++) {
+                    cf[scan_out[x]] = sums[x];
+                }
+                eob = (uint8_t[]){ 15, 15, 51, 99 }[idx];
+            }
+            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                coef_dump(cf, imin(t_dim->h, 8) * 4,
+                          imin(t_dim->w, 8) * 4, 3, "stx");
+            }
+        } else {
+            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                coef_dump(cf, imin(t_dim->h, 8) * 4,
+                          imin(t_dim->w, 8) * 4, 3, "dq");
+            }
+        }
+        if (f->seq_hdr->inter_ddt && !b->intra) {
+            if (t_dim->w > 1 && (txtp & 0x01))
+                txtp += 0x03; // (flip)adst -> (f)ddt - horizontally
+            if (t_dim->h > 1 && (txtp & 0x20))
+                txtp += 0x60; // (flip)adst -> (f)ddt - vertically
+        }
+        dsp->itx.itxfm_add[tx](dst, f->cur.stride[0],
+                               cf, txtp, eob HIGHBD_CALL_SUFFIX);
+        if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+            hex_dump(dst, f->cur.stride[0], t_dim->w * 4, t_dim->h * 4, "recon");
         }
     }
 
@@ -1686,8 +1685,18 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     // FIXME do error reporting, to shortcut further decoding
     if (tp[b->tx_part] == -1) return;
 
-    // FIXME do palette handling at prediction block level
-    // ..
+    if (b->intrabc) {
+        pixel *const dst = ((pixel *) f->cur.data[0]) +
+                               4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
+        const int res =
+            mc(t, dst, NULL, f->cur.stride[0], bw4, bh4, t->bx, t->by, 0,
+               b->mv[0], &f->sr_cur, 0 /* unused */, FILTER_2D_BILINEAR);
+        if (res) return;
+    } else if (!b->intra) {
+        // FIXME inter pred
+    } else if (b->pal_sz) {
+        // FIXME palette pred
+    }
 
     // luma
     const enum RectTxfmSize tx = tp[b->tx_part];
