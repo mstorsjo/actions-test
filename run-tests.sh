@@ -30,9 +30,6 @@ export PATH=$PREFIX/bin:$PATH
 : ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 MAKE=make
-if command -v gmake >/dev/null; then
-    MAKE=gmake
-fi
 
 case $(uname) in
 Darwin)
