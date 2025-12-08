@@ -32,6 +32,7 @@
 #include "src/levels.h"
 #include "src/loopfilter.h"
 
+#if 0
 static void init_lpf_border(pixel *const dst, const ptrdiff_t stride,
                             int E, int I, const int bitdepth_max)
 {
@@ -89,6 +90,7 @@ static void init_lpf_border(pixel *const dst, const ptrdiff_t stride,
         break;
     }
 }
+#endif
 
 static void check_lpf_sb(loopfilter_sb_fn fn, const char *const name,
                          const int n_blks, const int lf_idx,

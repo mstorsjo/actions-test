@@ -43,9 +43,9 @@ static const int8_t w_mult[8] = { 85, 51, 37, 28, 0, 20, 0, 15 };
 static int filter_choice(const pixel *const s, const pixel *const t, const ptrdiff_t stride,
                          const int max_width_neg, const int max_width_pos,
                          unsigned q_thr, unsigned side_thr) {
-    int deriv_s, deriv_t;
-    int second_derivs_buf[4];
-    int *second_deriv = &second_derivs_buf[2];
+    unsigned deriv_s, deriv_t;
+    unsigned second_derivs_buf[4];
+    unsigned *second_deriv = &second_derivs_buf[2];
 
     for (int dist = -2; dist < 2; dist++) {
         deriv_s = abs(s[(dist - 1) * stride] - (s[dist * stride] << 1) + s[(dist + 1) * stride]);
@@ -56,35 +56,32 @@ static int filter_choice(const pixel *const s, const pixel *const t, const ptrdi
     if (second_deriv[-2] > side_thr || second_deriv[1] > side_thr) return 0;
     if (max_width_pos == 1) return 1;
 
-    const int side_thr2 = side_thr >> 2;
+    const unsigned side_thr2 = side_thr >> 2;
     if (second_deriv[-2] > side_thr2 || second_deriv[1] > side_thr2) return 1;
     if (second_deriv[-1] + second_deriv[0] > q_thr * 4) return 1;
 
-    const int side_thr3 = side_thr >> 3;
-
+    const unsigned side_thr3 = side_thr >> 3;
     if (second_deriv[-2] > side_thr3 || second_deriv[1] > side_thr3) return 2;
     if (second_deriv[-1] + second_deriv[0] > q_thr * 3) return 2;
 
-    const int end_thr = (side_thr * 3) >> 4;
-
+    const unsigned end_thr = (side_thr * 3) >> 4;
     if (max_width_neg > 2) {
         deriv_s = abs(s[-1 * stride] - s[-4 * stride] - 3 * (s[-1 * stride] - s[-2 * stride]));
         deriv_t = abs(t[-1 * stride] - t[-4 * stride] - 3 * (t[-1 * stride] - t[-2 * stride]));
         if (((deriv_s + deriv_t + 1) >> 1) > end_thr) return 2;
     }
-
     deriv_s = abs(s[0] - s[3 * stride] - 3 * (s[0] - s[stride]));
     deriv_t = abs(t[0] - t[3 * stride] - 3 * (t[0] - t[stride]));
     if (((deriv_s + deriv_t + 1) >> 1) > end_thr) return 2;
     if (max_width_pos == 3) return 3;
 
-    const int transition = (second_deriv[-1] + second_deriv[0]) << 4;
+    const unsigned transition = (second_deriv[-1] + second_deriv[0]) << 4;
     int prev_dist = 3;
     for (int dist = 4; dist <= max_width_pos; dist += 2) {
-        const int q_thr4 = q_thr * q_first[(dist - 4) >> 1];
-        const int end_thr4 = (side_thr * dist) >> 4;
+        const unsigned q_thr4 = q_thr * q_first[(dist - 4) >> 1];
+        const unsigned end_thr4 = (side_thr * dist) >> 4;
         if (transition > q_thr4) return prev_dist;
-        const int dist2 = imin(7,dist);
+        const int dist2 = imin(7, dist);
         if (max_width_neg >= dist2) {
             deriv_s = abs(s[-stride] - s[(-dist2 - 1) * stride] - dist2 * (s[-stride] - s[-2 * stride]));
             deriv_t = abs(t[-stride] - t[(-dist2 - 1) * stride] - dist2 * (t[-stride] - t[-2 * stride]));
