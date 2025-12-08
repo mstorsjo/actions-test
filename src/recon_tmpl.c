@@ -563,7 +563,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     *txtp = dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.txtp_inter_set0[setidx][ctx], 7);
                 } else if (setidx) {
-                    *txtp = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                    *txtp = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                 ts->cdf.m.txtp_inter_set2[ctx], 3) + 8;
                 } else {
                     *txtp = dav1d_msac_decode_symbol_adapt8(&ts->msac,
@@ -964,12 +964,12 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         default: assert(0);
         }
     } else if (chroma) { // dc-only
-        dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac,
+        dc_tok = 1 + dav1d_msac_decode_symbol_adapt8(&ts->msac,
                          ts->cdf.coef.eob_base_uv_tok_lf[0], 4);
         DEBUG_CF_printf("%*sPost-eob_tok[pos=%d,ctx=%d|0|-1,freq=lo,plane=uv,%d]: r=%d\n",
                         depth, "", eob, t_dim->ctx, dc_tok, ts->msac.rng);
     } else {
-        dc_tok = 1 + dav1d_msac_decode_symbol_adapt4(&ts->msac,
+        dc_tok = 1 + dav1d_msac_decode_symbol_adapt8(&ts->msac,
                          ts->cdf.coef.eob_base_y_tok_lf[t_dim->ctx][0], 4);
         if (dc_tok == 5) {
             dc_tok += dav1d_msac_decode_symbol_adapt4(&ts->msac,

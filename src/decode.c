@@ -1245,10 +1245,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     v = 1;
                 } else {
                     const int rem = f->frame_hdr->cdef.n_strengths - 3;
-                    v = 1 + (rem < 3 ?
-                             dav1d_msac_decode_symbol_adapt4 :
-                             dav1d_msac_decode_symbol_adapt8)(&ts->msac,
-                                 ts->cdf.m.cdef_idx[rem], rem + 1);
+                    v = 1 + dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                                ts->cdf.m.cdef_idx[rem], rem + 1);
                 }
                 DEBUG_BLOCK_printf("%*sPost-cdef_idx[ctx=%d,%d]: r=%d\n",
                                    depth, "", ctx, v, ts->msac.rng);
