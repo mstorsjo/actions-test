@@ -120,7 +120,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t interintra[4][2], 4);
     ALIGN(uint16_t interintra_mode[4][4], 8);
     ALIGN(uint16_t interintra_wedge[2], 4);
-    ALIGN(uint16_t wedge_quad[4], 4);
+    ALIGN(uint16_t wedge_quad[4], 8);
     ALIGN(uint16_t wedge_angle[4][5+3], 16);
     ALIGN(uint16_t wedge_dist2[3+1], 8);
     ALIGN(uint16_t wedge_dist[4], 8);
