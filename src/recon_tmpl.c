@@ -2688,9 +2688,9 @@ void bytefn(dav1d_filter_sbrow_lr)(Dav1dFrameContext *const f, const int sby) {
 void bytefn(dav1d_filter_sbrow)(Dav1dFrameContext *const f, const int sby) {
     bytefn(dav1d_filter_sbrow_deblock_cols)(f, sby);
     bytefn(dav1d_filter_sbrow_deblock_rows)(f, sby);
-#if 0
     if (f->seq_hdr->cdef)
         bytefn(dav1d_filter_sbrow_cdef)(f->c->tc, sby);
+#if 0
     if (f->lf.restore_planes)
         bytefn(dav1d_filter_sbrow_lr)(f, sby);
 #endif
