@@ -1440,9 +1440,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else if (t->bx + t_dim->w < t->pb.col_end) {
                 n_tr = w;
             } else {
-                const int xpos = sbx + t_dim->w;
+                const int xpos = bx4 + t_dim->w;
                 const int bits =
-                    (t->is_coded[sby - 1] >> (xpos & 63)) & ((1 << w) - 1);
+                    (t->is_coded[by4 - 1] >> (xpos & 63)) & ((1 << w) - 1);
                 n_tr = ctz(~bits);
             }
         }
@@ -1462,10 +1462,10 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else if (t->by + t_dim->h < t->pb.row_end) {
                 n_bl = h;
             } else {
-                const int xpos = sbx - 1;
+                const int xpos = bx4 - 1;
                 int y = 0;
                 do {
-                    if (!((t->is_coded[sby + y + t_dim->h] >> (xpos & 63)) & 1))
+                    if (!((t->is_coded[by4 + y + t_dim->h] >> (xpos & 63)) & 1))
                         break;
                 } while (++y < h);
                 n_bl = y;
@@ -1580,9 +1580,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
 
-    const uint64_t mask = ((1ULL << t_dim->w) - 1) << sbx;
+    const uint64_t mask = ((1ULL << t_dim->w) - 1) << bx4;
     for (int y = 0; y < t_dim->h; y++) {
-        t->is_coded[sby + y] |= mask;
+        t->is_coded[by4 + y] |= mask;
     }
 
     b->y_mode = orig_y_mode;
