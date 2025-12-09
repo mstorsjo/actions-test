@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2025, VideoLAN and dav1d authors
+ * Copyright © 2018-2025, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,69 +71,11 @@ static const char *const itx_1d_names[5] = {
     [WHT]      = "wht"
 };
 
-static const double scaling_factors[9] = {
-    4.0000,             /*  4x4                          */
-    4.0000 * M_SQRT1_2, /*  4x8   8x4                    */
-    2.0000,             /*  4x16  8x8  16x4              */
-    2.0000 * M_SQRT1_2, /*        8x16 16x8              */
-    1.0000,             /*        8x32 16x16 32x8        */
-    0.5000 * M_SQRT1_2, /*             16x32 32x16       */
-    0.2500,             /*             16x64 32x32 64x16 */
-    0.1250 * M_SQRT1_2, /*                   32x64 64x32 */
-    0.0625,             /*                         64x64 */
-};
-
-/* FIXME: Ensure that those forward transforms are similar to the real AV1
- * transforms. The FLIPADST currently uses the ADST forward transform for
- * example which is obviously "incorrect", but we're just using it for now
- * since it does produce coefficients in the correct range at least. */
-
-/* DCT-II */
-static void fdct_1d(double *const out, const double *const in, const int sz) {
-    for (int i = 0; i < sz; i++) {
-        out[i] = 0.0;
-        for (int j = 0; j < sz; j++)
-            out[i] += in[j] * cos(M_PI * (2 * j + 1) * i / (sz * 2.0));
-    }
-    out[0] *= M_SQRT1_2;
-}
-
-/* See "Towards jointly optimal spatial prediction and adaptive transform in
- * video/image coding", by J. Han, A. Saxena, and K. Rose
- * IEEE Proc. ICASSP, pp. 726-729, Mar. 2010.
- * and "A Butterfly Structured Design of The Hybrid Transform Coding Scheme",
- * by Jingning Han, Yaowu Xu, and Debargha Mukherjee
- * http://research.google.com/pubs/archive/41418.pdf
- */
-static void fadst_1d(double *const out, const double *const in, const int sz) {
-    for (int i = 0; i < sz; i++) {
-        out[i] = 0.0;
-        for (int j = 0; j < sz; j++)
-            out[i] += in[j] * sin(M_PI *
-            (sz == 4 ? (    j + 1) * (2 * i + 1) / (8.0 + 1.0) :
-                       (2 * j + 1) * (2 * i + 1) / (sz * 4.0)));
-    }
-}
-
-static void fwht4_1d(double *const out, const double *const in)
+static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
+                          const enum TxfmType txtp, const int sw, const int sh,
+                          const int subsh, int *const max_eob, const int coef_max)
 {
-    const double t0 = in[0] + in[1];
-    const double t3 = in[3] - in[2];
-    const double t4 = (t0 - t3) * 0.5;
-    const double t1 = t4 - in[1];
-    const double t2 = t4 - in[2];
-    out[0] = t0 - t2;
-    out[1] = t2;
-    out[2] = t3 + t1;
-    out[3] = t1;
-}
-
-static int copy_subcoefs(coef *coeff,
-                         const enum RectTxfmSize tx, const enum TxfmType txtp,
-                         const int sw, const int sh, const int subsh,
-                         int *const max_eob)
-{
-    /* copy the topleft coefficients such that the return value (being the
+    /* Generate topleft coefficients such that the return value (being the
      * coefficient scantable index for the eob token) guarantees that only
      * the topleft $sub out of $sz (where $sz >= $sub) coefficients in both
      * dimensions are non-zero. This leads to braching to specific optimized
@@ -144,6 +86,7 @@ static int copy_subcoefs(coef *coeff,
     const uint16_t *const scan = dav1d_scans[tx];
     const int sub_high = subsh > 0 ? subsh * 8 - 1 : 0;
     const int sub_low  = subsh > 1 ? sub_high - 8 : 0;
+    const int coef_sign = (coef_max + 1) >> 1;
     int n, eob;
 
     for (n = 0, eob = 0; n < sw * sh; n++) {
@@ -156,10 +99,12 @@ static int copy_subcoefs(coef *coeff,
             rcx = n / sw, rcy = n % sw, rc = rcy * sh + rcx;
 
         /* Pick a random eob within this sub-itx */
-        if (rcx > sub_high || rcy > sub_high) {
+        if (rcx > sub_high || rcy > sub_high)
             break; /* upper boundary */
-        } else if (!eob && (rcx > sub_low || rcy > sub_low))
+        if (!eob && (rcx > sub_low || rcy > sub_low))
             eob = n; /* lower boundary */
+
+        coeff[rc] = (rnd() & coef_max) - coef_sign;
     }
     *max_eob = n - 1;
 
@@ -182,65 +127,6 @@ static int copy_subcoefs(coef *coeff,
     return eob;
 }
 
-static int ftx(coef *const buf, const enum RectTxfmSize tx,
-               const enum TxfmType txtp, const int w, const int h,
-               const int subsh, int *const max_eob, const int bitdepth_max)
-{
-    double out[64 * 64], temp[64 * 64];
-    const double scale = scaling_factors[ctz(w * h) - 4];
-    const int sw = imin(w, 32), sh = imin(h, 32);
-
-    for (int i = 0; i < h; i++) {
-        double in[64], temp_out[64];
-
-        for (int i = 0; i < w; i++)
-            in[i] = (rnd() & (2 * bitdepth_max + 1)) - bitdepth_max;
-
-        switch (itx_1d_types[txtp][0]) {
-        case DCT:
-            fdct_1d(temp_out, in, w);
-            break;
-        case ADST:
-        case FLIPADST:
-            fadst_1d(temp_out, in, w);
-            break;
-        case WHT:
-            fwht4_1d(temp_out, in);
-            break;
-        case IDENTITY:
-            memcpy(temp_out, in, w * sizeof(*temp_out));
-            break;
-        }
-
-        for (int j = 0; j < w; j++)
-            temp[j * h + i] = temp_out[j] * scale;
-    }
-
-    for (int i = 0; i < w; i++) {
-        switch (itx_1d_types[txtp][0]) {
-        case DCT:
-            fdct_1d(&out[i * h], &temp[i * h], h);
-            break;
-        case ADST:
-        case FLIPADST:
-            fadst_1d(&out[i * h], &temp[i * h], h);
-            break;
-        case WHT:
-            fwht4_1d(&out[i * h], &temp[i * h]);
-            break;
-        case IDENTITY:
-            memcpy(&out[i * h], &temp[i * h], h * sizeof(*out));
-            break;
-        }
-    }
-
-    for (int y = 0; y < sh; y++)
-        for (int x = 0; x < sw; x++)
-            buf[y * sw + x] = (coef) (out[y * w + x] + 0.5);
-
-    return copy_subcoefs(buf, tx, txtp, sw, sh, subsh, max_eob);
-}
-
 static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
                             const enum RectTxfmSize tx)
 {
@@ -252,6 +138,7 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
 
     const int w = dav1d_txfm_dimensions[tx].w * 4;
     const int h = dav1d_txfm_dimensions[tx].h * 4;
+    const int sw = imin(w, 32), sh = imin(h, 32);
     const int subsh_max = subsh_iters[imax(dav1d_txfm_dimensions[tx].lw,
                                            dav1d_txfm_dimensions[tx].lh)];
 #if BITDEPTH == 16
@@ -264,19 +151,24 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
                  int eob HIGHBD_DECL_SUFFIX);
 
     for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
+        /* Always using the largest possible coef_max just results in
+         * most of the output being clipped to either 0 or bitdepth_max.
+         * Randomize the range a bit to cover more scenarios. */
+        const int coef_max = (1 << ((rnd() % (bpc + 5)) + 4)) - 1;
+        const int bitdepth_max = (1 << bpc) - 1;
         bitfn(dav1d_itx_dsp_init)(c, bpc);
+
         for (enum TxfmType txtp = 0; txtp < N_TX_TYPES_PLUS_LL; txtp++)
-            for (int subsh = 0; subsh < subsh_max; subsh++)
+            for (int subsh = !!txtp; subsh < subsh_max; subsh++)
                 if (check_func(c->itxfm_add[tx][txtp],
                                "inv_txfm_add_%dx%d_%s_%s_%d_%dbpc",
                                w, h, itx_1d_names[itx_1d_types[txtp][0]],
                                itx_1d_names[itx_1d_types[txtp][1]], subsh,
                                bpc))
                 {
-                    const int bitdepth_max = (1 << bpc) - 1;
                     int max_eob;
-                    const int eob = ftx(coeff[0], tx, txtp, w, h, subsh, &max_eob,
-                                        bitdepth_max);
+                    const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
+                                                   subsh, &max_eob, coef_max);
                     memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
                     CLEAR_PIXEL_RECT(c_dst);
@@ -302,21 +194,32 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
                               alternate(coeff[0], coeff[1]), max_eob HIGHBD_TAIL_SUFFIX);
                 }
     }
-    report("add_%dx%d", w, h);
 }
 
 void bitfn(checkasm_check_itx)(void) {
     static const uint8_t txfm_size_order[N_RECT_TX_SIZES] = {
-        TX_4X4,   RTX_4X8,  RTX_4X16,
-        RTX_8X4,  TX_8X8,   RTX_8X16,  RTX_8X32,
-        RTX_16X4, RTX_16X8, TX_16X16,  RTX_16X32, RTX_16X64,
-                  RTX_32X8, RTX_32X16, TX_32X32,  RTX_32X64,
-                            RTX_64X16, RTX_64X32, TX_64X64
+        // tx4
+        TX_4X4,
+        // tx8
+        RTX_4X8,   RTX_8X4,   TX_8X8,
+        // tx16
+        RTX_4X16,  RTX_16X4,  RTX_8X16,  RTX_16X8,  TX_16X16,
+        // tx32
+        RTX_4X32,  RTX_32X4,  RTX_8X32,  RTX_32X8,  RTX_16X32,
+        RTX_32X16, TX_32X32,
+        // tx64
+        RTX_4X64,  RTX_64X4,  RTX_8X64,  RTX_64X8,  RTX_16X64,
+        RTX_64X16, RTX_32X64, RTX_64X32, TX_64X64,
     };
 
     /* Zero unused function pointer elements. */
     Dav1dInvTxfmDSPContext c = { { { 0 } } };
 
-    for (int i = 0; i < N_RECT_TX_SIZES; i++)
-        check_itxfm_add(&c, txfm_size_order[i]);
+    const uint8_t *txfm = txfm_size_order;
+    for (int i = 0; i < 5; i++) {
+        for (int j = 0; j <= i * 2; j++)
+            check_itxfm_add(&c, *txfm++);
+        report("add_tx%d", 4 << i);
+    }
+    assert(txfm == &txfm_size_order[N_RECT_TX_SIZES]);
 }
