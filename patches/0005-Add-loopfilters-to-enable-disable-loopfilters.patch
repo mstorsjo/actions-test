@@ -1,4 +1,4 @@
-From 6b10e8a5a3fcb8bd725bddb6ec6d43d3683f57e0 Mon Sep 17 00:00:00 2001
+From d4edd15147e81e1151f50b32611f9f665db8c2e7 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
@@ -8,9 +8,9 @@ Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
  aom/aomdx.h               | 11 +++++++++++
  apps/aomdec.c             | 33 +++++++++++++++++++++++++++++++++
  av1/av1_dx_iface.c        | 16 ++++++++++++++++
- av1/decoder/decodeframe.c | 19 ++++++++++++++-----
+ av1/decoder/decodeframe.c | 23 ++++++++++++++++-------
  av1/decoder/decoder.h     |  2 ++
- 6 files changed, 86 insertions(+), 5 deletions(-)
+ 6 files changed, 88 insertions(+), 7 deletions(-)
 
 diff --git a/aom/aom_codec.h b/aom/aom_codec.h
 index a338ed5614..5cda54d2d6 100644
@@ -190,7 +190,7 @@ index be11305845..7d0ae14c4e 100644
    { AV1D_ENABLE_SUBGOP_STATS, ctrl_enable_subgop_stats },
  
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index ebbffda271..8284145dc7 100644
+index 73b21114ec..529e7c1322 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
 @@ -10897,8 +10897,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
@@ -225,13 +225,15 @@ index ebbffda271..8284145dc7 100644
      }
  
 -    const int do_loop_restoration =
+-        cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
 +    const int do_loop_restoration = enable_restoration &&
-         cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
++        (cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
          (cm->rst_info[1].frame_restoration_type != RESTORE_NONE &&
           !cm->seq_params.monochrome) ||
          (cm->rst_info[2].frame_restoration_type != RESTORE_NONE &&
-          !cm->seq_params.monochrome);
+-         !cm->seq_params.monochrome);
 -    const int do_cdef = !pbi->skip_loop_filter &&
++         !cm->seq_params.monochrome));
 +    const int do_cdef = enable_cdef &&
 +                        !pbi->skip_loop_filter &&
                          !cm->features.coded_lossless &&
