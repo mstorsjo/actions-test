@@ -1532,7 +1532,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
                                  (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
-                const int transpose = !((mask >> m) & 1);
+                const int transpose = !((mask >> b->y_mode) & 1);
                 const int type = (stx & 3) - 1;
                 const int set = (stx >> 2) & 15;
                 if (tw >= 8 && th >= 8) {
