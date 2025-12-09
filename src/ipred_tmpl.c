@@ -790,6 +790,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
+    const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
     const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
     const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
@@ -801,28 +802,51 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     const int dy = dav1d_dr_intra_derivative[angle - 90];
     const int dx = dav1d_dr_intra_derivative[180 - angle];
 
+    if (mrl_mul) {
+        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
+        const pixel *tl2 = &topleft_in[-e_stride];
+        pixel tmp[64 * 64];
+        ipred_z2_c(tmp, 64, topleft_in, width, height,
+                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT),
+                   max_width, max_height HIGHBD_TAIL_SUFFIX);
+        ipred_z2_c(dst, stride, tl2, width, height,
+                   angle, max_width, max_height HIGHBD_TAIL_SUFFIX);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++)
+                dst[x] = (tmp[y * 64 + x] + dst[x]) >> 1;
+            dst += PXSTRIDE(stride);
+        }
+        return;
+    }
+
     // Max size = 1 (topleft) + 64 (width) + 64 (height) + 4 extra = 133
     pixel filt[133];
     pixel *const topleft = &filt[66];
 
+    const pixel *top = topleft;
     const int n_px_t = width + 1;
     const int str_t = enable_intra_edge_filter && have_top && !mrl_idx ?
         get_filter_strength(width + height, angle - 90, is_sm_t) : 0;
     if (str_t) {
         filter_edge(&topleft[1], n_px_t + 1, 1, n_px_t, &topleft_in[0],
                     0, n_px_t, str_t);
+    } else if (mrl_idx) {
+        top = &topleft_in[mrl_idx - 1];
     } else {
         pixel_copy(&topleft[1], &topleft_in[0], n_px_t);
     }
     topleft[0] = topleft[1];
     topleft[n_px_t + 1] = topleft[n_px_t];
 
+    const pixel *left = topleft;
     const int n_px_l = height + 1;
     const int str_l = enable_intra_edge_filter && have_left && !mrl_idx ?
         get_filter_strength(width + height, 180 - angle, is_sm_l) : 0;
     if (str_l) {
         filter_edge(&topleft[-n_px_l], height, height - max_height, height,
                     &topleft_in[-height], 0, height + 1, str_l);
+    } else if (mrl_idx) {
+        left = &topleft_in[1 - mrl_idx];
     } else {
         pixel_copy(&topleft[-n_px_l], &topleft_in[-height], n_px_l);
     }
@@ -831,19 +855,19 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
 
     for (int y = 0; y < height; y++) {
         const int ypos = y + 1;
-        int xpos = -(ypos + 0) * dx;
+        int xpos = -(ypos + mrl_idx) * dx;
         int x;
-        for (x = 0; x < width && xpos < -64; x++, xpos += 64) {
+        for (x = 0; x < width && xpos < -(64 * (1 + mrl_idx)); x++, xpos += 64) {
             const int xpos_l = x + 1;
-            const int ypos_l = (y << 6) - (xpos_l + 0) * dy;
+            const int ypos_l = (y << 6) - (xpos_l + mrl_idx) * dy;
             const int base_y = ypos_l >> 6;
             assert(base_y >= -1);
             const int shift = (ypos_l & 0x3F) >> 1;
             const int v =
-                av1_dr_interp_filter[shift].a * topleft[-(base_y + 1)] +
-                av1_dr_interp_filter[shift].b * topleft[-(base_y + 2)] +
-                av1_dr_interp_filter[shift].c * topleft[-(base_y + 3)] +
-                av1_dr_interp_filter[shift].d * topleft[-(base_y + 4)];
+                av1_dr_interp_filter[shift].a * left[-(base_y + 1)] +
+                av1_dr_interp_filter[shift].b * left[-(base_y + 2)] +
+                av1_dr_interp_filter[shift].c * left[-(base_y + 3)] +
+                av1_dr_interp_filter[shift].d * left[-(base_y + 4)];
             dst[x] = iclip_pixel((v + 64) >> 7);
         }
 
@@ -851,10 +875,10 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
             const int base_x = xpos >> 6;
             const int shift = (xpos & 0x3F) >> 1;
             const int v =
-                av1_dr_interp_filter[shift].a * topleft[base_x + 1] +
-                av1_dr_interp_filter[shift].b * topleft[base_x + 2] +
-                av1_dr_interp_filter[shift].c * topleft[base_x + 3] +
-                av1_dr_interp_filter[shift].d * topleft[base_x + 4];
+                av1_dr_interp_filter[shift].a * top[base_x + 1] +
+                av1_dr_interp_filter[shift].b * top[base_x + 2] +
+                av1_dr_interp_filter[shift].c * top[base_x + 3] +
+                av1_dr_interp_filter[shift].d * top[base_x + 4];
             dst[x] = iclip_pixel((v + 64) >> 7);
         }
         dst += PXSTRIDE(stride);
