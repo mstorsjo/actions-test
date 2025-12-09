@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2019, VideoLAN and dav1d authors
- * Copyright © 2018-2019, Two Orioles, LLC
+ * Copyright © 2018-2025, VideoLAN and dav1d authors
+ * Copyright © 2018-2025, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,29 +74,29 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                const enum TxfmType txtp HIGHBD_DECL_SUFFIX)
 {
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+    const uint8_t *const tx_shift = dav1d_tx_shift[tx];
     const int w = 4 * t_dim->w, h = 4 * t_dim->h;
     assert(w >= 4 && w <= 64);
     assert(h >= 4 && h <= 64);
     assert(eob >= 0);
 
     const int is_rect2 = (t_dim->lw + t_dim->lh) & 1;
-#if 0
-    // FIXME Disabled for now
-    const int has_dconly = txtp == DCT_DCT;
-    if (eob < has_dconly) {
+    if (eob + txtp == 0) { // DC-only DCT_DCT
+        const int shift_p1 = tx_shift[0];
+        const int shift = shift_p1 + tx_shift[1] - 12;
+        const int rnd = (1 << (shift - 1)) + shift_p1 - 6;
         int dc = coeff[0];
         coeff[0] = 0;
+
         if (is_rect2)
             dc = (dc * 181 + 128) >> 8;
-        dc = (dc * 181 + 128) >> 8;
         dc = (dc + rnd) >> shift;
-        dc = (dc * 181 + 128 + 2048) >> 12;
+
         for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
             for (int x = 0; x < w; x++)
                 dst[x] = iclip_pixel(dst[x] + dc);
         return;
     }
-#endif
 
     const uint8_t *const txtps = dav1d_tx1d_types[txtp];
     const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtps[1]];
@@ -139,20 +139,20 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
         memset(c, 0, sizeof(*c) * (sh - last_nonzero_col - 1) * w);
 #endif
     memset(coeff, 0, sizeof(*coeff) * sw * sh);
-    int new_shift = dav1d_tx_shift[tx][0];
-    int rnd = (1 << new_shift) >> 1;
+    int shift = tx_shift[0];
+    int rnd = (1 << shift) >> 1;
     for (int i = 0; i < w * sh; i++)
-        tmp[i] = iclip((tmp[i] + rnd) >> new_shift, row_clip_min, row_clip_max);
+        tmp[i] = iclip((tmp[i] + rnd) >> shift, row_clip_min, row_clip_max);
 
     for (int x = 0; x < w; x++)
         second_1d_fn(&tmp[x], w);
 
-    new_shift = dav1d_tx_shift[tx][1];
-    rnd = (1 << new_shift) >> 1;
+    shift = tx_shift[1];
+    rnd = (1 << shift) >> 1;
     c = tmp;
     for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
         for (int x = 0; x < w; x++)
-            dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> new_shift));
+            dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> shift));
 }
 
 #define inv_txfm_fn(type1, type2, type, pfx, w, h) \
