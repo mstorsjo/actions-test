@@ -246,10 +246,6 @@ inv_txfm_hl64(R, 64, 16)
 inv_txfm_fn64(R, 64, 32)
 inv_txfm_fn64( , 64, 64)
 
-#if !(HAVE_ASM && TRIM_DSP_FUNCTIONS && ( \
-  ARCH_AARCH64 || \
-  (ARCH_ARM && (defined(__ARM_NEON) || defined(__APPLE__) || defined(_WIN32))) \
-))
 static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
                                        coef *const coeff, const int eob
                                        HIGHBD_DECL_SUFFIX)
@@ -270,7 +266,6 @@ static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
         for (int x = 0; x < 4; x++)
             dst[x] = iclip_pixel(dst[x] + *c++);
 }
-#endif
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
@@ -370,12 +365,7 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
     c->itxfm_add[pfx##TX_##w##X##h][H_ADST] = \
         inv_txfm_add_identity_adst_##w##x##h##_c; \
 
-#if !(HAVE_ASM && TRIM_DSP_FUNCTIONS && ( \
-  ARCH_AARCH64 || \
-  (ARCH_ARM && (defined(__ARM_NEON) || defined(__APPLE__) || defined(_WIN32))) \
-))
     c->itxfm_add[TX_4X4][WHT_WHT] = inv_txfm_add_wht_wht_4x4_c;
-#endif
     assign_itx_all_fn84( 4,  4, );
     assign_itx_all_fn84( 4,  8, R);
     assign_itx_all_fn84( 4, 16, R);
