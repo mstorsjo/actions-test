@@ -1199,7 +1199,7 @@ static int mc(Dav1dTaskContext *const t,
               const int bw4, const int bh4,
               const int bx, const int by, const int pl,
               const mv mv, const Dav1dThreadPicture *const refp, const int refidx,
-              const enum Filter2d filter_2d)
+              const enum Dav1dFilterMode filter)
 {
     assert((dst8 != NULL) ^ (dst16 != NULL));
     const Dav1dFrameContext *const f = t->f;
@@ -1239,13 +1239,13 @@ static int mc(Dav1dTaskContext *const t,
         }
 
         if (dst8 != NULL) {
-            f->dsp->mc.mc[filter_2d](dst8, dst_stride, ref, ref_stride, bw4 * h_mul,
-                                     bh4 * v_mul, mx << !ss_hor, my << !ss_ver
-                                     HIGHBD_CALL_SUFFIX);
+            f->dsp->mc.mc[filter](dst8, dst_stride, ref, ref_stride, bw4 * h_mul,
+                                  bh4 * v_mul, mx << !ss_hor, my << !ss_ver
+                                  HIGHBD_CALL_SUFFIX);
         } else {
-            f->dsp->mc.mct[filter_2d](dst16, ref, ref_stride, bw4 * h_mul,
-                                      bh4 * v_mul, mx << !ss_hor, my << !ss_ver
-                                      HIGHBD_CALL_SUFFIX);
+            f->dsp->mc.mct[filter](dst16, ref, ref_stride, bw4 * h_mul,
+                                   bh4 * v_mul, mx << !ss_hor, my << !ss_ver
+                                   HIGHBD_CALL_SUFFIX);
         }
     } else {
         assert(refp != &f->sr_cur);
@@ -1289,19 +1289,19 @@ static int mc(Dav1dTaskContext *const t,
         }
 
         if (dst8 != NULL) {
-            f->dsp->mc.mc_scaled[filter_2d](dst8, dst_stride, ref, ref_stride,
-                                            bw4 * h_mul, bh4 * v_mul,
-                                            pos_x & 0x3ff, pos_y & 0x3ff,
-                                            f->svc[refidx][0].step,
-                                            f->svc[refidx][1].step
-                                            HIGHBD_CALL_SUFFIX);
+            f->dsp->mc.mc_scaled[filter](dst8, dst_stride, ref, ref_stride,
+                                         bw4 * h_mul, bh4 * v_mul,
+                                         pos_x & 0x3ff, pos_y & 0x3ff,
+                                         f->svc[refidx][0].step,
+                                         f->svc[refidx][1].step
+                                         HIGHBD_CALL_SUFFIX);
         } else {
-            f->dsp->mc.mct_scaled[filter_2d](dst16, ref, ref_stride,
-                                             bw4 * h_mul, bh4 * v_mul,
-                                             pos_x & 0x3ff, pos_y & 0x3ff,
-                                             f->svc[refidx][0].step,
-                                             f->svc[refidx][1].step
-                                             HIGHBD_CALL_SUFFIX);
+            f->dsp->mc.mct_scaled[filter](dst16, ref, ref_stride,
+                                          bw4 * h_mul, bh4 * v_mul,
+                                          pos_x & 0x3ff, pos_y & 0x3ff,
+                                          f->svc[refidx][0].step,
+                                          f->svc[refidx][1].step
+                                          HIGHBD_CALL_SUFFIX);
         }
     }
 
@@ -1632,6 +1632,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 #if 1
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
+    const Dav1dDSPContext *const dsp = f->dsp;
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
@@ -1692,10 +1693,121 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     if (b->intrabc) {
         const int res =
             mc(t, dst, NULL, f->cur.stride[0], bw4, bh4, t->bx, t->by, 0,
-               b->mv[0], &f->sr_cur, 0 /* unused */, FILTER_2D_BILINEAR);
+               b->mv[0], &f->sr_cur, 0 /* unused */, DAV1D_FILTER_BILINEAR);
         if (res) return;
     } else if (!b->intra) {
-        // FIXME inter pred
+        if (b->ref[1] == -1) {
+            const Dav1dThreadPicture *const refp = &f->refp[b->ref[0]];
+            if ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                (b->motion_mode >= MM_WARP_CAUSAL &&
+                 t->warpmv.type > DAV1D_WM_TYPE_TRANSLATION))
+            {
+                const int res =
+                    warp_affine(t, dst, NULL, f->cur.stride[0], b_dim, 0, refp,
+                                b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv :
+                                    &f->frame_hdr->gmv[b->ref[0]]);
+                if (res) return;
+            } else {
+                const int res =
+                    mc(t, dst, NULL, f->cur.stride[0], bw4, bh4,
+                       t->bx, t->by, 0, b->mv[0], refp, b->ref[0], b->filter);
+                if (res) return;
+            }
+            if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
+                pixel *const tl_edge = bitfn(t->scratch.edge) + 32;
+                enum IntraPredMode m = b->interintra_mode == II_SMOOTH_PRED ?
+                                       SMOOTH_PRED : b->interintra_mode;
+                pixel *const tmp = bitfn(t->scratch.interintra);
+                int angle = (const uint8_t[4]) { 0, 90, 180, 0 }[b->interintra_mode];
+                const pixel *top_sb_edge = NULL;
+                if (!(t->by & (f->sb_step - 1))) {
+                    top_sb_edge = f->ipred_edge[0];
+                    const int sby = t->by >> f->sb_shift;
+                    top_sb_edge += f->sb256w * 256 * (sby - 1);
+                }
+                const int intra_flags = ANGLE_IBP_FLAG /* for dc; or orip */ |
+                    ((t->bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
+                    ((t->by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+                m = bytefn(dav1d_prepare_intra_edges)(
+                        DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                        t->bx, t->by, ts->tiling.col_end, ts->tiling.row_end,
+                        0, 0, dst, f->cur.stride[0], top_sb_edge, m, &angle,
+                        bw4, bh4, intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
+                dsp->ipred.intra_pred[m](tmp, 4 * bw4 * sizeof(pixel),
+                                         tl_edge, bw4 * 4, bh4 * 4,
+                                         intra_flags, 0, 0 HIGHBD_CALL_SUFFIX);
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    hex_dump(tmp, bw4 * 4 * sizeof(pixel),
+                             bw4 * 4, bh4 * 4, "y-intra-pred");
+                }
+                const int has_orip = bs != BS_4x4 && (
+                    m == VERT_PRED ? bw4 < 8 : m == HOR_PRED ? bh4 < 8 :
+                    m == SMOOTH_PRED && bw4 < 8 && bh4 < 8);
+                if (has_orip) {
+                    const unsigned th_mask =
+                        ((m == VERT_PRED) << 1) | (m == HOR_PRED);
+                    dsp->ipred.orip(tmp, 4 * bw4 * sizeof(pixel), tl_edge, th_mask,
+                                    bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+
+                    if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                        hex_dump(tmp, 4 * bw4 * sizeof(pixel),
+                                 bw4 * 4, bh4 * 4, "orip");
+                }
+                const uint8_t *const mask = b->wedge_idx == -1 ?
+                    II_MASK(bs, bw4, bh4, b->interintra_mode) : \
+                    WEDGE_MASK(bs, bw4, bh4, b->wedge_idx);
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    hex_dump(dst, f->cur.stride[0],
+                             bw4 * 4, bh4 * 4, "y-inter-pred");
+                }
+                dsp->mc.blend(dst, f->cur.stride[0], tmp,
+                              bw4 * 4, bh4 * 4, mask);
+            }
+        } else {
+            int16_t (*const tmp)[128 * 128] = t->scratch.compinter;
+
+            for (int i = 0; i < 2; i++) {
+                const Dav1dThreadPicture *const refp = &f->refp[b->ref[i]];
+
+                if (b->inter_mode == GLOBALMV_GLOBALMV &&
+                    f->gmv_warp_allowed[b->ref[i]])
+                {
+                    const int res =
+                        warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
+                                    &f->frame_hdr->gmv[b->ref[i]]);
+                    if (res) return;
+                } else {
+                    const int res =
+                        mc(t, NULL, tmp[i], 0, bw4, bh4, t->bx, t->by, 0,
+                           b->mv[i], refp, b->ref[i], b->filter);
+                    if (res) return;
+                }
+                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                    ac_dump(tmp[i], bw4 * 4, bh4 * 4, "y-single-pred");
+            }
+            switch (b->comp_type) {
+            case COMP_INTER_WEDGE: {
+                const uint8_t *const mask =
+                    WEDGE_MASK(bs, bw4, bh4, b->wedge_idx);
+                dsp->mc.mask(dst, f->cur.stride[0],
+                             tmp[b->wedge_sign], tmp[!b->wedge_sign],
+                             bw4 * 4, bh4 * 4, mask HIGHBD_CALL_SUFFIX);
+                break;
+            }
+            case COMP_INTER_WEIGHTED_AVG: {
+                const int jnt_weight = f->jnt_weights[b->ref[0]][b->ref[1]];
+                dsp->mc.w_avg(dst, f->cur.stride[0], tmp[0], tmp[1],
+                              bw4 * 4, bh4 * 4, jnt_weight HIGHBD_CALL_SUFFIX);
+                break;
+            }
+            case COMP_INTER_AVG:
+                dsp->mc.avg(dst, f->cur.stride[0], tmp[0], tmp[1],
+                            bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+                break;
+            }
+        }
+        if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+            hex_dump(dst, f->cur.stride[0], bw4 * 4, bh4 * 4, "y-pred");
     } else if (b->pal_sz) {
         const uint8_t *pal_idx;
         if (t->frame_thread.pass) {

@@ -114,13 +114,13 @@ prep_c(int16_t *tmp, const pixel *src, const ptrdiff_t src_stride,
 
 #define GET_H_FILTER(mx) \
     const int8_t *const fh = !(mx) ? NULL : w > 4 ? \
-        dav1d_mc_subpel_filters[filter_type & 3][(mx) - 1] : \
+        dav1d_mc_subpel_filters[filter_type][(mx) - 1] : \
         dav1d_mc_subpel_filters[3 + (filter_type & 1)][(mx) - 1]
 
 #define GET_V_FILTER(my) \
     const int8_t *const fv = !(my) ? NULL : h > 4 ? \
-        dav1d_mc_subpel_filters[filter_type >> 2][(my) - 1] : \
-        dav1d_mc_subpel_filters[3 + ((filter_type >> 2) & 1)][(my) - 1]
+        dav1d_mc_subpel_filters[filter_type][(my) - 1] : \
+        dav1d_mc_subpel_filters[3 + (filter_type & 1)][(my) - 1]
 
 #define GET_FILTERS() \
     GET_H_FILTER(mx); \
@@ -357,8 +357,8 @@ prep_8tap_scaled_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
     }
 }
 
-#define filter_fns(type, type_h, type_v) \
-static void put_8tap_##type##_c(pixel *const dst, \
+#define filter_fns(name, type) \
+static void put_8tap_##name##_c(pixel *const dst, \
                                 const ptrdiff_t dst_stride, \
                                 const pixel *const src, \
                                 const ptrdiff_t src_stride, \
@@ -367,9 +367,9 @@ static void put_8tap_##type##_c(pixel *const dst, \
                                 HIGHBD_DECL_SUFFIX) \
 { \
     put_8tap_c(dst, dst_stride, src, src_stride, w, h, mx, my, \
-               type_h | (type_v << 2) HIGHBD_TAIL_SUFFIX); \
+               type HIGHBD_TAIL_SUFFIX); \
 } \
-static void put_8tap_##type##_scaled_c(pixel *const dst, \
+static void put_8tap_##name##_scaled_c(pixel *const dst, \
                                        const ptrdiff_t dst_stride, \
                                        const pixel *const src, \
                                        const ptrdiff_t src_stride, \
@@ -379,9 +379,9 @@ static void put_8tap_##type##_scaled_c(pixel *const dst, \
                                        HIGHBD_DECL_SUFFIX) \
 { \
     put_8tap_scaled_c(dst, dst_stride, src, src_stride, w, h, mx, my, dx, dy, \
-                      type_h | (type_v << 2) HIGHBD_TAIL_SUFFIX); \
+                      type HIGHBD_TAIL_SUFFIX); \
 } \
-static void prep_8tap_##type##_c(int16_t *const tmp, \
+static void prep_8tap_##name##_c(int16_t *const tmp, \
                                  const pixel *const src, \
                                  const ptrdiff_t src_stride, \
                                  const int w, const int h, \
@@ -389,9 +389,9 @@ static void prep_8tap_##type##_c(int16_t *const tmp, \
                                  HIGHBD_DECL_SUFFIX) \
 { \
     prep_8tap_c(tmp, src, src_stride, w, h, mx, my, \
-                type_h | (type_v << 2) HIGHBD_TAIL_SUFFIX); \
+                type HIGHBD_TAIL_SUFFIX); \
 } \
-static void prep_8tap_##type##_scaled_c(int16_t *const tmp, \
+static void prep_8tap_##name##_scaled_c(int16_t *const tmp, \
                                         const pixel *const src, \
                                         const ptrdiff_t src_stride, \
                                         const int w, const int h, \
@@ -400,18 +400,12 @@ static void prep_8tap_##type##_scaled_c(int16_t *const tmp, \
                                         HIGHBD_DECL_SUFFIX) \
 { \
     prep_8tap_scaled_c(tmp, src, src_stride, w, h, mx, my, dx, dy, \
-                       type_h | (type_v << 2) HIGHBD_TAIL_SUFFIX); \
+                       type HIGHBD_TAIL_SUFFIX); \
 }
 
-filter_fns(regular,        DAV1D_FILTER_8TAP_REGULAR, DAV1D_FILTER_8TAP_REGULAR)
-filter_fns(regular_sharp,  DAV1D_FILTER_8TAP_REGULAR, DAV1D_FILTER_8TAP_SHARP)
-filter_fns(regular_smooth, DAV1D_FILTER_8TAP_REGULAR, DAV1D_FILTER_8TAP_SMOOTH)
-filter_fns(smooth,         DAV1D_FILTER_8TAP_SMOOTH,  DAV1D_FILTER_8TAP_SMOOTH)
-filter_fns(smooth_regular, DAV1D_FILTER_8TAP_SMOOTH,  DAV1D_FILTER_8TAP_REGULAR)
-filter_fns(smooth_sharp,   DAV1D_FILTER_8TAP_SMOOTH,  DAV1D_FILTER_8TAP_SHARP)
-filter_fns(sharp,          DAV1D_FILTER_8TAP_SHARP,   DAV1D_FILTER_8TAP_SHARP)
-filter_fns(sharp_regular,  DAV1D_FILTER_8TAP_SHARP,   DAV1D_FILTER_8TAP_REGULAR)
-filter_fns(sharp_smooth,   DAV1D_FILTER_8TAP_SHARP,   DAV1D_FILTER_8TAP_SMOOTH)
+filter_fns(regular, DAV1D_FILTER_8TAP_REGULAR)
+filter_fns(smooth,  DAV1D_FILTER_8TAP_SMOOTH)
+filter_fns(sharp,   DAV1D_FILTER_8TAP_SHARP)
 
 #define FILTER_BILIN(src, x, mxy, stride) \
     (16 * src[x] + ((mxy) * (src[x + stride] - src[x])))
@@ -943,7 +937,7 @@ static void resize_c(pixel *dst, const ptrdiff_t dst_stride,
     } while (--h);
 }
 
-#if HAVE_ASM
+#if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/mc.h"
 #elif ARCH_LOONGARCH64
@@ -965,16 +959,10 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->mct_scaled[type] = prep_##name##_scaled_c; \
 } while (0)
 
-    init_mc_fns(FILTER_2D_8TAP_REGULAR,        8tap_regular);
-    init_mc_fns(FILTER_2D_8TAP_REGULAR_SMOOTH, 8tap_regular_smooth);
-    init_mc_fns(FILTER_2D_8TAP_REGULAR_SHARP,  8tap_regular_sharp);
-    init_mc_fns(FILTER_2D_8TAP_SHARP_REGULAR,  8tap_sharp_regular);
-    init_mc_fns(FILTER_2D_8TAP_SHARP_SMOOTH,   8tap_sharp_smooth);
-    init_mc_fns(FILTER_2D_8TAP_SHARP,          8tap_sharp);
-    init_mc_fns(FILTER_2D_8TAP_SMOOTH_REGULAR, 8tap_smooth_regular);
-    init_mc_fns(FILTER_2D_8TAP_SMOOTH,         8tap_smooth);
-    init_mc_fns(FILTER_2D_8TAP_SMOOTH_SHARP,   8tap_smooth_sharp);
-    init_mc_fns(FILTER_2D_BILINEAR,            bilin);
+    init_mc_fns(DAV1D_FILTER_8TAP_REGULAR, 8tap_regular);
+    init_mc_fns(DAV1D_FILTER_8TAP_SHARP,   8tap_sharp);
+    init_mc_fns(DAV1D_FILTER_8TAP_SMOOTH,  8tap_smooth);
+    init_mc_fns(DAV1D_FILTER_BILINEAR,     bilin);
 
     c->avg      = avg_c;
     c->w_avg    = w_avg_c;

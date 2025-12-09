@@ -31,10 +31,10 @@
 #include "src/mc.h"
 
 static const char *const filter_names[] = {
-    "8tap_regular",        "8tap_regular_smooth", "8tap_regular_sharp",
-    "8tap_sharp_regular",  "8tap_sharp_smooth",   "8tap_sharp",
-    "8tap_smooth_regular", "8tap_smooth",         "8tap_smooth_sharp",
-    "bilinear"
+    [DAV1D_FILTER_8TAP_REGULAR] = "regular",
+    [DAV1D_FILTER_8TAP_SMOOTH]  = "smooth",
+    [DAV1D_FILTER_8TAP_SHARP]   = "sharp",
+    [DAV1D_FILTER_BILINEAR]     = "bilinear",
 };
 
 static const char *const mxy_names[] = { "0", "h", "v", "hv" };
@@ -66,7 +66,7 @@ static void check_mc(Dav1dMCDSPContext *const c) {
                  ptrdiff_t src_stride, int w, int h, int mx, int my
                  HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < N_2D_FILTERS; filter++)
+    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
         for (int w = 2; w <= 128; w <<= 1) {
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mc[filter], "mc_%s_w%d_%s_%dbpc",
@@ -97,9 +97,9 @@ static void check_mc(Dav1dMCDSPContext *const c) {
                                                     a_dst, a_dst_stride,
                                                     w, h, "dst");
 
-                        if (filter == FILTER_2D_8TAP_REGULAR ||
-                            filter == FILTER_2D_8TAP_SHARP ||
-                            filter == FILTER_2D_BILINEAR)
+                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
+                            filter == DAV1D_FILTER_8TAP_SHARP ||
+                            filter == DAV1D_FILTER_BILINEAR)
                         {
                             bench_new(a_dst, a_dst_stride, src, src_stride, w, h,
                                       mx, my HIGHBD_TAIL_SUFFIX);
@@ -131,7 +131,7 @@ static void check_mct(Dav1dMCDSPContext *const c) {
     declare_func(void, int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < N_2D_FILTERS; filter++)
+    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
         for (int w = 4; w <= 128; w <<= 1)
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mct[filter], "mct_%s_w%d_%s_%dbpc",
@@ -155,9 +155,9 @@ static void check_mct(Dav1dMCDSPContext *const c) {
                                                 a_tmp, w * sizeof(*a_tmp),
                                                 w, h, "tmp");
 
-                        if (filter == FILTER_2D_8TAP_REGULAR ||
-                            filter == FILTER_2D_8TAP_SHARP ||
-                            filter == FILTER_2D_BILINEAR)
+                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
+                            filter == DAV1D_FILTER_8TAP_SHARP ||
+                            filter == DAV1D_FILTER_BILINEAR)
                         {
                             bench_new(a_tmp, src, src_stride, w, h,
                                       mx, my HIGHBD_TAIL_SUFFIX);
@@ -182,7 +182,7 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
                  ptrdiff_t src_stride, int w, int h,
                  int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < N_2D_FILTERS; filter++)
+    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
         for (int w = 2; w <= 128; w <<= 1) {
             for (int p = 0; p < 3; ++p) {
                 if (check_func(c->mc_scaled[filter], "mc_scaled_%s_w%d%s_%dbpc",
@@ -212,8 +212,8 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
                                                     a_dst, a_dst_stride,
                                                     w, h, "dst");
 
-                        if (filter == FILTER_2D_8TAP_REGULAR ||
-                            filter == FILTER_2D_BILINEAR)
+                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
+                            filter == DAV1D_FILTER_BILINEAR)
                             bench_new(a_dst, a_dst_stride, src, src_stride,
                                       w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
                     }
@@ -238,7 +238,7 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
     declare_func(void, int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < N_2D_FILTERS; filter++)
+    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
         for (int w = 4; w <= 128; w <<= 1)
             for (int p = 0; p < 3; ++p) {
                 if (check_func(c->mct_scaled[filter], "mct_scaled_%s_w%d%s_%dbpc",
@@ -265,8 +265,8 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
                                                 a_tmp, w * sizeof(*a_tmp),
                                                 w, h, "tmp");
 
-                        if (filter == FILTER_2D_8TAP_REGULAR ||
-                            filter == FILTER_2D_BILINEAR)
+                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
+                            filter == DAV1D_FILTER_BILINEAR)
                             bench_new(a_tmp, src, src_stride,
                                       w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
                     }
@@ -280,9 +280,9 @@ static void init_tmp(Dav1dMCDSPContext *const c, pixel *const buf,
 {
     for (int i = 0; i < 2; i++) {
         generate_mct_input(buf, bitdepth_max);
-        c->mct[FILTER_2D_8TAP_SHARP](tmp[i], buf + 135 * 3 + 3,
-                                      135 * sizeof(pixel), 128, 128,
-                                      8, 8 HIGHBD_TAIL_SUFFIX);
+        c->mct[DAV1D_FILTER_8TAP_SHARP](tmp[i], buf + 135 * 3 + 3,
+                                        135 * sizeof(pixel), 128, 128,
+                                        8, 8 HIGHBD_TAIL_SUFFIX);
     }
 }
 

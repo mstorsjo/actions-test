@@ -114,40 +114,28 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
 typedef decl_resize_fn(*resize_fn);
 
 #define decl_8tap_gen(decl_name, fn_name, opt) \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular,        opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular_smooth, opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular_sharp,  opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth_regular, opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth,         opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth_sharp,   opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_sharp_regular,  opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_sharp_smooth,   opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_sharp,          opt))
+    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular, opt)); \
+    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth,  opt)); \
+    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_sharp,   opt))
 
 #define decl_8tap_fns(opt) \
     decl_8tap_gen(mc,  put,  opt); \
     decl_8tap_gen(mct, prep, opt)
 
 #define init_8tap_gen(name, opt) \
-    init_##name##_fn(FILTER_2D_8TAP_REGULAR,        8tap_regular,        opt); \
-    init_##name##_fn(FILTER_2D_8TAP_REGULAR_SMOOTH, 8tap_regular_smooth, opt); \
-    init_##name##_fn(FILTER_2D_8TAP_REGULAR_SHARP,  8tap_regular_sharp,  opt); \
-    init_##name##_fn(FILTER_2D_8TAP_SMOOTH_REGULAR, 8tap_smooth_regular, opt); \
-    init_##name##_fn(FILTER_2D_8TAP_SMOOTH,         8tap_smooth,         opt); \
-    init_##name##_fn(FILTER_2D_8TAP_SMOOTH_SHARP,   8tap_smooth_sharp,   opt); \
-    init_##name##_fn(FILTER_2D_8TAP_SHARP_REGULAR,  8tap_sharp_regular,  opt); \
-    init_##name##_fn(FILTER_2D_8TAP_SHARP_SMOOTH,   8tap_sharp_smooth,   opt); \
-    init_##name##_fn(FILTER_2D_8TAP_SHARP,          8tap_sharp,          opt)
+    init_##name##_fn(DAV1D_FILTER_8TAP_REGULAR, 8tap_regular, opt); \
+    init_##name##_fn(DAV1D_FILTER_8TAP_SMOOTH,  8tap_smooth,  opt); \
+    init_##name##_fn(DAV1D_FILTER_8TAP_SHARP,   8tap_sharp,   opt)
 
 #define init_8tap_fns(opt) \
     init_8tap_gen(mc,  opt); \
     init_8tap_gen(mct, opt)
 
 typedef struct Dav1dMCDSPContext {
-    mc_fn mc[N_2D_FILTERS];
-    mc_scaled_fn mc_scaled[N_2D_FILTERS];
-    mct_fn mct[N_2D_FILTERS];
-    mct_scaled_fn mct_scaled[N_2D_FILTERS];
+    mc_fn mc[DAV1D_N_FILTERS];
+    mc_scaled_fn mc_scaled[DAV1D_N_FILTERS];
+    mct_fn mct[DAV1D_N_FILTERS];
+    mct_scaled_fn mct_scaled[DAV1D_N_FILTERS];
     avg_fn avg;
     w_avg_fn w_avg;
     mask_fn mask;

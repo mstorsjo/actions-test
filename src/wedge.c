@@ -32,16 +32,33 @@
 
 #include "common/intops.h"
 
+#include "src/tables.h"
 #include "src/wedge.h"
 
+Dav1dMasks dav1d_masks;
+
 enum WedgeDirectionType {
-    WEDGE_HORIZONTAL = 0,
-    WEDGE_VERTICAL = 1,
-    WEDGE_OBLIQUE27 = 2,
-    WEDGE_OBLIQUE63 = 3,
-    WEDGE_OBLIQUE117 = 4,
-    WEDGE_OBLIQUE153 = 5,
-    N_WEDGE_DIRECTIONS
+    WEDGE_0,
+    WEDGE_14,
+    WEDGE_27,
+    WEDGE_45,
+    WEDGE_63,
+    WEDGE_90,
+    WEDGE_117,
+    WEDGE_135,
+    WEDGE_153,
+    WEDGE_166,
+    WEDGE_180,
+    WEDGE_194,
+    WEDGE_207,
+    WEDGE_225,
+    WEDGE_243,
+    WEDGE_270,
+    WEDGE_297,
+    WEDGE_315,
+    WEDGE_333,
+    WEDGE_346,
+    N_WEDGE_DIRECTIONS,
 };
 
 typedef struct {
@@ -50,147 +67,122 @@ typedef struct {
     uint8_t y_offset;
 } wedge_code_type;
 
-static const wedge_code_type wedge_codebook_16_hgtw[16] = {
-    { WEDGE_OBLIQUE27,  4, 4 }, { WEDGE_OBLIQUE63,  4, 4 },
-    { WEDGE_OBLIQUE117, 4, 4 }, { WEDGE_OBLIQUE153, 4, 4 },
-    { WEDGE_HORIZONTAL, 4, 2 }, { WEDGE_HORIZONTAL, 4, 4 },
-    { WEDGE_HORIZONTAL, 4, 6 }, { WEDGE_VERTICAL,   4, 4 },
-    { WEDGE_OBLIQUE27,  4, 2 }, { WEDGE_OBLIQUE27,  4, 6 },
-    { WEDGE_OBLIQUE153, 4, 2 }, { WEDGE_OBLIQUE153, 4, 6 },
-    { WEDGE_OBLIQUE63,  2, 4 }, { WEDGE_OBLIQUE63,  6, 4 },
-    { WEDGE_OBLIQUE117, 2, 4 }, { WEDGE_OBLIQUE117, 6, 4 },
+static const wedge_code_type wedge_codebook_16[68] = {
+    { WEDGE_0, 5, 4 },   { WEDGE_0, 6, 4 },   { WEDGE_0, 7, 4 },
+    { WEDGE_14, 4, 4 },  { WEDGE_14, 5, 4 },  { WEDGE_14, 6, 4 },
+    { WEDGE_14, 7, 4 },  { WEDGE_27, 4, 4 },  { WEDGE_27, 5, 4 },
+    { WEDGE_27, 6, 4 },  { WEDGE_27, 7, 4 },  { WEDGE_45, 4, 4 },
+    { WEDGE_45, 5, 4 },  { WEDGE_45, 6, 4 },  { WEDGE_45, 7, 4 },
+    { WEDGE_63, 4, 4 },  { WEDGE_63, 4, 3 },  { WEDGE_63, 4, 2 },
+    { WEDGE_63, 4, 1 },  { WEDGE_90, 4, 3 },  { WEDGE_90, 4, 2 },
+    { WEDGE_90, 4, 1 },  { WEDGE_117, 4, 4 }, { WEDGE_117, 4, 3 },
+    { WEDGE_117, 4, 2 }, { WEDGE_117, 4, 1 }, { WEDGE_135, 4, 4 },
+    { WEDGE_135, 3, 4 }, { WEDGE_135, 2, 4 }, { WEDGE_135, 1, 4 },
+    { WEDGE_153, 4, 4 }, { WEDGE_153, 3, 4 }, { WEDGE_153, 2, 4 },
+    { WEDGE_153, 1, 4 }, { WEDGE_166, 4, 4 }, { WEDGE_166, 3, 4 },
+    { WEDGE_166, 2, 4 }, { WEDGE_166, 1, 4 }, { WEDGE_180, 3, 4 },
+    { WEDGE_180, 2, 4 }, { WEDGE_180, 1, 4 }, { WEDGE_194, 3, 4 },
+    { WEDGE_194, 2, 4 }, { WEDGE_194, 1, 4 }, { WEDGE_207, 3, 4 },
+    { WEDGE_207, 2, 4 }, { WEDGE_207, 1, 4 }, { WEDGE_225, 3, 4 },
+    { WEDGE_225, 2, 4 }, { WEDGE_225, 1, 4 }, { WEDGE_243, 4, 5 },
+    { WEDGE_243, 4, 6 }, { WEDGE_243, 4, 7 }, { WEDGE_270, 4, 5 },
+    { WEDGE_270, 4, 6 }, { WEDGE_270, 4, 7 }, { WEDGE_297, 4, 5 },
+    { WEDGE_297, 4, 6 }, { WEDGE_297, 4, 7 }, { WEDGE_315, 5, 4 },
+    { WEDGE_315, 6, 4 }, { WEDGE_315, 7, 4 }, { WEDGE_333, 5, 4 },
+    { WEDGE_333, 6, 4 }, { WEDGE_333, 7, 4 }, { WEDGE_346, 5, 4 },
+    { WEDGE_346, 6, 4 }, { WEDGE_346, 7, 4 },
 };
 
-static const wedge_code_type wedge_codebook_16_hltw[16] = {
-    { WEDGE_OBLIQUE27,  4, 4 }, { WEDGE_OBLIQUE63,  4, 4 },
-    { WEDGE_OBLIQUE117, 4, 4 }, { WEDGE_OBLIQUE153, 4, 4 },
-    { WEDGE_VERTICAL,   2, 4 }, { WEDGE_VERTICAL,   4, 4 },
-    { WEDGE_VERTICAL,   6, 4 }, { WEDGE_HORIZONTAL, 4, 4 },
-    { WEDGE_OBLIQUE27,  4, 2 }, { WEDGE_OBLIQUE27,  4, 6 },
-    { WEDGE_OBLIQUE153, 4, 2 }, { WEDGE_OBLIQUE153, 4, 6 },
-    { WEDGE_OBLIQUE63,  2, 4 }, { WEDGE_OBLIQUE63,  6, 4 },
-    { WEDGE_OBLIQUE117, 2, 4 }, { WEDGE_OBLIQUE117, 6, 4 },
-};
-
-static const wedge_code_type wedge_codebook_16_heqw[16] = {
-    { WEDGE_OBLIQUE27,  4, 4 }, { WEDGE_OBLIQUE63,  4, 4 },
-    { WEDGE_OBLIQUE117, 4, 4 }, { WEDGE_OBLIQUE153, 4, 4 },
-    { WEDGE_HORIZONTAL, 4, 2 }, { WEDGE_HORIZONTAL, 4, 6 },
-    { WEDGE_VERTICAL,   2, 4 }, { WEDGE_VERTICAL,   6, 4 },
-    { WEDGE_OBLIQUE27,  4, 2 }, { WEDGE_OBLIQUE27,  4, 6 },
-    { WEDGE_OBLIQUE153, 4, 2 }, { WEDGE_OBLIQUE153, 4, 6 },
-    { WEDGE_OBLIQUE63,  2, 4 }, { WEDGE_OBLIQUE63,  6, 4 },
-    { WEDGE_OBLIQUE117, 2, 4 }, { WEDGE_OBLIQUE117, 6, 4 },
-};
-
-Dav1dMasks dav1d_masks;
-
-static void insert_border(uint8_t *const dst, const uint8_t *const src,
-                          const int ctr)
+static void copy2d(uint8_t *dst, const uint8_t *src,
+                   const int w8, const int h8,
+                   const int x_off, const int y_off)
 {
-    if (ctr > 4) memset(dst, 0, ctr - 4);
-    memcpy(dst + imax(ctr, 4) - 4, src + imax(4 - ctr, 0), imin(64 - ctr, 8));
-    if (ctr < 64 - 4)
-        memset(dst + ctr + 4, 64, 64 - 4 - ctr);
-}
-
-static void transpose(uint8_t *const dst, const uint8_t *const src) {
-    for (int y = 0, y_off = 0; y < 64; y++, y_off += 64)
-        for (int x = 0, x_off = 0; x < 64; x++, x_off += 64)
-            dst[x_off + y] = src[y_off + x];
-}
-
-static void hflip(uint8_t *const dst, const uint8_t *const src) {
-    for (int y = 0, y_off = 0; y < 64; y++, y_off += 64)
-        for (int x = 0; x < 64; x++)
-            dst[y_off + 64 - 1 - x] = src[y_off + x];
-}
-
-static void copy2d(uint8_t *dst, const uint8_t *src, int sign,
-                   const int w, const int h, const int x_off, const int y_off)
-{
-    src += y_off * 64 + x_off;
-    if (sign) {
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++)
-                dst[x] = 64 - src[x];
-            src += 64;
-            dst += w;
-        }
-    } else {
-        for (int y = 0; y < h; y++) {
-            memcpy(dst, src, w);
-            src += 64;
-            dst += w;
-        }
+    src += (64 - y_off * h8) * 128 + (64 - x_off * w8);
+    for (int y = 0; y < h8 * 8; y++) {
+        memcpy(dst, src, w8 * 8);
+        src += 128;
+        dst += w8 * 8;
     }
 }
 
-#define MASK_OFFSET(x) ((uint16_t)(((uintptr_t)(x) - (uintptr_t)&dav1d_masks) >> 3))
-
-static COLD uint16_t init_chroma(uint8_t *chroma, const uint8_t *luma,
-                                 const int sign, const int w, const int h,
-                                 const int ss_ver)
+static void gen_master(uint8_t *master, const int mul,
+                       const enum WedgeDirectionType wd)
 {
-    const uint16_t offset = MASK_OFFSET(chroma);
-    for (int y = 0; y < h; y += 1 + ss_ver) {
-        for (int x = 0; x < w; x += 2) {
-            int sum = luma[x] + luma[x + 1] + 1;
-            if (ss_ver) sum += luma[w + x] + luma[w + x + 1] + 1;
-            chroma[x >> 1] = (sum - sign) >> (1 + ss_ver);
+    static const int8_t cos_lut[N_WEDGE_DIRECTIONS] = {
+        4, 4, 4, 2, 2, 0, -2, -2, -4, -4, -4, -4, -4, -2, -2, 0, 2, 2, 4, 4
+    }, sin_lut[N_WEDGE_DIRECTIONS] = {
+        0, -1, -2, -2, -4, -4, -4, -2, -2, -1, 0, 1, 2, 2, 4, 4, 4, 2, 2, 1
+    }, weight[29] = {
+        8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2,
+        2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0
+    };
+    const int s = sin_lut[wd] * mul, c = cos_lut[wd] * mul;
+    for (int y = 0; y < 128; y++) {
+        const int dy = (2 * y - 127) * s;
+        for (int x = 0; x < 128; x++) {
+            const int d = iclip((2 * x - 127) * c + dy, -28, 28);
+            master[x] = 4 * (d >= 0 ? 16 - weight[d] : weight[-d]);
         }
-        luma += w << ss_ver;
-        chroma += w >> 1;
+        master += 128;
     }
-    return offset;
 }
 
-static COLD void fill2d_16x2(const int w, const int h, const enum BlockSize bs,
-                             const uint8_t (*const master)[64 * 64],
-                             const wedge_code_type *const cb,
-                             uint8_t *masks_444, uint8_t *masks_422,
-                             uint8_t *masks_420, unsigned signs)
-{
-    const int n_stride_444 = (w * h);
-    const int n_stride_422 = n_stride_444 >> 1;
-    const int n_stride_420 = n_stride_444 >> 2;
-    const int sign_stride_422 = 16 * n_stride_422;
-    const int sign_stride_420 = 16 * n_stride_420;
+static COLD void init_wedge_masks(void) {
+    int o = 0;
+    for (enum BlockSize bs = BS_64x64; bs < N_BS_SIZES; bs++) {
+        const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+        if (b_dim[0] == 1 || b_dim[1] == 1) continue;
+        dav1d_masks.offsets.wedge[bs - BS_64x64] = o;
+        o += b_dim[0] * b_dim[1] >> 2;
+    }
+    assert(o * 0x1100 == sizeof(dav1d_masks.wedge) && o < 256);
 
-    // assign pointer offsets in lookup table
-    for (int n = 0; n < 16; n++) {
-        const int sign = signs & 1;
-
-        copy2d(masks_444, master[cb[n].direction], sign, w, h,
-               32 - (w * cb[n].x_offset >> 3), 32 - (h * cb[n].y_offset >> 3));
-
-        // not using !sign is intentional here, since 444 does not require
-        // any rounding since no chroma subsampling is applied.
-        dav1d_masks.offsets[0][bs].wedge[0][n] =
-        dav1d_masks.offsets[0][bs].wedge[1][n] = MASK_OFFSET(masks_444);
-
-        dav1d_masks.offsets[1][bs].wedge[0][n] =
-            init_chroma(&masks_422[ sign * sign_stride_422], masks_444, 0, w, h, 0);
-        dav1d_masks.offsets[1][bs].wedge[1][n] =
-            init_chroma(&masks_422[!sign * sign_stride_422], masks_444, 1, w, h, 0);
-        dav1d_masks.offsets[2][bs].wedge[0][n] =
-            init_chroma(&masks_420[ sign * sign_stride_420], masks_444, 0, w, h, 1);
-        dav1d_masks.offsets[2][bs].wedge[1][n] =
-            init_chroma(&masks_420[!sign * sign_stride_420], masks_444, 1, w, h, 1);
-
-        signs >>= 1;
-        masks_444 += n_stride_444;
-        masks_422 += n_stride_422;
-        masks_420 += n_stride_420;
+    uint8_t master[128 * 128];
+    enum WedgeDirectionType wd = N_WEDGE_DIRECTIONS;
+    for (int widx = 0; widx < 68; widx++) {
+        const wedge_code_type *const cb = &wedge_codebook_16[widx];
+        if (cb->direction != wd) {
+            gen_master(master, 2 /* sharp edge */, cb->direction);
+            wd = cb->direction;
+        }
+#define fill(w8, h8, sz) \
+        copy2d(WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx), \
+               master, w8, h8, cb->x_offset, cb->y_offset)
+        fill(1, 1, 8x8);
+        fill(1, 2, 8x16);
+        fill(2, 1, 16x8);
+        fill(2, 2, 16x16);
+    }
+    for (int widx = 0; widx < 68; widx++) {
+        const wedge_code_type *const cb = &wedge_codebook_16[widx];
+        if (cb->direction != wd) {
+            gen_master(master, 1 /* soft edge */, cb->direction);
+            wd = cb->direction;
+        }
+        fill(1, 4, 8x32);
+        fill(1, 8, 8x64);
+        fill(2, 4, 16x32);
+        fill(2, 8, 16x64);
+        fill(4, 1, 32x8);
+        fill(4, 2, 32x16);
+        fill(4, 4, 32x32);
+        fill(4, 8, 32x64);
+        fill(8, 1, 64x8);
+        fill(8, 2, 64x16);
+        fill(8, 4, 64x32);
+        fill(8, 8, 64x64);
+#undef fill
     }
 }
 
 static COLD void build_nondc_ii_masks(uint8_t *const mask_v, const int w,
                                       const int h, const int step)
 {
-    static const uint8_t ii_weights_1d[32] = {
-        60, 52, 45, 39, 34, 30, 26, 22, 19, 17, 15, 13, 11, 10,  8,  7,
-         6,  6,  5,  4,  4,  3,  3,  2,  2,  2,  2,  1,  1,  1,  1,  1,
+    static const uint8_t ii_weights_1d[64] = {
+         60, 56, 52, 48, 45, 42, 39, 37, 34, 32, 30, 28, 26, 24, 22, 21,
+         19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 10,  9,  8,  8,  7,  7,
+          6,  6,  6,  5,  5,  4,  4,  4,  4,  3,  3,  3,  3,  3,  2,  2,
+          2,  2,  2,  2,  2,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
     };
 
     uint8_t *const mask_h  = &mask_v[w * h];
@@ -204,96 +196,47 @@ static COLD void build_nondc_ii_masks(uint8_t *const mask_v, const int w,
     }
 }
 
+static COLD void init_ii_masks(void) {
+    memset(dav1d_masks.ii_dc, 32, 64 * 64);
+
+    int o = 0;
+    for (enum BlockSize bs = BS_64x64; bs < N_BS_SIZES; bs++) {
+        const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+        if (b_dim[0] * b_dim[1] <= 2) continue;
+        dav1d_masks.offsets.ii_nondc[bs - BS_64x64] = o;
+        o += b_dim[0] * b_dim[1] >> 2;
+    }
+    assert(o * 0xc0 == sizeof(dav1d_masks.ii_nondc) && o < 256);
+
+#define fill(w, h, s) \
+    build_nondc_ii_masks(II_MASK(BS_##w##x##h, 0, 0, 1), w, h, s)
+    fill( 4, 16, 4);
+    fill( 4, 32, 2);
+    fill( 4, 64, 1);
+    fill( 8,  8, 8);
+    fill( 8, 16, 4);
+    fill( 8, 32, 2);
+    fill( 8, 64, 1);
+    fill(16,  4, 4);
+    fill(16,  8, 4);
+    fill(16, 16, 4);
+    fill(16, 32, 2);
+    fill(16, 64, 1);
+    fill(32,  4, 2);
+    fill(32,  8, 2);
+    fill(32, 16, 2);
+    fill(32, 32, 2);
+    fill(32, 64, 1);
+    fill(64,  4, 1);
+    fill(64,  8, 1);
+    fill(64, 16, 1);
+    fill(64, 32, 1);
+    fill(64, 64, 1);
+#undef fill
+}
+
 COLD void dav1d_init_ii_wedge_masks(void) {
     // This function is guaranteed to be called only once
-
-    enum WedgeMasterLineType {
-        WEDGE_MASTER_LINE_ODD,
-        WEDGE_MASTER_LINE_EVEN,
-        WEDGE_MASTER_LINE_VERT,
-        N_WEDGE_MASTER_LINES,
-    };
-    static const uint8_t wedge_master_border[N_WEDGE_MASTER_LINES][8] = {
-        [WEDGE_MASTER_LINE_ODD]  = {  1,  2,  6, 18, 37, 53, 60, 63 },
-        [WEDGE_MASTER_LINE_EVEN] = {  1,  4, 11, 27, 46, 58, 62, 63 },
-        [WEDGE_MASTER_LINE_VERT] = {  0,  2,  7, 21, 43, 57, 62, 64 },
-    };
-    uint8_t master[6][64 * 64];
-
-    // create master templates
-    for (int y = 0, off = 0; y < 64; y++, off += 64)
-        insert_border(&master[WEDGE_VERTICAL][off],
-                      wedge_master_border[WEDGE_MASTER_LINE_VERT], 32);
-    for (int y = 0, off = 0, ctr = 48; y < 64; y += 2, off += 128, ctr--)
-    {
-        insert_border(&master[WEDGE_OBLIQUE63][off],
-                      wedge_master_border[WEDGE_MASTER_LINE_EVEN], ctr);
-        insert_border(&master[WEDGE_OBLIQUE63][off + 64],
-                      wedge_master_border[WEDGE_MASTER_LINE_ODD], ctr - 1);
-    }
-
-    transpose(master[WEDGE_OBLIQUE27], master[WEDGE_OBLIQUE63]);
-    transpose(master[WEDGE_HORIZONTAL], master[WEDGE_VERTICAL]);
-    hflip(master[WEDGE_OBLIQUE117], master[WEDGE_OBLIQUE63]);
-    hflip(master[WEDGE_OBLIQUE153], master[WEDGE_OBLIQUE27]);
-
-#define fill(w, h, sz_422, sz_420, hvsw, signs) \
-    fill2d_16x2(w, h, BS_##w##x##h - BS_32x32, \
-                master, wedge_codebook_16_##hvsw, \
-                dav1d_masks.wedge_444_##w##x##h, \
-                dav1d_masks.wedge_422_##sz_422, \
-                dav1d_masks.wedge_420_##sz_420, signs)
-
-    fill(32, 32, 16x32, 16x16, heqw, 0x7bfb);
-    fill(32, 16, 16x16, 16x8,  hltw, 0x7beb);
-    fill(32,  8, 16x8,  16x4,  hltw, 0x6beb);
-    fill(16, 32,  8x32,  8x16, hgtw, 0x7beb);
-    fill(16, 16,  8x16,  8x8,  heqw, 0x7bfb);
-    fill(16,  8,  8x8,   8x4,  hltw, 0x7beb);
-    fill( 8, 32,  4x32,  4x16, hgtw, 0x7aeb);
-    fill( 8, 16,  4x16,  4x8,  hgtw, 0x7beb);
-    fill( 8,  8,  4x8,   4x4,  heqw, 0x7bfb);
-#undef fill
-
-    memset(dav1d_masks.ii_dc, 32, 32 * 32);
-    for (int c = 0; c < 3; c++) {
-        dav1d_masks.offsets[c][BS_32x32-BS_32x32].ii[II_DC_PRED] =
-        dav1d_masks.offsets[c][BS_32x16-BS_32x32].ii[II_DC_PRED] =
-        dav1d_masks.offsets[c][BS_16x32-BS_32x32].ii[II_DC_PRED] =
-        dav1d_masks.offsets[c][BS_16x16-BS_32x32].ii[II_DC_PRED] =
-        dav1d_masks.offsets[c][BS_16x8 -BS_32x32].ii[II_DC_PRED] =
-        dav1d_masks.offsets[c][BS_8x16 -BS_32x32].ii[II_DC_PRED] =
-        dav1d_masks.offsets[c][BS_8x8  -BS_32x32].ii[II_DC_PRED] =
-            MASK_OFFSET(dav1d_masks.ii_dc);
-    }
-
-#define BUILD_NONDC_II_MASKS(w, h, step) \
-    build_nondc_ii_masks(dav1d_masks.ii_nondc_##w##x##h, w, h, step)
-
-#define ASSIGN_NONDC_II_OFFSET(bs, w444, h444, w422, h422, w420, h420) \
-    dav1d_masks.offsets[0][bs-BS_32x32].ii[p + 1] = \
-        MASK_OFFSET(&dav1d_masks.ii_nondc_##w444##x##h444[p*w444*h444]); \
-    dav1d_masks.offsets[1][bs-BS_32x32].ii[p + 1] = \
-        MASK_OFFSET(&dav1d_masks.ii_nondc_##w422##x##h422[p*w422*h422]); \
-    dav1d_masks.offsets[2][bs-BS_32x32].ii[p + 1] = \
-        MASK_OFFSET(&dav1d_masks.ii_nondc_##w420##x##h420[p*w420*h420])
-
-    BUILD_NONDC_II_MASKS(32, 32, 1);
-    BUILD_NONDC_II_MASKS(16, 32, 1);
-    BUILD_NONDC_II_MASKS(16, 16, 2);
-    BUILD_NONDC_II_MASKS( 8, 32, 1);
-    BUILD_NONDC_II_MASKS( 8, 16, 2);
-    BUILD_NONDC_II_MASKS( 8,  8, 4);
-    BUILD_NONDC_II_MASKS( 4, 16, 2);
-    BUILD_NONDC_II_MASKS( 4,  8, 4);
-    BUILD_NONDC_II_MASKS( 4,  4, 8);
-    for (int p = 0; p < 3; p++) {
-        ASSIGN_NONDC_II_OFFSET(BS_32x32, 32, 32, 16, 32, 16, 16);
-        ASSIGN_NONDC_II_OFFSET(BS_32x16, 32, 32, 16, 16, 16, 16);
-        ASSIGN_NONDC_II_OFFSET(BS_16x32, 16, 32,  8, 32,  8, 16);
-        ASSIGN_NONDC_II_OFFSET(BS_16x16, 16, 16,  8, 16,  8,  8);
-        ASSIGN_NONDC_II_OFFSET(BS_16x8,  16, 16,  8,  8,  8,  8);
-        ASSIGN_NONDC_II_OFFSET(BS_8x16,   8, 16,  4, 16,  4,  8);
-        ASSIGN_NONDC_II_OFFSET(BS_8x8,    8,  8,  4,  8,  4,  4);
-    }
+    init_wedge_masks();
+    init_ii_masks();
 }

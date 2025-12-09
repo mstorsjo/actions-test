@@ -4598,7 +4598,7 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         for (int i = 0; i < 7; i++) {
             const unsigned ref0poc = f->refp[i].p.frame_hdr->frame_offset;
 
-            for (int j = i + 1; j < 7; j++) {
+            for (int j = 0; j < 7; j++) {
                 const unsigned ref1poc = f->refp[j].p.frame_hdr->frame_offset;
 
                 const unsigned d1 =

@@ -470,7 +470,7 @@ struct Dav1dTaskContext {
     // for chroma sub8x8, we need to know the filter for all 4 subblocks in
     // a 4x4 area, but the top/left one can go out of cache already, so this
     // keeps it accessible
-    enum Filter2d tl_4x4_filter;
+    enum Dav1dFilterMode tl_4x4_filter;
 
     struct {
         int pass;
