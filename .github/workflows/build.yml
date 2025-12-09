@@ -21,12 +21,12 @@ jobs:
         run: |
           cat /proc/cpuinfo
           curl -LO https://martin.st/temp/winpf2.exe
-          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine wine /host/winpf2.exe
-          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine cat /proc/cpuinfo
+          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine:11.0-rc1-v1 wine /host/winpf2.exe
+          docker run --rm -v $(pwd):/host ghcr.io/mstorsjo/wine:11.0-rc1-v1 cat /proc/cpuinfo
 
   inspect-container:
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/mstorsjo/wine
+    container: ghcr.io/mstorsjo/wine:11.0-rc1-v1
     steps:
       - name: Inspect
         run: |
