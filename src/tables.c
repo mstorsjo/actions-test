@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2025, VideoLAN and dav1d authors
+ * Copyright © 2018-2025, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -119,6 +119,34 @@ const TxfmInfo dav1d_txfm_dimensions[N_RECT_TX_SIZES] = {
                     .min = 0, .max = 4, .sub = RTX_4X32, .ctx = 2 },
     [RTX_64X4]  = { .w = 16, .h = 1, .lw = 4, .lh = 0,
                     .min = 0, .max = 4, .sub = RTX_32X4, .ctx = 2 },
+};
+
+const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2] = {
+    [ TX_4X4]   = { 7, 10 },
+    [ TX_8X8]   = { 7, 11 },
+    [ TX_16X16] = { 6, 13 },
+    [ TX_32X32] = { 6, 13 },
+    [ TX_64X64] = { 6, 13 },
+    [RTX_4X8]   = { 7, 10 },
+    [RTX_8X4]   = { 7, 10 },
+    [RTX_8X16]  = { 7, 11 },
+    [RTX_16X8]  = { 7, 11 },
+    [RTX_16X32] = { 6, 12 },
+    [RTX_32X16] = { 6, 12 },
+    [RTX_32X64] = { 6, 12 },
+    [RTX_64X32] = { 6, 12 },
+    [RTX_4X16]  = { 6, 12 },
+    [RTX_16X4]  = { 6, 12 },
+    [RTX_8X32]  = { 6, 13 },
+    [RTX_32X8]  = { 6, 13 },
+    [RTX_16X64] = { 6, 13 },
+    [RTX_64X16] = { 6, 13 },
+    [RTX_4X32]  = { 7, 11 },
+    [RTX_32X4]  = { 7, 11 },
+    [RTX_8X64]  = { 6, 12 },
+    [RTX_64X8]  = { 6, 12 },
+    [RTX_4X64]  = { 6, 13 },
+    [RTX_64X4]  = { 6, 13 },
 };
 
 const uint8_t /* enum (Rect)TxfmSize */

@@ -40,34 +40,6 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
-static const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2] = {
-    [ TX_4X4]   = { 7, 10 },
-    [ TX_8X8]   = { 7, 11 },
-    [ TX_16X16] = { 6, 13 },
-    [ TX_32X32] = { 6, 13 },
-    [ TX_64X64] = { 6, 13 },
-    [RTX_4X8]   = { 7, 10 },
-    [RTX_8X4]   = { 7, 10 },
-    [RTX_8X16]  = { 7, 11 },
-    [RTX_16X8]  = { 7, 11 },
-    [RTX_16X32] = { 6, 12 },
-    [RTX_32X16] = { 6, 12 },
-    [RTX_32X64] = { 6, 12 },
-    [RTX_64X32] = { 6, 12 },
-    [RTX_4X16]  = { 6, 12 },
-    [RTX_16X4]  = { 6, 12 },
-    [RTX_8X32]  = { 6, 13 },
-    [RTX_32X8]  = { 6, 13 },
-    [RTX_16X64] = { 6, 13 },
-    [RTX_64X16] = { 6, 13 },
-    [RTX_4X32]  = { 7, 11 },
-    [RTX_32X4]  = { 7, 11 },
-    [RTX_8X64]  = { 6, 12 },
-    [RTX_64X8]  = { 6, 12 },
-    [RTX_4X64]  = { 6, 13 },
-    [RTX_64X4]  = { 6, 13 },
-};
-
 static NOINLINE void
 inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                const int eob, const /*enum RectTxfmSize*/ int tx,

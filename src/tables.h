@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2025, VideoLAN and dav1d authors
+ * Copyright © 2018-2025, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@ typedef struct TxfmInfo {
     uint8_t w, h, lw, lh, min, max, sub, ctx;
 } TxfmInfo;
 EXTERN const TxfmInfo dav1d_txfm_dimensions[N_RECT_TX_SIZES];
+EXTERN const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2];
 EXTERN const uint8_t /* enum (Rect)TxfmSize */
                      dav1d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */];
 
