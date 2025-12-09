@@ -765,7 +765,6 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         const int mode_index = av1_angle_to_mode_index[angle / 3 - 12];
         if (mode_index) {
             const pixel *left = &topleft_in[-1];
-            assert(have_left);
             const int filter_strength = enable_intra_edge_filter && have_left ?
                 get_filter_strength(width + height, angle, is_sm_l) : 0;
             if (filter_strength) {
@@ -933,8 +932,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
 
     // Max size = 1 (topleft) + 64 (width) + 64 (height) + 4 extra = 133
     pixel filt[133];
-    assert(have_left);
-    const int str = enable_intra_edge_filter && !mrl_idx ?
+    const int str = enable_intra_edge_filter && !mrl_idx && have_left ?
         get_filter_strength(n_px, angle - 180, is_sm_l) : 0;
     if (str) {
         filter_edge(&filt[2], n_px + 1, 0, n_px,
