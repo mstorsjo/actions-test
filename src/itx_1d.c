@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2019, VideoLAN and dav1d authors
- * Copyright © 2018-2019, Two Orioles, LLC
+ * Copyright © 2018-2025, VideoLAN and dav1d authors
+ * Copyright © 2018-2025, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,7 @@ static const int8_t tx_kernel_dct2_size4[4][4] = {
     {  64,  83,  64,  35 },
     {  64,  35, -64, -83 },
     {  64, -35, -64,  83 },
-    {  64, -83,  64, -35 }
+    {  64, -83,  64, -35 },
 };
 
 static const int8_t tx_kernel_dct2_size8[8][8] = {
@@ -49,7 +49,7 @@ static const int8_t tx_kernel_dct2_size8[8][8] = {
     {  64, -18, -83,  50,  64, -75, -35,  89 },
     {  64, -50, -35,  89, -64, -18,  83, -75 },
     {  64, -75,  35,  18, -64,  89, -83,  50 },
-    {  64, -89,  83, -75,  64, -50,  35, -18 }
+    {  64, -89,  83, -75,  64, -50,  35, -18 },
 };
 
 static const int8_t tx_kernel_dct2_size16[16][16] = {
@@ -68,7 +68,7 @@ static const int8_t tx_kernel_dct2_size16[16][16] = {
     {  64, -70,  18,  43, -83,  87, -50,  -9,  64, -90,  75, -26, -35,  80, -89,  57 },
     {  64, -80,  50,  -9, -35,  70, -89,  87, -64,  26,  18, -57,  83, -90,  75, -43 },
     {  64, -87,  75, -57,  35,  -9, -18,  43, -64,  80, -89,  90, -83,  70, -50,  26 },
-    {  64, -90,  89, -87,  83, -80,  75, -70,  64, -57,  50, -43,  35, -26,  18,  -9 }
+    {  64, -90,  89, -87,  83, -80,  75, -70,  64, -57,  50, -43,  35, -26,  18,  -9 },
 };
 
 static const int8_t tx_kernel_dct2_size32[32][32] = {
@@ -142,7 +142,7 @@ static const int8_t adst_kernel_sz4[4][4] = {
     {  18,  50,  75,  89 },
     {  50,  89,  18, -75 },
     {  75,  18, -89,  50 },
-    {  89, -75,  50, -18 }
+    {  89, -75,  50, -18 },
 };
 
 static const int8_t adst_kernel_sz8[8][8] = {
@@ -153,7 +153,7 @@ static const int8_t adst_kernel_sz8[8][8] = {
     {  84,  17, -89,  10,  86, -35, -75,  58 },
     {  88, -44, -44,  88, -44, -44,  88, -44 },
     {  79, -83,  50,   6, -59,  86, -74,  29 },
-    {  50, -69,  81, -84,  78, -62,  40, -14 }
+    {  50, -69,  81, -84,  78, -62,  40, -14 },
 };
 
 static const int8_t adst_kernel_sz16[16][16] = {
@@ -172,14 +172,14 @@ static const int8_t adst_kernel_sz16[16][16] = {
     {  62, -89,  67,  -8, -55,  88, -73,  17,  48, -87,  77, -25, -41,  84, -81,  33 },
     {  48, -81,  88, -67,  25,  25, -67,  88, -81,  48,   0, -48,  81, -88,  67, -25 },
     {  33, -62,  81, -89,  84, -67,  41,  -8, -25,  55, -77,  88, -87,  73, -48,  17 },
-    {  17, -33,  48, -62,  73, -81,  87, -89,  88, -84,  77, -67,  55, -41,  25,  -8 }
+    {  17, -33,  48, -62,  73, -81,  87, -89,  88, -84,  77, -67,  55, -41,  25,  -8 },
 };
 
 static const int8_t flipadst_kernel_sz4[4][4] = {
     {  89,  75,  50,  18 },
     {  75, -18, -89, -50 },
     {  50, -89,  18,  75 },
-    {  18, -50,  75, -89 }
+    {  18, -50,  75, -89 },
 };
 
 static const int8_t flipadst_kernel_sz8[8][8] = {
@@ -190,7 +190,7 @@ static const int8_t flipadst_kernel_sz8[8][8] = {
     {  58, -75, -35,  86,  10, -89,  17,  84 },
     { -44,  88, -44, -44,  88, -44, -44,  88 },
     {  29, -74,  86, -59,   6,  50, -83,  79 },
-    { -14,  40, -62,  78, -84,  81, -69,  50 }
+    { -14,  40, -62,  78, -84,  81, -69,  50 },
 };
 
 static const int8_t flipadst_kernel_sz16[16][16] = {
@@ -209,16 +209,16 @@ static const int8_t flipadst_kernel_sz16[16][16] = {
     {  33, -81,  84, -41, -25,  77, -87,  48,  17, -73,  88, -55, -8,   67, -89,  62 },
     {  25, -67,  88, -81,  48,   0, -48,  81, -88,  67, -25, -25,  67, -88,  81, -48 },
     {  17, -48,  73, -87,  88, -77,  55, -25,  -8,  41, -67,  84, -89,  81, -62,  33 },
-    {   8, -25,  41, -55,  67, -77,  84, -88,  89, -87,  81, -73,  62, -48,  33, -17 }
+    {   8, -25,  41, -55,  67, -77,  84, -88,  89, -87,  81, -73,  62, -48,  33, -17 },
 };
 
 static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride) {
+    int32_t odd[2], stage1[2];
+    const int8_t (*const mat)[4] = tx_kernel_dct2_size4;
     assert(stride > 0);
-    int odd[2], stage1[2];
-    const int8_t (*mat)[4] = tx_kernel_dct2_size4;
 
-    odd[0] = mat[0][1] * c[1 * stride] + mat[0][3] * c[3 * stride];
-    odd[1] = mat[1][1] * c[1 * stride] + mat[1][3] * c[3 * stride];
+    odd[0]    = mat[0][1] * c[1 * stride] + mat[0][3] * c[3 * stride];
+    odd[1]    = mat[1][1] * c[1 * stride] + mat[1][3] * c[3 * stride];
     stage1[0] = mat[0][0] * c[0 * stride] + mat[0][2] * c[2 * stride];
     stage1[1] = mat[1][0] * c[0 * stride] + mat[1][2] * c[2 * stride];
 
@@ -229,10 +229,9 @@ static void inv_dct4_1d_c(int32_t *const c, const ptrdiff_t stride) {
 }
 
 static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride) {
+    int32_t odd[4], quarter[2], stage1[4], dc_nyquist[2];
+    const int8_t (*const mat)[8] = tx_kernel_dct2_size8;
     assert(stride > 0);
-    int odd[4], quarter[2];
-    int stage1[4], dc_nyquist[2];
-    const int8_t (*mat)[8] = tx_kernel_dct2_size8;
 
     for (int i = 0; i < 4; i++) {
         int sum = 0;
@@ -242,8 +241,8 @@ static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride) {
         odd[i] = sum;
     }
 
-    quarter[0] = mat[0][2] * c[2 * stride] + mat[0][6] * c[6 * stride];
-    quarter[1] = mat[1][2] * c[2 * stride] + mat[1][6] * c[6 * stride];
+    quarter[0]    = mat[0][2] * c[2 * stride] + mat[0][6] * c[6 * stride];
+    quarter[1]    = mat[1][2] * c[2 * stride] + mat[1][6] * c[6 * stride];
     dc_nyquist[0] = mat[0][0] * c[0 * stride] + mat[0][4] * c[4 * stride];
     dc_nyquist[1] = mat[1][0] * c[0 * stride] + mat[1][4] * c[4 * stride];
 
@@ -253,16 +252,16 @@ static void inv_dct8_1d_c(int32_t *const c, const ptrdiff_t stride) {
     stage1[3] = dc_nyquist[0] - quarter[0];
 
     for (int i = 0; i < 4; i++) {
-        c[i * stride]       = stage1[i]     + odd[i];
-        c[(i + 4) * stride] = stage1[3 - i] - odd[3 - i];
+        c[(i    ) * stride] = stage1[i] + odd[i];
+        c[(7 - i) * stride] = stage1[i] - odd[i];
     }
 }
 
-static NOINLINE void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride) {
+static void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride) {
+    int32_t odd[8], quarter[4], eighth[2];
+    int32_t stage2[8], stage1[4], dc_nyquist[2];
+    const int8_t (*const mat)[16] = tx_kernel_dct2_size16;
     assert(stride > 0);
-    int odd[8], quarter[4], eighth[2];
-    int stage2[8], stage1[4], dc_nyquist[2];
-    const int8_t (*mat)[16] = tx_kernel_dct2_size16;
 
     for (int i = 0; i < 8; i++) {
         int sum = 0;
@@ -280,10 +279,10 @@ static NOINLINE void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride) {
         quarter[i] = sum;
     }
 
-    eighth[0] = mat[0][4] * c[4 * stride] + mat[0][12] * c[12 * stride];
-    eighth[1] = mat[1][4] * c[4 * stride] + mat[1][12] * c[12 * stride];
-    dc_nyquist[0] = mat[0][0] * c[0 * stride] + mat[0][8] * c[8 * stride];
-    dc_nyquist[1] = mat[1][0] * c[0 * stride] + mat[1][8] * c[8 * stride];
+    eighth[0]     = mat[0][4] * c[4 * stride] + mat[0][12] * c[12 * stride];
+    eighth[1]     = mat[1][4] * c[4 * stride] + mat[1][12] * c[12 * stride];
+    dc_nyquist[0] = mat[0][0] * c[0 * stride] + mat[0][ 8] * c[ 8 * stride];
+    dc_nyquist[1] = mat[1][0] * c[0 * stride] + mat[1][ 8] * c[ 8 * stride];
 
     stage1[0] = dc_nyquist[0] + eighth[0];
     stage1[1] = dc_nyquist[1] + eighth[1];
@@ -291,22 +290,22 @@ static NOINLINE void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride) {
     stage1[3] = dc_nyquist[0] - eighth[0];
 
     for (int i = 0; i < 4; i++) {
-        stage2[i]     = stage1[i]     + quarter[i];
-        stage2[i + 4] = stage1[3 - i] - quarter[3 - i];
+        stage2[i    ] = stage1[i] + quarter[i];
+        stage2[7 - i] = stage1[i] - quarter[i];
     }
 
     for (int i = 0; i < 8; i++) {
-        c[i * stride]       = stage2[i]     + odd[i];
-        c[(i + 8) * stride] = stage2[7 - i] - odd[7 - i];
+        c[(i     ) * stride] = stage2[i] + odd[i];
+        c[(15 - i) * stride] = stage2[i] - odd[i];
     }
 }
 
-static void idct32_1d(const int32_t *const c, const ptrdiff_t stride,
-                      int odd[16], int stage3[16])
+static NOINLINE void idct32_1d(const int32_t *const c, const ptrdiff_t stride,
+                               int32_t odd[16], int32_t stage3[16])
 {
-    int quarter[8], eighth[4], sixteenth[2];
-    int stage2[8], stage1[4], dc_nyquist[2];
-    const int8_t (*mat)[32] = tx_kernel_dct2_size32;
+    int32_t quarter[8], eighth[4], sixteenth[2];
+    int32_t stage2[8], stage1[4], dc_nyquist[2];
+    const int8_t (*const mat)[32] = tx_kernel_dct2_size32;
 
     for (int i = 0; i < 16; i++) {
         int sum = 0;
@@ -343,47 +342,49 @@ static void idct32_1d(const int32_t *const c, const ptrdiff_t stride,
     stage1[3] = dc_nyquist[0] - sixteenth[0];
 
     for (int i = 0; i < 4; i++) {
-        stage2[i]     = stage1[i]     + eighth[i];
-        stage2[i + 4] = stage1[3 - i] - eighth[3 - i];
+        stage2[i    ] = stage1[i] + eighth[i];
+        stage2[7 - i] = stage1[i] - eighth[i];
     }
 
     for (int i = 0; i < 8; i++) {
-        stage3[i]     = stage2[i]     + quarter[i];
-        stage3[i + 8] = stage2[7 - i] - quarter[7 - i];
+        stage3[i     ] = stage2[i] + quarter[i];
+        stage3[15 - i] = stage2[i] - quarter[i];
     }
 }
 
 static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride) {
-    int odd[16], stage3[16];
+    int32_t odd[16], stage3[16];
+    assert(stride > 0);
 
     idct32_1d(c, stride, odd, stage3);
 
     for (int i = 0; i < 16; i++) {
-        c[i * stride]        = stage3[i]      + odd[i];
-        c[(i + 16) * stride] = stage3[15 - i] - odd[15 - i];
+        c[(i     ) * stride] = stage3[i] + odd[i];
+        c[(31 - i) * stride] = stage3[i] - odd[i];
     }
 }
 
 static void inv_dct64_1d_c(int32_t *const c, const ptrdiff_t stride) {
-    int odd[16], stage3[16];
+    int32_t odd[16], stage3[16];
+    assert(stride > 0);
 
     idct32_1d(c, stride, odd, stage3);
 
     for (int i = 0; i < 16; i++) {
         const int ii = i + i;
-        c[ii * stride]            =
-        c[(ii + 1) * stride]      = stage3[i] + odd[i];
-        c[(ii + 32) * stride]     =
-        c[(ii + 1 + 32) * stride] = stage3[15 - i] - odd[15 - i];
+        c[(ii +  0) * stride] =
+        c[(ii +  1) * stride] = stage3[i] + odd[i];
+        c[(63 - ii) * stride] =
+        c[(62 - ii) * stride] = stage3[i] - odd[i];
     }
 }
 
-static NOINLINE void
-inv_dst4_1d(int32_t *const c, const ptrdiff_t stride,
-            const int8_t (*mat)[4])
+static NOINLINE void inv_dst4_1d(int32_t *const c, const ptrdiff_t stride,
+                                 const int8_t (*const mat)[4])
 {
+    int32_t sums[4];
     assert(stride > 0);
-    int sums[4];
+
     for (int i = 0; i < 4; i++) {
         int sum = 0;
         for (int j = 0; j < 4; j++) {
@@ -391,17 +392,18 @@ inv_dst4_1d(int32_t *const c, const ptrdiff_t stride,
         }
         sums[i] = sum;
     }
+
     for (int i = 0; i < 4; i++) {
         c[i * stride] = sums[i];
     }
 }
 
-static NOINLINE void
-inv_dst8_1d(int32_t *const c, const ptrdiff_t stride,
-            const int8_t (*mat)[8])
+static NOINLINE void inv_dst8_1d(int32_t *const c, const ptrdiff_t stride,
+                                 const int8_t (*const mat)[8])
 {
+    int32_t sums[8];
     assert(stride > 0);
-    int sums[8];
+
     for (int i = 0; i < 8; i++) {
         int sum = 0;
         for (int j = 0; j < 8; j++) {
@@ -409,17 +411,18 @@ inv_dst8_1d(int32_t *const c, const ptrdiff_t stride,
         }
         sums[i] = sum;
     }
+
     for (int i = 0; i < 8; i++) {
         c[i * stride] = sums[i];
     }
 }
 
-static NOINLINE void
-inv_dst16_1d(int32_t *const c, const ptrdiff_t stride,
-             const int8_t (*mat)[16])
+static NOINLINE void inv_dst16_1d(int32_t *const c, const ptrdiff_t stride,
+                                  const int8_t (*const mat)[16])
 {
+    int32_t sums[16];
     assert(stride > 0);
-    int sums[16];
+
     for (int i = 0; i < 16; i++) {
         int sum = 0;
         for (int j = 0; j < 16; j++) {
@@ -427,6 +430,7 @@ inv_dst16_1d(int32_t *const c, const ptrdiff_t stride,
         }
         sums[i] = sum;
     }
+
     for (int i = 0; i < 16; i++) {
         c[i * stride] = sums[i];
     }
