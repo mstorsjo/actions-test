@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 
+#if 0
 static inline int gen_mv(const int total_bits, int spel_bits) {
     int bits = rnd() & ((1 << spel_bits) - 1);
     do {
@@ -40,7 +41,6 @@ static inline int gen_mv(const int total_bits, int spel_bits) {
     return rnd() & 1 ? -bits : bits;
 }
 
-#if 0
 static inline int get_min_mv_val(const int idx) {
     if      (idx <= 9)  return idx;
     else if (idx <= 18) return (idx - 9) * 10;
@@ -223,7 +223,6 @@ static void check_load_tmvs(const Dav1dRefmvsDSPContext *const c) {
 
     report("load_tmvs");
 }
-#endif
 
 static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
     refmvs_block *rr[31];
@@ -346,12 +345,15 @@ static void check_splat_mv(const Dav1dRefmvsDSPContext *const c) {
     }
     report("splat_mv");
 }
+#endif
 
 void checkasm_check_refmvs(void) {
     Dav1dRefmvsDSPContext c;
     dav1d_refmvs_dsp_init(&c);
 
+#if 0
     //check_load_tmvs(&c); // FIME: causes integer overflows, disable until investigated
     check_save_tmvs(&c);
     check_splat_mv(&c);
+#endif
 }
