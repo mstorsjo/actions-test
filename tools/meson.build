@@ -31,6 +31,19 @@ dav2d_input_sources = files(
     'input/section5.c',
 )
 
+dav2d_input_objs = static_library('dav2d_input',
+    dav2d_input_sources,
+
+    include_directories : dav2d_inc_dirs,
+    install : false,
+    build_by_default : false,
+)
+
+# Leave subdir if tools are disabled
+if not get_option('enable_tools')
+    subdir_done()
+endif
+
 dav2d_output_sources = files(
     'output/md5.c',
     'output/null.c',
@@ -51,14 +64,6 @@ if not get_option('xxhash_muxer').disabled()
     endif
 endif
 
-dav2d_input_objs = static_library('dav2d_input',
-    dav2d_input_sources,
-
-    include_directories : dav2d_inc_dirs,
-    install : false,
-    build_by_default : false,
-)
-
 dav2d_output_objs = static_library('dav2d_output',
     dav2d_output_sources,
 
@@ -66,13 +71,6 @@ dav2d_output_objs = static_library('dav2d_output',
     install : false,
     build_by_default : false,
 )
-
-
-# Leave subdir if tools are disabled
-if not get_option('enable_tools')
-    subdir_done()
-endif
-
 
 #
 # Build definition for the dav2d tools
