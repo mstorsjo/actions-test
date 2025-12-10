@@ -34,12 +34,14 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
-static const char *const itx_1d_names[5] = {
+static const char *const itx_1d_names[] = {
     [DCT]      = "dct",
     [ADST]     = "adst",
     [FLIPADST] = "flipadst",
     [IDENTITY] = "identity",
-    [WHT]      = "wht"
+    [DDT]      = "ddt",
+    [WHT]      = "wht",
+    [FDDT]     = "fddt",
 };
 
 static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
@@ -108,30 +110,49 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
                         ADST_ADST, DCT_ADST, DCT_FLIPADST, V_DCT, TXTP_MASK_DCT_HOR
 #define TXTP_MASK_ALL V_ADST, H_ADST, V_FLIPADST, H_FLIPADST, TXTP_MASK_16x16
 #define TXTP_MASK_ALL_LOSSLESS WHT_WHT, TXTP_MASK_ALL
-static const uint8_t valid_txtp_per_txsz[][18] = {
+
+#define TXTP_MASK_DCT_VER_W_DDT DCT_DDT, DCT_FDDT, TXTP_MASK_DCT_VER
+#define TXTP_MASK_DCT_HOR_W_DDT DDT_DCT, FDDT_DCT, TXTP_MASK_DCT_HOR
+#define TXTP_MASK_DCT_ID_VER_W_DDT \
+    IDENTITY_DDT, IDENTITY_FDDT, DCT_DDT, DCT_FDDT, TXTP_MASK_DCT_ID_VER
+#define TXTP_MASK_DCT_ID_HOR_W_DDT \
+    DDT_IDENTITY, FDDT_IDENTITY, DDT_DCT, FDDT_DCT, TXTP_MASK_DCT_ID_HOR
+#define TXTP_MASK_DDT_NOID \
+    FDDT_FDDT, DDT_FDDT, FDDT_DDT, DDT_DDT, DCT_DDT, DDT_DCT, DCT_FDDT, FDDT_DCT
+#define TXTP_MASK_16x16_W_DDT TXTP_MASK_DDT_NOID, TXTP_MASK_16x16
+#define TXTP_MASK_ALL_W_DDT_2D TXTP_MASK_DDT_NOID, DDT_IDENTITY, FDDT_IDENTITY, \
+                               IDENTITY_DDT, IDENTITY_FDDT, TXTP_MASK_ALL
+#define TXTP_MASK_ALL_W_DDT_HOR \
+    ADST_DDT, ADST_FDDT, DCT_DDT, DCT_FDDT, FLIPADST_DDT, FLIPADST_FDDT, \
+    IDENTITY_DDT, IDENTITY_FDDT, TXTP_MASK_ALL
+#define TXTP_MASK_ALL_W_DDT_VER \
+    DDT_ADST, FDDT_ADST, DDT_DCT, FDDT_DCT, DDT_FLIPADST, FDDT_FLIPADST, \
+    DDT_IDENTITY, FDDT_IDENTITY, TXTP_MASK_ALL
+
+static const uint8_t valid_txtp_per_txsz[][29] = {
     [TX_4X4] = { TXTP_MASK_ALL_LOSSLESS },
-    [TX_8X8] = { TXTP_MASK_ALL },
-    [TX_16X16] = { TXTP_MASK_16x16 },
+    [TX_8X8] = { TXTP_MASK_ALL_W_DDT_2D },
+    [TX_16X16] = { TXTP_MASK_16x16_W_DDT },
     [TX_32X32] = { TXTP_MASK_DCT_ID_ONLY },
     [TX_64X64] = { TXTP_MASK_DCT_ONLY },
-    [RTX_4X8] = { TXTP_MASK_ALL },
-    [RTX_8X4] = { TXTP_MASK_ALL },
-    [RTX_8X16] = { TXTP_MASK_ALL },
-    [RTX_16X8] = { TXTP_MASK_ALL },
-    [RTX_16X32] = { TXTP_MASK_DCT_ID_VER },
-    [RTX_32X16] = { TXTP_MASK_DCT_ID_HOR },
+    [RTX_4X8] = { TXTP_MASK_ALL_W_DDT_VER },
+    [RTX_8X4] = { TXTP_MASK_ALL_W_DDT_HOR },
+    [RTX_8X16] = { TXTP_MASK_ALL_W_DDT_2D },
+    [RTX_16X8] = { TXTP_MASK_ALL_W_DDT_2D },
+    [RTX_16X32] = { TXTP_MASK_DCT_ID_VER_W_DDT },
+    [RTX_32X16] = { TXTP_MASK_DCT_ID_HOR_W_DDT },
     [RTX_32X64] = { TXTP_MASK_DCT_ONLY },
     [RTX_64X32] = { TXTP_MASK_DCT_ONLY },
     [RTX_4X16] = { TXTP_MASK_ALL },
     [RTX_16X4] = { TXTP_MASK_ALL },
-    [RTX_8X32] = { TXTP_MASK_DCT_ID_VER },
-    [RTX_32X8] = { TXTP_MASK_DCT_ID_HOR },
-    [RTX_16X64] = { TXTP_MASK_DCT_VER },
-    [RTX_64X16] = { TXTP_MASK_DCT_HOR },
+    [RTX_8X32] = { TXTP_MASK_DCT_ID_VER_W_DDT },
+    [RTX_32X8] = { TXTP_MASK_DCT_ID_HOR_W_DDT },
+    [RTX_16X64] = { TXTP_MASK_DCT_VER_W_DDT },
+    [RTX_64X16] = { TXTP_MASK_DCT_HOR_W_DDT },
     [RTX_4X32] = { TXTP_MASK_DCT_ID_VER },
     [RTX_32X4] = { TXTP_MASK_DCT_ID_HOR },
-    [RTX_8X64] = { TXTP_MASK_DCT_VER },
-    [RTX_64X8] = { TXTP_MASK_DCT_HOR },
+    [RTX_8X64] = { TXTP_MASK_DCT_VER_W_DDT },
+    [RTX_64X8] = { TXTP_MASK_DCT_HOR_W_DDT },
     [RTX_4X64] = { TXTP_MASK_DCT_VER },
     [RTX_64X4] = { TXTP_MASK_DCT_HOR },
 };
