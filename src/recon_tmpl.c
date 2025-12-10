@@ -1822,7 +1822,8 @@ chroma: {}
                                depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
                                uv_t_dim->h * 4, txtp, eob, t->ts->msac.rng);
             // FIXME Overwrite CF with 0, until we have proper chroma recon
-            memset(cf, 0, ctw * cth * sizeof(*cf));
+            memset(cf, 0, imin(uv_t_dim->w, 8) * imin(uv_t_dim->h, 8) *
+                              16 * sizeof(*cf));
         }
         dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx, ctw);
         dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx, cth);
