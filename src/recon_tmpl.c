@@ -603,8 +603,9 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
     }
-    DEBUG_CF_printf("%*sPost-txtp[%d]: r=%d\n",
-                    depth, "", *txtp, ts->msac.rng);
+    DEBUG_CF_printf("%*sPost-txtp[%s/%s]: r=%d\n",
+                    depth, "", dav1d_tx1d_names[dav1d_tx1d_types[*txtp][1]],
+                    dav1d_tx1d_names[dav1d_tx1d_types[*txtp][0]], ts->msac.rng);
 
     const enum TxClass tx_class = dav1d_tx_type_class[*txtp];
 
@@ -1433,8 +1434,11 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                            tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
         stx = txtp >> 4;
         txtp = txtp & 0xf;
-        DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
-                           depth + 1, "", tw, th, txtp, eob, ts->msac.rng);
+        DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
+                           depth + 1, "", tw, th,
+                           dav1d_tx1d_names[dav1d_tx1d_types[txtp][1]],
+                           dav1d_tx1d_names[dav1d_tx1d_types[txtp][0]],
+                           eob, ts->msac.rng);
     }
     dav1d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
                              imin(t_dim->w, f->bw - t->bx));
@@ -1844,9 +1848,12 @@ chroma: {}
                                          &t->a->ccoef[pl][cbx4],
                                          &t->l.ccoef[pl][cby4], uvtx, b->bs,
                                          b, 1 + pl, cf, &txtp, &cf_ctx);
-            DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
+            DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
                                depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
-                               uv_t_dim->h * 4, txtp, eob, t->ts->msac.rng);
+                               uv_t_dim->h * 4,
+                               dav1d_tx1d_names[dav1d_tx1d_types[txtp][1]],
+                               dav1d_tx1d_names[dav1d_tx1d_types[txtp][0]],
+                               eob, t->ts->msac.rng);
             // FIXME Overwrite CF with 0, until we have proper chroma recon
             memset(cf, 0, imin(uv_t_dim->w, 8) * imin(uv_t_dim->h, 8) *
                               16 * sizeof(*cf));

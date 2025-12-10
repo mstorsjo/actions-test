@@ -33,21 +33,12 @@
 #ifndef DAV1D_SRC_ITX_1D_H
 #define DAV1D_SRC_ITX_1D_H
 
-enum Tx1dType {
-    DCT,
-    ADST,
-    IDENTITY,
-    FLIPADST,
-    N_TX_1D_TYPES,
-};
-
 // FIXME remove min and max when all inverse transforms are done
 #define decl_itx_1d_fn(name) \
 void (name)(int32_t *c, ptrdiff_t stride)
 typedef decl_itx_1d_fn(*itx_1d_fn);
 
 EXTERN const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES];
-EXTERN const uint8_t /* enum Tx1dType */ dav1d_tx1d_types[N_TX_TYPES][2];
 
 void dav1d_inv_wht4_1d_c(int32_t *c, ptrdiff_t stride);
 

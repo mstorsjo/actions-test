@@ -74,6 +74,14 @@ enum RectTxfmSize {
     N_RECT_TX_SIZES
 };
 
+enum Tx1dType {
+    DCT,
+    ADST,
+    IDENTITY,
+    FLIPADST,
+    N_TX_1D_TYPES,
+};
+
 enum TxfmType {
     DCT_DCT,    // DCT  in both horizontal and vertical
     ADST_DCT,   // ADST in vertical, DCT in horizontal

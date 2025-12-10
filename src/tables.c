@@ -31,6 +31,7 @@
 
 #include "common/attributes.h"
 
+#include "src/debug.h"
 #include "src/levels.h"
 #include "src/tables.h"
 
@@ -184,6 +185,34 @@ const uint8_t /* enum (Rect)TxfmSize */
     [BS_4x8]     = { RTX_4X8,    TX_4X4,   RTX_4X8,   RTX_4X8   },
     [BS_4x4]     = {  TX_4X4,    TX_4X4,    TX_4X4,    TX_4X4   },
 };
+
+const uint8_t /* enum Tx1dType */ dav1d_tx1d_types[N_TX_TYPES][2] = {
+    [DCT_DCT]           = { DCT, DCT },
+    [ADST_DCT]          = { ADST, DCT },
+    [DCT_ADST]          = { DCT, ADST },
+    [ADST_ADST]         = { ADST, ADST },
+    [FLIPADST_DCT]      = { FLIPADST, DCT },
+    [DCT_FLIPADST]      = { DCT, FLIPADST },
+    [FLIPADST_FLIPADST] = { FLIPADST, FLIPADST },
+    [ADST_FLIPADST]     = { ADST, FLIPADST },
+    [FLIPADST_ADST]     = { FLIPADST, ADST },
+    [IDTX]              = { IDENTITY, IDENTITY },
+    [V_DCT]             = { DCT, IDENTITY },
+    [H_DCT]             = { IDENTITY, DCT },
+    [V_ADST]            = { ADST, IDENTITY },
+    [H_ADST]            = { IDENTITY, ADST },
+    [V_FLIPADST]        = { FLIPADST, IDENTITY },
+    [H_FLIPADST]        = { IDENTITY, FLIPADST },
+};
+
+#if DEBUG_BLOCK_INFO
+const char *const dav1d_tx1d_names[N_TX_1D_TYPES] = {
+    [DCT] = "dct",
+    [ADST] = "adst",
+    [FLIPADST] = "flipadst",
+    [IDENTITY] = "identity",
+};
+#endif
 
 const int8_t dav1d_tx_part_tbl[N_BS_SIZES][8] = {
     [BS_4x4]   = { TX_4X4, -1, -1, -1, -1, -1, -1, -1 },

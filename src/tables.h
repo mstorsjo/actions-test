@@ -45,6 +45,9 @@ EXTERN const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2];
 EXTERN const uint8_t /* enum (Rect)TxfmSize */
                      dav1d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */];
 
+EXTERN const char *const dav1d_tx1d_names[N_TX_1D_TYPES];
+EXTERN const uint8_t /* enum Tx1dType */ dav1d_tx1d_types[N_TX_TYPES][2];
+
 // order: split, horz, vert, horz4, vert4, horz5[small], ver5[small]
 // the big transforms in horz5 and vert5 are identical to horz or vert
 EXTERN const int8_t dav1d_tx_part_tbl[N_BS_SIZES][8];

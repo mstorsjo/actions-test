@@ -501,25 +501,6 @@ const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES] = {
     },
 };
 
-const uint8_t /* enum Tx1dType */ dav1d_tx1d_types[N_TX_TYPES][2] = {
-    [DCT_DCT]           = { DCT, DCT },
-    [ADST_DCT]          = { ADST, DCT },
-    [DCT_ADST]          = { DCT, ADST },
-    [ADST_ADST]         = { ADST, ADST },
-    [FLIPADST_DCT]      = { FLIPADST, DCT },
-    [DCT_FLIPADST]      = { DCT, FLIPADST },
-    [FLIPADST_FLIPADST] = { FLIPADST, FLIPADST },
-    [ADST_FLIPADST]     = { ADST, FLIPADST },
-    [FLIPADST_ADST]     = { FLIPADST, ADST },
-    [IDTX]              = { IDENTITY, IDENTITY },
-    [V_DCT]             = { DCT, IDENTITY },
-    [H_DCT]             = { IDENTITY, DCT },
-    [V_ADST]            = { ADST, IDENTITY },
-    [H_ADST]            = { IDENTITY, ADST },
-    [V_FLIPADST]        = { FLIPADST, IDENTITY },
-    [H_FLIPADST]        = { IDENTITY, FLIPADST },
-};
-
 void dav1d_inv_wht4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     const int in0 = c[0 * stride], in1 = c[1 * stride];
