@@ -46,7 +46,6 @@ EXTERN const uint8_t /* enum (Rect)TxfmSize */
                      dav1d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */];
 
 EXTERN const char *const dav1d_tx1d_names[N_TX_1D_TYPES];
-EXTERN const uint8_t /* enum Tx1dType */ dav1d_tx1d_types[N_TX_TYPES][2];
 
 // order: split, horz, vert, horz4, vert4, horz5[small], ver5[small]
 // the big transforms in horz5 and vert5 are identical to horz or vert
@@ -61,9 +60,6 @@ EXTERN const uint8_t av1_angle_to_mode_index[22];
 
 EXTERN const uint8_t /* enum InterPredMode */
                      dav1d_comp_inter_pred_modes[][2];
-
-EXTERN const uint8_t /* enum TxClass */
-                     dav1d_tx_type_class[N_TX_TYPES_PLUS_LL];
 
 EXTERN const Dav1dWarpedMotionParams dav1d_default_wm_params;
 

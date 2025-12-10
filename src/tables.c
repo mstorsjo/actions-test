@@ -186,31 +186,13 @@ const uint8_t /* enum (Rect)TxfmSize */
     [BS_4x4]     = {  TX_4X4,    TX_4X4,    TX_4X4,    TX_4X4   },
 };
 
-const uint8_t /* enum Tx1dType */ dav1d_tx1d_types[N_TX_TYPES][2] = {
-    [DCT_DCT]           = { DCT, DCT },
-    [ADST_DCT]          = { ADST, DCT },
-    [DCT_ADST]          = { DCT, ADST },
-    [ADST_ADST]         = { ADST, ADST },
-    [FLIPADST_DCT]      = { FLIPADST, DCT },
-    [DCT_FLIPADST]      = { DCT, FLIPADST },
-    [FLIPADST_FLIPADST] = { FLIPADST, FLIPADST },
-    [ADST_FLIPADST]     = { ADST, FLIPADST },
-    [FLIPADST_ADST]     = { FLIPADST, ADST },
-    [IDTX]              = { IDENTITY, IDENTITY },
-    [V_DCT]             = { DCT, IDENTITY },
-    [H_DCT]             = { IDENTITY, DCT },
-    [V_ADST]            = { ADST, IDENTITY },
-    [H_ADST]            = { IDENTITY, ADST },
-    [V_FLIPADST]        = { FLIPADST, IDENTITY },
-    [H_FLIPADST]        = { IDENTITY, FLIPADST },
-};
-
 #if DEBUG_BLOCK_INFO
 const char *const dav1d_tx1d_names[N_TX_1D_TYPES] = {
     [DCT] = "dct",
     [ADST] = "adst",
     [FLIPADST] = "flipadst",
     [IDENTITY] = "identity",
+    [WHT] = "wht",
 };
 #endif
 
@@ -296,26 +278,6 @@ const uint8_t /* enum InterPredMode */
     [OPFL_NEARMV_NEWMV  - NEARMV_NEARMV] = { NEARMV,   NEWMV    },
     [OPFL_NEWMV_NEWMV   - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
     [OPFL_JOINT_NEWMV   - NEARMV_NEARMV] = { NEWMV,    NEWMV    },
-};
-
-const uint8_t /* enum TxClass */ dav1d_tx_type_class[N_TX_TYPES_PLUS_LL] = {
-    [DCT_DCT]           = TX_CLASS_2D,
-    [ADST_DCT]          = TX_CLASS_2D,
-    [DCT_ADST]          = TX_CLASS_2D,
-    [ADST_ADST]         = TX_CLASS_2D,
-    [FLIPADST_DCT]      = TX_CLASS_2D,
-    [DCT_FLIPADST]      = TX_CLASS_2D,
-    [FLIPADST_FLIPADST] = TX_CLASS_2D,
-    [ADST_FLIPADST]     = TX_CLASS_2D,
-    [FLIPADST_ADST]     = TX_CLASS_2D,
-    [IDTX]              = TX_CLASS_2D,
-    [V_DCT]             = TX_CLASS_V,
-    [H_DCT]             = TX_CLASS_H,
-    [V_ADST]            = TX_CLASS_V,
-    [H_ADST]            = TX_CLASS_H,
-    [V_FLIPADST]        = TX_CLASS_V,
-    [H_FLIPADST]        = TX_CLASS_H,
-    [WHT_WHT]           = TX_CLASS_2D,
 };
 
 const Dav1dWarpedMotionParams dav1d_default_wm_params = {

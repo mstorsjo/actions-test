@@ -70,9 +70,8 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
         return;
     }
 
-    const uint8_t *const txtps = dav1d_tx1d_types[txtp];
-    const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtps[1]];
-    const itx_1d_fn second_1d_fn = dav1d_tx1d_fns[t_dim->lh][txtps[0]];
+    const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtp & 7];
+    const itx_1d_fn second_1d_fn = dav1d_tx1d_fns[t_dim->lh][txtp >> 5];
     const int sh = imin(h, 32), sw = imin(w, 32);
 #if BITDEPTH == 8
     const int row_clip_min = INT16_MIN;

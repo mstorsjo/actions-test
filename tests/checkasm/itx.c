@@ -34,35 +34,6 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-#ifndef M_SQRT1_2
-#define M_SQRT1_2 0.707106781186547524401
-#endif
-
-enum Tx1D { DCT, ADST, FLIPADST, IDENTITY, WHT };
-
-static const uint8_t itx_1d_types[N_TX_TYPES_PLUS_LL][2] = {
-    [DCT_DCT]           = { DCT,      DCT      },
-    [ADST_DCT]          = { DCT,      ADST     },
-    [DCT_ADST]          = { ADST,     DCT      },
-    [ADST_ADST]         = { ADST,     ADST     },
-    [FLIPADST_DCT]      = { DCT,      FLIPADST },
-    [DCT_FLIPADST]      = { FLIPADST, DCT      },
-    [FLIPADST_FLIPADST] = { FLIPADST, FLIPADST },
-    [ADST_FLIPADST]     = { FLIPADST, ADST     },
-    [FLIPADST_ADST]     = { ADST,     FLIPADST },
-    [IDTX]              = { IDENTITY, IDENTITY },
-    [V_DCT]             = { IDENTITY, DCT      },
-    [H_DCT]             = { DCT,      IDENTITY },
-    [V_ADST]            = { IDENTITY, ADST     },
-    [H_ADST]            = { ADST,     IDENTITY },
-    [V_FLIPADST]        = { IDENTITY, FLIPADST },
-    [H_FLIPADST]        = { FLIPADST, IDENTITY },
-    [WHT_WHT]           = { WHT,      WHT      },
-};
-
 static const char *const itx_1d_names[5] = {
     [DCT]      = "dct",
     [ADST]     = "adst",
@@ -82,7 +53,7 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
      * simd versions (e.g. dc-only) so that we get full asm coverage in this
      * test */
 
-    const enum TxClass tx_class = dav1d_tx_type_class[txtp];
+    const enum TxClass tx_class = (txtp >> 3) & 3;
     const uint16_t *const scan = dav1d_scans[tx];
     const int sub_high = subsh > 0 ? subsh * 8 - 1 : 0;
     const int sub_low  = subsh > 1 ? sub_high - 8 : 0;
@@ -200,12 +171,12 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
              txtp_idx++)
         {
             const enum TxfmType txtp = valid_txtp_per_txsz[tx][txtp_idx];
+            const enum Tx1dType hor1d = txtp & 0x7, ver1d = txtp >> 5;
             for (int subsh = !!txtp; subsh < subsh_max; subsh++)
                 if (check_func(txtp == WHT_WHT ? c->iwht_add_4x4: c->itxfm_add[tx],
                                "inv_txfm_add_%dx%d_%s_%s_%d_%dbpc",
-                               w, h, itx_1d_names[itx_1d_types[txtp][0]],
-                               itx_1d_names[itx_1d_types[txtp][1]], subsh,
-                               bpc))
+                               w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
+                               subsh, bpc))
                 {
                     int max_eob;
                     const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,

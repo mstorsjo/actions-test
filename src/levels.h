@@ -79,29 +79,8 @@ enum Tx1dType {
     ADST,
     IDENTITY,
     FLIPADST,
+    WHT,
     N_TX_1D_TYPES,
-};
-
-enum TxfmType {
-    DCT_DCT,    // DCT  in both horizontal and vertical
-    ADST_DCT,   // ADST in vertical, DCT in horizontal
-    DCT_ADST,   // DCT  in vertical, ADST in horizontal
-    ADST_ADST,  // ADST in both directions
-    FLIPADST_DCT,
-    DCT_FLIPADST,
-    FLIPADST_FLIPADST,
-    ADST_FLIPADST,
-    FLIPADST_ADST,
-    IDTX,
-    V_DCT,
-    H_DCT,
-    V_ADST,
-    H_ADST,
-    V_FLIPADST,
-    H_FLIPADST,
-    N_TX_TYPES,
-    WHT_WHT = N_TX_TYPES,
-    N_TX_TYPES_PLUS_LL,
 };
 
 enum TxClass {
@@ -109,6 +88,32 @@ enum TxClass {
     TX_CLASS_H,
     TX_CLASS_V,
 };
+
+#define TX_TYPE_ENUM(NAME, HOR_1D, VER_1D, CLASS) \
+    NAME = (HOR_1D) | (TX_CLASS_##CLASS << 3) | (VER_1D << 5)
+#define TX_TYPE_ENUM_2D(HOR_1D, VER_1D) \
+    TX_TYPE_ENUM(VER_1D##_##HOR_1D, HOR_1D, VER_1D, 2D)
+enum TxfmType {
+    TX_TYPE_ENUM_2D(DCT, DCT),
+    TX_TYPE_ENUM_2D(DCT, ADST),
+    TX_TYPE_ENUM_2D(ADST, DCT),
+    TX_TYPE_ENUM_2D(ADST, ADST),
+    TX_TYPE_ENUM_2D(DCT, FLIPADST),
+    TX_TYPE_ENUM_2D(FLIPADST, DCT),
+    TX_TYPE_ENUM_2D(FLIPADST, FLIPADST),
+    TX_TYPE_ENUM_2D(FLIPADST, ADST),
+    TX_TYPE_ENUM_2D(ADST, FLIPADST),
+    TX_TYPE_ENUM(IDTX, IDENTITY, IDENTITY, 2D),
+    TX_TYPE_ENUM(V_DCT, IDENTITY, DCT, V),
+    TX_TYPE_ENUM(H_DCT, DCT, IDENTITY, H),
+    TX_TYPE_ENUM(V_ADST, IDENTITY, ADST, V),
+    TX_TYPE_ENUM(H_ADST, ADST, IDENTITY, H),
+    TX_TYPE_ENUM(V_FLIPADST, IDENTITY, FLIPADST, V),
+    TX_TYPE_ENUM(H_FLIPADST, FLIPADST, IDENTITY, H),
+    TX_TYPE_ENUM_2D(WHT, WHT),
+};
+#undef TX_TYPE_ENUM_2D
+#undef TX_TYPE_ENUM
 
 enum IntraPredMode {
     DC_PRED,

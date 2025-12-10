@@ -428,9 +428,11 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     } else if (chroma) {
         // inferred from either the luma txtp (inter) or a LUT (intra)
         if (intra) *txtp = dav1d_txtp_from_uvmode[b->uv_mode];
-        if ((t_dim->w >= 8 && dav1d_tx1d_types[*txtp][1] & 1) ||
-            (t_dim->h >= 8 && dav1d_tx1d_types[*txtp][0] & 1) ||
-            (tx == (int) TX_16X16 && *txtp >= V_ADST))
+        if ((t_dim->w >= 8 && *txtp & 0x01 /* horizontal is (flip)adst */) ||
+            (t_dim->h >= 8 && *txtp & 0x20 /* vertical is (flip)adst */) ||
+            (tx == (int) TX_16X16 &&
+             ((*txtp & 0x27) == 0x22 /* (flip)adst ver, identity hor */ ||
+              (*txtp & 0xe1) == 0x41 /* identity ver, (flip)adst hor */)))
         {
             *txtp = DCT_DCT;
         }
@@ -604,10 +606,10 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
     DEBUG_CF_printf("%*sPost-txtp[%s/%s]: r=%d\n",
-                    depth, "", dav1d_tx1d_names[dav1d_tx1d_types[*txtp][1]],
-                    dav1d_tx1d_names[dav1d_tx1d_types[*txtp][0]], ts->msac.rng);
+                    depth, "", dav1d_tx1d_names[*txtp & 7],
+                    dav1d_tx1d_names[*txtp >> 5], ts->msac.rng);
 
-    const enum TxClass tx_class = dav1d_tx_type_class[*txtp];
+    const enum TxClass tx_class = (*txtp >> 3) & 0x3;
 
     // secondary transform
     int stx_type = 0;
@@ -673,9 +675,9 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     stx_set = inv_most_probable_stx_mapping[b->y_mode][stx_set];
                 }
                 stx_set += 7 * (*txtp == ADST_ADST);
-                *txtp |= stx_set << 6;
+                *txtp |= stx_set << 10;
             }
-            *txtp |= stx_type << 4;
+            *txtp |= stx_type << 8;
             DEBUG_CF_printf("%*sPost-stx[type=%d,set=%d]: r=%d\n",
                             depth, "", stx_type, stx_set, ts->msac.rng);
         }
@@ -1432,19 +1434,19 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         eob = decode_coefs(t, DB_ONLY(depth + 1)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
                            tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
-        stx = txtp >> 4;
-        txtp = txtp & 0xf;
+        stx = txtp >> 8;
+        txtp = txtp & 0xff;
         DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
                            depth + 1, "", tw, th,
-                           dav1d_tx1d_names[dav1d_tx1d_types[txtp][1]],
-                           dav1d_tx1d_names[dav1d_tx1d_types[txtp][0]],
+                           dav1d_tx1d_names[txtp & 7],
+                           dav1d_tx1d_names[txtp >> 5],
                            eob, ts->msac.rng);
     }
     dav1d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
                              imin(t_dim->w, f->bw - t->bx));
     dav1d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
-    t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xf;
+    t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xff;
 
     if (b->intra && !b->intrabc && !b->pal_sz) {
         const int mrl_idx = b->mrl_index;
@@ -1851,8 +1853,8 @@ chroma: {}
             DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
                                depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
                                uv_t_dim->h * 4,
-                               dav1d_tx1d_names[dav1d_tx1d_types[txtp][1]],
-                               dav1d_tx1d_names[dav1d_tx1d_types[txtp][0]],
+                               dav1d_tx1d_names[txtp & 7],
+                               dav1d_tx1d_names[txtp >> 5],
                                eob, t->ts->msac.rng);
             // FIXME Overwrite CF with 0, until we have proper chroma recon
             memset(cf, 0, imin(uv_t_dim->w, 8) * imin(uv_t_dim->h, 8) *
