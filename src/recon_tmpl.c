@@ -1572,8 +1572,8 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                               imin(t_dim->w, 8) * 4, 3, "dq");
                 }
             }
-            dsp->itx.itxfm_add[tx][txtp](dst, f->cur.stride[0],
-                                         cf, eob HIGHBD_CALL_SUFFIX);
+            dsp->itx.itxfm_add[tx](dst, f->cur.stride[0],
+                                   cf, txtp, eob HIGHBD_CALL_SUFFIX);
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 hex_dump(dst, f->cur.stride[0], t_dim->w * 4, t_dim->h * 4, "recon");
             }

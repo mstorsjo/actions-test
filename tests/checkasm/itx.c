@@ -127,6 +127,44 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
     return eob;
 }
 
+#define TXTP_MASK_DCT_ONLY DCT_DCT, 0xff /* invalid */
+#define TXTP_MASK_DCT_ID_ONLY IDTX, TXTP_MASK_DCT_ONLY
+#define TXTP_MASK_DCT_HOR ADST_DCT, FLIPADST_DCT, H_DCT, TXTP_MASK_DCT_ONLY
+#define TXTP_MASK_DCT_VER DCT_ADST, DCT_FLIPADST, V_DCT, TXTP_MASK_DCT_ONLY
+#define TXTP_MASK_DCT_ID_HOR V_DCT, V_ADST, V_FLIPADST, IDTX, TXTP_MASK_DCT_HOR
+#define TXTP_MASK_DCT_ID_VER H_DCT, H_ADST, H_FLIPADST, IDTX, TXTP_MASK_DCT_VER
+#define TXTP_MASK_16x16 FLIPADST_FLIPADST, ADST_FLIPADST, FLIPADST_ADST, IDTX, \
+                        ADST_ADST, DCT_ADST, DCT_FLIPADST, V_DCT, TXTP_MASK_DCT_HOR
+#define TXTP_MASK_ALL V_ADST, H_ADST, V_FLIPADST, H_FLIPADST, TXTP_MASK_16x16
+#define TXTP_MASK_ALL_LOSSLESS WHT_WHT, TXTP_MASK_ALL
+static const uint8_t valid_txtp_per_txsz[][18] = {
+    [TX_4X4] = { TXTP_MASK_ALL_LOSSLESS },
+    [TX_8X8] = { TXTP_MASK_ALL },
+    [TX_16X16] = { TXTP_MASK_16x16 },
+    [TX_32X32] = { TXTP_MASK_DCT_ID_ONLY },
+    [TX_64X64] = { TXTP_MASK_DCT_ONLY },
+    [RTX_4X8] = { TXTP_MASK_ALL },
+    [RTX_8X4] = { TXTP_MASK_ALL },
+    [RTX_8X16] = { TXTP_MASK_ALL },
+    [RTX_16X8] = { TXTP_MASK_ALL },
+    [RTX_16X32] = { TXTP_MASK_DCT_ID_VER },
+    [RTX_32X16] = { TXTP_MASK_DCT_ID_HOR },
+    [RTX_32X64] = { TXTP_MASK_DCT_ONLY },
+    [RTX_64X32] = { TXTP_MASK_DCT_ONLY },
+    [RTX_4X16] = { TXTP_MASK_ALL },
+    [RTX_16X4] = { TXTP_MASK_ALL },
+    [RTX_8X32] = { TXTP_MASK_DCT_ID_VER },
+    [RTX_32X8] = { TXTP_MASK_DCT_ID_HOR },
+    [RTX_16X64] = { TXTP_MASK_DCT_VER },
+    [RTX_64X16] = { TXTP_MASK_DCT_HOR },
+    [RTX_4X32] = { TXTP_MASK_DCT_ID_VER },
+    [RTX_32X4] = { TXTP_MASK_DCT_ID_HOR },
+    [RTX_8X64] = { TXTP_MASK_DCT_VER },
+    [RTX_64X8] = { TXTP_MASK_DCT_HOR },
+    [RTX_4X64] = { TXTP_MASK_DCT_VER },
+    [RTX_64X4] = { TXTP_MASK_DCT_HOR },
+};
+
 static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
                             const enum RectTxfmSize tx)
 {
@@ -148,7 +186,7 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
 #endif
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, coef *coeff,
-                 int eob HIGHBD_DECL_SUFFIX);
+                 enum TxfmType txtp, int eob HIGHBD_DECL_SUFFIX);
 
     for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
         /* Always using the largest possible coef_max just results in
@@ -158,9 +196,12 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
         const int bitdepth_max = (1 << bpc) - 1;
         bitfn(dav1d_itx_dsp_init)(c, bpc);
 
-        for (enum TxfmType txtp = 0; txtp < N_TX_TYPES_PLUS_LL; txtp++)
+        for (int txtp_idx = 0; valid_txtp_per_txsz[tx][txtp_idx] != 0xff;
+             txtp_idx++)
+        {
+            const enum TxfmType txtp = valid_txtp_per_txsz[tx][txtp_idx];
             for (int subsh = !!txtp; subsh < subsh_max; subsh++)
-                if (check_func(c->itxfm_add[tx][txtp],
+                if (check_func(txtp == WHT_WHT ? c->iwht_add_4x4: c->itxfm_add[tx],
                                "inv_txfm_add_%dx%d_%s_%s_%d_%dbpc",
                                w, h, itx_1d_names[itx_1d_types[txtp][0]],
                                itx_1d_names[itx_1d_types[txtp][1]], subsh,
@@ -179,9 +220,9 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
                             c_dst[y*PXSTRIDE(c_dst_stride) + x] =
                             a_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
 
-                    call_ref(c_dst, c_dst_stride, coeff[0], eob
+                    call_ref(c_dst, c_dst_stride, coeff[0], txtp, eob
                              HIGHBD_TAIL_SUFFIX);
-                    call_new(a_dst, a_dst_stride, coeff[1], eob
+                    call_new(a_dst, a_dst_stride, coeff[1], txtp, eob
                              HIGHBD_TAIL_SUFFIX);
 
                     checkasm_check_pixel_padded(c_dst, c_dst_stride,
@@ -191,8 +232,10 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
                         fail();
 
                     bench_new(alternate(c_dst, a_dst), a_dst_stride,
-                              alternate(coeff[0], coeff[1]), max_eob HIGHBD_TAIL_SUFFIX);
+                              alternate(coeff[0], coeff[1]), txtp,
+                              max_eob HIGHBD_TAIL_SUFFIX);
                 }
+        }
     }
 }
 
@@ -212,8 +255,7 @@ void bitfn(checkasm_check_itx)(void) {
         RTX_64X16, RTX_32X64, RTX_64X32, TX_64X64,
     };
 
-    /* Zero unused function pointer elements. */
-    Dav1dInvTxfmDSPContext c = { { { 0 } } };
+    Dav1dInvTxfmDSPContext c;
 
     const uint8_t *txfm = txfm_size_order;
     for (int i = 0; i < 5; i++) {

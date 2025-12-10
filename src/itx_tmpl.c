@@ -42,8 +42,8 @@
 
 static NOINLINE void
 inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
-               const int eob, const /*enum RectTxfmSize*/ int tx,
-               const enum TxfmType txtp HIGHBD_DECL_SUFFIX)
+               const enum TxfmType txtp, const int eob,
+               const /*enum RectTxfmSize*/ int tx HIGHBD_DECL_SUFFIX)
 {
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const uint8_t *const tx_shift = dav1d_tx_shift[tx];
@@ -127,100 +127,45 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
             dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> shift));
 }
 
-#define inv_txfm_fn(type1, type2, type, pfx, w, h) \
+#define inv_txfm_fn(pfx, w, h) \
 static void \
-inv_txfm_add_##type1##_##type2##_##w##x##h##_c(pixel *dst, \
-                                               const ptrdiff_t stride, \
-                                               coef *const coeff, \
-                                               const int eob \
-                                               HIGHBD_DECL_SUFFIX) \
+inv_txfm_add_##w##x##h##_c(pixel *dst, const ptrdiff_t stride, \
+                           coef *const coeff, const enum TxfmType txtp, \
+                           const int eob HIGHBD_DECL_SUFFIX) \
 { \
-    inv_txfm_add_c(dst, stride, coeff, eob, pfx##TX_##w##X##h, type \
+    inv_txfm_add_c(dst, stride, coeff, txtp, eob, pfx##TX_##w##X##h \
                    HIGHBD_TAIL_SUFFIX); \
 }
 
-#define inv_txfm_fn64(pfx, w, h) \
-inv_txfm_fn(dct, dct, DCT_DCT, pfx, w, h)
-
-#define inv_txfm_hl64(pfx, w, h) \
-inv_txfm_fn64(pfx, w, h) \
-inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx, w, h) \
-inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h) \
-inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h)
-
-#define inv_txfm_vl64(pfx, w, h) \
-inv_txfm_fn64(pfx, w, h) \
-inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h) \
-inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h) \
-inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h) \
-
-#define inv_txfm_fn32(pfx, w, h) \
-inv_txfm_fn64(pfx, w, h) \
-inv_txfm_fn(identity, identity, IDTX, pfx, w, h)
-
-#define inv_txfm_hl32(pfx, w, h) \
-inv_txfm_hl64(pfx, w, h) \
-inv_txfm_fn(dct,      identity, V_DCT,      pfx, w, h) \
-inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h) \
-inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h) \
-inv_txfm_fn(identity, identity, IDTX,       pfx, w, h)
-
-#define inv_txfm_vl32(pfx, w, h) \
-inv_txfm_vl64(pfx, w, h) \
-inv_txfm_fn(identity, dct,      H_DCT,      pfx, w, h) \
-inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h) \
-inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h) \
-inv_txfm_fn(identity, identity, IDTX,       pfx, w, h)
-
-#define inv_txfm_fn16(pfx, w, h) \
-inv_txfm_fn32(pfx, w, h) \
-inv_txfm_fn(adst,     dct,      ADST_DCT,          pfx, w, h) \
-inv_txfm_fn(dct,      adst,     DCT_ADST,          pfx, w, h) \
-inv_txfm_fn(adst,     adst,     ADST_ADST,         pfx, w, h) \
-inv_txfm_fn(dct,      flipadst, DCT_FLIPADST,      pfx, w, h) \
-inv_txfm_fn(flipadst, dct,      FLIPADST_DCT,      pfx, w, h) \
-inv_txfm_fn(adst,     flipadst, ADST_FLIPADST,     pfx, w, h) \
-inv_txfm_fn(flipadst, adst,     FLIPADST_ADST,     pfx, w, h) \
-inv_txfm_fn(flipadst, flipadst, FLIPADST_FLIPADST, pfx, w, h) \
-inv_txfm_fn(identity, dct,      H_DCT,             pfx, w, h) \
-inv_txfm_fn(dct,      identity, V_DCT,             pfx, w, h) \
-
-#define inv_txfm_fn84(pfx, w, h) \
-inv_txfm_fn16(pfx, w, h) \
-inv_txfm_fn(identity, flipadst, H_FLIPADST, pfx, w, h) \
-inv_txfm_fn(flipadst, identity, V_FLIPADST, pfx, w, h) \
-inv_txfm_fn(identity, adst,     H_ADST,     pfx, w, h) \
-inv_txfm_fn(adst,     identity, V_ADST,     pfx, w, h) \
-
-inv_txfm_fn84( ,  4,  4)
-inv_txfm_fn84(R,  4,  8)
-inv_txfm_fn84(R,  4, 16)
-inv_txfm_vl32(R,  4, 32)
-inv_txfm_vl64(R,  4, 64)
-inv_txfm_fn84(R,  8,  4)
-inv_txfm_fn84( ,  8,  8)
-inv_txfm_fn84(R,  8, 16)
-inv_txfm_vl32(R,  8, 32)
-inv_txfm_vl64(R,  8, 64)
-inv_txfm_fn84(R, 16,  4)
-inv_txfm_fn84(R, 16,  8)
-inv_txfm_fn16( , 16, 16)
-inv_txfm_vl32(R, 16, 32)
-inv_txfm_vl64(R, 16, 64)
-inv_txfm_hl32(R, 32,  4)
-inv_txfm_hl32(R, 32,  8)
-inv_txfm_hl32(R, 32, 16)
-inv_txfm_fn32( , 32, 32)
-inv_txfm_fn64(R, 32, 64)
-inv_txfm_hl64(R, 64,  4)
-inv_txfm_hl64(R, 64,  8)
-inv_txfm_hl64(R, 64, 16)
-inv_txfm_fn64(R, 64, 32)
-inv_txfm_fn64( , 64, 64)
+inv_txfm_fn( ,  4,  4)
+inv_txfm_fn(R,  4,  8)
+inv_txfm_fn(R,  4, 16)
+inv_txfm_fn(R,  4, 32)
+inv_txfm_fn(R,  4, 64)
+inv_txfm_fn(R,  8,  4)
+inv_txfm_fn( ,  8,  8)
+inv_txfm_fn(R,  8, 16)
+inv_txfm_fn(R,  8, 32)
+inv_txfm_fn(R,  8, 64)
+inv_txfm_fn(R, 16,  4)
+inv_txfm_fn(R, 16,  8)
+inv_txfm_fn( , 16, 16)
+inv_txfm_fn(R, 16, 32)
+inv_txfm_fn(R, 16, 64)
+inv_txfm_fn(R, 32,  4)
+inv_txfm_fn(R, 32,  8)
+inv_txfm_fn(R, 32, 16)
+inv_txfm_fn( , 32, 32)
+inv_txfm_fn(R, 32, 64)
+inv_txfm_fn(R, 64,  4)
+inv_txfm_fn(R, 64,  8)
+inv_txfm_fn(R, 64, 16)
+inv_txfm_fn(R, 64, 32)
+inv_txfm_fn( , 64, 64)
 
 static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
-                                       coef *const coeff, const int eob
-                                       HIGHBD_DECL_SUFFIX)
+                                       coef *const coeff, const enum TxfmType txtp,
+                                       const int eob HIGHBD_DECL_SUFFIX)
 {
     int32_t tmp[4 * 4], *c = tmp;
     for (int y = 0; y < 4; y++, c += 4) {
@@ -239,7 +184,7 @@ static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
             dst[x] = iclip_pixel(dst[x] + *c++);
 }
 
-#if HAVE_ASM
+#if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/itx.h"
 #elif ARCH_LOONGARCH64
@@ -254,115 +199,35 @@ static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
 #endif
 
 COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
-#define assign_itx_all_fn64(w, h, pfx) \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_DCT  ] = \
-        inv_txfm_add_dct_dct_##w##x##h##_c
+#define assign_itx(w, h, pfx) \
+    c->itxfm_add[pfx##TX_##w##X##h] = inv_txfm_add_##w##x##h##_c
 
-#define assign_itx_all_vl64(w, h, pfx) \
-    assign_itx_all_fn64(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_ADST ] = \
-        inv_txfm_add_dct_adst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_FLIPADST] = \
-        inv_txfm_add_dct_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][V_DCT] = \
-        inv_txfm_add_dct_identity_##w##x##h##_c
-
-#define assign_itx_all_hl64(w, h, pfx) \
-    assign_itx_all_fn64(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][ADST_DCT ] = \
-        inv_txfm_add_adst_dct_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_DCT] = \
-        inv_txfm_add_flipadst_dct_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
-        inv_txfm_add_identity_dct_##w##x##h##_c
-
-#define assign_itx_all_fn32(w, h, pfx) \
-    assign_itx_all_fn64(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][IDTX] = \
-        inv_txfm_add_identity_identity_##w##x##h##_c
-
-#define assign_itx_all_vl32(w, h, pfx) \
-    assign_itx_all_vl64(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
-        inv_txfm_add_identity_dct_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_ADST] = \
-        inv_txfm_add_identity_adst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_FLIPADST] = \
-        inv_txfm_add_identity_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][IDTX] = \
-        inv_txfm_add_identity_identity_##w##x##h##_c
-
-#define assign_itx_all_hl32(w, h, pfx) \
-    assign_itx_all_hl64(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][V_DCT] = \
-        inv_txfm_add_dct_identity_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][V_ADST] = \
-        inv_txfm_add_adst_identity_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][V_FLIPADST] = \
-        inv_txfm_add_flipadst_identity_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][IDTX] = \
-        inv_txfm_add_identity_identity_##w##x##h##_c
-
-#define assign_itx_all_fn16(w, h, pfx) \
-    assign_itx_all_fn32(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][ADST_DCT ] = \
-        inv_txfm_add_adst_dct_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_ADST ] = \
-        inv_txfm_add_dct_adst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][ADST_ADST] = \
-        inv_txfm_add_adst_adst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_ADST] = \
-        inv_txfm_add_flipadst_adst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][ADST_FLIPADST] = \
-        inv_txfm_add_adst_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_DCT] = \
-        inv_txfm_add_flipadst_dct_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][DCT_FLIPADST] = \
-        inv_txfm_add_dct_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][FLIPADST_FLIPADST] = \
-        inv_txfm_add_flipadst_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][V_DCT] = \
-        inv_txfm_add_dct_identity_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_DCT] = \
-        inv_txfm_add_identity_dct_##w##x##h##_c
-
-#define assign_itx_all_fn84(w, h, pfx) \
-    assign_itx_all_fn16(w, h, pfx); \
-    c->itxfm_add[pfx##TX_##w##X##h][V_FLIPADST] = \
-        inv_txfm_add_flipadst_identity_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_FLIPADST] = \
-        inv_txfm_add_identity_flipadst_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][V_ADST] = \
-        inv_txfm_add_adst_identity_##w##x##h##_c; \
-    c->itxfm_add[pfx##TX_##w##X##h][H_ADST] = \
-        inv_txfm_add_identity_adst_##w##x##h##_c; \
-
-    c->itxfm_add[TX_4X4][WHT_WHT] = inv_txfm_add_wht_wht_4x4_c;
-    assign_itx_all_fn84( 4,  4, );
-    assign_itx_all_fn84( 4,  8, R);
-    assign_itx_all_fn84( 4, 16, R);
-    assign_itx_all_vl32( 4, 32, R);
-    assign_itx_all_vl64( 4, 64, R);
-    assign_itx_all_fn84( 8,  4, R);
-    assign_itx_all_fn84( 8,  8, );
-    assign_itx_all_fn84( 8, 16, R);
-    assign_itx_all_vl32( 8, 32, R);
-    assign_itx_all_vl64( 8, 64, R);
-    assign_itx_all_fn84(16,  4, R);
-    assign_itx_all_fn84(16,  8, R);
-    assign_itx_all_fn16(16, 16, );
-    assign_itx_all_vl32(16, 32, R);
-    assign_itx_all_vl64(16, 64, R);
-    assign_itx_all_hl32(32,  4, R);
-    assign_itx_all_hl32(32,  8, R);
-    assign_itx_all_hl32(32, 16, R);
-    assign_itx_all_fn32(32, 32, );
-    assign_itx_all_fn64(32, 64, R);
-    assign_itx_all_hl64(64,  4, R);
-    assign_itx_all_hl64(64,  8, R);
-    assign_itx_all_hl64(64, 16, R);
-    assign_itx_all_fn64(64, 32, R);
-    assign_itx_all_fn64(64, 64, );
+    c->iwht_add_4x4 = inv_txfm_add_wht_wht_4x4_c;
+    assign_itx( 4,  4, );
+    assign_itx( 4,  8, R);
+    assign_itx( 4, 16, R);
+    assign_itx( 4, 32, R);
+    assign_itx( 4, 64, R);
+    assign_itx( 8,  4, R);
+    assign_itx( 8,  8, );
+    assign_itx( 8, 16, R);
+    assign_itx( 8, 32, R);
+    assign_itx( 8, 64, R);
+    assign_itx(16,  4, R);
+    assign_itx(16,  8, R);
+    assign_itx(16, 16, );
+    assign_itx(16, 32, R);
+    assign_itx(16, 64, R);
+    assign_itx(32,  4, R);
+    assign_itx(32,  8, R);
+    assign_itx(32, 16, R);
+    assign_itx(32, 32, );
+    assign_itx(32, 64, R);
+    assign_itx(64,  4, R);
+    assign_itx(64,  8, R);
+    assign_itx(64, 16, R);
+    assign_itx(64, 32, R);
+    assign_itx(64, 64, );
 
     int all_simd = 0;
 #if 0
