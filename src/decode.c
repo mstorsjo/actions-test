@@ -335,7 +335,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     {
         wmp->type = DAV1D_WM_TYPE_AFFINE;
     } else
-        wmp->type = DAV1D_WM_TYPE_IDENTITY;
+        wmp->type = DAV1D_WM_TYPE_INVALID;
 }
 
 static void extend_warpmv(Dav1dTaskContext *const t,
@@ -388,6 +388,8 @@ static void extend_warpmv(Dav1dTaskContext *const t,
         m[4] &= ~0x3f;
     }
     dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], wmp, t->bx, t->by);
+    wmp->type = dav1d_get_shear_params(wmp) ? DAV1D_WM_TYPE_INVALID :
+                                              DAV1D_WM_TYPE_AFFINE;
 }
 
 static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
@@ -2839,8 +2841,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                      ts->cdf.m.warp_delta_prec[bs]);
                 const int np = f->seq_hdr->six_param_warp_delta &&
                                warp_ref_idx == 1 ? 4 : 2;
-                t->warpmv.type = np == 4 ? DAV1D_WM_TYPE_AFFINE :
-                                           DAV1D_WM_TYPE_ROT_ZOOM;
                 for (int n = 0; n < np; n++) {
                     const int ctx = n - 1U > 1U;
                     b->matrix[n] =
@@ -2873,6 +2873,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 t->warpmv.matrix[1] = b->mv[0].y * (1 << 13) -
                     xpos * t->warpmv.matrix[4] -
                     ypos * (t->warpmv.matrix[5] - 0x10000);
+                t->warpmv.type = dav1d_get_shear_params(&t->warpmv) ?
+                    DAV1D_WM_TYPE_INVALID : np == 4 ?
+                    DAV1D_WM_TYPE_AFFINE : DAV1D_WM_TYPE_ROT_ZOOM;
                 DEBUG_BLOCK_printf("%*sPost-warp_param_signal[%d,%d,%d,%d]: r=%d\n",
                                    depth, "", b->matrix[0], b->matrix[1],
                                    (np == 4) ? b->matrix[2] : 0,
@@ -2880,7 +2883,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else if (b->motion_mode == MM_WARP_DELTA) {
                 memcpy(t->warpmv.matrix, warp[warp_ref_idx],
                        sizeof(int32_t) * 6);
-                t->warpmv.type = warp[warp_ref_idx][6];
                 if (b->inter_mode == WARPMV) {
                     if (warpmv_with_mvd) {
                         t->warpmv.matrix[0] += diff.x * (1 << 13);
@@ -2893,6 +2895,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 // warpmv) we've just done the opposite. The round-trip error
                 // from this operation is required for conformance.
                 dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv, t->bx, t->by);
+                t->warpmv.type = dav1d_get_shear_params(&t->warpmv) ?
+                    DAV1D_WM_TYPE_INVALID : warp[warp_ref_idx][6];
             } else if (b->motion_mode == MM_WARP_CAUSAL) {
                 derive_warpmv(t, have_top, have_left,
                               bw4, bh4, w4, h4, b->ref[0], b->mv[0], &t->warpmv);
@@ -2932,6 +2936,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 if (y_off || x_off)
                     extend_warpmv(t, x_off, y_off, b_dim, b, &t->warpmv);
+                else
+                    t->warpmv.type = DAV1D_WM_TYPE_INVALID;
             }
 
             b->warp_ii = 0;

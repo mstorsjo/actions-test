@@ -97,6 +97,7 @@ enum Dav1dRestorationType {
 };
 
 enum Dav1dWarpedMotionType {
+    DAV1D_WM_TYPE_INVALID = -1,
     DAV1D_WM_TYPE_IDENTITY,
     DAV1D_WM_TYPE_TRANSLATION,
     DAV1D_WM_TYPE_ROT_ZOOM,
