@@ -79,7 +79,9 @@ enum Tx1dType {
     ADST,
     IDENTITY,
     FLIPADST,
+    DDT,
     WHT,
+    FDDT,
     N_TX_1D_TYPES,
 };
 
