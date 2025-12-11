@@ -1458,22 +1458,26 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int bw4 = b_dim[0], bh4 = b_dim[1];
         int n_tr = 0, n_bl = 0;
         if (t->by > ts->tiling.row_start) {
-            const int end = imin((t->bx + sbsz) & ~(sbsz - 1), ts->tiling.col_end);
-            const int w = imin(t_dim->w, end - t->bx - t_dim->w);
+            int w = imin(t_dim->w, ts->tiling.col_end - t->bx - t_dim->w);
             if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
                            t->bx + bw4 > t->pb.col_end))
             {
-                n_tr = 0;
-            } else if (!w) {
-                // right sb or tile/frame boundary
                 n_tr = 0;
             } else if (!(t->by & (sbsz - 1))) {
                 // top sb boundary
                 n_tr = w;
             } else {
-                const int xpos = (bx4 + t_dim->w) & 63;
-                const unsigned bits = (unsigned) (t->is_coded[by4 - 1] >> xpos);
-                n_tr = imin(ctz(~bits), w);
+                const int end = imin((t->bx + sbsz) & ~(sbsz - 1),
+                                     ts->tiling.col_end);
+                w = imin(w, end - t->bx - t_dim->w);
+                if (!w) {
+                    // right sb or tile/frame boundary
+                    n_tr = 0;
+                } else {
+                    const int xpos = (bx4 + t_dim->w) & 63;
+                    const unsigned bits = (unsigned) (t->is_coded[by4 - 1] >> xpos);
+                    n_tr = imin(ctz(~bits), w);
+                }
             }
         }
 
