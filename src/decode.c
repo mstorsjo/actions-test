@@ -4137,8 +4137,6 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 lowest_px[n][m] = INT_MIN;
     }
 
-    memset(t->is_coded, 0, sizeof(t->is_coded));
-
     reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), t->frame_thread.pass);
     if (t->frame_thread.pass == 2) {
         const int off_2pass = c->n_tc > 1 ? f->sb256w * f->frame_hdr->tiling.t.rows : 0;
@@ -4164,6 +4162,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     for (t->bx = ts->tiling.col_start;
          t->bx < ts->tiling.col_end; t->bx += sb_step)
     {
+        memset(t->is_coded, 0, sizeof(t->is_coded));
         t->lf_mask = f->lf.mask + (t->bx >> 6) + sb256y * f->sb256w;
         t->a = f->a + tile_row * f->sb256w + (t->bx >> 6);
         if (atomic_load_explicit(c->flush, memory_order_acquire))
