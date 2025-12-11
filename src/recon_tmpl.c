@@ -1508,7 +1508,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
         const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4;
-        const int dip = b->dip - !!b->dip;
+        const int dip = b->dip - 1;
         const int sm_top = sm_flag(t->a, bx4);
         const int sm_left = sm_flag(&t->l, by4);
         const int is_sm_flag = apply_ibp ?
@@ -1518,13 +1518,13 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
         const int intra_flags = is_sm_flag |
             (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
-            (apply_ibp  ? ANGLE_IBP_FLAG : 0) |
+            (apply_ibp ? ANGLE_IBP_FLAG : 0) |
             (mrl_idx << ANGLE_MRL_IDX_SHIFT) |
             (mrl_mul ? ANGLE_MULTI_MRL_FLAG : 0) |
             ((t->bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
             ((t->by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0) |
-            (dip ? ANGLE_DIP_FLAG : 0);
-        angle = dip ? dip : angle;
+            (dip >= 0 ? ANGLE_DIP_FLAG : 0);
+        angle = dip >= 0 ? dip : angle;
         const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,
             ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
