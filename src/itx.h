@@ -39,8 +39,19 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, coef *coeff, \
             enum TxfmType txtp, int eob HIGHBD_DECL_SUFFIX)
 typedef decl_itxfm_fn(*itxfm_fn);
 
-#define decl_itx_fns(w, h, opt) \
-decl_itx_fn(BF(dav1d_inv_txfm_add_##w##x##h, opt))
+#define decl_itx_w_fns(w, ext) \
+decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x4,  ext)); \
+decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x8,  ext)); \
+decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x16, ext)); \
+decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x32, ext)); \
+decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x64, ext))
+
+#define decl_itx_fns(ext) \
+decl_itx_w_fns( 4, ext); \
+decl_itx_w_fns( 8, ext); \
+decl_itx_w_fns(16, ext); \
+decl_itx_w_fns(32, ext); \
+decl_itx_w_fns(64, ext)
 
 typedef struct Dav1dInvTxfmDSPContext {
     itxfm_fn itxfm_add[N_RECT_TX_SIZES];
