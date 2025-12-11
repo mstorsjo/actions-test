@@ -742,7 +742,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
             const int xpos_l = x + 1;
             const int ypos_l = (y << 6) - (xpos_l + mrl_idx) * dy;
             const int base_y = ypos_l >> 6;
-            //assert(base_y >= -1);
+            assert(base_y >= -(1 + mrl_idx));
             const int shift = (ypos_l & 0x3F) >> 1;
             const int v =
                 av1_dr_interp_filter[shift].a * left[-(base_y + 1)] +
