@@ -737,10 +737,10 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         top = &filt[2];
         max_base_x = width + height - 1;
     } else {
-        top = &topleft_in[1];
+        top = &topleft_in[1 + mrl_idx];
         max_base_x = (width + height) - 1 + (mrl_idx << 1);
     }
-    for (int y = 0, xpos = dx; y < height; y++, xpos += dx) {
+    for (int y = 0, xpos = dx * (1 + mrl_idx); y < height; y++, xpos += dx) {
         int base = xpos >> 6;
         if (base > max_base_x) {
             for (; y < height; y++) {
