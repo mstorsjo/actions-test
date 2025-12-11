@@ -724,16 +724,15 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         return;
     }
 
-    // Max size = 1 (topleft) + 64 (width) + 64 (height) + 4 extra = 133
-    pixel filt[133];
+    // Max size = 1 pad + 1 (topleft) + 64 (width) + 64 (height) + 2 pad = 132
+    pixel filt[132];
     const int str = enable_intra_edge_filter && have_top && !mrl_idx ?
             get_filter_strength(width + height, 90 - angle, is_sm_t) : 0;
     if (str) {
         const int sz = width + height + 1;
-        filter_edge(&filt[2], sz, 1, sz, &topleft_in[1], 0, sz, str);
-        filt[0] = filt[1] = filt[2];
-        const int end = sz + 1;
-        filt[end + 2] = filt[end + 1] = filt[end];
+        filter_edge(&filt[1], sz, 0, sz, &topleft_in[0], 0, sz, str);
+        filt[0] = topleft_in[-1];
+        filt[sz + 2] = filt[sz + 1] = filt[sz];
         top = &filt[2];
         max_base_x = width + height - 1;
     } else {
