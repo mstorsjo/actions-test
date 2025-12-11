@@ -1571,9 +1571,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 memset(cf, 0, 32 * sizeof(coef));
                 // Subtract 1 to map {8,16,32} to idx {0,1,2}
                 const int idx = imin(t_dim->lh, 3) - 1;
-                // FIXME I'm not sure why we don't need to do this for stxfm4_c
-                const int t = tw >= th ? transpose : !transpose;
-                const uint8_t *scan_out = stx_scan_orders_8x8[idx][t];
+                const uint8_t *scan_out = stx_scan_orders_8x8[idx][transpose];
                 const uint8_t *mapping = coeff8x8_mapping[set * 3 + type];
                 for (int x = 0; x < 48; x++) {
                     cf[scan_out[mapping[x]]] = sums[x];
