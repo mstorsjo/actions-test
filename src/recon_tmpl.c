@@ -3184,8 +3184,7 @@ void bytefn(dav1d_filter_sbrow_deblock_cols)(Dav1dFrameContext *const f, const i
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
     Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    bytefn(dav1d_loopfilter_sbrow_cols)(f, p, mask, sby,
-                                        f->lf.start_of_tile_row[sby]);
+    bytefn(dav1d_loopfilter_sbrow_cols)(f, p, mask, sby);
 }
 
 void bytefn(dav1d_filter_sbrow_deblock_rows)(Dav1dFrameContext *const f, const int sby) {

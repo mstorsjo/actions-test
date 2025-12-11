@@ -155,44 +155,49 @@ static inline void mask_edges_intra(uint16_t (*const masks)[64][4][4],
     const int twl4c = imin(3, twl4), thl4c = imin(3, thl4);
     int y, x;
 
-    // TODO: Limit filter size on sb edges.
     // left block edge
-    unsigned mask = 1U << by4;
+    uint64_t mask = 1ULL << by4;
     for (y = 0; y < h4; y++, mask <<= 1) {
-        // FIXME: sidx is broken on larger blocks
-        const int sidx = mask >= 0x10000;
+        const int sidx = (by4 + y) >> 4;
         const unsigned smask = mask >> (sidx << 4);
         masks[0][bx4][imin(twl4c, l[y])][sidx] |= smask;
     }
 
     // top block edge
-    for (x = 0, mask = 1U << bx4; x < w4; x++, mask <<= 1) {
-        const int sidx = mask >= 0x10000;
+    for (x = 0, mask = 1ULL << bx4; x < w4; x++, mask <<= 1) {
+        const int sidx = (bx4 + x) >> 4;
         const unsigned smask = mask >> (sidx << 4);
         masks[1][by4][imin(thl4c, a[x])][sidx] |= smask;
     }
 
     // inner (tx) left|right edges
     const int hstep = t_dim->w;
-    unsigned t = 1U << by4;
-    unsigned inner = (unsigned) ((((uint64_t) t) << h4) - t);
-    unsigned inner1 = inner & 0xffff, inner2 = inner >> 16;
+    uint64_t inner = (~0ULL >> (64 - h4)) << by4;
+    unsigned inner1 = inner & 0xffff;
+    unsigned inner2 = (inner >> 16) & 0xffff;
+    unsigned inner3 = (inner >> 32) & 0xffff;
+    unsigned inner4 = (inner >> 48);
     for (x = hstep; x < w4; x += hstep) {
         if (inner1) masks[0][bx4 + x][twl4c][0] |= inner1;
         if (inner2) masks[0][bx4 + x][twl4c][1] |= inner2;
+        if (inner3) masks[0][bx4 + x][twl4c][2] |= inner3;
+        if (inner4) masks[0][bx4 + x][twl4c][3] |= inner4;
     }
 
     //            top
     // inner (tx) --- edges
     //           bottom
     const int vstep = t_dim->h;
-    t = 1U << bx4;
-    inner = (unsigned) ((((uint64_t) t) << w4) - t);
+    inner =(~0ULL >> (64 - w4)) << bx4;
     inner1 = inner & 0xffff;
-    inner2 = inner >> 16;
+    inner2 = (inner >> 16) & 0xffff;
+    inner3 = (inner >> 32) & 0xffff;
+    inner4 = (inner >> 48);
     for (y = vstep; y < h4; y += vstep) {
         if (inner1) masks[1][by4 + y][thl4c][0] |= inner1;
         if (inner2) masks[1][by4 + y][thl4c][1] |= inner2;
+        if (inner3) masks[1][by4 + y][thl4c][2] |= inner3;
+        if (inner4) masks[1][by4 + y][thl4c][3] |= inner4;
     }
 
     dav1d_memset_likely_pow2(a, thl4c, w4);
