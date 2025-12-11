@@ -1511,7 +1511,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int sby = t->by >> f->sb_shift;
             top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
-        const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4;
+        const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 && !mrl_idx;
         const int dip = b->dip - 1;
         const int sm_top = t->pb.a_is_sm;
         const int sm_left = t->pb.l_is_sm;
@@ -1520,7 +1520,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
              (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG)) :
                 (sm_top | sm_left) *
                     (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
-        const int intra_flags = is_sm_flag |
+        int intra_flags = is_sm_flag |
             (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
             (apply_ibp ? ANGLE_IBP_FLAG : 0) |
             (mrl_idx << ANGLE_MRL_IDX_SHIFT) |
@@ -1534,6 +1534,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
             f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
             t_dim->w, t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
+        // FIXME I'd like to clear this flag before calling prepare_edges(),
+        // but that doesn't work for some reason...
+        if (b->y_angle & 1) intra_flags &= ~ANGLE_IBP_FLAG;
 
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
                                  edge, tw, th, angle | intra_flags,

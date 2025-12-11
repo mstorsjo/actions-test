@@ -291,9 +291,6 @@ const uint8_t av1_mode_to_angle_map[8] = {
     90, 180, 45, 135, 113, 157, 203, 67
 };
 
-const uint8_t av1_angle_to_mode_index[22] =
-    { 7, 7, 0, 6, 0, 5, 0, 0, 4, 0, 3, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0 };
-
 const uint8_t /* enum InterPredMode */
     dav1d_comp_inter_pred_modes[][2] =
 {
