@@ -1491,7 +1491,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 // left sb boundary
                 n_bl = h;
             } else {
-                const uint64_t mask = 1 << ((bx4 - 1) & 63);
+                const uint64_t mask = 1ULL << ((bx4 - 1) & 63);
                 int y;
                 for (y = 0; y < h; y++) {
                     if (!(t->is_coded[by4 + y + t_dim->h] & mask))
