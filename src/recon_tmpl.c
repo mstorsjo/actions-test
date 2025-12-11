@@ -428,11 +428,11 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     } else if (chroma) {
         // inferred from either the luma txtp (inter) or a LUT (intra)
         if (intra) *txtp = dav1d_txtp_from_uvmode[b->uv_mode];
-        if ((t_dim->w >= 8 && *txtp & 0x01 /* horizontal is (flip)adst */) ||
-            (t_dim->h >= 8 && *txtp & 0x20 /* vertical is (flip)adst */) ||
+        if ((t_dim->w >= 8 && *txtp & 0x02 /* horizontal is (flip)adst */) ||
+            (t_dim->h >= 8 && *txtp & 0x40 /* vertical is (flip)adst */) ||
             (tx == (int) TX_16X16 &&
-             ((*txtp & 0x27) == 0x22 /* (flip)adst ver, identity hor */ ||
-              (*txtp & 0xe1) == 0x41 /* identity ver, (flip)adst hor */)))
+             ((*txtp & 0x47) == 0x41 /* (flip)adst ver, identity hor */ ||
+              (*txtp & 0xe2) == 0x22 /* identity ver, (flip)adst hor */)))
         {
             *txtp = DCT_DCT;
         }
@@ -1603,12 +1603,8 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                           imin(t_dim->w, 8) * 4, 3, "dq");
             }
         }
-        if (f->seq_hdr->inter_ddt && !b->intra) {
-            if (t_dim->w > 1 && (txtp & 0x01))
-                txtp += 0x03; // (flip)adst -> (f)ddt - horizontally
-            if (t_dim->h > 1 && (txtp & 0x20))
-                txtp += 0x60; // (flip)adst -> (f)ddt - vertically
-        }
+        if (f->seq_hdr->inter_ddt && !b->intra)
+            txtp += txtp & dav1d_tx_ddt_mask[tx]; // (flip)adst -> (f)ddt
         dsp->itx.itxfm_add[tx](dst, f->cur.stride[0],
                                cf, txtp, eob HIGHBD_CALL_SUFFIX);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {

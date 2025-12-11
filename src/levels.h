@@ -76,12 +76,12 @@ enum RectTxfmSize {
 
 enum Tx1dType {
     DCT,
-    ADST,
     IDENTITY,
+    ADST,
     FLIPADST,
     DDT,
-    WHT,
     FDDT,
+    WHT,
     N_TX_1D_TYPES,
 };
 

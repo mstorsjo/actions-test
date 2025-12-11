@@ -150,6 +150,34 @@ const uint8_t dav1d_tx_shift[N_RECT_TX_SIZES][2] = {
     [RTX_64X4]  = { 6, 13 },
 };
 
+const uint8_t dav1d_tx_ddt_mask[N_RECT_TX_SIZES] = {
+    [ TX_4X4]   = 0x00,
+    [ TX_8X8]   = 0x42,
+    [ TX_16X16] = 0x42,
+    [ TX_32X32] = 0x00,
+    [ TX_64X64] = 0x00,
+    [RTX_4X8]   = 0x40,
+    [RTX_8X4]   = 0x02,
+    [RTX_8X16]  = 0x42,
+    [RTX_16X8]  = 0x42,
+    [RTX_16X32] = 0x02,
+    [RTX_32X16] = 0x40,
+    [RTX_32X64] = 0x00,
+    [RTX_64X32] = 0x00,
+    [RTX_4X16]  = 0x40,
+    [RTX_16X4]  = 0x02,
+    [RTX_8X32]  = 0x02,
+    [RTX_32X8]  = 0x40,
+    [RTX_16X64] = 0x02,
+    [RTX_64X16] = 0x40,
+    [RTX_4X32]  = 0x00,
+    [RTX_32X4]  = 0x00,
+    [RTX_8X64]  = 0x02,
+    [RTX_64X8]  = 0x40,
+    [RTX_4X64]  = 0x00,
+    [RTX_64X4]  = 0x00,
+};
+
 const uint8_t /* enum (Rect)TxfmSize */
     dav1d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */] =
 {
@@ -188,11 +216,13 @@ const uint8_t /* enum (Rect)TxfmSize */
 
 #if DEBUG_BLOCK_INFO
 const char *const dav1d_tx1d_names[N_TX_1D_TYPES] = {
-    [DCT] = "dct",
-    [ADST] = "adst",
-    [FLIPADST] = "flipadst",
+    [DCT]      = "dct",
     [IDENTITY] = "identity",
-    [WHT] = "wht",
+    [ADST]     = "adst",
+    [FLIPADST] = "flipadst",
+    [DDT]      = "ddt",
+    [FDDT]     = "fddt",
+    [WHT]      = "wht",
 };
 #endif
 

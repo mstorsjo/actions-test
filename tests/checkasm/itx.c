@@ -36,12 +36,12 @@
 
 static const char *const itx_1d_names[] = {
     [DCT]      = "dct",
+    [IDENTITY] = "identity",
     [ADST]     = "adst",
     [FLIPADST] = "flipadst",
-    [IDENTITY] = "identity",
     [DDT]      = "ddt",
-    [WHT]      = "wht",
     [FDDT]     = "fddt",
+    [WHT]      = "wht",
 };
 
 static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
