@@ -697,7 +697,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     int hr_avg = 0, tcq_state = tcq_enabled * -0x80000000;
     const uint8_t *const qm_tbl = *txtp < IDTX ? f->qm[tx][plane] : NULL;
     int dq_shift = tcq_enabled + 3 + imax(0, t_dim->ctx - 2);
-    const uint16_t *const dq_tbl = ts->dq[b->seg_id][plane];
+    const uint32_t *const dq_tbl = ts->dq[b->seg_id][plane];
     const int cf_max = ~(~127U << (BITDEPTH == 8 ? 8 : f->cur.p.bpc));
     unsigned dc_sign_level = 1 << 6;
 

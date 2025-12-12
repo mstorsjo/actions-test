@@ -274,7 +274,7 @@ struct Dav1dFrameContext {
     ptrdiff_t b4_stride;
     int w4, h4, bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
     int ss_ver, ss_hor;
-    uint16_t dq[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
+    uint32_t dq[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];
     BlockContext *a;
     int a_sz /* w*tile_rows */;
@@ -383,8 +383,8 @@ struct Dav1dTileState {
     // each entry is one tile-sbrow; middle index is refidx
     int (*lowest_pixel)[7][2];
 
-    uint16_t dqmem[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
-    const uint16_t (*dq)[3][2];
+    uint32_t dqmem[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
+    const uint32_t (*dq)[3][2];
     int last_qidx;
 
     Av1RestorationUnit *lr_ref[3];

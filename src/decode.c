@@ -64,17 +64,17 @@ static inline int dq_lookup(const int hbd, int qidx) {
 
 static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
                               const Dav1dFrameHeader *const frame_hdr,
-                              const int qidx, uint16_t (*dq)[3][2])
+                              const int qidx, uint32_t (*dq)[3][2])
 {
     // and then ac == dc
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
         const int yac = frame_hdr->segmentation.enabled ?
-            iclip_u8(qidx + frame_hdr->segmentation.seg_data.d[i].delta_q) : qidx;
-        const int ydc = iclip_u8(yac + frame_hdr->quant.ydc_delta);
-        const int uac = iclip_u8(yac + frame_hdr->quant.uac_delta);
-        const int udc = iclip_u8(yac + frame_hdr->quant.udc_delta);
-        const int vac = iclip_u8(yac + frame_hdr->quant.vac_delta);
-        const int vdc = iclip_u8(yac + frame_hdr->quant.vdc_delta);
+            qidx + frame_hdr->segmentation.seg_data.d[i].delta_q : qidx;
+        const int ydc = yac + frame_hdr->quant.ydc_delta;
+        const int uac = yac + frame_hdr->quant.uac_delta;
+        const int udc = yac + frame_hdr->quant.udc_delta;
+        const int vac = yac + frame_hdr->quant.vac_delta;
+        const int vdc = yac + frame_hdr->quant.vdc_delta;
 
         dq[i][0][0] = dq_lookup(seq_hdr->hbd, ydc);
         dq[i][0][1] = dq_lookup(seq_hdr->hbd, yac);
@@ -86,7 +86,7 @@ static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
 }
 
 static uint16_t deblock_quant_thr(const int hbd, const int qidx) {
-    const int qmax = 255 + 2 * hbd;
+    const int qmax = 255 + 48 * hbd;
     return (dq_lookup(hbd, iclip(qidx, 0, qmax)) + 4) >> (3 + 6);
 }
 
