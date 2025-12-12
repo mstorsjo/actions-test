@@ -406,6 +406,7 @@ struct Dav1dTaskContext {
     struct {
         int col_end;
         int row_end;
+        uint8_t a_is_sm, l_is_sm;
     } pb;
     refmvs_tile rt;
     ALIGN(union, 64) {

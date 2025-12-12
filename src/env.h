@@ -79,6 +79,17 @@ static inline int get_intra_ctx(const BlockContext *nx[2],
     return sum + (sum == n_ctx);
 }
 
+static inline int sm_flag(const BlockContext *const b, const int idx) {
+    if (!b->intra[idx]) return 0;
+    const enum IntraPredMode m = b->mode[idx];
+    return m == SMOOTH_PRED || m == SMOOTH_H_PRED || m == SMOOTH_V_PRED;
+}
+
+static inline int sm_uv_flag(const BlockContext *const b, const int idx) {
+    const enum IntraPredMode m = b->uvmode[idx];
+    return m == SMOOTH_PRED || m == SMOOTH_H_PRED || m == SMOOTH_V_PRED;
+}
+
 static inline int get_partition_ctx(const BlockContext *const a,
                                     const BlockContext *const l,
                                     const uint8_t *const b_dim,

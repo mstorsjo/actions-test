@@ -89,15 +89,4 @@ enum IntraPredMode
                                       int tw, int th, int intra_flags,
                                       pixel *topleft_out HIGHBD_DECL_SUFFIX);
 
-static inline int sm_flag(const BlockContext *const b, const int idx) {
-    if (!b->intra[idx]) return 0;
-    const enum IntraPredMode m = b->mode[idx];
-    return m == SMOOTH_PRED || m == SMOOTH_H_PRED || m == SMOOTH_V_PRED;
-}
-
-static inline int sm_uv_flag(const BlockContext *const b, const int idx) {
-    const enum IntraPredMode m = b->uvmode[idx];
-    return m == SMOOTH_PRED || m == SMOOTH_H_PRED || m == SMOOTH_V_PRED;
-}
-
 #endif /* DAV1D_SRC_IPRED_PREPARE_H */

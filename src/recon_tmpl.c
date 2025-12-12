@@ -1513,8 +1513,8 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4;
         const int dip = b->dip - 1;
-        const int sm_top = sm_flag(t->a, bx4);
-        const int sm_left = sm_flag(&t->l, by4);
+        const int sm_top = t->pb.a_is_sm;
+        const int sm_left = t->pb.l_is_sm;
         const int is_sm_flag = apply_ibp ?
             ((sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
              (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG)) :

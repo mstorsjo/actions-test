@@ -1742,6 +1742,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
+            t->pb.a_is_sm = sm_flag(t->a, bx4);
+            t->pb.l_is_sm = sm_flag(&t->l, by4);
             f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
         }
 
