@@ -805,7 +805,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
         const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
         const pixel *tl2 = &topleft_in[-e_stride];
         pixel tmp[64 * 64];
-        ipred_z2_c(tmp, 64, topleft_in, width, height,
+        ipred_z2_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
                    angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT),
                    max_width, max_height HIGHBD_TAIL_SUFFIX);
         ipred_z2_c(dst, stride, tl2, width, height,
