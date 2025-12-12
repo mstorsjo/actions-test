@@ -1274,7 +1274,8 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
             for (int i = 0; i < 11; i++) {
                 sum += dav1d_dip_weights[m][idx][i] * in[i];
             }
-            dst[y * PXSTRIDE(stride) + x] = ((sum + 2048) >> 12) - in_sum;
+            dst[y * PXSTRIDE(stride) + x] =
+                iclip_pixel(((sum + 2048) >> 12) - in_sum);
             x += step_x;
         }
         y += step_y;
