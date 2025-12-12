@@ -162,7 +162,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
             int i;
             for (i = 0; i < px_have; i++)
                 left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
-            if (e.needs_bottomleft) {
+            if (e.needs_bottomleft && n_bl > 0) {
                 px_have += n_bl << 2;
                 for (; i < px_have; i++)
                     left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
@@ -218,7 +218,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         if (have_top) {
             int px_have = imin(tw, (w - x) << 2);
             pixel_copy(top, dst_top, px_have);
-            if (e.needs_topright && n_tr) {
+            if (e.needs_topright && n_tr > 0) {
                 px_have += n_tr << 2;
                 pixel_copy(top + tw, dst_top + tw, n_tr << 2);
             }
