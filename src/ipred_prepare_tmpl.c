@@ -134,14 +134,17 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     }
 
     const pixel *dst_top, *dst_top2;
+    ptrdiff_t top_stride;
     if (have_top &&
         (e.needs_top || e.needs_topleft || (e.needs_left && !have_left)))
     {
         if (prefilter_toplevel_sb_edge) {
             dst_top = dst_top2 = &prefilter_toplevel_sb_edge[x * 4];
+            top_stride = 0;
         } else {
             dst_top = &dst[-((mrl_idx + 1) * PXSTRIDE(stride))];
             dst_top2 = &dst[-PXSTRIDE(stride)];
+            top_stride = stride;
         }
     }
 
@@ -260,7 +263,8 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     if (e.needs_topleft) {
         if (have_top && have_left) {
             for (int i = -mrl_idx; i < 0; i++)
-                topleft_out[i] = dst_top[-(mrl_idx + 1) + (-i) * PXSTRIDE(stride)];
+                topleft_out[i] = dst_top[-(mrl_idx + 1) + (-i) *
+                                          PXSTRIDE(top_stride)];
             for (int i = 0; i <= mrl_idx; i++)
                 topleft_out[i] = dst_top[-(mrl_idx + 1 - i)];
         } else {
