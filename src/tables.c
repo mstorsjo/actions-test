@@ -334,6 +334,13 @@ const int8_t dav1d_cdef_directions[2 + 8 + 2 /* dir */][2 /* pass */] = {
     {  0 * 12 + 1, -1 * 12 + 2 }, // 1
 };
 
+const uint16_t dav1d_ccso_quant_sz[4 /* scale */][4 /* quant_idx */] = {
+    { 16, 8, 32, 0 },
+    { 56, 40, 64, 128 },
+    { 48, 24, 96, 192 },
+    { 80, 112, 160, 256 }
+};
+
 const unsigned dav1d_subset_masks_y[4] = { 0x3f, 0xfc3, 0xfff, 0xffff };
 const unsigned dav1d_subset_masks_uv[3] = { 0x3f, 0x3ff, 0x3ffff };
 

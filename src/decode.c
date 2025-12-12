@@ -4879,6 +4879,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 
         switch (bpc) {
 #define assign_bitdepth_case(bd) \
+            dav1d_ccso_dsp_init_##bd##bpc(&dsp->ccso); \
             dav1d_cdef_dsp_init_##bd##bpc(&dsp->cdef); \
             dav1d_intra_pred_dsp_init_##bd##bpc(&dsp->ipred); \
             dav1d_itx_dsp_init_##bd##bpc(&dsp->itx, bpc); \

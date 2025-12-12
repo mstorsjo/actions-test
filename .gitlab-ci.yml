@@ -137,8 +137,8 @@ build-debian:
               base="$(basename "$file")"
               a_file="/tmp/${base}.avm.yuv"
               d_file="/tmp/${base}.dav2d.yuv"
-              ./avm/x86-64/aomdec "$file" -o "$a_file" --limit=1 --inloopfilters=deblock+cdef --rawvideo
-              ./build/tools/dav1d -i "$file" -o "$d_file" --limit=1 --inloopfilters=deblock+cdef --threads=1 --quiet
+              ./avm/x86-64/aomdec "$file" -o "$a_file" --limit=1 --inloopfilters=deblock+cdef+ccso --rawvideo
+              ./build/tools/dav1d -i "$file" -o "$d_file" --limit=1 --inloopfilters=deblock+cdef+ccso --threads=1 --quiet
               a_md5=$(head -c "$((64 * 64))" "$a_file" | md5sum | cut -d' ' -f1)
               d_md5=$(head -c "$((64 * 64))" "$d_file" | md5sum | cut -d' ' -f1)
               if [[ "$a_md5" == "$d_md5" ]]; then
@@ -173,8 +173,8 @@ build-debian:
               base="$(basename "$file")"
               a_file="/tmp/${base}.avm.yuv"
               d_file="/tmp/${base}.dav2d.yuv"
-              a_md5=$(./avm/x86-64/aomdec "$file" -o - --inloopfilters=deblock+cdef --md5 --rawvideo | cut -d' ' -f1)
-              d_md5=$(./build/tools/dav1d -i "$file" -o - --inloopfilters=deblock+cdef --threads=1 --quiet --muxer=md5)
+              a_md5=$(./avm/x86-64/aomdec "$file" -o - --inloopfilters=deblock+cdef+ccso --md5 --rawvideo | cut -d' ' -f1)
+              d_md5=$(./build/tools/dav1d -i "$file" -o - --inloopfilters=deblock+cdef+ccso --threads=1 --quiet --muxer=md5)
               if [[ "$a_md5" == "$d_md5" ]]; then
                   echo $base "[OK] md5:$a_md5"
               else

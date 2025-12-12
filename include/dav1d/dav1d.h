@@ -59,12 +59,13 @@ typedef struct Dav1dLogger {
 } Dav1dLogger;
 
 enum Dav1dInloopFilterType {
-    DAV1D_INLOOPFILTER_NONE        = 0,
     DAV1D_INLOOPFILTER_DEBLOCK     = 1 << 0,
     DAV1D_INLOOPFILTER_CDEF        = 1 << 1,
-    DAV1D_INLOOPFILTER_RESTORATION = 1 << 2,
+    DAV1D_INLOOPFILTER_CCSO        = 1 << 2,
+    DAV1D_INLOOPFILTER_RESTORATION = 1 << 3,
     DAV1D_INLOOPFILTER_ALL = DAV1D_INLOOPFILTER_DEBLOCK |
                              DAV1D_INLOOPFILTER_CDEF |
+                             DAV1D_INLOOPFILTER_CCSO |
                              DAV1D_INLOOPFILTER_RESTORATION,
 };
 

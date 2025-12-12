@@ -266,14 +266,10 @@ static const EnumParseTable cpu_mask_tbl[] = {
 };
 
 static const EnumParseTable inloop_filters_tbl[] = {
-    { "none",          DAV1D_INLOOPFILTER_NONE },
     { "deblock",       DAV1D_INLOOPFILTER_DEBLOCK },
-    { "nodeblock",     DAV1D_INLOOPFILTER_ALL - DAV1D_INLOOPFILTER_DEBLOCK },
     { "cdef",          DAV1D_INLOOPFILTER_CDEF },
-    { "deblock+cdef",  DAV1D_INLOOPFILTER_DEBLOCK | DAV1D_INLOOPFILTER_CDEF },
-    { "nocdef",        DAV1D_INLOOPFILTER_ALL - DAV1D_INLOOPFILTER_CDEF },
+    { "ccso",          DAV1D_INLOOPFILTER_CCSO },
     { "restoration",   DAV1D_INLOOPFILTER_RESTORATION },
-    { "norestoration", DAV1D_INLOOPFILTER_ALL - DAV1D_INLOOPFILTER_RESTORATION },
     { "all",           DAV1D_INLOOPFILTER_ALL },
 };
 
@@ -317,6 +313,55 @@ static unsigned parse_enum(char *optarg, const EnumParseTable *const tbl,
     }
 
     return res;
+}
+
+static int parse_enum_mask(const char *const optargs, unsigned const start_mask,
+                           const EnumParseTable *const tbl, const int tbl_sz,
+                           const int option, const char *app)
+{
+    const int start_with_sign = optargs[0] == '+' || optargs[0] == '-';
+    unsigned res = start_with_sign ? start_mask : 0;
+    int sub_instead_of_add = optargs[0] == '-';
+    const char *end = optargs + start_with_sign;
+    for (;;) {
+        const char *start = end;
+        const char *plus = strchr(start, '+');
+        const char *min = strchr(start, '-');
+        if (plus && min) {
+            assert(plus != min);
+            end = plus < min ? plus : min;
+        } else {
+            end = plus ? plus : min;
+        }
+        const ptrdiff_t len = end ? end - start : (ptrdiff_t) strlen(start);
+        int n;
+        for (n = 0; n < tbl_sz; n++)
+            if (!strncmp(tbl[n].str, start, len) && !tbl[n].str[len])
+                break;
+        if (n == tbl_sz) break;
+        if (sub_instead_of_add) {
+            res &= ~tbl[n].val;
+        } else {
+            res |= tbl[n].val;
+        }
+        if (end) {
+            sub_instead_of_add = *end == '-';
+            end++;
+        } else {
+            return res;
+        }
+    }
+
+    char err_msg[1024];
+    size_t len = snprintf(err_msg, sizeof(err_msg), "plus/min-separated values from ");
+    for (int n = 0; n < tbl_sz; n++) {
+        len += snprintf(err_msg + len, sizeof(err_msg) - len, "%s%s",
+                        n ? tbl[n + 1].str ? ", " : " or " : "",
+                        tbl[n].str);
+    }
+
+    error(app, optarg, option, err_msg);
+    return -1;
 }
 
 void parse(const int argc, char *const *const argv,
@@ -425,8 +470,9 @@ void parse(const int argc, char *const *const argv,
             break;
         case ARG_INLOOP_FILTERS:
             lib_settings->inloop_filters =
-                parse_enum(optarg, inloop_filters_tbl,
-                           ARRAY_SIZE(inloop_filters_tbl),ARG_INLOOP_FILTERS, argv[0]);
+                parse_enum_mask(optarg, lib_settings->inloop_filters,
+                                inloop_filters_tbl, ARRAY_SIZE(inloop_filters_tbl),
+                                ARG_INLOOP_FILTERS, argv[0]);
             break;
         case ARG_DECODE_FRAME_TYPE:
             lib_settings->decode_frame_type =

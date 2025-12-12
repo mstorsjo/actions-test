@@ -30,6 +30,7 @@
 
 #include <stdatomic.h>
 
+#include "ccso.h"
 #include "dav1d/data.h"
 
 typedef struct Dav1dFrameContext Dav1dFrameContext;
@@ -67,6 +68,7 @@ typedef struct Dav1dDSPContext {
     Dav1dInvTxfmDSPContext itx;
     Dav1dStxDSPContext stx;
     Dav1dLoopFilterDSPContext lf;
+    Dav1dCcsoDSPContext ccso;
     Dav1dCdefDSPContext cdef;
     Dav1dLoopRestorationDSPContext lr;
 } Dav1dDSPContext;

@@ -528,7 +528,7 @@ typedef struct Dav1dFrameHeader {
             uint8_t reuse, sb_reuse, refidx;
             uint8_t bo_only, scale_idx, quant_idx;
             uint8_t ext_filter_support, edge_clf, max_band_log2;
-            int8_t filter_off[128 /* band */][3 /* d0 */][3 /* d1 */];
+            int8_t filter_off[128 /* if bo_only { [band:128] } else { [d0:4][d1:4][band:8] } */];
         } p[3];
     } ccso;
     enum Dav1dTxfmMode txfm_mode;

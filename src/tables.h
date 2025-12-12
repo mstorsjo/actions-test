@@ -66,6 +66,8 @@ EXTERN const int16_t dav1d_deblock_side_thresholds[296];
 
 EXTERN const int8_t dav1d_cdef_directions[12][2];
 
+EXTERN const uint16_t dav1d_ccso_quant_sz[4][4];
+
 EXTERN const unsigned dav1d_subset_masks_y[4];
 EXTERN const unsigned dav1d_subset_masks_uv[3];
 EXTERN const int8_t dav1d_wiener_ns_filters[64][16];

@@ -106,7 +106,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
     enum CdefEdgeFlags edges = CDEF_HAVE_BOTTOM | (by_start > 0 ? CDEF_HAVE_TOP : 0);
     pixel *ptrs[3] = { p[0], p[1], p[2] };
     const int sbsz = 16;
-    const int sb64w = f->sb256w << 2;
+    const int sb64w = (f->bw + sbsz - 1) >> 4;
     const int damping = f->frame_hdr->cdef.damping + bitdepth_min_8;
     const enum Dav1dPixelLayout layout = f->cur.p.layout;
     const int uv_idx = DAV1D_PIXEL_LAYOUT_I444 - layout;
@@ -143,12 +143,56 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
         edges |= CDEF_HAVE_RIGHT;
         enum Backup2x8Flags prev_flag = 0;
         for (int sbx = 0, last_skip = 1; sbx < sb64w; sbx++, edges |= CDEF_HAVE_LEFT) {
+            ALIGN_STK_64(uint8_t, ccso_lut_idx, 3, [64*8]);
             const int sb256x = sbx >> 2;
             const int sb64_idx = ((by & 0x30) >> 2) + (sbx & 3);
             const int cdef_idx = lflvl[sb256x].cdef_idx[sb64_idx];
+
+            if (lflvl[sb256x].ccso[0] &&
+                f->c->inloop_filters & DAV1D_INLOOPFILTER_CCSO)
+            {
+                const Dav1dFrameHeader *const hdr = f->frame_hdr;
+                const unsigned max_band = hdr->ccso.p[0].max_band_log2;
+                const unsigned ext_filter = hdr->ccso.p[0].ext_filter_support;
+                const unsigned scale_idx = hdr->ccso.p[0].scale_idx;
+                const unsigned quant =
+                    dav1d_ccso_quant_sz[scale_idx][hdr->ccso.p[0].quant_idx];
+                const int edge_cfl = hdr->ccso.p[0].edge_clf;
+                const int bo_only = hdr->ccso.p[0].bo_only;
+
+                const pixel *top, *bot;
+                ptrdiff_t offset;
+
+                enum CdefEdgeFlags sb_edges = edges;
+                if ((sbx + 1) * sbsz >= f->bw) sb_edges &= ~CDEF_HAVE_RIGHT;
+                const int w = imin(sbsz, f->bw - sbx * sbsz) * 4;
+                assert(w >= 0);
+
+                if (!have_tt) goto sb_st_y;
+                if (sbrow_start && by == by_start) {
+                    offset = (sby * (4 << sb128) - 4) * y_stride + sbx * sbsz * 4;
+                    top = &f->lf.lr_lpf_line[0][offset];
+                    bot = iptrs[0] + 8 * y_stride;
+                } else if (!sbrow_start && by + 2 >= by_end) {
+                    top = &f->lf.cdef_line[tf][0][sby * 4 * y_stride + sbx * sbsz * 4];
+                    const int line = sby * (4 << sb128) + 4 * sb128 + 2;
+                    offset = line * y_stride + sbx * sbsz * 4;
+                    bot = &f->lf.lr_lpf_line[0][offset];
+                } else {
+            sb_st_y:
+                    offset = sby * 4 * y_stride;
+                    top = &f->lf.cdef_line[tf][0][have_tt * offset + sbx * sbsz * 4];
+                    bot = iptrs[0] + 8 * y_stride;
+                }
+
+                dsp->ccso.prep[0](ccso_lut_idx[0], 64, iptrs[0], f->cur.stride[0], lr_bak[bit][0],
+                                  top, bot, max_band, ext_filter, quant, edge_cfl, bo_only,
+                                  w, 8, sb_edges HIGHBD_CALL_SUFFIX);
+            }
             if (cdef_idx == -1 ||
                 (!f->frame_hdr->cdef.y_strength[cdef_idx] &&
-                 !f->frame_hdr->cdef.uv_strength[cdef_idx]))
+                 !f->frame_hdr->cdef.uv_strength[cdef_idx]) ||
+                 !(f->c->inloop_filters & DAV1D_INLOOPFILTER_CDEF))
             {
                 last_skip = 1;
                 goto next_sb;
@@ -275,6 +319,19 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
             }
 
         next_sb:
+            if (lflvl[sb256x].ccso[0] &&
+                f->c->inloop_filters & DAV1D_INLOOPFILTER_CCSO)
+            {
+                if (!(prev_flag & BACKUP_2X8_Y) && edges & CDEF_HAVE_RIGHT) {
+                    backup2x8(lr_bak[bit], iptrs, f->cur.stride, sbsz * 4, layout, BACKUP_2X8_Y);
+                    prev_flag |= BACKUP_2X8_Y;
+                    last_skip = 0;
+                }
+                const int w = imin(sbsz, f->bw - sbx * sbsz) * 4;
+                dsp->ccso.add(iptrs[0], f->cur.stride[0], ccso_lut_idx[0], 64,
+                              f->frame_hdr->ccso.p[0].filter_off, w, 8
+                              HIGHBD_CALL_SUFFIX);
+            }
             iptrs[0] += sbsz * 4;
             iptrs[1] += sbsz * 4 >> ss_hor;
             iptrs[2] += sbsz * 4 >> ss_hor;

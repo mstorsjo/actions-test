@@ -1842,12 +1842,6 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                         }
                     }
                 }
-                static const uint16_t quant_sz[4][4] = {
-                    { 16, 8, 32, 0 },
-                    { 56, 40, 64, 128 },
-                    { 48, 24, 96, 192 },
-                    { 80, 112, 160, 256 }
-                };
                 if (!hdr->ccso.p[p].reuse) {
                     hdr->ccso.p[p].bo_only = dav1d_get_bit(gb);
                     const int si = hdr->ccso.p[p].scale_idx = dav1d_get_bits(gb, 2);
@@ -1858,24 +1852,25 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                         hdr->ccso.p[p].quant_idx = dav1d_get_bits(gb, 2);
                         hdr->ccso.p[p].ext_filter_support = dav1d_get_bits(gb, 3);
                         if (hdr->ccso.p[p].ext_filter_support == 7) goto error;
-                        if (quant_sz[si][qi])
+                        if (dav1d_ccso_quant_sz[si][qi])
                             hdr->ccso.p[p].edge_clf = dav1d_get_bit(gb);
                         hdr->ccso.p[p].max_band_log2 = dav1d_get_bits(gb, 2);
                     }
                     const int n_edge_off_intervals = hdr->ccso.p[p].bo_only ? 1 :
                                                      3 - hdr->ccso.p[p].edge_clf;
                     const int max_band = 1 << hdr->ccso.p[p].max_band_log2;
+                    memset(hdr->ccso.p[p].filter_off, 0, sizeof(hdr->ccso.p[p].filter_off));
                     for (int n = 0; n < n_edge_off_intervals; n++) {
-                        for (int m = 0; m < n_edge_off_intervals; m++) {
+                        int8_t *filter_off = &hdr->ccso.p[p].filter_off[n * 32];
+                        for (int m = 0; m < n_edge_off_intervals; m++, filter_off += 8) {
                             for (int o = 0; o < max_band; o++) {
                                 int off = 0;
                                 for (; off < 7; off++)
                                     if (!dav1d_get_bit(gb)) break;
                                 static const int8_t ccso_offset[8] = {
                                     0, 1, -1, 3, -3, 7, -7, -10
-                                }, ccso_scale[4] = { 1, 2, 3, 4 };
-                                hdr->ccso.p[p].filter_off[o][n][m] =
-                                    ccso_offset[off] * ccso_scale[si];
+                                };
+                                filter_off[o] = ccso_offset[off] * (si + 1);
                             }
                         }
                     }

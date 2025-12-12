@@ -3210,7 +3210,7 @@ void bytefn(dav1d_filter_sbrow_deblock_rows)(Dav1dFrameContext *const f, const i
 
 void bytefn(dav1d_filter_sbrow_cdef)(Dav1dTaskContext *const tc, const int sby) {
     const Dav1dFrameContext *const f = tc->f;
-    if (!(f->c->inloop_filters & DAV1D_INLOOPFILTER_CDEF)) return;
+    if (!(f->c->inloop_filters & (DAV1D_INLOOPFILTER_CDEF | DAV1D_INLOOPFILTER_CCSO))) return;
     const int sbsz = f->sb_step;
     const int y = sby * sbsz * 4;
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
