@@ -879,47 +879,18 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     const pixel *left = &topleft_in[-(mrl_idx + 1)];
     int ypos = dy * (1 + mrl_idx);
     if (mrl_mul) {
-        // Safe maximum size for edge buffers
-        const int e_stride = mrl_idx ? (n_px + (mrl_idx << 1) + 3) * 2 : 0;
-        const pixel *left2 = &topleft_in[-(1 + e_stride)];
-        const int max_base_y2 = height + imin(width, height) - 1;
-        int ypos2 = dy;
-
-        for (int x = 0; x < width; x++, ypos += dy, ypos2 += dy) {
-            int base = ypos >> 6;
-            int base2 = ypos2 >> 6;
-            if (base > max_base_y) {
-                assert(base2 > max_base_y2);
-                const int rem = width - x;
-                dst += x;
-                const int v = (left[-max_base_y] + left2[-max_base_y2]) >> 1;
-                for (int y = 0; y < height; y++) {
-                    pixel_set(dst, v, rem);
-                    dst += PXSTRIDE(stride);
-                }
-                return;
-            }
-
-            const DRFilter4Tap f1 = av1_dr_interp_filter[(ypos & 0x3F) >> 1];
-            const DRFilter4Tap f2 = av1_dr_interp_filter[(ypos2 & 0x3F) >> 1];
-            for (int y = 0; y < height; y++, base++, base2++) {
-                int v1, v2;
-                if (base < max_base_y) {
-                    v1 = f1.a * left[-(base - 1)] + f1.b * left[-base] +
-                         f1.c * left[-(base + 1)] + f1.d * left[-(base + 2)];
-                    v1 = iclip_pixel((v1 + 64) >> 7);
-                } else {
-                    v1 = left[-max_base_y];
-                }
-                if (base2 < max_base_y2) {
-                    v2 = f2.a * left2[-(base2 - 1)] + f2.b * left2[-base2] +
-                         f2.c * left2[-(base2 + 1)] + f2.d * left2[-(base2 + 2)];
-                    v2 = iclip_pixel((v2 + 64) >> 7);
-                } else {
-                    v2 = left2[-max_base_y2];
-                }
-                dst[y * PXSTRIDE(stride) + x] = (v1 + v2) >> 1;
-            }
+        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
+        const pixel *tl2 = &topleft_in[-e_stride];
+        pixel tmp[64 * 64];
+        ipred_z3_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
+                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT),
+                   max_width, max_height HIGHBD_TAIL_SUFFIX);
+        ipred_z3_c(dst, stride, tl2, width, height,
+                   angle, max_width, max_height HIGHBD_TAIL_SUFFIX);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++)
+                dst[x] = (tmp[y * 64 + x] + dst[x]) >> 1;
+            dst += PXSTRIDE(stride);
         }
         return;
     }
