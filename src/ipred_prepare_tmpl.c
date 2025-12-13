@@ -211,7 +211,11 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                     pixel_set(top2 + px_have, top2[px_have - 1], sz - px_have);
             }
         } else {
-            pixel_set(top, have_left ? dst[-1] : ((1 << bitdepth) >> 1) - 1, sz);
+            pixel_set(top, have_left ? dst[-(1 + mrl_idx)] :
+                      ((1 << bitdepth) >> 1) - 1, sz);
+            if (mrl_mul)
+                pixel_set(top2, have_left ? dst[-1] :
+                          ((1 << bitdepth) >> 1) - 1, sz);
         }
 
 #if DEBUG_BLOCK_INFO
@@ -234,7 +238,7 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         } else {
             int v;
             if (have_left)
-                v = have_top ? dst_top[-1] : dst[-1];
+                v = dst[-(1 + mrl_idx)];
             else
                 v = have_top ? *dst_top : (1 << bitdepth) >> 1;
             pixel_set(&topleft_out[-mrl_idx], v, 2 * mrl_idx + 1);
