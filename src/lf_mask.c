@@ -369,6 +369,7 @@ void dav1d_create_lf_mask_inter(Av1Filter *const lflvl,
                          max_ytx, tx_masks, ay, ly);
     }
 
+    return;
     if (!auv) return;
 
     const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
