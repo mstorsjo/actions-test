@@ -615,7 +615,8 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
             get_filter_strength(width + height, 90 - angle, is_sm_t) : 0;
     const int sz = 1 + mrl_idx + width + height + mrl_idx * 2;
     if (str) {
-        filter_edge(&filt[1], sz, 1, sz, topleft_in, 0, sz, str);
+        filter_edge(&filt[1], sz, 1, sz + max_width - width,
+                    topleft_in, 0, sz, str);
     } else {
         pixel_copy(&filt[1], topleft_in, sz);
     }
@@ -712,7 +713,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
         get_filter_strength(width + height, angle - 90, is_sm_t) : 0;
     const int sz_t = 1 + width + mrl_idx;
     if (str_t) {
-        filter_edge(&filt[1], sz_t, 1, sz_t, topleft_in, 0, sz_t, str_t);
+        filter_edge(&filt[1], sz_t, 1, sz_t + max_width - width,
+                    topleft_in, 0, sz_t, str_t);
     } else {
         pixel_copy(&filt[1], topleft_in, sz_t);
     }
@@ -724,8 +726,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
         get_filter_strength(width + height, 180 - angle, is_sm_l) : 0;
     const int sz_l = 1 + height + mrl_idx;
     if (str_l) {
-        filter_edge(&filt2[1], sz_l, 0, sz_l - 1, &topleft_in[-height],
-                    0, sz_l, str_l);
+        filter_edge(&filt2[1], sz_l, height - max_height, sz_l - 1,
+                    &topleft_in[-height], 0, sz_l, str_l);
     } else {
         pixel_copy(&filt2[1], &topleft_in[-(height + mrl_idx)], sz_l);
     }
@@ -816,7 +818,8 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         get_filter_strength(n_px, angle - 180, is_sm_l) : 0;
     const int sz = 1 + mrl_idx + width + height + mrl_idx * 2;
     if (str) {
-        filter_edge(&filt[2], sz, 0, sz - 1, &topleft_in[1 - sz], 0, sz, str);
+        filter_edge(&filt[2], sz, height - max_height, sz - 1,
+                    &topleft_in[1 - sz], 0, sz, str);
     } else {
         pixel_copy(&filt[2], &topleft_in[1 - sz], sz);
     }
