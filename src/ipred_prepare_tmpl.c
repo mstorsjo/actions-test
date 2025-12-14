@@ -178,6 +178,9 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
             }
         } else {
             pixel_set(left, have_top ? *dst_top : ((1 << bitdepth) >> 1) + 1, sz);
+            if (mrl_mul)
+                pixel_set(left2, have_top ? *dst_top2 :
+                                 ((1 << bitdepth) >> 1) + 1, sz);
         }
 
 #if DEBUG_BLOCK_INFO
