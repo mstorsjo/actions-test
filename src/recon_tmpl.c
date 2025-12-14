@@ -1630,6 +1630,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                            Av1Block *const b)
 {
 #if 1
+    Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
@@ -1686,9 +1687,9 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     // FIXME do error reporting, to shortcut further decoding
     if (tp[b->tx_part] == -1) return;
 
+    pixel *const dst = ((pixel *) f->cur.data[0]) +
+                           4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
     if (b->intrabc) {
-        pixel *const dst = ((pixel *) f->cur.data[0]) +
-                               4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
         const int res =
             mc(t, dst, NULL, f->cur.stride[0], bw4, bh4, t->bx, t->by, 0,
                b->mv[0], &f->sr_cur, 0 /* unused */, FILTER_2D_BILINEAR);
@@ -1696,7 +1697,24 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     } else if (!b->intra) {
         // FIXME inter pred
     } else if (b->pal_sz) {
-        // FIXME palette pred
+        const uint8_t *pal_idx;
+        if (t->frame_thread.pass) {
+            const int p = t->frame_thread.pass & 1;
+            assert(ts->frame_thread[p].pal_idx);
+            pal_idx = ts->frame_thread[p].pal_idx;
+            ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
+        } else {
+            pal_idx = t->scratch.pal_idx_y;
+        }
+        const pixel *const pal = t->frame_thread.pass ?
+            f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
+                                ((t->bx >> 1) + (t->by & 1))] :
+            bytefn(t->scratch.pal);
+        f->dsp->ipred.pal_pred(dst, f->cur.stride[0], pal,
+                               pal_idx, bw4 * 4, bh4 * 4);
+        if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS)
+            hex_dump(dst, PXSTRIDE(f->cur.stride[0]),
+                     bw4 * 4, bh4 * 4, "y-pal-pred");
     }
 
     // luma

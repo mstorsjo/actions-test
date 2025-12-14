@@ -1,18 +1,18 @@
-From 7b1684ff6eac43c163ce197b4f986f70252f8b90 Mon Sep 17 00:00:00 2001
+From 784a14a5dfc033d6a999bde973a82bc9817f7dd3 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- aom/debug.h               |  49 +++++++++++++
+ aom/debug.h               |  49 ++++++++++++
  av1/common/idct.c         |  20 ++++-
  av1/common/idct.h         |   7 +-
- av1/common/reconintra.c   | 150 ++++++++++++++++++++++++++++++++++++--
+ av1/common/reconintra.c   | 156 ++++++++++++++++++++++++++++++++++++--
  av1/decoder/decodeframe.c |  16 +++-
  av1/encoder/encodemb.c    |  10 +--
  av1/encoder/tpl_model.c   |   2 +-
  av1/encoder/tx_search.c   |   8 +-
- 8 files changed, 240 insertions(+), 22 deletions(-)
+ 8 files changed, 246 insertions(+), 22 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index b203c56cfa..d13c4174a8 100644
@@ -183,7 +183,7 @@ index 419319c472..d97b0a9cd0 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av1/common/reconintra.c b/av1/common/reconintra.c
-index 68d4b6f035..3c2b45679b 100644
+index 68d4b6f035..ae16680d32 100644
 --- a/av1/common/reconintra.c
 +++ b/av1/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -224,7 +224,7 @@ index 68d4b6f035..3c2b45679b 100644
 -      aom_memset16(dst, val, txwpx);
 -      dst += dst_stride;
 +      aom_memset16(&dst[i * dst_stride], val, txwpx);
-+    }
+     }
 +#if DEBUG_B_PIXELS
 +    if (BLOCK_TO_DEBUG) {
 +      // FIXME only print luma for now
@@ -244,7 +244,7 @@ index 68d4b6f035..3c2b45679b 100644
 +        }
 +        hex_dump(dst, dst_stride, txwpx, txhpx, "y-intra-pred", hbd);
 +      }
-     }
++    }
 +#endif
      return;
    }
@@ -425,7 +425,20 @@ index 68d4b6f035..3c2b45679b 100644
    }
  }
  
-@@ -1575,7 +1713,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1521,6 +1659,12 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+         dst[r * dst_stride + c] = palette[map[(r + y) * wpx + c + x]];
+       }
+     }
++#if DEBUG_B_PIXELS
++    const int mi_row = xd->mi_row, mi_col = xd->mi_col, hbd = !!(xd->bd - 8);
++    if (BLOCK_TO_DEBUG) {
++      hex_dump(dst, dst_stride, txwpx, txhpx, "y-pal-pred", hbd);
++    }
++#endif
+     return;
+   }
+ 
+@@ -1575,7 +1719,7 @@ void av1_predict_intra_block(const AV1_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  
@@ -564,5 +577,5 @@ index 2c2ca12103..12b7990516 100644
        max_chroma_eob,
        replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
 -- 
-2.43.0
+2.48.1
 
