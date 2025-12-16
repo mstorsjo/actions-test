@@ -2520,7 +2520,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->ref[0] = 0;
             } else {
                 if (is_tip) {
+                    static const int8_t tip_wts[] = { 8,  12, 16, 18, 20, 4, 6, -4 };
                     b->ref[0] = TIP_FRAME;
+                    b->cwp_idx = tip_wts[f->frame_hdr->tip.global_wtd_idx];
                 } else {
                     const int n_refs = f->frame_hdr->n_ref_frames;
                     int i = 0;

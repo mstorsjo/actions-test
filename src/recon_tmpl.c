@@ -1369,6 +1369,22 @@ static int warp_affine(Dav1dTaskContext *const t,
     return 0;
 }
 
+static void gen_mask(uint8_t *mask, const ptrdiff_t stride,
+                     const int bw, const int bh,
+                     const int x0, const int y0,
+                     const int x1, const int y1,
+                     const unsigned fw, const unsigned fh)
+{
+    for (int y = 0; y < bh; y++) {
+        for (int x = 0; x < bw; x++) {
+            int p0 = (unsigned) (x0 + x) < fw && (unsigned) (y0 + y) < fh;
+            int p1 = (unsigned) (x1 + x) < fw && (unsigned) (y1 + y) < fh;
+            mask[x] = 32 * (p0 - p1 + 1);
+        }
+        mask += stride;
+    }
+}
+
 static int tip_pred(Dav1dTaskContext *const t,
                     int16_t (*const tmp)[128 * 128], const Av1Block *const b,
                     const int bw4, const int bh4, const int w4, const int h4)
@@ -1377,14 +1393,21 @@ static int tip_pred(Dav1dTaskContext *const t,
     const int step = 2 << (f->frame_hdr->tip.frame_mode == 1 /* reference */ &&
                            ((!f->seq_hdr->tip_refine_mv &&
                              imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+    const uint8_t *const tip_refs = f->frame_hdr->tip.refs;
     ptrdiff_t off_y = 0;
+    uint8_t *const mask = t->scratch.seg_mask;
+    const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8 &&
+        !f->svc[tip_refs[0]][0].scale && !f->svc[tip_refs[1]][0].scale;
+    const int w = f->frame_hdr->width, h = f->frame_hdr->height;
+    if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
+    int have_bacp = 0;
 
     for (int y = 0; y < h4; y += step) {
         const ptrdiff_t off_y8 = (((t->by + y) & 63) >> 1) * f->rf.rp_stride;
         for (int x = 0; x < w4; x += step) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
             const mv tmv = t->rt.rp_proj[off_8x8].mv;
-            mv cmv[2];
+            union mv cmv[2];
             for (int i = 0; i < 2; i++) {
                 const Dav1dThreadPicture *const refp =
                     &f->refp[f->frame_hdr->tip.refs[i]];
@@ -1400,6 +1423,20 @@ static int tip_pred(Dav1dTaskContext *const t,
                        mv, refp, f->frame_hdr->tip.refs[i], b->filter);
                 if (res) return res;
             }
+            if (bacp) {
+                const int x0 = (t->bx + x) * 4 + (cmv[0].x >> 3);
+                const int y0 = (t->by + y) * 4 + (cmv[0].y >> 3);
+                const int x1 = (t->bx + x) * 4 + (cmv[1].x >> 3);
+                const int y1 = (t->by + y) * 4 + (cmv[1].y >> 3);
+                if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
+                    x0 + bw4 * 4 >= w || x1 + bw4 * 4 >= w ||
+                    y0 + bh4 * 4 >= h || y1 + bh4 * 4 >= h)
+                {
+                    gen_mask(&mask[(y * bw4 + x) * 4], bw4 * 4,
+                             step * 4, step * 4, x0, y0, x1, y1, w, h);
+                    have_bacp = 1;
+                }
+            }
         }
         off_y += bw4 * 4 * 4 * step;
     }
@@ -1407,7 +1444,7 @@ static int tip_pred(Dav1dTaskContext *const t,
         for (int i = 0; i < 2; i++)
             ac_dump(tmp[i], w4 * 4, h4 * 4, "y-single-tip-pred");
     }
-    return 0;
+    return bacp && have_bacp;
 }
 
 static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
@@ -1810,27 +1847,35 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             }
         } else {
             int16_t (*const tmp)[128 * 128] = t->scratch.compinter;
+            int bacp;
 
             if (b->ref[0] == TIP_FRAME) {
-                tip_pred(t, tmp, b, bw4, bh4, w4, h4);
-            } else for (int i = 0; i < 2; i++) {
-                const Dav1dThreadPicture *const refp = &f->refp[b->ref[i]];
+                bacp = tip_pred(t, tmp, b, bw4, bh4, w4, h4);
+                if (bacp < 0) return;
+            } else {
+                // FIXME also exclude newmv^2 warp-causal
+                bacp = f->seq_hdr->imp_msk_bld &&
+                       b->inter_mode != GLOBALMV_GLOBALMV &&
+                       !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale;
+                for (int i = 0; i < 2; i++) {
+                    const Dav1dThreadPicture *const refp = &f->refp[b->ref[i]];
 
-                if (b->inter_mode == GLOBALMV_GLOBALMV &&
-                    f->gmv_warp_allowed[b->ref[i]])
-                {
-                    const int res =
-                        warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
-                                    &f->frame_hdr->gmv[b->ref[i]]);
-                    if (res) return;
-                } else {
-                    const int res =
-                        mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
-                           b->mv[i], refp, b->ref[i], b->filter);
-                    if (res) return;
+                    if (b->inter_mode == GLOBALMV_GLOBALMV &&
+                        f->gmv_warp_allowed[b->ref[i]])
+                    {
+                        const int res =
+                            warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
+                                        &f->frame_hdr->gmv[b->ref[i]]);
+                        if (res) return;
+                    } else {
+                        const int res =
+                            mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
+                               b->mv[i], refp, b->ref[i], b->filter);
+                        if (res) return;
+                    }
+                    if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                        ac_dump(tmp[i], bw4 * 4, bh4 * 4, "y-single-pred");
                 }
-                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-                    ac_dump(tmp[i], bw4 * 4, bh4 * 4, "y-single-pred");
             }
             switch (b->comp_type) {
             case COMP_INTER_WEDGE: {
@@ -1857,12 +1902,31 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 assert(b->ref[0] == TIP_FRAME);
                 // fall-through
             case COMP_INTER_AVG: {
-                static const int8_t tip_wts[] = { 8,  12, 16, 18, 20, 4, 6, -4 };
-                const int wt = b->ref[0] == TIP_FRAME ?
-                    tip_wts[f->frame_hdr->tip.global_wtd_idx] : b->cwp_idx;
+                const int wt = b->cwp_idx;
                 if (wt == 8) {
-                    dsp->mc.avg(dst, f->cur.stride[0], tmp[0], tmp[1],
-                                bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+                    int y0, y1, x0, x1, w, h;
+                    if (bacp && b->ref[0] != TIP_FRAME) {
+                        w = f->frame_hdr->width;
+                        h = f->frame_hdr->height;
+                        x0 = t->bx * 4 + (b->mv[0].x >> 3);
+                        y0 = t->by * 4 + (b->mv[0].y >> 3);
+                        x1 = t->bx * 4 + (b->mv[1].x >> 3);
+                        y1 = t->by * 4 + (b->mv[1].y >> 3);
+                        bacp = x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
+                               x0 + bw4 * 4 >= w || x1 + bw4 * 4 >= w ||
+                               y0 + bh4 * 4 >= h || y1 + bh4 * 4 >= h;
+                    }
+                    if (bacp) {
+                        uint8_t *const mask = t->scratch.seg_mask;
+                        if (b->ref[0] != TIP_FRAME)
+                            gen_mask(mask, bw4 * 4, bw4 * 4, bh4 * 4,
+                                     x0, y0, x1, y1, w, h);
+                        dsp->mc.mask(dst, f->cur.stride[0], tmp[0], tmp[1],
+                                     bw4 * 4, bh4 * 4, mask HIGHBD_CALL_SUFFIX);
+                    } else {
+                        dsp->mc.avg(dst, f->cur.stride[0], tmp[0], tmp[1],
+                                    bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+                    }
                 } else {
                     dsp->mc.w_avg(dst, f->cur.stride[0], tmp[0], tmp[1],
                                   bw4 * 4, bh4 * 4, wt HIGHBD_CALL_SUFFIX);
