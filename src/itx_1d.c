@@ -392,12 +392,11 @@ static void inv_dct16_1d_c(int32_t *const c, const ptrdiff_t stride) {
     }
 }
 
-static NOINLINE void idct32_1d(const int32_t *const c, const ptrdiff_t stride,
-                               int32_t odd[16], int32_t stage3[16])
-{
-    int32_t quarter[8], eighth[4], sixteenth[2];
-    int32_t stage2[8], stage1[4], dc_nyquist[2];
+static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride) {
+    int32_t odd[16], quarter[8], eighth[4], sixteenth[2];
+    int32_t stage3[16], stage2[8], stage1[4], dc_nyquist[2];
     const int8_t (*const mat)[32] = tx_kernel_dct2_size32;
+    assert(stride > 0);
 
     for (int i = 0; i < 16; i++) {
         int sum = 0;
@@ -442,32 +441,10 @@ static NOINLINE void idct32_1d(const int32_t *const c, const ptrdiff_t stride,
         stage3[i     ] = stage2[i] + quarter[i];
         stage3[15 - i] = stage2[i] - quarter[i];
     }
-}
-
-static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride) {
-    int32_t odd[16], stage3[16];
-    assert(stride > 0);
-
-    idct32_1d(c, stride, odd, stage3);
 
     for (int i = 0; i < 16; i++) {
         c[(i     ) * stride] = stage3[i] + odd[i];
         c[(31 - i) * stride] = stage3[i] - odd[i];
-    }
-}
-
-static void inv_dct64_1d_c(int32_t *const c, const ptrdiff_t stride) {
-    int32_t odd[16], stage3[16];
-    assert(stride > 0);
-
-    idct32_1d(c, stride, odd, stage3);
-
-    for (int i = 0; i < 16; i++) {
-        const int ii = i + i;
-        c[(ii +  0) * stride] =
-        c[(ii +  1) * stride] = stage3[i] + odd[i];
-        c[(63 - ii) * stride] =
-        c[(62 - ii) * stride] = stage3[i] - odd[i];
     }
 }
 
@@ -606,7 +583,7 @@ const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES] = {
         [DCT] = inv_dct32_1d_c,
         [IDENTITY] = inv_identity32_1d_c,
     }, [TX_64X64] = {
-        [DCT] = inv_dct64_1d_c,
+        [DCT] = inv_dct32_1d_c,
     },
 };
 

@@ -80,7 +80,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
 #endif
     const int row_clip_max = ~row_clip_min;
 
-    int32_t tmp[64 * 64], *c = tmp;
+    int32_t tmp[32 * 32], *c = tmp;
 #if 0
     // FIXME Disabled for now,this needs to be updated to AVM
     int last_nonzero_col; // in first 1d itx
@@ -95,7 +95,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
 #else
     int last_nonzero_col = sh - 1;
 #endif
-    for (int y = 0; y <= last_nonzero_col; y++, c += w) {
+    for (int y = 0; y <= last_nonzero_col; y++, c += sw) {
         if (is_rect2)
             for (int x = 0; x < sw; x++)
                 c[x] = (coeff[y + x * sh] * 181 + 128) >> 8;
@@ -107,23 +107,56 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
 
 #if 0
     if (last_nonzero_col + 1 < sh)
-        memset(c, 0, sizeof(*c) * (sh - last_nonzero_col - 1) * w);
+        memset(c, 0, sizeof(*c) * (sh - last_nonzero_col - 1) * sw);
 #endif
     memset(coeff, 0, sizeof(*coeff) * sw * sh);
     int shift = tx_shift[0];
     int rnd = (1 << shift) >> 1;
-    for (int i = 0; i < w * sh; i++)
+    for (int i = 0; i < sw * sh; i++)
         tmp[i] = iclip((tmp[i] + rnd) >> shift, row_clip_min, row_clip_max);
 
-    for (int x = 0; x < w; x++)
-        second_1d_fn(&tmp[x], w);
+    for (int x = 0; x < sw; x++)
+        second_1d_fn(&tmp[x], sw);
 
     shift = tx_shift[1];
     rnd = (1 << shift) >> 1;
     c = tmp;
-    for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
-        for (int x = 0; x < w; x++)
-            dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> shift));
+
+    /* Handle idct64 upsampling */
+    if (w > sw) {
+        if (h > sh) {
+            for (int y = 0; y < h; y += 2, dst += PXSTRIDE(stride) * 2) {
+                pixel *const dst2 = dst + PXSTRIDE(stride);
+                for (int x = 0; x < w; x += 2) {
+                    const int cf = (*c++ + rnd) >> shift;
+                    dst[x + 0]  = iclip_pixel(dst[x + 0]  + cf);
+                    dst[x + 1]  = iclip_pixel(dst[x + 1]  + cf);
+                    dst2[x + 0] = iclip_pixel(dst2[x + 0] + cf);
+                    dst2[x + 1] = iclip_pixel(dst2[x + 1] + cf);
+                }
+            }
+        } else {
+            for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
+                for (int x = 0; x < w; x += 2) {
+                    const int cf = (*c++ + rnd) >> shift;
+                    dst[x + 0] = iclip_pixel(dst[x + 0] + cf);
+                    dst[x + 1] = iclip_pixel(dst[x + 1] + cf);
+                }
+        }
+    } else if (h > sh) {
+        for (int y = 0; y < h; y += 2, dst += PXSTRIDE(stride) * 2) {
+            pixel *const dst2 = dst + PXSTRIDE(stride);
+            for (int x = 0; x < w; x++) {
+                const int cf = (*c++ + rnd) >> shift;
+                dst[x]  = iclip_pixel(dst[x]  + cf);
+                dst2[x] = iclip_pixel(dst2[x] + cf);
+            }
+        }
+    } else {
+        for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
+            for (int x = 0; x < w; x++)
+                dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> shift));
+    }
 }
 
 #define inv_txfm_fn(pfx, w, h) \
