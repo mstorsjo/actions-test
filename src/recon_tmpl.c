@@ -1694,6 +1694,9 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         const int res =
             mc(t, dst, NULL, f->cur.stride[0], bw4, bh4, t->bx, t->by, 0,
                b->mv[0], &f->sr_cur, 0 /* unused */, DAV1D_FILTER_BILINEAR);
+        if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+            hex_dump(dst, f->cur.stride[0], bw4 * 4, bh4 * 4, "y-pred");
+        }
         if (res) return;
     } else if (!b->intra) {
         if (b->ref[1] == -1) {
