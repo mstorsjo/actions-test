@@ -573,6 +573,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
                        HIGHBD_DECL_SUFFIX)
 {
     const int angle_flags = angle & ~(511 | ANGLE_IBP_FLAG);
+    const int is_luma = angle & ANGLE_IS_LUMA;
     const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     const int enable_ibp = !!(angle & ANGLE_IBP_FLAG);
@@ -586,11 +587,12 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
         const pixel *tl2 = &topleft_in[-e_stride];
         pixel tmp[64 * 64];
+        assert(is_luma);
         ipred_z1_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
-                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT),
+                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT) | ANGLE_IS_LUMA,
                    max_width, max_height HIGHBD_TAIL_SUFFIX);
-        ipred_z1_c(dst, stride, tl2, width, height,
-                   angle, max_width, max_height HIGHBD_TAIL_SUFFIX);
+        ipred_z1_c(dst, stride, tl2, width, height, angle | ANGLE_IS_LUMA,
+                   max_width, max_height HIGHBD_TAIL_SUFFIX);
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++)
                 dst[x] = (tmp[y * 64 + x] + dst[x]) >> 1;
@@ -631,16 +633,22 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
             }
             break;
         }
-        const DRFilter4Tap f = av1_dr_interp_filter[(xpos & 0x3F) >> 1];
+        const int shift = (xpos & 0x3F) >> 1;
+        const DRFilter4Tap f = av1_dr_interp_filter[shift];
         for (int x = 0; x < width; x++, base++) {
-            if (base > max_base_x) {
+            if (base >= max_base_x) {
                 pixel_set(&dst[y * PXSTRIDE(stride) + x], top[max_base_x],
                           width - x);
                 break;
             }
-            const int v = f.a * top[base - 1] + f.b * top[base] +
-                          f.c * top[base + 1] + f.d * top[base + 2];
-            dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 64) >> 7);
+            if (is_luma) {
+                const int v = f.a * top[base - 1] + f.b * top[base] +
+                              f.c * top[base + 1] + f.d * top[base + 2];
+                dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 64) >> 7);
+            } else {
+                const int v = (32 - shift) * top[base] + shift * top[base + 1];
+                dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 16) >> 5);
+            }
         }
     }
 
@@ -673,6 +681,7 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
                        HIGHBD_DECL_SUFFIX)
 {
     const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
+    const int is_luma = angle & ANGLE_IS_LUMA;
     const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
     const int is_sm_t = !!(angle & ANGLE_SMOOTH_TOP_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
@@ -686,11 +695,12 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
         const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
         const pixel *tl2 = &topleft_in[-e_stride];
         pixel tmp[64 * 64];
+        assert(is_luma);
         ipred_z2_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
-                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT),
+                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT) | ANGLE_IS_LUMA,
                    max_width, max_height HIGHBD_TAIL_SUFFIX);
-        ipred_z2_c(dst, stride, tl2, width, height,
-                   angle, max_width, max_height HIGHBD_TAIL_SUFFIX);
+        ipred_z2_c(dst, stride, tl2, width, height, angle | ANGLE_IS_LUMA,
+                   max_width, max_height HIGHBD_TAIL_SUFFIX);
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++)
                 dst[x] = (tmp[y * 64 + x] + dst[x]) >> 1;
@@ -744,23 +754,35 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
             const int base_y = ypos_l >> 6;
             assert(base_y >= -(1 + mrl_idx));
             const int shift = (ypos_l & 0x3F) >> 1;
-            const int v =
-                av1_dr_interp_filter[shift].a * left[-(base_y + 1)] +
-                av1_dr_interp_filter[shift].b * left[-(base_y + 2)] +
-                av1_dr_interp_filter[shift].c * left[-(base_y + 3)] +
-                av1_dr_interp_filter[shift].d * left[-(base_y + 4)];
-            dst[x] = iclip_pixel((v + 64) >> 7);
+            if (is_luma) {
+                const int v =
+                    av1_dr_interp_filter[shift].a * left[-(base_y + 1)] +
+                    av1_dr_interp_filter[shift].b * left[-(base_y + 2)] +
+                    av1_dr_interp_filter[shift].c * left[-(base_y + 3)] +
+                    av1_dr_interp_filter[shift].d * left[-(base_y + 4)];
+                dst[x] = iclip_pixel((v + 64) >> 7);
+            } else {
+                const int v = (32 - shift) * left[-(base_y + 2)] +
+                              shift * left[-(base_y + 3)];
+                dst[x] = iclip_pixel((v + 16) >> 5);
+            }
         }
 
         for (; x < width; x++, xpos += 64) {
             const int base_x = xpos >> 6;
             const int shift = (xpos & 0x3F) >> 1;
-            const int v =
-                av1_dr_interp_filter[shift].a * top[base_x + 1] +
-                av1_dr_interp_filter[shift].b * top[base_x + 2] +
-                av1_dr_interp_filter[shift].c * top[base_x + 3] +
-                av1_dr_interp_filter[shift].d * top[base_x + 4];
-            dst[x] = iclip_pixel((v + 64) >> 7);
+            if (is_luma) {
+                const int v =
+                    av1_dr_interp_filter[shift].a * top[base_x + 1] +
+                    av1_dr_interp_filter[shift].b * top[base_x + 2] +
+                    av1_dr_interp_filter[shift].c * top[base_x + 3] +
+                    av1_dr_interp_filter[shift].d * top[base_x + 4];
+                dst[x] = iclip_pixel((v + 64) >> 7);
+            } else {
+                const int v = (32 - shift) * top[base_x + 2] +
+                              shift * top[base_x + 3];
+                dst[x] = iclip_pixel((v + 16) >> 5);
+            }
         }
         dst += PXSTRIDE(stride);
     }
@@ -773,6 +795,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
                        HIGHBD_DECL_SUFFIX)
 {
     const int angle_flags = angle & ~(511 | ANGLE_IBP_FLAG);
+    const int is_luma = angle & ANGLE_IS_LUMA;
     const int is_sm_l = !!(angle & ANGLE_SMOOTH_LEFT_EDGE_FLAG);
     const int enable_intra_edge_filter = !!(angle & ANGLE_USE_EDGE_FILTER_FLAG);
     const int have_left = !!(angle & ANGLE_HAS_LEFT_FLAG);
@@ -787,11 +810,12 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
         const pixel *tl2 = &topleft_in[-e_stride];
         pixel tmp[64 * 64];
+        assert(is_luma);
         ipred_z3_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
-                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT),
+                   angle | (mrl_idx << ANGLE_MRL_IDX_SHIFT) | ANGLE_IS_LUMA,
                    max_width, max_height HIGHBD_TAIL_SUFFIX);
-        ipred_z3_c(dst, stride, tl2, width, height,
-                   angle, max_width, max_height HIGHBD_TAIL_SUFFIX);
+        ipred_z3_c(dst, stride, tl2, width, height, angle | ANGLE_IS_LUMA,
+                   max_width, max_height HIGHBD_TAIL_SUFFIX);
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++)
                 dst[x] = (tmp[y * 64 + x] + dst[x]) >> 1;
@@ -828,12 +852,19 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
 
     int ypos = dy * (1 + mrl_idx);
     for (int x = 0; x < width; x++, ypos += dy) {
-        const DRFilter4Tap f = av1_dr_interp_filter[(ypos & 0x3F) >> 1];
+        const int shift = (ypos & 0x3F) >> 1;
+        const DRFilter4Tap f = av1_dr_interp_filter[shift];
         for (int y = 0, base = ypos >> 6; y < height; y++, base++) {
             if (base <= max_base_y) {
-                const int v = f.a * left[-(base - 1)] + f.b * left[-base] +
-                              f.c * left[-(base + 1)] + f.d * left[-(base + 2)];
-                dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 64) >> 7);
+                if (is_luma) {
+                    const int v = f.a * left[-(base - 1)] + f.b * left[-base] +
+                                  f.c * left[-(base + 1)] + f.d * left[-(base + 2)];
+                    dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 64) >> 7);
+                } else {
+                    const int v = (32 - shift) * left[-base] +
+                                  shift * left[-(base + 1)];
+                    dst[y * PXSTRIDE(stride) + x] = iclip_pixel((v + 16) >> 5);
+                }
             } else {
                 do {
                     dst[y * PXSTRIDE(stride) + x] = left[-max_base_y];

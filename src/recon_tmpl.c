@@ -1553,7 +1553,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     n_tr = 0;
                 } else {
                     const int xpos = (bx4 + t_dim->w) & 63;
-                    const unsigned bits = (unsigned) (t->is_coded[by4 - 1] >> xpos);
+                    const unsigned bits = (unsigned) (t->is_coded[0][by4 - 1] >> xpos);
                     n_tr = imin(ctz(~bits), w);
                 }
             }
@@ -1576,7 +1576,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const uint64_t mask = 1ULL << ((bx4 - 1) & 63);
                 int y;
                 for (y = 0; y < h; y++) {
-                    if (!(t->is_coded[by4 + y + t_dim->h] & mask))
+                    if (!(t->is_coded[0][by4 + y + t_dim->h] & mask))
                         break;
                 }
                 n_bl = y;
@@ -1598,7 +1598,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
              (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG)) :
                 (sm_top | sm_left) *
                     (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
-        int intra_flags = is_sm_flag |
+        int intra_flags = ANGLE_IS_LUMA | is_sm_flag |
             (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
             (apply_ibp ? ANGLE_IBP_FLAG : 0) |
             (mrl_idx << ANGLE_MRL_IDX_SHIFT) |
@@ -1612,8 +1612,9 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
             f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
             t_dim->w, t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
-        // FIXME I'd like to clear this flag before calling prepare_edges(),
-        // but that doesn't work for some reason...
+        // FIXME this is a hack so that we fill in the edges orip needs,
+        // but we normally might not fill as the predictor itself might not
+        // need them
         if (b->y_angle & 1) intra_flags &= ~ANGLE_IBP_FLAG;
 
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
@@ -1626,6 +1627,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
         }
 
+        // XXX fix m to y_mode
         const int has_orip = !mrl_idx && tx && (
             m == VERT_PRED ? t_dim->w < 8 : m == HOR_PRED ? t_dim->h < 8 :
                 m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8);
@@ -1695,7 +1697,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     const uint64_t mask = ((1ULL << t_dim->w) - 1) << bx4;
     for (int y = 0; y < t_dim->h; y++) {
-        t->is_coded[by4 + y] |= mask;
+        t->is_coded[0][by4 + y] |= mask;
     }
 
     b->y_mode = orig_y_mode;
@@ -2233,24 +2235,35 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
     // chroma
 chroma: {}
-    const int cbx4 = (t->cbx & 63) >> f->ss_hor, cby4 = (t->cby & 63) >> f->ss_ver;
+#if DEBUG_B_PIXELS
+    const char *const pred_names[] = { "u-intra-pred", "v-intra-pred" };
+#endif
     coef *const cf = bitfn(t->cf);
     const enum RectTxfmSize uvtx = dav1d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
-    int ctw = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
-    int cth = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
+    const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
+    const int cth4 = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
+    const int ctw = ctw4 * 4, cth = cth4 * 4;
+    const int bx4 = t->cbx & 63, by4 = t->cby & 63;
+    const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
+    const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
+    const ptrdiff_t stride = f->cur.stride[1];
     const enum IntraPredMode orig_uv_mode = b->uv_mode;
     int angle = b->uv_angle;
     if (b->intra)
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
+
     for (int pl = 0; pl < 2; pl++) {
+        // decode coefficients
         uint8_t cf_ctx;
+        enum TxfmType txtp;
+        int eob;
         if (b->skip_txfm) {
+            eob = -1;
             cf_ctx = 0x40;
         } else {
-            enum TxfmType txtp = t->scratch.txtp_map[(t->by & 15) * 16 +
-                                                     (t->bx & 15)];
-            const int eob = decode_coefs(t, DB_ONLY(depth + 1)
+            txtp = t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+            eob = decode_coefs(t, DB_ONLY(depth + 1)
                                          &t->a->ccoef[pl][cbx4],
                                          &t->l.ccoef[pl][cby4], uvtx, b->bs,
                                          b, 1 + pl, cf, &txtp, &cf_ctx);
@@ -2260,13 +2273,123 @@ chroma: {}
                                dav1d_tx1d_names[txtp & 7],
                                dav1d_tx1d_names[txtp >> 5],
                                eob, t->ts->msac.rng);
-            // FIXME Overwrite CF with 0, until we have proper chroma recon
-            memset(cf, 0, imin(uv_t_dim->w, 8) * imin(uv_t_dim->h, 8) *
-                              16 * sizeof(*cf));
         }
-        dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx, ctw);
-        dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx, cth);
+        dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx, ctw4);
+        dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx, cth4);
+        if (b->intra && !b->intrabc) {
+            // intra prediction
+            pixel *dst = ((pixel *) f->cur.data[1 + pl]) +
+                4 * (ssby * PXSTRIDE(stride) + ssbx);
+            const int sbsz = f->sb_step;
+            pixel *const edge = bitfn(t->scratch.edge) + 128;
+
+            if (b->uv_mode == CFL_PRED) {
+                // FIXME implement
+            } else {
+                int n_tr = 0, n_bl = 0;
+                if (t->cby > ts->tiling.row_start) {
+                    const int csbsz = sbsz >> ss_hor;
+                    const int end = imin((ssbx + csbsz) & ~(csbsz - 1),
+                                         ts->tiling.col_end >> ss_hor);
+                    const int w = imin(ctw4, end - ssbx - ctw4);
+                    if (!(t->cby & (sbsz - 1)) || !w) {
+                        // top or right sb boundary
+                        n_tr = w;
+                    } else {
+                        const unsigned bits = (unsigned)
+                            (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
+                        n_tr = imin(ctz(~bits), w);
+                    }
+                }
+                if (t->cbx > ts->tiling.col_start) {
+                    const int csbsz = sbsz >> ss_ver;
+                    const int end = imin((ssby + csbsz) & ~(csbsz - 1),
+                                         ts->tiling.row_end >> ss_ver);
+                    const int h = imin(cth4, end - ssby - cth4);
+                    if (!(t->cbx & (sbsz - 1)) || !h) {
+                        // left or bottom sb boundary
+                        n_bl = h;
+                    } else {
+                        const uint64_t mask = 1ULL << (cbx4 - 1);
+                        for (; n_bl < h; n_bl++)
+                            if (!(t->is_coded[1][cby4 + n_bl + cth4] & mask))
+                                break;
+                    }
+                }
+
+                const pixel *top_sb_edge = NULL;
+                if (!(t->cby & (sbsz - 1))) {
+                    top_sb_edge = f->ipred_edge[1 + pl];
+                    const int sby = t->cby >> f->sb_shift;
+                    top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_ver;
+                }
+                const int apply_ibp = f->seq_hdr->ibp &&
+                    uvtx != (enum RectTxfmSize) TX_4X4 && b->uv_mode == DC_PRED;
+                const int sm_top = sm_uv_flag(t->a, cbx4);
+                const int sm_left = sm_uv_flag(&t->l, cby4);
+                const int is_sm_flag = (sm_top | sm_left) *
+                    (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+                int intra_flags = is_sm_flag |
+                    ANGLE_IBP_FLAG |
+                    (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
+                    ((t->cbx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
+                    ((t->cby > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+
+                const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
+                    // don't print chroma as avm does things in a different order
+                    // (decode coefs of both planes first then pred + itx)
+                    DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
+                    ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
+                    n_tr, n_bl, dst, stride, top_sb_edge, b->uv_mode,
+                    &angle, uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
+
+                // FIXME this is a hack so that we fill in the edges orip needs,
+                // but we normally might not fill as the predictor itself might
+                // not need them
+                if (!apply_ibp) intra_flags &= ~ANGLE_IBP_FLAG;
+                dsp->ipred.intra_pred[m](dst, stride,
+                                         edge, ctw, cth, angle | intra_flags,
+                                         4 * f->bw - 4 * t->cbx,
+                                         4 * f->bh - 4 * t->cby HIGHBD_CALL_SUFFIX);
+
+#if DEBUG_B_PIXELS
+                if (0 && BLOCK_TO_DEBUG) {
+                    hex_dump(dst, stride, ctw, cth, pred_names[pl]);
+                }
+#endif
+                const int has_orip = uvtx && (
+                    b->uv_mode == VERT_PRED ? uv_t_dim->w < 8 : b->uv_mode == HOR_PRED ? uv_t_dim->h < 8 :
+                        b->uv_mode == SMOOTH_PRED && uv_t_dim->w < 8 && uv_t_dim->h < 8);
+                if (has_orip) {
+                    const unsigned cth_mask = ((m == VERT_PRED) << 1) | (m == HOR_PRED);
+                    dsp->ipred.orip(dst, stride, edge, cth_mask,
+                                    ctw, cth HIGHBD_CALL_SUFFIX);
+
+                    if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                        hex_dump(dst, stride, ctw, cth, "orip");
+                }
+            }
+
+            // inverse transform
+            if (eob != -1) {
+                // don't print chroma as avm does things in a different order
+                // (decode coefs of both planes first then pred + itx)
+                if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    coef_dump(cf, imin(uv_t_dim->w, 8) * 4,
+                              imin(uv_t_dim->h, 8) * 4, 3, "dq");
+                }
+                dsp->itx.itxfm_add[uvtx](dst, stride, cf, txtp, eob HIGHBD_CALL_SUFFIX);
+            }
+            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                hex_dump(dst, stride, uv_t_dim->w * 4, uv_t_dim->h * 4, "recon");
+            }
+        }
     }
+
+    const uint64_t mask = ((1ULL << ctw4) - 1) << cbx4;
+    for (int y = 0; y < cth4; y++)
+        t->is_coded[1][cby4 + y] |= mask;
+
     b->uv_mode = orig_uv_mode;
 #else
     Dav1dTileState *const ts = t->ts;

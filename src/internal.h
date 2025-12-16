@@ -401,7 +401,7 @@ struct Dav1dTaskContext {
     int bx, by, cbx, cby, sdp_cfl_disallowed, intra_region;
     BlockContext l, *a;
     struct SBEdgeCtx a_sb_cache;
-    uint64_t is_coded[64];
+    uint64_t is_coded[2 /* luma, chroma */][64];
     struct {
         int col_end;
         int row_end;

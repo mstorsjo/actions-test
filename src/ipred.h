@@ -36,8 +36,10 @@
 
 // These flags are OR'ed with the angle parameter in intra predictors.
 // They encode intra mode features such as edge availability, multi-line MRL,
-// DIP, IBP, and edge filtering.
+// DIP, IBP, edge filtering, and whether we're luma or chroma.
 //
+// ANGLE_IS_LUMA               - z1-3 use this flag to switch between a 4-tap
+//                               luma filter and a 2-tap (bilinear) chroma filter
 // ANGLE_DIP_FLAG              – enables directional intra prediction (DIP) mode
 // ANGLE_HAS_TOP_FLAG          – top reference edge is available for prediction
 // ANGLE_HAS_LEFT_FLAG         – left reference edge is available for prediction
@@ -47,6 +49,7 @@
 // ANGLE_USE_EDGE_FILTER_FLAG  – apply edge filtering (convolution) to reference samples
 // ANGLE_SMOOTH_TOP_EDGE_FLAG  – indicates smooth top edge; use reduced filter strength
 // ANGLE_SMOOTH_LEFT_EDGE_FLAG – indicates smooth left edge; use reduced filter strength
+#define ANGLE_IS_LUMA               (1 << 19)
 #define ANGLE_DIP_FLAG              (1 << 18)
 #define ANGLE_HAS_TOP_FLAG          (1 << 17)
 #define ANGLE_HAS_LEFT_FLAG         (1 << 16)
