@@ -279,7 +279,6 @@ struct Dav1dFrameContext {
     BlockContext *a;
     int a_sz /* w*tile_rows */;
     refmvs_frame rf;
-    uint8_t jnt_weights[7][7];
     int bitdepth_max;
     enum BlockSize root_bs;
 

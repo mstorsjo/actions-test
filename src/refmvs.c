@@ -140,7 +140,8 @@ static int add_candidate_comp(DB_ARGS(const refmvs_frame *const rf,
                                       const char *const tag)
                               refmvs_candidate *const mvstack,
                               int *const cnt, const int max_cnt,
-                              const int weight, const refmvs_mvpair cand_mv,
+                              const int weight, const int cwp_idx,
+                              const refmvs_mvpair cand_mv,
                               int *const iter_cntr, const int max_iter)
 {
     const int last = *cnt;
@@ -165,6 +166,7 @@ static int add_candidate_comp(DB_ARGS(const refmvs_frame *const rf,
 
     mvstack[last].mv = cand_mv;
     mvstack[last].weight = weight;
+    mvstack[last].cwp_idx = cwp_idx;
     DEBUG_REFMV_printf("%s-c[%d]: %s[%d] y=%d,x=%d,y2=%d,x2=%d,w=%d at offset "
                        "y=%d,x=%d\n",
                        tag, iter_cntr[0], did_check ? "adding" : "tailing",
@@ -320,7 +322,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         }};
         add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                    y_off, x_off, "tip-spc")
-                           st->mv, st->cnt, 6, weight, cand_mv,
+                           st->mv, st->cnt, 6, weight, 8, cand_mv,
                            &st->iter_cntr, 16);
     } else if (b->ref.pair == ref.pair) {
         const refmvs_mvpair cand_mv = { .mv = {
@@ -329,8 +331,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         }};
         add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                    y_off, x_off, "spc")
-                           st->mv, st->cnt, 6, weight, cand_mv,
-                           &st->iter_cntr, 16);
+                           st->mv, st->cnt, 6, weight, b->mf >> 2,
+                           cand_mv, &st->iter_cntr, 16);
     } else {
         if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
             b->ref.ref[0] - 1 != TIP_FRAME &&
@@ -357,8 +359,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 }};
                 add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "mvtj-spc")
-                                   st->dr, &st->drvd_cnt, 4, weight, cand_mv,
-                                   &st->drvd_iter_cntr, 2);
+                                   st->dr, &st->drvd_cnt, 4, weight, 8,
+                                   cand_mv, &st->drvd_iter_cntr, 2);
                 if (b->ref.ref[1] <= 0) break;
             }
         }
@@ -379,8 +381,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
             cand_mv.mv[!ns] = st->sngl[oidx].mv;
             add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                        y_off, x_off, "mvxp-spc")
-                               st->dr, &st->drvd_cnt, 4, weight, cand_mv,
-                               &st->drvd_iter_cntr, 2);
+                               st->dr, &st->drvd_cnt, 4, weight, 8,
+                               cand_mv, &st->drvd_iter_cntr, 2);
         }
         add_candidate_c2s(DB_ARGS(rf, st->by4, st->bx4,
                                   y_off, x_off, "sngl-c", ns)
@@ -398,8 +400,8 @@ static void add_derived(DB_ARGS(const refmvs_frame *const rf)
         if (comp) {
             add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                        0, 0, "derived")
-                               st->mv, st->cnt, lim, 0, st->dr[n].mv,
-                               &st->iter_cntr, 16);
+                               st->mv, st->cnt, lim, 0, 8,
+                               st->dr[n].mv, &st->iter_cntr, 16);
         } else {
             add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                        0, 0, "derived", n)
@@ -470,7 +472,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
     return add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                       (int) (off_8x8 / rf->rp_stride),
                                       (int) (off_8x8 % rf->rp_stride), "tpl")
-                              st->mv, st->cnt, 6, 1, mvp, &st->iter_cntr, 16);
+                              st->mv, st->cnt, 6, 1, 8, mvp, &st->iter_cntr, 16);
 }
 
 static int model_from_corners(DB_ARGS(const int idx)
@@ -835,8 +837,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         const int sz = rt->bank.size[c], idx = rt->bank.idx[c];
         const int start = sz + idx - 1;
         for (int n = 0; n < sz && *cnt < lim; n++) {
-            if (c == 8 && rt->bank.ref[(start - n) & 3].pair != ref.pair) continue;
-            const refmvs_mvpair *const mv = &rt->bank.mv[c][(start - n) & 3];
+            const int bank_idx = (start - n) & 3;
+            if (c == 8 && rt->bank.ref[bank_idx].pair != ref.pair) continue;
+            const refmvs_mvpair *const mv = &rt->bank.mv[c][bank_idx];
             const int last = *cnt;
             RDB_ONLY(int did_check = 0);
             if (st.iter_cntr < 16) {
@@ -874,6 +877,8 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             mvstack[last].mv.mv[0].n = mv->mv[0].n;
             mvstack[last].mv.mv[1].n = mv->mv[1].n;
             mvstack[last].weight = 0;
+            if (ref.ref[1] > 0)
+                mvstack[last].cwp_idx = rt->bank.cwp_idx[c - 6][bank_idx];
             mvstack[last].y_off = mvstack[last].x_off = 0;
             *cnt = last + 1;
         end: {}
@@ -1189,6 +1194,8 @@ void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
                 rt->bank.mv[c][n1].n = rt->bank.mv[c][n2].n;
                 if (c == 8)
                     rt->bank.ref[n1].pair = rt->bank.ref[n2].pair;
+                if (c >= 6)
+                    rt->bank.cwp_idx[c][n1] = rt->bank.cwp_idx[c][n2];
             }
             rt->bank.mv[c][to].n = mv_bak.n;
             if (c == 8)
@@ -1205,6 +1212,8 @@ void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
         rt->bank.ref[tgt].ref[0] = b->ref[0] + 1;
         rt->bank.ref[tgt].ref[1] = b->ref[1] + (b->ref[1] >= 0);
     }
+    if (b->ref[1] != -1)
+        rt->bank.cwp_idx[c - 6][tgt] = b->cwp_idx;
     DEBUG_REFMV_printf("Adding new refbank entry in %d | remain=%d|hits=%d|%d\n",
                        tgt, rt->bank.avail, rt->bank.hits[1], rt->bank.hits[0]);
     debug_refbank(rt, c, by4, bx4);

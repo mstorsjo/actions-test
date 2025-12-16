@@ -81,10 +81,13 @@ PACKED(typedef struct refmvs_temporal_block {
 }) refmvs_temporal_block;
 CHECK_SIZE(refmvs_temporal_block, 6);
 
+// FIXME the size of this array can be reduced if we generate mv on-the-fly
+// from the (separately stored) warp matrix.
 PACKED(typedef struct refmvs_block {
     refmvs_mvpair mv, lmv; // for non-warp blocks, lmv==mv (see #1146)
     refmvs_refpair ref;
-    uint8_t bs, mf; // 1 = globalmv+affine, 2 = warp[not gmv]
+    uint8_t bs;
+    int8_t mf; // 1 = globalmv+affine, 2 = warp[not gmv], 3-7: cwp-idx
     uint16_t bx4, by4; // top/left coordinates (in 4px units) of this block
 }) ALIGN(refmvs_block, 4);
 CHECK_SIZE(refmvs_block, 24);
@@ -138,6 +141,7 @@ typedef struct refmvs_tile {
     } tile_col, tile_row;
     struct {
         refmvs_mvpair mv[9][4];
+        int8_t cwp_idx[3 /* class-6 */][4];
         refmvs_refpair ref[4];
         uint8_t size[9], idx[9];
         uint8_t hits[2 /* sb, b */], avail;
@@ -151,8 +155,8 @@ typedef struct refmvs_tile {
 typedef struct refmvs_candidate {
     refmvs_mvpair mv;
     uint8_t weight;
+    int8_t cwp_idx;
     int8_t y_off, x_off;
-    // FIXME cwp_idx for skip_mode
 } refmvs_candidate;
 
 #define decl_save_tmvs_fn(name) \

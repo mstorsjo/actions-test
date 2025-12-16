@@ -1856,11 +1856,19 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             case COMP_INTER_NONE:
                 assert(b->ref[0] == TIP_FRAME);
                 // fall-through
-            case COMP_INTER_AVG:
-                dsp->mc.avg(dst, f->cur.stride[0], tmp[0], tmp[1],
-                            bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+            case COMP_INTER_AVG: {
+                static const int8_t tip_wts[] = { 8,  12, 16, 18, 20, 4, 6, -4 };
+                const int wt = b->ref[0] == TIP_FRAME ?
+                    tip_wts[f->frame_hdr->tip.global_wtd_idx] : b->cwp_idx;
+                if (wt == 8) {
+                    dsp->mc.avg(dst, f->cur.stride[0], tmp[0], tmp[1],
+                                bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+                } else {
+                    dsp->mc.w_avg(dst, f->cur.stride[0], tmp[0], tmp[1],
+                                  bw4 * 4, bh4 * 4, wt HIGHBD_CALL_SUFFIX);
+                }
                 break;
-            }
+            }}
         }
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             hex_dump(dst, f->cur.stride[0], bw4 * 4, bh4 * 4, "y-pred");

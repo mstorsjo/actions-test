@@ -623,13 +623,13 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     tmpl.ref.ref[0] = b->ref[0] + 1;
     tmpl.ref.ref[1] = b->ref[1] + 1;
     tmpl.bs = bs;
+    tmpl.mf = b->cwp_idx * 4;
     tmpl.lmv.mv[0] = b->mv[0];
     tmpl.lmv.mv[1] = b->mv[1];
     tmpl.bx4 = t->bx;
     tmpl.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
-        tmpl.mf = 0;
         const int32_t *const mat = t->warpmv.matrix;
         const int64_t mvx = (int64_t) mat[2] * (t->bx + 1) * 4 +
                             (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
@@ -639,7 +639,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
         f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
     } else {
-        tmpl.mf = b->inter_mode == GLOBALMV_GLOBALMV;
+        tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
         DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n",
                            depth, "", b->mv[0].y, b->mv[0].x,
@@ -2055,6 +2055,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             b->mv[0] = mvstack[drl_idx].mv.mv[0];
             b->mv[1] = mvstack[drl_idx].mv.mv[1];
+            b->cwp_idx = mvstack[drl_idx].cwp_idx;
             mv_reduce_prec(&b->mv[0], 3 + f->frame_hdr->mv_precision);
             mv_reduce_prec(&b->mv[0], 3 + f->frame_hdr->mv_precision);
         } else if (is_comp) {
@@ -2487,6 +2488,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        b->wedge_sign : -1, ts->msac.rng);
             }
 
+            b->cwp_idx = 8;
             if (!b->refine_mv && !jmvd_scale_mode &&
                 f->seq_hdr->cwp && b->comp_type == COMP_INTER_AVG &&
                 (b->inter_mode == NEARMV_NEARMV || b->inter_mode == JOINT_NEWMV))
@@ -4592,43 +4594,6 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         }
     else
         memset(f->qm, 0, sizeof(f->qm));
-
-    // setup jnt_comp weights
-    if (f->frame_hdr->switchable_comp_refs) {
-        for (int i = 0; i < 7; i++) {
-            const unsigned ref0poc = f->refp[i].p.frame_hdr->frame_offset;
-
-            for (int j = 0; j < 7; j++) {
-                const unsigned ref1poc = f->refp[j].p.frame_hdr->frame_offset;
-
-                const unsigned d1 =
-                    imin(abs(get_poc_diff(f->seq_hdr->order_hint_n_bits, ref0poc,
-                                          f->cur.frame_hdr->frame_offset)), 31);
-                const unsigned d0 =
-                    imin(abs(get_poc_diff(f->seq_hdr->order_hint_n_bits, ref1poc,
-                                          f->cur.frame_hdr->frame_offset)), 31);
-                const int order = d0 <= d1;
-
-                static const uint8_t quant_dist_weight[3][2] = {
-                    { 2, 3 }, { 2, 5 }, { 2, 7 }
-                };
-                static const uint8_t quant_dist_lookup_table[4][2] = {
-                    { 9, 7 }, { 11, 5 }, { 12, 4 }, { 13, 3 }
-                };
-
-                int k;
-                for (k = 0; k < 3; k++) {
-                    const int c0 = quant_dist_weight[k][order];
-                    const int c1 = quant_dist_weight[k][!order];
-                    const int d0_c0 = d0 * c0;
-                    const int d1_c1 = d1 * c1;
-                    if ((d0 > d1 && d0_c0 < d1_c1) || (d0 <= d1 && d0_c0 > d1_c1)) break;
-                }
-
-                f->jnt_weights[i][j] = quant_dist_lookup_table[k][order];
-            }
-        }
-    }
 
     /* Init loopfilter pointers. Increasing NULL pointers is technically UB,
      * so just point the chroma pointers in 4:0:0 to the luma plane here to
