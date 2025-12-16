@@ -143,9 +143,9 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
         edges |= CDEF_HAVE_RIGHT;
         enum Backup2x8Flags prev_flag = 0;
         for (int sbx = 0, last_skip = 1; sbx < sb64w; sbx++, edges |= CDEF_HAVE_LEFT) {
-            const int sb128x = sbx >> 1;
-            const int sb64_idx = ((by & sbsz) >> 3) + (sbx & 1);
-            const int cdef_idx = lflvl[sb128x].cdef_idx[sb64_idx];
+            const int sb256x = sbx >> 2;
+            const int sb64_idx = ((by & 0x30) >> 2) + (sbx & 3);
+            const int cdef_idx = lflvl[sb256x].cdef_idx[sb64_idx];
             if (cdef_idx == -1 ||
                 (!f->frame_hdr->cdef.y_strength[cdef_idx] &&
                  !f->frame_hdr->cdef.uv_strength[cdef_idx]))
@@ -155,7 +155,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
             }
 
             // Create a complete 32-bit mask for the sb row ahead of time.
-            const uint16_t (*noskip_row)[4] = &lflvl[sb128x].noskip_mask[by_idx];
+            const uint16_t (*noskip_row)[4] = &lflvl[sb256x].noskip_mask[by_idx];
             const unsigned noskip_mask = (unsigned) noskip_row[0][1] << 16 |
                                                     noskip_row[0][0];
 
