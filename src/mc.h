@@ -115,6 +115,11 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             int dst_w, int h, int src_w, int dx, int mx HIGHBD_DECL_SUFFIX)
 typedef decl_resize_fn(*resize_fn);
 
+#define decl_morph_fn(name) \
+void (name)(pixel *dst, ptrdiff_t dst_stride, int alpha, int beta, \
+            int w, int h HIGHBD_DECL_SUFFIX)
+typedef decl_morph_fn(*morph_fn);
+
 #define decl_8tap_gen(decl_name, fn_name, opt) \
     decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular, opt)); \
     decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth,  opt)); \
@@ -149,6 +154,7 @@ typedef struct Dav1dMCDSPContext {
     warp8x8t_fn warp8x8t;
     emu_edge_fn emu_edge;
     resize_fn resize;
+    morph_fn morph;
 } Dav1dMCDSPContext;
 
 bitfn_decls(void dav1d_mc_dsp_init, Dav1dMCDSPContext *c);

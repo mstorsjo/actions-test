@@ -942,6 +942,22 @@ static void resize_c(pixel *dst, const ptrdiff_t dst_stride,
     } while (--h);
 }
 
+static void morph_c(pixel *dst, const ptrdiff_t dst_stride,
+                    const int alpha, const int beta,
+                    const int w, const int h HIGHBD_DECL_SUFFIX)
+{
+    assert(w <= 64 && h <= 64);
+    assert(w != 64 || h != 64);
+    assert(alpha > -512 && alpha < 512);
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            dst[x] = iclip_pixel((alpha * dst[x] + beta) >> 8);
+        }
+        dst += PXSTRIDE(dst_stride);
+    }
+}
+
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/mc.h"
@@ -982,6 +998,7 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->warp8x8t = warp_affine_8x8t_c;
     c->emu_edge = emu_edge_c;
     c->resize   = resize_c;
+    c->morph    = morph_c;
 
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
