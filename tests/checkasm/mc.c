@@ -128,7 +128,8 @@ static void check_mct(Dav1dMCDSPContext *const c) {
     const pixel *src = src_buf + 135 * 3 + 3;
     const ptrdiff_t src_stride = 135 * sizeof(pixel);
 
-    declare_func(void, int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
+    declare_func(void, int16_t *tmp, ptrdiff_t tmp_stride,
+                 const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my HIGHBD_DECL_SUFFIX);
 
     for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
@@ -147,9 +148,9 @@ static void check_mct(Dav1dMCDSPContext *const c) {
 #endif
                         generate_mct_input(src_buf, bitdepth_max);
 
-                        call_ref(c_tmp, src, src_stride, w, h,
+                        call_ref(c_tmp, w, src, src_stride, w, h,
                                  mx, my HIGHBD_TAIL_SUFFIX);
-                        call_new(a_tmp, src, src_stride, w, h,
+                        call_new(a_tmp, w, src, src_stride, w, h,
                                  mx, my HIGHBD_TAIL_SUFFIX);
                         checkasm_check(int16_t, c_tmp, w * sizeof(*c_tmp),
                                                 a_tmp, w * sizeof(*a_tmp),
@@ -159,7 +160,7 @@ static void check_mct(Dav1dMCDSPContext *const c) {
                             filter == DAV1D_FILTER_8TAP_SHARP ||
                             filter == DAV1D_FILTER_BILINEAR)
                         {
-                            bench_new(a_tmp, src, src_stride, w, h,
+                            bench_new(a_tmp, w, src, src_stride, w, h,
                                       mx, my HIGHBD_TAIL_SUFFIX);
                         }
                     }
@@ -235,7 +236,8 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
     const int bitdepth_max = 0xff;
 #endif
 
-    declare_func(void, int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
+    declare_func(void, int16_t *tmp, ptrdiff_t tmp_stride,
+                 const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
     for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
@@ -257,9 +259,9 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
                         for (int k = 0; k < 263 * 263; k++)
                             src_buf[k] = rnd() & bitdepth_max;
 
-                        call_ref(c_tmp, src, src_stride,
+                        call_ref(c_tmp, w, src, src_stride,
                                  w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
-                        call_new(a_tmp, src, src_stride,
+                        call_new(a_tmp, w, src, src_stride,
                                  w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
                         checkasm_check(int16_t, c_tmp, w * sizeof(*c_tmp),
                                                 a_tmp, w * sizeof(*a_tmp),
@@ -267,7 +269,7 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
 
                         if (filter == DAV1D_FILTER_8TAP_REGULAR ||
                             filter == DAV1D_FILTER_BILINEAR)
-                            bench_new(a_tmp, src, src_stride,
+                            bench_new(a_tmp, w, src, src_stride,
                                       w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
                     }
                 }
@@ -280,7 +282,7 @@ static void init_tmp(Dav1dMCDSPContext *const c, pixel *const buf,
 {
     for (int i = 0; i < 2; i++) {
         generate_mct_input(buf, bitdepth_max);
-        c->mct[DAV1D_FILTER_8TAP_SHARP](tmp[i], buf + 135 * 3 + 3,
+        c->mct[DAV1D_FILTER_8TAP_SHARP](tmp[i], 128, buf + 135 * 3 + 3,
                                         135 * sizeof(pixel), 128, 128,
                                         8, 8 HIGHBD_TAIL_SUFFIX);
     }

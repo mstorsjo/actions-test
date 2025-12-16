@@ -61,7 +61,8 @@ put_c(pixel *dst, const ptrdiff_t dst_stride,
 }
 
 static NOINLINE void
-prep_c(int16_t *tmp, const pixel *src, const ptrdiff_t src_stride,
+prep_c(int16_t *tmp, const ptrdiff_t tmp_stride,
+       const pixel *src, const ptrdiff_t src_stride,
        const int w, int h HIGHBD_DECL_SUFFIX)
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
@@ -69,7 +70,7 @@ prep_c(int16_t *tmp, const pixel *src, const ptrdiff_t src_stride,
         for (int x = 0; x < w; x++)
             tmp[x] = (src[x] << intermediate_bits) - PREP_BIAS;
 
-        tmp += w;
+        tmp += tmp_stride;
         src += src_stride;
     } while (--h);
 }
@@ -244,7 +245,8 @@ put_8tap_scaled_c(pixel *dst, const ptrdiff_t dst_stride,
 }
 
 static NOINLINE void
-prep_8tap_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
+prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
+            const pixel *src, ptrdiff_t src_stride,
             const int w, int h, const int mx, const int my,
             const int filter_type HIGHBD_DECL_SUFFIX)
 {
@@ -277,7 +279,7 @@ prep_8tap_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
                 }
 
                 mid_ptr += 128;
-                tmp += w;
+                tmp += tmp_stride;
             } while (--h);
         } else {
             do {
@@ -286,7 +288,7 @@ prep_8tap_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
                                                    6 - intermediate_bits) -
                              PREP_BIAS;
 
-                tmp += w;
+                tmp += tmp_stride;
                 src += src_stride;
             } while (--h);
         }
@@ -297,15 +299,16 @@ prep_8tap_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
                                                6 - intermediate_bits) -
                          PREP_BIAS;
 
-            tmp += w;
+            tmp += tmp_stride;
             src += src_stride;
         } while (--h);
     } else
-        prep_c(tmp, src, src_stride, w, h HIGHBD_TAIL_SUFFIX);
+        prep_c(tmp, tmp_stride, src, src_stride, w, h HIGHBD_TAIL_SUFFIX);
 }
 
 static NOINLINE void
-prep_8tap_scaled_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
+prep_8tap_scaled_c(int16_t *tmp, const ptrdiff_t tmp_stride,
+                   const pixel *src, ptrdiff_t src_stride,
                    const int w, int h, const int mx, int my,
                    const int dx, const int dy, const int filter_type
                    HIGHBD_DECL_SUFFIX)
@@ -353,7 +356,7 @@ prep_8tap_scaled_c(int16_t *tmp, const pixel *src, ptrdiff_t src_stride,
                          : mid_ptrs[3][x]) - PREP_BIAS;
 
         my += dy;
-        tmp += w;
+        tmp += tmp_stride;
     }
 }
 
@@ -382,16 +385,18 @@ static void put_8tap_##name##_scaled_c(pixel *const dst, \
                       type HIGHBD_TAIL_SUFFIX); \
 } \
 static void prep_8tap_##name##_c(int16_t *const tmp, \
+                                 const ptrdiff_t tmp_stride, \
                                  const pixel *const src, \
                                  const ptrdiff_t src_stride, \
                                  const int w, const int h, \
                                  const int mx, const int my \
                                  HIGHBD_DECL_SUFFIX) \
 { \
-    prep_8tap_c(tmp, src, src_stride, w, h, mx, my, \
+    prep_8tap_c(tmp, tmp_stride, src, src_stride, w, h, mx, my, \
                 type HIGHBD_TAIL_SUFFIX); \
 } \
 static void prep_8tap_##name##_scaled_c(int16_t *const tmp, \
+                                        const ptrdiff_t tmp_stride, \
                                         const pixel *const src, \
                                         const ptrdiff_t src_stride, \
                                         const int w, const int h, \
@@ -399,7 +404,7 @@ static void prep_8tap_##name##_scaled_c(int16_t *const tmp, \
                                         const int dx, const int dy \
                                         HIGHBD_DECL_SUFFIX) \
 { \
-    prep_8tap_scaled_c(tmp, src, src_stride, w, h, mx, my, dx, dy, \
+    prep_8tap_scaled_c(tmp, tmp_stride, src, src_stride, w, h, mx, my, dx, dy, \
                        type HIGHBD_TAIL_SUFFIX); \
 }
 
@@ -524,7 +529,7 @@ static void put_bilin_scaled_c(pixel *dst, ptrdiff_t dst_stride,
     } while (--h);
 }
 
-static void prep_bilin_c(int16_t *tmp,
+static void prep_bilin_c(int16_t *tmp, const ptrdiff_t tmp_stride,
                          const pixel *src, ptrdiff_t src_stride,
                          const int w, int h, const int mx, const int my
                          HIGHBD_DECL_SUFFIX)
@@ -553,7 +558,7 @@ static void prep_bilin_c(int16_t *tmp,
                              PREP_BIAS;
 
                 mid_ptr += 128;
-                tmp += w;
+                tmp += tmp_stride;
             } while (--h);
         } else {
             do {
@@ -562,7 +567,7 @@ static void prep_bilin_c(int16_t *tmp,
                                               4 - intermediate_bits) -
                              PREP_BIAS;
 
-                tmp += w;
+                tmp += tmp_stride;
                 src += src_stride;
             } while (--h);
         }
@@ -572,14 +577,14 @@ static void prep_bilin_c(int16_t *tmp,
                 tmp[x] = FILTER_BILIN_RND(src, x, my, src_stride,
                                           4 - intermediate_bits) - PREP_BIAS;
 
-            tmp += w;
+            tmp += tmp_stride;
             src += src_stride;
         } while (--h);
     } else
-        prep_c(tmp, src, src_stride, w, h HIGHBD_TAIL_SUFFIX);
+        prep_c(tmp, tmp_stride, src, src_stride, w, h HIGHBD_TAIL_SUFFIX);
 }
 
-static void prep_bilin_scaled_c(int16_t *tmp,
+static void prep_bilin_scaled_c(int16_t *tmp, const ptrdiff_t tmp_stride,
                                 const pixel *src, ptrdiff_t src_stride,
                                 const int w, int h, const int mx, int my,
                                 const int dx, const int dy HIGHBD_DECL_SUFFIX)
@@ -615,7 +620,7 @@ static void prep_bilin_scaled_c(int16_t *tmp,
             tmp[x] = FILTER_BILIN_RND2(mid1, mid2, x, dmy >> 6, 4) - PREP_BIAS;
 
         my += dy;
-        tmp += w;
+        tmp += tmp_stride;
     } while (--h);
 }
 

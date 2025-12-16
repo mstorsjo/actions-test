@@ -54,12 +54,14 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
 typedef decl_warp8x8_fn(*warp8x8_fn);
 
 #define decl_mct_fn(name) \
-void (name)(int16_t *tmp, const pixel *src, ptrdiff_t src_stride, \
+void (name)(int16_t *tmp, ptrdiff_t dst_stride, \
+            const pixel *src, ptrdiff_t src_stride, \
             int w, int h, int mx, int my HIGHBD_DECL_SUFFIX)
 typedef decl_mct_fn(*mct_fn);
 
 #define decl_mct_scaled_fn(name) \
-void (name)(int16_t *tmp, const pixel *src, ptrdiff_t src_stride, \
+void (name)(int16_t *tmp, ptrdiff_t dst_stride, \
+            const pixel *src, ptrdiff_t src_stride, \
             int w, int h, int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX)
 typedef decl_mct_scaled_fn(*mct_scaled_fn);
 

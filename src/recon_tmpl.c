@@ -1243,7 +1243,7 @@ static int mc(Dav1dTaskContext *const t,
                                   bh4 * v_mul, mx << !ss_hor, my << !ss_ver
                                   HIGHBD_CALL_SUFFIX);
         } else {
-            f->dsp->mc.mct[filter](dst16, ref, ref_stride, bw4 * h_mul,
+            f->dsp->mc.mct[filter](dst16, dst_stride, ref, ref_stride, bw4 * h_mul,
                                    bh4 * v_mul, mx << !ss_hor, my << !ss_ver
                                    HIGHBD_CALL_SUFFIX);
         }
@@ -1296,7 +1296,7 @@ static int mc(Dav1dTaskContext *const t,
                                          f->svc[refidx][1].step
                                          HIGHBD_CALL_SUFFIX);
         } else {
-            f->dsp->mc.mct_scaled[filter](dst16, ref, ref_stride,
+            f->dsp->mc.mct_scaled[filter](dst16, dst_stride, ref, ref_stride,
                                           bw4 * h_mul, bh4 * v_mul,
                                           pos_x & 0x3ff, pos_y & 0x3ff,
                                           f->svc[refidx][0].step,
@@ -1365,6 +1365,47 @@ static int warp_affine(Dav1dTaskContext *const t,
         }
         if (dst8) dst8  += 8 * PXSTRIDE(dstride);
         else      dst16 += 8 * dstride;
+    }
+    return 0;
+}
+
+static int tip_pred(Dav1dTaskContext *const t,
+                    int16_t (*const tmp)[128 * 128], const Av1Block *const b,
+                    const int bw4, const int bh4, const int w4, const int h4)
+{
+    const Dav1dFrameContext *const f = t->f;
+    const int step = 2 << (f->frame_hdr->tip.frame_mode == 1 /* reference */ &&
+                           ((!f->seq_hdr->tip_refine_mv &&
+                             imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+    ptrdiff_t off_y = 0;
+
+    for (int y = 0; y < h4; y += step) {
+        const ptrdiff_t off_y8 = (((t->by + y) & 63) >> 1) * f->rf.rp_stride;
+        for (int x = 0; x < w4; x += step) {
+            const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
+            const mv tmv = t->rt.rp_proj[off_8x8].mv;
+            mv cmv[2];
+            for (int i = 0; i < 2; i++) {
+                const Dav1dThreadPicture *const refp =
+                    &f->refp[f->frame_hdr->tip.refs[i]];
+                const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
+                const union mv mv = (union mv) {
+                    .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
+                    .x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff),
+                };
+                cmv[i] = mv;
+                const int res =
+                    mc(t, NULL, &tmp[i][off_y + x * 4], bw4 * 4,
+                       step, step, t->bx + x, t->by + y, 0,
+                       mv, refp, f->frame_hdr->tip.refs[i], b->filter);
+                if (res) return res;
+            }
+        }
+        off_y += bw4 * 4;
+    }
+    if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+        for (int i = 0; i < 2; i++)
+            ac_dump(tmp[i], w4 * 4, h4 * 4, "y-single-tip-pred");
     }
     return 0;
 }
@@ -1637,6 +1678,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     assert(bs != BS_INVALID);
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
+    const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
     const uint8_t csplit[6][3] = {
         [BS_256x256] = {  BS_64x64, BS_128x64, BS_128x128 },
@@ -1699,7 +1741,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         }
         if (res) return;
     } else if (!b->intra) {
-        if (b->ref[1] == -1) {
+        if (b->ref[1] == -1 && b->ref[0] != TIP_FRAME) {
             const Dav1dThreadPicture *const refp = &f->refp[b->ref[0]];
             if ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
                 (b->motion_mode >= MM_WARP_CAUSAL &&
@@ -1769,7 +1811,9 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         } else {
             int16_t (*const tmp)[128 * 128] = t->scratch.compinter;
 
-            for (int i = 0; i < 2; i++) {
+            if (b->ref[0] == TIP_FRAME) {
+                tip_pred(t, tmp, b, bw4, bh4, w4, h4);
+            } else for (int i = 0; i < 2; i++) {
                 const Dav1dThreadPicture *const refp = &f->refp[b->ref[i]];
 
                 if (b->inter_mode == GLOBALMV_GLOBALMV &&
@@ -1781,7 +1825,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                     if (res) return;
                 } else {
                     const int res =
-                        mc(t, NULL, tmp[i], 0, bw4, bh4, t->bx, t->by, 0,
+                        mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
                            b->mv[i], refp, b->ref[i], b->filter);
                     if (res) return;
                 }
@@ -1808,6 +1852,10 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                                                b->mask_sign HIGHBD_CALL_SUFFIX);
                 break;
             }
+            default: assert(0);
+            case COMP_INTER_NONE:
+                assert(b->ref[0] == TIP_FRAME);
+                // fall-through
             case COMP_INTER_AVG:
                 dsp->mc.avg(dst, f->cur.stride[0], tmp[0], tmp[1],
                             bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);

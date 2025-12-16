@@ -201,7 +201,8 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8);
 
-mv mv_projection(const union mv mv, const int num, const int den);
+mv mv_projection(mv in, int num, int den);
+mv scale_mv(mv in, int sf);
 
 // initialize tile boundaries and refmvs_block pointers for one tile/sbrow
 void dav1d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,

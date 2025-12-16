@@ -174,7 +174,7 @@ static int add_candidate_comp(DB_ARGS(const refmvs_frame *const rf,
     return 1;
 }
 
-static mv scale_mv(const mv in, const int sf) {
+mv scale_mv(const mv in, const int sf) {
     const int64_t y = in.y * (int64_t) sf, x = in.x * (int64_t) sf;
     return (mv) {
         .y = iclip((int)((y + 0x2000 - (y < 0)) >> 14), -0xffff, 0xffff),
