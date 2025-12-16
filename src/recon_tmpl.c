@@ -1794,10 +1794,15 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                              bw4 * 4, bh4 * 4, mask HIGHBD_CALL_SUFFIX);
                 break;
             }
-            case COMP_INTER_WEIGHTED_AVG: {
-                const int jnt_weight = f->jnt_weights[b->ref[0]][b->ref[1]];
-                dsp->mc.w_avg(dst, f->cur.stride[0], tmp[0], tmp[1],
-                              bw4 * 4, bh4 * 4, jnt_weight HIGHBD_CALL_SUFFIX);
+            case COMP_INTER_SEG: {
+                const int chr_layout_idx =
+                    f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400 ? 0 :
+                    DAV1D_PIXEL_LAYOUT_I444 - f->cur.p.layout;
+                uint8_t *const seg_mask = t->scratch.seg_mask;
+                dsp->mc.w_mask[chr_layout_idx](dst, f->cur.stride[0],
+                                               tmp[b->mask_sign], tmp[!b->mask_sign],
+                                               bw4 * 4, bh4 * 4, seg_mask,
+                                               b->mask_sign HIGHBD_CALL_SUFFIX);
                 break;
             }
             case COMP_INTER_AVG:

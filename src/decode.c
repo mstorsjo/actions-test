@@ -2473,8 +2473,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         b->wedge_idx = read_wedge_idx(ts);
                         b->wedge_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
                     } else {
-                        b->comp_type = COMP_INTER_WEIGHTED_AVG;
-                        b->mask_type = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        b->comp_type = COMP_INTER_SEG;
+                        b->mask_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
                     }
                 }
                 DEBUG_BLOCK_printf("%*sPost-comp_inter_type[ctx=%d,%d,%c=%d|%d]: r=%d\n",
@@ -2482,7 +2482,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    "?wm"[b->comp_type - 1],
                                    b->comp_type == COMP_INTER_AVG ? -1 :
                                    b->comp_type == COMP_INTER_WEDGE ?
-                                       b->wedge_idx : b->mask_type,
+                                       b->wedge_idx : b->mask_sign,
                                    b->comp_type == COMP_INTER_WEDGE ?
                                        b->wedge_sign : -1, ts->msac.rng);
             }

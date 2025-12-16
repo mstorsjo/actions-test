@@ -264,7 +264,7 @@ enum CompInterType {
     COMP_INTER_NONE,
     COMP_INTER_AVG,
     COMP_INTER_WEDGE,
-    COMP_INTER_WEIGHTED_AVG,
+    COMP_INTER_SEG,
 };
 
 typedef union mv {
@@ -307,7 +307,7 @@ typedef struct Av1Block {
                 struct {
                     union mv mv[2];
                     int8_t wedge_idx, wedge_sign; // -1 for no wedge
-                    uint8_t mask_type, interintra_mode, morph_pred;
+                    uint8_t mask_sign, interintra_mode, morph_pred;
                 };
                 struct {
                     union mv mv2d;
