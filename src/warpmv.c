@@ -31,19 +31,8 @@
 
 #include "common/intops.h"
 
+#include "src/tables.h"
 #include "src/warpmv.h"
-
-static const uint16_t div_lut[129] = {
-    512, 508, 504, 500, 496, 493, 489, 485, 482, 478, 475, 471, 468, 465, 462,
-    458, 455, 452, 449, 446, 443, 440, 437, 434, 431, 428, 426, 423, 420, 417,
-    415, 412, 410, 407, 405, 402, 400, 397, 395, 392, 390, 388, 386, 383, 381,
-    379, 377, 374, 372, 370, 368, 366, 364, 362, 360, 358, 356, 354, 352, 350,
-    349, 347, 345, 343, 341, 340, 338, 336, 334, 333, 331, 329, 328, 326, 324,
-    323, 321, 320, 318, 317, 315, 314, 312, 311, 309, 308, 306, 305, 303, 302,
-    301, 299, 298, 297, 295, 294, 293, 291, 290, 289, 287, 286, 285, 284, 282,
-    281, 280, 279, 278, 277, 275, 274, 273, 272, 271, 270, 269, 267, 266, 265,
-    264, 263, 262, 261, 260, 259, 258, 257, 256
-};
 
 static inline int iclip_wmp(const int v) {
     const int cv = iclip(v, INT16_MIN, INT16_MAX);
@@ -59,7 +48,7 @@ static inline int resolve_divisor_32(const unsigned d, int *const shift) {
     assert(f <= 128);
     *shift += 9;
     // Use f as lookup into the precomputed table of multipliers
-    return div_lut[f];
+    return dav1d_div_recip[f];
 }
 
 int dav1d_get_shear_params(Dav1dWarpedMotionParams *const wm) {
@@ -92,7 +81,7 @@ static int resolve_divisor_64(const uint64_t d, int *const shift) {
     assert(f <= 128);
     *shift += 9;
     // Use f as lookup into the precomputed table of multipliers
-    return div_lut[f];
+    return dav1d_div_recip[f];
 }
 
 static int get_mult_shift_ndiag(const int64_t px, const int idet,
