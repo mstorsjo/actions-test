@@ -1401,7 +1401,7 @@ static int tip_pred(Dav1dTaskContext *const t,
                 if (res) return res;
             }
         }
-        off_y += bw4 * 4 * 8;
+        off_y += bw4 * 4 * 4 * step;
     }
     if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
         for (int i = 0; i < 2; i++)
