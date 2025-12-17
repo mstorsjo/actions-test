@@ -3079,12 +3079,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (!b->skip_txfm) {
         uint16_t (*noskip_mask)[4] = &t->lf_mask->noskip_mask[by4 >> 1];
         const unsigned mask = (~0U >> imax(0, 32 - bw4)) << (bx4 & 15);
-        const int bx_idx = (bx4 & 16) >> 4;
+        const int bx_idx = (bx4 & 0x30) >> 4;
         for (int y = 0; y < bh4; y += 2, noskip_mask++) {
             (*noskip_mask)[bx_idx] |= mask;
             if (bw4 >= 32) {
                 assert(mask == ~0U);
-                (*noskip_mask)[1] = mask;
+                (*noskip_mask)[bx_idx + 1] = mask;
                 if (bw4 == 64)
                     (*noskip_mask)[2] = (*noskip_mask)[3] = mask;
             }

@@ -171,8 +171,8 @@ build-debian:
               base="$(basename "$file")"
               a_file="/tmp/${base}.avm.yuv"
               d_file="/tmp/${base}.dav2d.yuv"
-              ./avm/x86-64/aomdec "$file" -o "$a_file" --inloopfilters=deblock --rawvideo
-              ./build/tools/dav1d -i "$file" -o "$d_file" --inloopfilters=deblock --filmgrain=0 --threads=1 --quiet
+              ./avm/x86-64/aomdec "$file" -o "$a_file" --inloopfilters=deblock+cdef+ccso --rawvideo
+              ./build/tools/dav1d -i "$file" -o "$d_file" --inloopfilters=deblock+cdef+ccso --filmgrain=0 --threads=1 --quiet
               a_md5=$(for i in `seq 0 4`; do head -c "$((64 * 64 + 64 * 96 * $i))" $a_file | tail -c "$((64 * 64))"; done | md5sum | cut -d' ' -f1)
               d_md5=$(for i in `seq 0 4`; do head -c "$((64 * 64 + 64 * 96 * $i))" $d_file | tail -c "$((64 * 64))"; done | md5sum | cut -d' ' -f1)
               if [[ "$a_md5" == "$d_md5" ]]; then

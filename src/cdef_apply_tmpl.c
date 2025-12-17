@@ -108,6 +108,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
     const int sbsz = 16;
     const int sb64w = (f->bw + sbsz - 1) >> 4;
     const int damping = f->frame_hdr->cdef.damping + bitdepth_min_8;
+    const int on_skip_tx = f->frame_hdr->cdef.on_skiptx;
     const enum Dav1dPixelLayout layout = f->cur.p.layout;
     const int uv_idx = DAV1D_PIXEL_LAYOUT_I444 - layout;
     const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
@@ -122,7 +123,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
 
     for (int bit = 0, by = by_start; by < by_end; by += 2, edges |= CDEF_HAVE_TOP) {
         const int tf = tc->top_pre_cdef_toggle;
-        const int by_idx = (by & 30) >> 1;
+        const int by_idx = (by & 0x3e) >> 1;
         if (by + 2 >= f->bh) edges &= ~CDEF_HAVE_BOTTOM;
 
         if ((!have_tt || sbrow_start || by + 2 < by_end) &&
@@ -206,10 +207,15 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
                 goto next_sb;
             }
 
-            // Create a complete 32-bit mask for the sb row ahead of time.
-            const uint16_t (*noskip_row)[4] = &lflvl[sb256x].noskip_mask[by_idx];
-            const unsigned noskip_mask = (unsigned) noskip_row[0][1] << 16 |
-                                                    noskip_row[0][0];
+            // Load the entire 64-bit mask for the largest sb row size
+            uint64_t noskip_mask = ~0ULL;
+            if (!on_skip_tx) {
+                const uint16_t (*noskip_row)[4] = &lflvl[sb256x].noskip_mask[by_idx];
+                noskip_mask = (uint64_t) noskip_row[0][3] << 48 |
+                              (uint64_t) noskip_row[0][2] << 32 |
+                              (uint64_t) noskip_row[0][1] << 16 |
+                              noskip_row[0][0];
+            }
 
             const int y_lvl = f->frame_hdr->cdef.y_strength[cdef_idx];
             const int uv_lvl = f->frame_hdr->cdef.uv_strength[cdef_idx];
@@ -233,7 +239,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
 
                 // check if this 8x8 block had any coded coefficients; if not,
                 // go to the next block
-                const uint32_t bx_mask = 3U << (bx & 30);
+                const uint32_t bx_mask = 3U << (bx & 0x3e);
                 if (!(noskip_mask & bx_mask)) {
                     prev_flag = 0;
                     goto next_b;
