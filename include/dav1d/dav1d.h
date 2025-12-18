@@ -160,13 +160,17 @@ DAV1D_API int dav1d_parse_sequence_header(Dav1dSequenceHeader *out,
  *
  * @param   c Input decoder instance.
  * @param  in Input bitstream data. On success, ownership of the reference is
- *            passed to the library.
+ *            passed to the library. May be NULL, in which case the decoder will
+ *            enter draining mode.
  *
  * @return
  *         0: Success, and the data was consumed.
  *  DAV1D_ERR(EAGAIN): The data can't be consumed. dav1d_get_picture() should
  *                     be called to get one or more frames before the function
  *                     can consume new data.
+ *  DAV1D_EOF:         The decoder is in draining mode. No further data can be
+ *                     consumed. Use dav1d_flush() to force out of draining
+ *                     mode, or call get_picture() until it returns DAV1D_EOF.
  *  Other negative DAV1D_ERR codes: Error during decoding or because of invalid
  *                                  passed-in arguments. The reference remains
  *                                  owned by the caller.
@@ -184,11 +188,11 @@ DAV1D_API int dav1d_send_data(Dav1dContext *c, Dav1dData *in);
  *         0: Success, and a frame is returned.
  *  DAV1D_ERR(EAGAIN): Not enough data to output a frame. dav1d_send_data()
  *                     should be called with new input.
+ *  DAV1D_EOF:         The decoder has been drained. No more frame will be
+ *                     output.
+ *
  *  Other negative DAV1D_ERR codes: Error during decoding or because of invalid
  *                                  passed-in arguments.
- *
- * @note To drain buffered frames from the decoder (i.e. on end of stream),
- *       call this function until it returns DAV1D_ERR(EAGAIN).
  *
  * @code{.c}
  *  Dav1dData data = { 0 };
@@ -198,25 +202,30 @@ DAV1D_API int dav1d_send_data(Dav1dContext *c, Dav1dData *in);
  *  read_data(&data);
  *  do {
  *      res = dav1d_send_data(c, &data);
- *      // Keep going even if the function can't consume the current data
- *         packet. It eventually will after one or more frames have been
- *         returned in this loop.
- *      if (res < 0 && res != DAV1D_ERR(EAGAIN))
+ *      // Given we fetch all available frames in the loop below,
+ *      // DAV1D_ERR(EAGAIN) should not happen.
+ *      assert(res != DAV1D_ERR(EGAIN));
+ *      if (res < 0)
  *          free_and_abort();
- *      res = dav1d_get_picture(c, &p);
- *      if (res < 0) {
- *          if (res != DAV1D_ERR(EAGAIN))
- *              free_and_abort();
- *      } else
- *          output_and_unref_picture(&p);
+ *      for (;;) {
+ *          res = dav1d_get_picture(c, &p);
+ *          if (res < 0) {
+ *              if (res != DAV1D_ERR(EAGAIN))
+ *                  free_and_abort();
+ *              break;
+ *          } else
+ *              output_and_unref_picture(&p);
+ *      // Stay in the loop until no more frames are available.
+ *      }
  *  // Stay in the loop as long as there's data to consume.
  *  } while (data.sz || read_data(&data) == SUCCESS);
  *
  *  // Handle EOS by draining all buffered frames.
+ *  dav1d_send_data(c, NULL);
  *  do {
  *      res = dav1d_get_picture(c, &p);
  *      if (res < 0) {
- *          if (res != DAV1D_ERR(EAGAIN))
+ *          if (res != DAV1D_EOF)
  *              free_and_abort();
  *      } else
  *          output_and_unref_picture(&p);

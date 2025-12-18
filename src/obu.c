@@ -2144,7 +2144,9 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
 
         if (!c->seq_hdr) {
             c->frame_hdr = NULL;
+#if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
+#endif
         // see 7.5, operating_parameter_info is allowed to change in
         // sequence headers of a single sequence
         } else if (memcmp(seq_hdr, c->seq_hdr, offsetof(Dav1dSequenceHeader, operating_parameter_info))) {
@@ -2160,12 +2162,14 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
                 dav1d_ref_dec(&c->refs[i].refmvs);
                 dav1d_cdf_thread_unref(&c->cdf[i]);
             }
+#if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
         // If operating_parameter_info changed, signal it
         } else if (memcmp(seq_hdr->operating_parameter_info, c->seq_hdr->operating_parameter_info,
                           sizeof(seq_hdr->operating_parameter_info)))
         {
             c->frame_flags |= PICTURE_FLAG_NEW_OP_PARAMS_INFO;
+#endif
         }
         dav1d_ref_dec(&c->seq_hdr_ref);
         c->seq_hdr_ref = ref;
@@ -2426,7 +2430,9 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
         break;
     }
     case DAV1D_OBU_TD:
+#if 0
         c->frame_flags |= PICTURE_FLAG_NEW_TEMPORAL_UNIT;
+#endif
         break;
     case DAV1D_OBU_PADDING:
         // ignore OBUs we don't care about
@@ -2462,8 +2468,8 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
                 goto error;
             }
             if (c->n_fc == 1) {
-                dav1d_thread_picture_ref(&c->out,
-                                         &c->refs[c->frame_hdr->existing_frame_idx].p);
+                queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
+#if 0
                 dav1d_picture_copy_props(&c->out.p,
                                          c->content_light, c->content_light_ref,
                                          c->mastering_display, c->mastering_display_ref,
@@ -2529,6 +2535,7 @@ ptrdiff_t dav1d_parse_obus(Dav1dContext *const c, Dav1dData *const in) {
                 c->n_itut_t35 = 0;
 
                 pthread_mutex_unlock(&c->task_thread.lock);
+#endif
             }
             if (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type == DAV1D_FRAME_TYPE_KEY) {
                 const int r = c->frame_hdr->existing_frame_idx;
@@ -2605,7 +2612,9 @@ skip:
     return gb.ptr_end - gb.ptr_start;
 
 error:
+#if 0
     dav1d_data_props_copy(&c->cached_error_props, &in->m);
+#endif
     dav1d_log(c, gb.error ? "Overrun in OBU bit buffer\n" :
                             "Error parsing OBU data\n");
     return DAV1D_ERR(EINVAL);

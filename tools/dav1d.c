@@ -294,7 +294,6 @@ int main(const int argc, char *const *const argv) {
     do {
         if ((res = signal_terminate)) break;
 
-        memset(&p, 0, sizeof(p));
         if ((res = dav1d_send_data(c, &data)) < 0) {
             if (res != DAV1D_ERR(EAGAIN)) {
                 dav1d_data_unref(&data);
@@ -304,54 +303,17 @@ int main(const int argc, char *const *const argv) {
             }
         }
 
-        if ((res = dav1d_get_picture(c, &p)) < 0) {
-            if (res != DAV1D_ERR(EAGAIN)) {
-                fprintf(stderr, "Error decoding frame: %s\n",
-                        strerror(DAV1D_ERR(res)));
-                if (res != DAV1D_ERR(EINVAL)) break;
-            }
-            res = 0;
-        } else {
-            if (!n_out) {
-                if ((res = output_open(&out, cli_settings.muxer,
-                                       cli_settings.outputfile,
-                                       &p.p, fps)) < 0)
-                {
-                    if (frametimes) fclose(frametimes);
-                    return EXIT_FAILURE;
+        for (;;) {
+            memset(&p, 0, sizeof(p));
+            if ((res = dav1d_get_picture(c, &p)) < 0) {
+                if (res != DAV1D_ERR(EAGAIN)) {
+                    fprintf(stderr, "Error decoding frame: %s\n",
+                            strerror(DAV1D_ERR(res)));
+                    if (res != DAV1D_ERR(EINVAL)) goto nested_break;
                 }
-            }
-            if ((res = output_write(out, &p)) < 0)
-                break;
-            n_out++;
-            if (nspf || !cli_settings.quiet) {
-                synchronize(cli_settings.realtime, cli_settings.realtime_cache,
-                            n_out, nspf, tfirst, &elapsed, frametimes);
-            }
-            if (!cli_settings.quiet)
-                print_stats(istty, n_out, total, elapsed, i_fps);
-        }
-
-        if (cli_settings.limit && n_out == cli_settings.limit)
-            break;
-    } while (data.sz > 0 || !input_read(in, &data));
-
-    if (data.sz > 0) dav1d_data_unref(&data);
-
-    // flush
-    if (res == 0) while (!cli_settings.limit || n_out < cli_settings.limit) {
-        if ((res = signal_terminate)) break;
-
-        if ((res = dav1d_get_picture(c, &p)) < 0) {
-            if (res != DAV1D_ERR(EAGAIN)) {
-                fprintf(stderr, "Error decoding frame: %s\n",
-                        strerror(DAV1D_ERR(res)));
-                if (res != DAV1D_ERR(EINVAL)) break;
-            } else {
                 res = 0;
                 break;
             }
-        } else {
             if (!n_out) {
                 if ((res = output_open(&out, cli_settings.muxer,
                                        cli_settings.outputfile,
@@ -362,7 +324,7 @@ int main(const int argc, char *const *const argv) {
                 }
             }
             if ((res = output_write(out, &p)) < 0)
-                break;
+                goto nested_break;
             n_out++;
             if (nspf || !cli_settings.quiet) {
                 synchronize(cli_settings.realtime, cli_settings.realtime_cache,
@@ -370,6 +332,48 @@ int main(const int argc, char *const *const argv) {
             }
             if (!cli_settings.quiet)
                 print_stats(istty, n_out, total, elapsed, i_fps);
+            if (cli_settings.limit && n_out >= cli_settings.limit)
+                goto nested_break;
+        }
+    } while (data.sz > 0 || !input_read(in, &data));
+
+nested_break:
+    if (data.sz > 0) dav1d_data_unref(&data);
+
+    // flush
+    if (res == 0) {
+        dav1d_send_data(c, NULL);
+        while (!cli_settings.limit || n_out < cli_settings.limit) {
+            if ((res = signal_terminate)) break;
+
+            if ((res = dav1d_get_picture(c, &p)) < 0) {
+                if (res != DAV1D_EOF) {
+                    fprintf(stderr, "Error decoding frame: %s\n",
+                            strerror(DAV1D_ERR(res)));
+                } else {
+                    res = 0;
+                }
+                break;
+            } else {
+                if (!n_out) {
+                    if ((res = output_open(&out, cli_settings.muxer,
+                                           cli_settings.outputfile,
+                                           &p.p, fps)) < 0)
+                    {
+                        if (frametimes) fclose(frametimes);
+                        return EXIT_FAILURE;
+                    }
+                }
+                if ((res = output_write(out, &p)) < 0)
+                    break;
+                n_out++;
+                if (nspf || !cli_settings.quiet) {
+                    synchronize(cli_settings.realtime, cli_settings.realtime_cache,
+                                n_out, nspf, tfirst, &elapsed, frametimes);
+                }
+                if (!cli_settings.quiet)
+                    print_stats(istty, n_out, total, elapsed, i_fps);
+            }
         }
     }
 

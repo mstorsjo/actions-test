@@ -121,14 +121,22 @@ struct Dav1dContext {
 
     // decoded output picture queue
     Dav1dData in;
-    Dav1dThreadPicture out, cache;
+    struct OutputQueue {
+        Dav1dThreadPicture p;
+        int res;
+        // FIXME event/frame_flags
+    } *dpb; // output buffer management
+    int dpb_in, dpb_out, dpb_sz, dpb_poc, drain;
+    atomic_int flush_mem, *flush;
+#if 0
+    Dav1dThreadPicture cache;
     // dummy is a pointer to prevent compiler errors about atomic_load()
     // not taking const arguments
-    atomic_int flush_mem, *flush;
     struct {
         Dav1dThreadPicture *out_delayed;
         unsigned next;
     } frame_thread;
+#endif
 
     // task threading (refer to tc[] for per_thread thingies)
     struct TaskThreadData {
@@ -190,11 +198,12 @@ struct Dav1dContext {
     int output_invisible_frames;
     enum Dav1dInloopFilterType inloop_filters;
     enum Dav1dDecodeFrameType decode_frame_type;
-    int drain;
+#if 0
     enum PictureFlags frame_flags;
     enum Dav1dEventFlags event_flags;
     Dav1dDataProps cached_error_props;
     int cached_error;
+#endif
 
     Dav1dLogger logger;
 
@@ -482,5 +491,7 @@ struct Dav1dTaskContext {
         int die;
     } task_thread;
 };
+
+struct OutputQueue *queue_output(Dav1dContext *c, Dav1dThreadPicture *p);
 
 #endif /* DAV1D_SRC_INTERNAL_H */

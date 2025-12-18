@@ -4813,6 +4813,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     Dav1dFrameContext *f;
     int res = -1;
 
+#if 0
     // wait for c->out_delayed[next] and move into c->out if visible
     Dav1dThreadPicture *out_delayed;
     if (c->n_fc > 1) {
@@ -4854,7 +4855,9 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             }
             dav1d_thread_picture_unref(out_delayed);
         }
-    } else {
+    } else
+#endif
+    {
         f = c->fc;
     }
 
@@ -5013,13 +5016,12 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     dav1d_picture_ref(&f->cur, &f->sr_cur.p);
 
     // move f->cur into output queue
-    if (c->n_fc == 1) {
-        if (f->frame_hdr->show_frame || c->output_invisible_frames) {
-            dav1d_thread_picture_ref(&c->out, &f->sr_cur);
-            c->event_flags |= dav1d_picture_get_event_flags(&f->sr_cur);
-        }
-    } else {
-        dav1d_thread_picture_ref(out_delayed, &f->sr_cur);
+    struct OutputQueue *q = NULL;
+    if (f->frame_hdr->show_frame || c->output_invisible_frames) {
+        q = queue_output(c, &f->sr_cur);
+#if 0
+        c->event_flags |= dav1d_picture_get_event_flags(&f->sr_cur);
+#endif
     }
 
     // ss_ver is set for 4:2:0, and ss_hor for 4:2:0 & 4:2:2
@@ -5204,16 +5206,13 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                 dav1d_thread_picture_unref(&f->refp[i]);
             dav1d_ref_dec(&f->ref_mvs_ref[i]);
         }
-        dav1d_thread_picture_unref(&c->out);
         dav1d_picture_unref_internal(&f->cur);
         dav1d_thread_picture_unref(&f->sr_cur);
         dav1d_ref_dec(&f->mvs_ref);
         dav1d_ref_dec(&f->seq_hdr_ref);
         dav1d_ref_dec(&f->frame_hdr_ref);
-        dav1d_data_props_copy(&c->cached_error_props, &c->in.m);
     } else if (c->n_fc == 1) {
         if ((res = dav1d_decode_frame(f)) < 0) {
-            dav1d_thread_picture_unref(&c->out);
             for (int i = 0; i < 8; i++) {
                 if (refresh_frame_flags & (1 << i)) {
                     if (c->refs[i].p.p.frame_hdr)
@@ -5225,9 +5224,11 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             }
             goto error;
         }
+#if 0
     } else {
         dav1d_task_frame_init(f);
         pthread_mutex_unlock(&c->task_thread.lock);
+#endif
     }
 
     return 0;
@@ -5245,16 +5246,15 @@ error:
             dav1d_thread_picture_unref(&f->refp[i]);
         dav1d_ref_dec(&f->ref_mvs_ref[i]);
     }
-    if (c->n_fc == 1)
-        dav1d_thread_picture_unref(&c->out);
-    else
-        dav1d_thread_picture_unref(out_delayed);
+    if (q) q->res = res;
     dav1d_picture_unref_internal(&f->cur);
     dav1d_thread_picture_unref(&f->sr_cur);
     dav1d_ref_dec(&f->mvs_ref);
     dav1d_ref_dec(&f->seq_hdr_ref);
     dav1d_ref_dec(&f->frame_hdr_ref);
+#if 0
     dav1d_data_props_copy(&c->cached_error_props, &c->in.m);
+#endif
 
     for (int i = 0; i < f->n_tile_data; i++)
         dav1d_data_unref_internal(&f->tile[i].data);

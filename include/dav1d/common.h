@@ -58,6 +58,8 @@ extern "C" {
 #define DAV1D_ERR(e) (e)
 #endif
 
+#define DAV1D_EOF -('E' | ('O' << 8) | ('F' << 16))
+
 /**
  * A reference-counted object wrapper for a user-configurable pointer.
  */
