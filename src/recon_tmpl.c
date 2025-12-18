@@ -49,7 +49,7 @@
 #include "src/tables.h"
 #include "src/wedge.h"
 
-static inline int decode_exp_golomb(MsacContext *const s, const int k) {
+static inline unsigned decode_exp_golomb(MsacContext *const s, const int k) {
     const int length = dav1d_msac_decode_unary_bypass21(s) + k;
     const int x = (1 << length) + dav1d_msac_decode_bools_bypass(s, length);
     return x - (1 << k);
@@ -842,7 +842,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         lim == 5 ? "lo" : "hi", chroma ? "uv" : "y", \
                         tok, ts->msac.rng); \
         tcq_state = tcq_next_state(tcq_state, tok); \
-        cf[is_stx ? eob : rc] = tok; \
+        cf[is_stx ? (unsigned)eob : rc] = tok; \
         if (tx_class == TX_CLASS_2D) \
             level = levels + rc; \
         else \
@@ -888,7 +888,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             chroma ? "uv" : "y", tok, ts->msac.rng); \
             tcq_state = tcq_next_state(tcq_state, tok); \
             *level = tok; \
-            cf[is_stx ? i : rc] = tok; \
+            cf[is_stx ? (unsigned)i : rc] = tok; \
         } \
         /* dc */ \
         unsigned hr_ctx; \
