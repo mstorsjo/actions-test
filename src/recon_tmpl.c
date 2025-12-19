@@ -1868,7 +1868,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 }
             }
 
-            int alpha = 0, beta = 0;
+            int alpha = 256, beta = 0;
             if (count_l2) {
                 const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
                 const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
@@ -1900,11 +1900,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                         }
                         alpha = apply_sign(alpha, num);
                     }
-
-                    const int diff = (sum_y << 8) - sum_x * alpha;
-                    const int abs_diff = abs(diff);
-                    beta = apply_sign(abs_diff >> count_l2, diff);
                 }
+
+                const int diff = (sum_y << 8) - sum_x * alpha;
+                const int abs_diff = abs(diff);
+                beta = apply_sign(abs_diff >> count_l2, diff);
             }
             dsp->mc.morph(dst, f->cur.stride[0], alpha, beta,
                           bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
