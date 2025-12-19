@@ -741,11 +741,10 @@ static void read_tx_part(Dav1dTaskContext *const t,
     const int bw4 = b_dim[0], bh4 = b_dim[1];
 
     b->tx_part = TX_PARTITION_NONE;
+    b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
     if (f->frame_hdr->segmentation.lossless[b->seg_id] || b->skip_txfm) {
         // FIXME I believe lossless can be wht as well as idtx?
     } else {
-        b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
-
         if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
             bs != BS_4x4 && imax(bw4, bh4) <= 16)
         {
