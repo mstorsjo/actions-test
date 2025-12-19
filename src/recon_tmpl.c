@@ -1778,8 +1778,8 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
         const int tile_top_edge = ts->tiling.row_start * 4;
         const int tile_left_edge = ts->tiling.col_start * 4;
-        const int mvx = b->mv[0].x >> 3;
-        const int mvy = b->mv[0].y >> 3;
+        const int mvx = (b->mv[0].x + 3 + (b->mv[0].x >= 0)) >> 3;
+        const int mvy = (b->mv[0].y + 3 + (b->mv[0].y >= 0)) >> 3;
         const int ref_y = (t->by * 4 + mvy);
         const int ref_x = (t->bx * 4 + mvx);
         const int ref_tmplt_x = ref_x - 1;
