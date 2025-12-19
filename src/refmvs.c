@@ -908,6 +908,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         mvstack[last].mv.mv[0] = gmv[0];
         mvstack[last].mv.mv[1] = gmv[1];
         mvstack[last].weight = 0;
+        mvstack[last].cwp_idx = 8;
         mvstack[last].y_off = mvstack[last].x_off = 0;
         DEBUG_REFMV_printf("gmv_add[%d]: %s[%d] y=%d,x=%d,y2=%d,x2=%d,w=%d from GMV\n",
                            st.iter_cntr, did_check ? "adding" : "tailing",
