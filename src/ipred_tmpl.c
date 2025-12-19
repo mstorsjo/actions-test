@@ -636,7 +636,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         const int shift = (xpos & 0x3F) >> 1;
         const DRFilter4Tap f = av1_dr_interp_filter[shift];
         for (int x = 0; x < width; x++, base++) {
-            if (base >= max_base_x) {
+            if (base > max_base_x) {
                 pixel_set(&dst[y * PXSTRIDE(stride) + x], top[max_base_x],
                           width - x);
                 break;
