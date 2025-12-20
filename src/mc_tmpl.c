@@ -140,6 +140,9 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
     dst_stride = PXSTRIDE(dst_stride);
     src_stride = PXSTRIDE(src_stride);
 
+    assert(!(w & (w - 1)) && w >= 2 && w <= 64); // w2/h2 used by sub8x8 chroma?
+    assert(!(h & (h - 1)) && h >= 2 && h <= 64);
+
     if (fh) {
         if (fv) {
             int tmp_h = h + 7;
@@ -201,6 +204,9 @@ put_8tap_scaled_c(pixel *dst, const ptrdiff_t dst_stride,
     int in_y = -8;
     src_stride = PXSTRIDE(src_stride);
 
+    assert(!(w & (w - 1)) && w >= 2 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 2 && h <= 64);
+
     for (int i = 0; i < 8; i++)
         mid_ptrs[i] = mid[i];
 
@@ -253,6 +259,9 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     GET_FILTERS();
     src_stride = PXSTRIDE(src_stride);
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
 
     if (fh) {
         if (fv) {
@@ -318,6 +327,9 @@ prep_8tap_scaled_c(int16_t *tmp, const ptrdiff_t tmp_stride,
     int16_t *mid_ptrs[8];
     int in_y = -8;
     src_stride = PXSTRIDE(src_stride);
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
 
     for (int i = 0; i < 8; i++)
         mid_ptrs[i] = mid[i];
@@ -440,6 +452,9 @@ static void put_bilin_c(pixel *dst, ptrdiff_t dst_stride,
     dst_stride = PXSTRIDE(dst_stride);
     src_stride = PXSTRIDE(src_stride);
 
+    assert(!(w & (w - 1)) && w >= 2 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 2 && h <= 64);
+
     if (mx) {
         if (my) {
             int16_t mid[64 * (64 + 7)], *mid_ptr = mid;
@@ -497,6 +512,9 @@ static void put_bilin_scaled_c(pixel *dst, ptrdiff_t dst_stride,
     int16_t mid[2][64];
     int in_y = -2;
 
+    assert(!(w & (w - 1)) && w >= 2 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 2 && h <= 64);
+
     do {
         int x;
         int y = my >> 10;
@@ -536,6 +554,9 @@ static void prep_bilin_c(int16_t *tmp, const ptrdiff_t tmp_stride,
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     src_stride = PXSTRIDE(src_stride);
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
 
     if (mx) {
         if (my) {
@@ -593,6 +614,9 @@ static void prep_bilin_scaled_c(int16_t *tmp, const ptrdiff_t tmp_stride,
     int16_t mid[2][64];
     int in_y = -2;
 
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+
     do {
         int x;
         int y = my >> 10;
@@ -631,6 +655,10 @@ static void avg_c(pixel *dst, const ptrdiff_t dst_stride,
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     const int sh = intermediate_bits + 1;
     const int rnd = (1 << intermediate_bits) + PREP_BIAS * 2;
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+
     do {
         for (int x = 0; x < w; x++)
             dst[x] = iclip_pixel((tmp1[x] + tmp2[x] + rnd) >> sh);
@@ -648,6 +676,10 @@ static void w_avg_c(pixel *dst, const ptrdiff_t dst_stride,
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     const int sh = intermediate_bits + 4;
     const int rnd = (8 << intermediate_bits) + PREP_BIAS * 16;
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+
     do {
         for (int x = 0; x < w; x++)
             dst[x] = iclip_pixel((tmp1[x] * weight +
@@ -666,6 +698,10 @@ static void mask_c(pixel *dst, const ptrdiff_t dst_stride,
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     const int sh = intermediate_bits + 6;
     const int rnd = (32 << intermediate_bits) + PREP_BIAS * 64;
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+
     do {
         for (int x = 0; x < w; x++)
             dst[x] = iclip_pixel((tmp1[x] * mask[x] +
@@ -681,6 +717,9 @@ static void mask_c(pixel *dst, const ptrdiff_t dst_stride,
 static void blend_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *tmp,
                     const int w, int h, const uint8_t *mask)
 {
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+
     do {
         for (int x = 0; x < w; x++)
             dst[x] = ((dst[x] * (64 - mask[x]) + tmp[x] * mask[x]) + 32) >> 6;
@@ -703,6 +742,10 @@ static void w_mask_c(pixel *dst, const ptrdiff_t dst_stride,
     const int rnd = (32 << intermediate_bits) + PREP_BIAS * 64;
     const int mask_sh = bitdepth + intermediate_bits - 4;
     const int mask_rnd = 1 << (mask_sh - 5);
+
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+
     do {
         for (int x = 0; x < w; x++) {
             const int m = imin(38 + ((abs(tmp1[x] - tmp2[x]) + mask_rnd) >> mask_sh), 64);
