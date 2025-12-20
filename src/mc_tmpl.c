@@ -678,45 +678,15 @@ static void mask_c(pixel *dst, const ptrdiff_t dst_stride,
     } while (--h);
 }
 
-#define blend_px(a, b, m) (((a * (64 - m) + b * m) + 32) >> 6)
 static void blend_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *tmp,
                     const int w, int h, const uint8_t *mask)
 {
     do {
-        for (int x = 0; x < w; x++) {
-            dst[x] = blend_px(dst[x], tmp[x], mask[x]);
-        }
+        for (int x = 0; x < w; x++)
+            dst[x] = ((dst[x] * (64 - mask[x]) + tmp[x] * mask[x]) + 32) >> 6;
         dst += PXSTRIDE(dst_stride);
         tmp += w;
         mask += w;
-    } while (--h);
-}
-
-static void blend_v_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *tmp,
-                      const int w, int h)
-{
-    const uint8_t *const mask = &dav1d_obmc_masks[w];
-    do {
-        for (int x = 0; x < (w * 3) >> 2; x++) {
-            dst[x] = blend_px(dst[x], tmp[x], mask[x]);
-        }
-        dst += PXSTRIDE(dst_stride);
-        tmp += w;
-    } while (--h);
-}
-
-static void blend_h_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *tmp,
-                      const int w, int h)
-{
-    const uint8_t *mask = &dav1d_obmc_masks[h];
-    h = (h * 3) >> 2;
-    do {
-        const int m = *mask++;
-        for (int x = 0; x < w; x++) {
-            dst[x] = blend_px(dst[x], tmp[x], m);
-        }
-        dst += PXSTRIDE(dst_stride);
-        tmp += w;
     } while (--h);
 }
 
@@ -989,8 +959,6 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->w_avg    = w_avg_c;
     c->mask     = mask_c;
     c->blend    = blend_c;
-    c->blend_v  = blend_v_c;
-    c->blend_h  = blend_h_c;
     c->w_mask[0] = w_mask_444_c;
     c->w_mask[1] = w_mask_422_c;
     c->w_mask[2] = w_mask_420_c;

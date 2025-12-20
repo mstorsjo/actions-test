@@ -834,22 +834,6 @@ const int8_t ALIGN(dav1d_filter_intra_taps[5][64], 64) = {
     }
 };
 
-const uint8_t ALIGN(dav1d_obmc_masks[64], 16) = {
-    /* Unused */
-     0,  0,
-    /* 2 */
-    19,  0,
-    /* 4 */
-    25, 14,  5,  0,
-    /* 8 */
-    28, 22, 16, 11,  7,  3,  0,  0,
-    /* 16 */
-    30, 27, 24, 21, 18, 15, 12, 10,  8,  6,  4,  3,  0,  0,  0,  0,
-    /* 32 */
-    31, 29, 28, 26, 24, 23, 21, 20, 19, 17, 16, 14, 13, 12, 11,  9,
-     8,  7,  6,  5,  4,  4,  3,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-};
-
 // Taken from the spec. Range is [-2048, 2047], mean is 0 and stddev is 512
 ATTR_MCMODEL_SMALL
 const int16_t dav1d_gaussian_sequence[2048] = {

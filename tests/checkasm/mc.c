@@ -487,83 +487,6 @@ static void check_blend(Dav1dMCDSPContext *const c) {
     report("blend");
 }
 
-static void check_blend_v(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, tmp,   32 * 128,);
-    PIXEL_RECT(c_dst, 32, 128);
-    PIXEL_RECT(a_dst, 32, 128);
-
-    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *tmp,
-                 int w, int h);
-
-    for (int w = 2; w <= 32; w <<= 1) {
-        if (check_func(c->blend_v, "blend_v_w%d_%dbpc", w, BITDEPTH))
-            for (int h = 2; h <= (w == 2 ? 64 : 128); h <<= 1) {
-#if BITDEPTH == 16
-                const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-#else
-                const int bitdepth_max = 0xff;
-#endif
-
-                CLEAR_PIXEL_RECT(c_dst);
-                CLEAR_PIXEL_RECT(a_dst);
-
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        c_dst[y*PXSTRIDE(c_dst_stride) + x] =
-                        a_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
-
-                for (int i = 0; i < 32 * 128; i++)
-                    tmp[i] = rnd() & bitdepth_max;
-
-                call_ref(c_dst, c_dst_stride, tmp, w, h);
-                call_new(a_dst, a_dst_stride, tmp, w, h);
-                checkasm_check_pixel_padded(c_dst, c_dst_stride, a_dst, a_dst_stride,
-                                            w, h, "dst");
-
-                bench_new(alternate(c_dst, a_dst), a_dst_stride, tmp, w, h);
-            }
-    }
-    report("blend_v");
-}
-
-static void check_blend_h(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, tmp,   128 * 32,);
-    PIXEL_RECT(c_dst, 128, 32);
-    PIXEL_RECT(a_dst, 128, 32);
-
-    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *tmp,
-                 int w, int h);
-
-    for (int w = 2; w <= 128; w <<= 1) {
-        if (check_func(c->blend_h, "blend_h_w%d_%dbpc", w, BITDEPTH))
-            for (int h = (w == 128 ? 4 : 2); h <= 32; h <<= 1) {
-#if BITDEPTH == 16
-                const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-#else
-                const int bitdepth_max = 0xff;
-#endif
-                CLEAR_PIXEL_RECT(c_dst);
-                CLEAR_PIXEL_RECT(a_dst);
-
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        c_dst[y*PXSTRIDE(c_dst_stride) + x] =
-                        a_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
-
-                for (int i = 0; i < 128 * 32; i++)
-                    tmp[i] = rnd() & bitdepth_max;
-
-                call_ref(c_dst, c_dst_stride, tmp, w, h);
-                call_new(a_dst, a_dst_stride, tmp, w, h);
-                checkasm_check_pixel_padded(c_dst, c_dst_stride, a_dst, a_dst_stride,
-                                            w, h, "dst");
-
-                bench_new(alternate(c_dst, a_dst), a_dst_stride, tmp, w, h);
-            }
-    }
-    report("blend_h");
-}
-
 static void check_warp8x8(Dav1dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, 15 * 15,);
     PIXEL_RECT(c_dst, 8, 8);
@@ -785,8 +708,6 @@ void bitfn(checkasm_check_mc)(void) {
     check_mask(&c);
     check_w_mask(&c);
     check_blend(&c);
-    check_blend_v(&c);
-    check_blend_h(&c);
     check_warp8x8(&c);
     check_warp8x8t(&c);
     check_emuedge(&c);
