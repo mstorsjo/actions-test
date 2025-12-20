@@ -143,7 +143,7 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
     if (fh) {
         if (fv) {
             int tmp_h = h + 7;
-            int16_t mid[128 * 135], *mid_ptr = mid;
+            int16_t mid[64 * (64 + 7)], *mid_ptr = mid;
 
             src -= src_stride * 3;
             do {
@@ -151,17 +151,17 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
                     mid_ptr[x] = DAV1D_FILTER_8TAP_RND(src, x, fh, 1,
                                                        6 - intermediate_bits);
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 src += src_stride;
             } while (--tmp_h);
 
-            mid_ptr = mid + 128 * 3;
+            mid_ptr = mid + 64 * 3;
             do {
                 for (int x = 0; x < w; x++)
-                    dst[x] = DAV1D_FILTER_8TAP_CLIP(mid_ptr, x, fv, 128,
+                    dst[x] = DAV1D_FILTER_8TAP_CLIP(mid_ptr, x, fv, 64,
                                                     6 + intermediate_bits);
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 dst += dst_stride;
             } while (--h);
         } else {
@@ -196,13 +196,13 @@ put_8tap_scaled_c(pixel *dst, const ptrdiff_t dst_stride,
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     const int intermediate_rnd = (1 << intermediate_bits) >> 1;
-    int16_t mid[128 * 8];
+    int16_t mid[8][64];
     int16_t *mid_ptrs[8];
     int in_y = -8;
     src_stride = PXSTRIDE(src_stride);
 
     for (int i = 0; i < 8; i++)
-        mid_ptrs[i] = &mid[128 * i];
+        mid_ptrs[i] = mid[i];
 
     src -= src_stride * 3;
 
@@ -257,7 +257,7 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
     if (fh) {
         if (fv) {
             int tmp_h = h + 7;
-            int16_t mid[128 * 135], *mid_ptr = mid;
+            int16_t mid[64 * (64 + 7)], *mid_ptr = mid;
 
             src -= src_stride * 3;
             do {
@@ -265,20 +265,20 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
                     mid_ptr[x] = DAV1D_FILTER_8TAP_RND(src, x, fh, 1,
                                                        6 - intermediate_bits);
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 src += src_stride;
             } while (--tmp_h);
 
-            mid_ptr = mid + 128 * 3;
+            mid_ptr = mid + 64 * 3;
             do {
                 for (int x = 0; x < w; x++) {
-                    int t = DAV1D_FILTER_8TAP_RND(mid_ptr, x, fv, 128, 6) -
+                    int t = DAV1D_FILTER_8TAP_RND(mid_ptr, x, fv, 64, 6) -
                                   PREP_BIAS;
                     assert(t >= INT16_MIN && t <= INT16_MAX);
                     tmp[x] = t;
                 }
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 tmp += tmp_stride;
             } while (--h);
         } else {
@@ -314,13 +314,13 @@ prep_8tap_scaled_c(int16_t *tmp, const ptrdiff_t tmp_stride,
                    HIGHBD_DECL_SUFFIX)
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
-    int16_t mid[128 * 8];
+    int16_t mid[8][64];
     int16_t *mid_ptrs[8];
     int in_y = -8;
     src_stride = PXSTRIDE(src_stride);
 
     for (int i = 0; i < 8; i++)
-        mid_ptrs[i] = &mid[128 * i];
+        mid_ptrs[i] = mid[i];
 
     src -= src_stride * 3;
 
@@ -442,7 +442,7 @@ static void put_bilin_c(pixel *dst, ptrdiff_t dst_stride,
 
     if (mx) {
         if (my) {
-            int16_t mid[128 * 129], *mid_ptr = mid;
+            int16_t mid[64 * (64 + 7)], *mid_ptr = mid;
             int tmp_h = h + 1;
 
             do {
@@ -450,17 +450,17 @@ static void put_bilin_c(pixel *dst, ptrdiff_t dst_stride,
                     mid_ptr[x] = FILTER_BILIN_RND(src, x, mx, 1,
                                                   4 - intermediate_bits);
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 src += src_stride;
             } while (--tmp_h);
 
             mid_ptr = mid;
             do {
                 for (int x = 0; x < w; x++)
-                    dst[x] = FILTER_BILIN_CLIP(mid_ptr, x, my, 128,
+                    dst[x] = FILTER_BILIN_CLIP(mid_ptr, x, my, 64,
                                                4 + intermediate_bits);
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 dst += dst_stride;
             } while (--h);
         } else {
@@ -494,19 +494,19 @@ static void put_bilin_scaled_c(pixel *dst, ptrdiff_t dst_stride,
                                HIGHBD_DECL_SUFFIX)
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
-    int16_t mid[128 * 2];
+    int16_t mid[2][64];
     int in_y = -2;
 
     do {
         int x;
         int y = my >> 10;
-        int16_t *mid1 = &mid[(y & 1) * 128];
-        int16_t *mid2 = &mid[((y + 1) & 1) * 128];
+        int16_t *mid1 = mid[y & 1];
+        int16_t *mid2 = mid[(y & 1) ^ 1];
         int dmy = my & 0x3ff;
 
         while (in_y < y) {
             int imx = mx, ioff = 0;
-            int16_t *mid_ptr = &mid[(in_y & 1) * 128];
+            int16_t *mid_ptr = mid[in_y & 1];
 
             for (x = 0; x < w; x++) {
                 mid_ptr[x] = FILTER_BILIN_RND(src, ioff, imx >> 6, 1,
@@ -539,7 +539,7 @@ static void prep_bilin_c(int16_t *tmp, const ptrdiff_t tmp_stride,
 
     if (mx) {
         if (my) {
-            int16_t mid[128 * 129], *mid_ptr = mid;
+            int16_t mid[64 * (64 + 1)], *mid_ptr = mid;
             int tmp_h = h + 1;
 
             do {
@@ -547,17 +547,17 @@ static void prep_bilin_c(int16_t *tmp, const ptrdiff_t tmp_stride,
                     mid_ptr[x] = FILTER_BILIN_RND(src, x, mx, 1,
                                                   4 - intermediate_bits);
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 src += src_stride;
             } while (--tmp_h);
 
             mid_ptr = mid;
             do {
                 for (int x = 0; x < w; x++)
-                    tmp[x] = FILTER_BILIN_RND(mid_ptr, x, my, 128, 4) -
+                    tmp[x] = FILTER_BILIN_RND(mid_ptr, x, my, 64, 4) -
                              PREP_BIAS;
 
-                mid_ptr += 128;
+                mid_ptr += 64;
                 tmp += tmp_stride;
             } while (--h);
         } else {
@@ -590,19 +590,19 @@ static void prep_bilin_scaled_c(int16_t *tmp, const ptrdiff_t tmp_stride,
                                 const int dx, const int dy HIGHBD_DECL_SUFFIX)
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
-    int16_t mid[128 * 2];
+    int16_t mid[2][64];
     int in_y = -2;
 
     do {
         int x;
         int y = my >> 10;
-        int16_t *mid1 = &mid[(y & 1) * 128];
-        int16_t *mid2 = &mid[((y + 1) & 1) * 128];
+        int16_t *mid1 = mid[y & 1];
+        int16_t *mid2 = mid[(y & 1) ^ 1];
         int dmy = my & 0x3ff;
 
         while (in_y < y) {
             int imx = mx, ioff = 0;
-            int16_t *mid_ptr = &mid[(in_y & 1) * 128];
+            int16_t *mid_ptr = mid[in_y & 1];
 
             for (x = 0; x < w; x++) {
                 mid_ptr[x] = FILTER_BILIN_RND(src, ioff, imx >> 6, 1,

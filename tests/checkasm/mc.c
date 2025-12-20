@@ -40,41 +40,26 @@ static const char *const filter_names[] = {
 static const char *const mxy_names[] = { "0", "h", "v", "hv" };
 static const char *const scaled_paths[] = { "", "_dy1", "_dy2" };
 
-static int mc_h_next(const int h) {
-    switch (h) {
-    case 4:
-    case 8:
-    case 16:
-        return (h * 3) >> 1;
-    case 6:
-    case 12:
-    case 24:
-        return (h & (h - 1)) * 2;
-    default:
-        return h * 2;
-    }
-}
-
 static void check_mc(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, src_buf, 135 * 135,);
-    PIXEL_RECT(c_dst, 128, 128);
-    PIXEL_RECT(a_dst, 128, 128);
-    const pixel *src = src_buf + 135 * 3 + 3;
-    const ptrdiff_t src_stride = 135 * sizeof(pixel);
+    ALIGN_STK_64(pixel, src_buf, (64 + 7) * (64 + 7),);
+    PIXEL_RECT(c_dst, 64, 64);
+    PIXEL_RECT(a_dst, 64, 64);
+    const pixel *src = src_buf + (64 + 7) * 3 + 3;
+    const ptrdiff_t src_stride = (64 + 7) * sizeof(pixel);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *src,
                  ptrdiff_t src_stride, int w, int h, int mx, int my
                  HIGHBD_DECL_SUFFIX);
 
     for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
-        for (int w = 2; w <= 128; w <<= 1) {
+        for (int w = 2; w <= 64; w <<= 1) {
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mc[filter], "mc_%s_w%d_%s_%dbpc",
                     filter_names[filter], w, mxy_names[mxy], BITDEPTH))
                 {
                     const int h_min = w <= 32 ? 2 : w / 4;
-                    const int h_max = imax(imin(w * 4, 128), 32);
-                    for (int h = h_min; h <= h_max; h = mc_h_next(h)) {
+                    const int h_max = imax(imin(w * 4, 64), 32);
+                    for (int h = h_min; h <= h_max; h <<= 1) {
                         const int mx = (mxy & 1) ? rnd() % 15 + 1 : 0;
                         const int my = (mxy & 2) ? rnd() % 15 + 1 : 0;
 #if BITDEPTH == 16
@@ -83,7 +68,7 @@ static void check_mc(Dav1dMCDSPContext *const c) {
                         const int bitdepth_max = 0xff;
 #endif
 
-                        for (int i = 0; i < 135 * 135; i++)
+                        for (int i = 0; i < (64 + 7) * (64 + 7); i++)
                             src_buf[i] = rnd() & bitdepth_max;
 
                         CLEAR_PIXEL_RECT(c_dst);
@@ -111,33 +96,33 @@ static void check_mc(Dav1dMCDSPContext *const c) {
 }
 
 /* Generate worst case input in the topleft corner, randomize the rest */
-static void generate_mct_input(pixel *const buf, const int bitdepth_max) {
+static void generate_mct_input(pixel *buf, const int bitdepth_max) {
     static const int8_t pattern[8] = { -1,  0, -1,  0,  0, -1,  0, -1 };
     const int sign = -(rnd() & 1);
 
-    for (int y = 0; y < 135; y++)
-        for (int x = 0; x < 135; x++)
-            buf[135*y+x] = ((x | y) < 8 ? (pattern[x] ^ pattern[y] ^ sign)
-                                        : rnd()) & bitdepth_max;
+    for (int y = 0; y < 64 + 7; y++)
+        for (int x = 0; x < 64 + 7; x++)
+            *buf++ = ((x | y) < 8 ? (pattern[x] ^ pattern[y] ^ sign)
+                                  : rnd()) & bitdepth_max;
 }
 
 static void check_mct(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, src_buf, 135 * 135,);
-    ALIGN_STK_64(int16_t, c_tmp, 128 * 128,);
-    ALIGN_STK_64(int16_t, a_tmp, 128 * 128,);
-    const pixel *src = src_buf + 135 * 3 + 3;
-    const ptrdiff_t src_stride = 135 * sizeof(pixel);
+    ALIGN_STK_64(pixel, src_buf, (64 + 7) * (64 + 7),);
+    ALIGN_STK_64(int16_t, c_tmp, 64 * 64,);
+    ALIGN_STK_64(int16_t, a_tmp, 64 * 64,);
+    const pixel *src = src_buf + (64 + 7) * 3 + 3;
+    const ptrdiff_t src_stride = (64 + 7) * sizeof(pixel);
 
     declare_func(void, int16_t *tmp, ptrdiff_t tmp_stride,
                  const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my HIGHBD_DECL_SUFFIX);
 
     for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
-        for (int w = 4; w <= 128; w <<= 1)
+        for (int w = 4; w <= 64; w <<= 1)
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mct[filter], "mct_%s_w%d_%s_%dbpc",
                     filter_names[filter], w, mxy_names[mxy], BITDEPTH))
-                    for (int h = imax(w / 4, 4); h <= imin(w * 4, 128); h <<= 1)
+                    for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1)
                     {
                         const int mx = (mxy & 1) ? rnd() % 15 + 1 : 0;
                         const int my = (mxy & 2) ? rnd() % 15 + 1 : 0;
@@ -168,11 +153,11 @@ static void check_mct(Dav1dMCDSPContext *const c) {
 }
 
 static void check_mc_scaled(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, src_buf, 263 * 263,);
-    PIXEL_RECT(c_dst, 128, 128);
-    PIXEL_RECT(a_dst, 128, 128);
-    const pixel *src = src_buf + 263 * 3 + 3;
-    const ptrdiff_t src_stride = 263 * sizeof(pixel);
+    ALIGN_STK_64(pixel, src_buf, (128 + 7) * (128 + 7),);
+    PIXEL_RECT(c_dst, 64, 64);
+    PIXEL_RECT(a_dst, 64, 64);
+    const pixel *src = src_buf + (128 + 7) * 3 + 3;
+    const ptrdiff_t src_stride = (128 + 7) * sizeof(pixel);
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
@@ -184,14 +169,14 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
                  int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
     for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
-        for (int w = 2; w <= 128; w <<= 1) {
+        for (int w = 2; w <= 64; w <<= 1) {
             for (int p = 0; p < 3; ++p) {
                 if (check_func(c->mc_scaled[filter], "mc_scaled_%s_w%d%s_%dbpc",
                                filter_names[filter], w, scaled_paths[p], BITDEPTH))
                 {
                     const int h_min = w <= 32 ? 2 : w / 4;
-                    const int h_max = imax(imin(w * 4, 128), 32);
-                    for (int h = h_min; h <= h_max; h = mc_h_next(h)) {
+                    const int h_max = imax(imin(w * 4, 64), 32);
+                    for (int h = h_min; h <= h_max; h <<= 1) {
                         const int mx = rnd() % 1024;
                         const int my = rnd() % 1024;
                         const int dx = rnd() % 2048 + 1;
@@ -199,7 +184,7 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
                             ? rnd() % 2048 + 1
                             : p << 10; // ystep=1.0 and ystep=2.0 paths
 
-                        for (int k = 0; k < 263 * 263; k++)
+                        for (int k = 0; k < (128 + 7) * (128 + 7); k++)
                             src_buf[k] = rnd() & bitdepth_max;
 
                         CLEAR_PIXEL_RECT(c_dst);
@@ -225,11 +210,11 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
 }
 
 static void check_mct_scaled(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, src_buf, 263 * 263,);
-    ALIGN_STK_64(int16_t, c_tmp,   128 * 128,);
-    ALIGN_STK_64(int16_t, a_tmp,   128 * 128,);
-    const pixel *src = src_buf + 263 * 3 + 3;
-    const ptrdiff_t src_stride = 263 * sizeof(pixel);
+    ALIGN_STK_64(pixel, src_buf, (128 + 7) * (128 + 7),);
+    ALIGN_STK_64(int16_t, c_tmp, 64 * 64,);
+    ALIGN_STK_64(int16_t, a_tmp, 64 * 64,);
+    const pixel *src = src_buf + (128 + 7) * 3 + 3;
+    const ptrdiff_t src_stride = (128 + 7) * sizeof(pixel);
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
@@ -241,14 +226,14 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
                  int w, int h, int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
     for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
-        for (int w = 4; w <= 128; w <<= 1)
+        for (int w = 4; w <= 64; w <<= 1)
             for (int p = 0; p < 3; ++p) {
                 if (check_func(c->mct_scaled[filter], "mct_scaled_%s_w%d%s_%dbpc",
                                filter_names[filter], w, scaled_paths[p], BITDEPTH))
                 {
                     const int h_min = imax(w / 4, 4);
-                    const int h_max = imin(w * 4, 128);
-                    for (int h = h_min; h <= h_max; h = mc_h_next(h)) {
+                    const int h_max = imin(w * 4, 64);
+                    for (int h = h_min; h <= h_max; h <<= 1) {
                         const int mx = rnd() % 1024;
                         const int my = rnd() % 1024;
                         const int dx = rnd() % 2048 + 1;
@@ -256,7 +241,7 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
                             ? rnd() % 2048 + 1
                             : p << 10; // ystep=1.0 and ystep=2.0 paths
 
-                        for (int k = 0; k < 263 * 263; k++)
+                        for (int k = 0; k < (128 + 7) * (128 + 7); k++)
                             src_buf[k] = rnd() & bitdepth_max;
 
                         call_ref(c_tmp, w, src, src_stride,
@@ -278,27 +263,27 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
 }
 
 static void init_tmp(Dav1dMCDSPContext *const c, pixel *const buf,
-                     int16_t (*const tmp)[128 * 128], const int bitdepth_max)
+                     int16_t (*const tmp)[64 * 64], const int bitdepth_max)
 {
     for (int i = 0; i < 2; i++) {
         generate_mct_input(buf, bitdepth_max);
-        c->mct[DAV1D_FILTER_8TAP_SHARP](tmp[i], 128, buf + 135 * 3 + 3,
-                                        135 * sizeof(pixel), 128, 128,
+        c->mct[DAV1D_FILTER_8TAP_SHARP](tmp[i], 64, buf + (64 + 7) * 3 + 3,
+                                        (64 + 7) * sizeof(pixel), 64, 64,
                                         8, 8 HIGHBD_TAIL_SUFFIX);
     }
 }
 
 static void check_avg(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(int16_t, tmp, 2, [128 * 128]);
-    PIXEL_RECT(c_dst, 135, 135);
-    PIXEL_RECT(a_dst, 128, 128);
+    ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
+    PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
+    PIXEL_RECT(a_dst, 64, 64);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const int16_t *tmp1,
                  const int16_t *tmp2, int w, int h HIGHBD_DECL_SUFFIX);
 
-    for (int w = 4; w <= 128; w <<= 1)
+    for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->avg, "avg_w%d_%dbpc", w, BITDEPTH)) {
-            for (int h = imax(w / 4, 4); h <= imin(w * 4, 128); h <<= 1)
+            for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1)
             {
 #if BITDEPTH == 16
                 const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
@@ -323,16 +308,16 @@ static void check_avg(Dav1dMCDSPContext *const c) {
 }
 
 static void check_w_avg(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(int16_t, tmp, 2, [128 * 128]);
-    PIXEL_RECT(c_dst, 135, 135);
-    PIXEL_RECT(a_dst, 128, 128);
+    ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
+    PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
+    PIXEL_RECT(a_dst, 64, 64);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const int16_t *tmp1,
                  const int16_t *tmp2, int w, int h, int weight HIGHBD_DECL_SUFFIX);
 
-    for (int w = 4; w <= 128; w <<= 1)
+    for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->w_avg, "w_avg_w%d_%dbpc", w, BITDEPTH)) {
-            for (int h = imax(w / 4, 4); h <= imin(w * 4, 128); h <<= 1)
+            for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1)
             {
                 int weight = rnd() % 15 + 1;
 #if BITDEPTH == 16
@@ -357,21 +342,21 @@ static void check_w_avg(Dav1dMCDSPContext *const c) {
 }
 
 static void check_mask(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(int16_t, tmp, 2, [128 * 128]);
-    PIXEL_RECT(c_dst, 135, 135);
-    PIXEL_RECT(a_dst, 128, 128);
-    ALIGN_STK_64(uint8_t, mask,  128 * 128,);
+    ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
+    PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
+    PIXEL_RECT(a_dst, 64, 64);
+    ALIGN_STK_64(uint8_t, mask,  64 * 64,);
 
-    for (int i = 0; i < 128 * 128; i++)
+    for (int i = 0; i < 64 * 64; i++)
         mask[i] = rnd() % 65;
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const int16_t *tmp1,
                  const int16_t *tmp2, int w, int h, const uint8_t *mask
                  HIGHBD_DECL_SUFFIX);
 
-    for (int w = 4; w <= 128; w <<= 1)
+    for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->mask, "mask_w%d_%dbpc", w, BITDEPTH)) {
-            for (int h = imax(w / 4, 4); h <= imin(w * 4, 128); h <<= 1)
+            for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1)
             {
 #if BITDEPTH == 16
                 const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
@@ -395,11 +380,11 @@ static void check_mask(Dav1dMCDSPContext *const c) {
 }
 
 static void check_w_mask(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(int16_t, tmp, 2, [128 * 128]);
-    PIXEL_RECT(c_dst, 135, 135);
-    PIXEL_RECT(a_dst, 128, 128);
-    ALIGN_STK_64(uint8_t, c_mask, 128 * 128,);
-    ALIGN_STK_64(uint8_t, a_mask, 128 * 128,);
+    ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
+    PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
+    PIXEL_RECT(a_dst, 64, 64);
+    ALIGN_STK_64(uint8_t, c_mask, 64 * 64,);
+    ALIGN_STK_64(uint8_t, a_mask, 64 * 64,);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const int16_t *tmp1,
                  const int16_t *tmp2, int w, int h, uint8_t *mask, int sign
@@ -410,11 +395,11 @@ static void check_w_mask(Dav1dMCDSPContext *const c) {
     static const uint8_t ss_ver[] = { 0, 0, 1 };
 
     for (int i = 0; i < 3; i++)
-        for (int w = 4; w <= 128; w <<= 1)
+        for (int w = 4; w <= 64; w <<= 1)
             if (check_func(c->w_mask[i], "w_mask_%d_w%d_%dbpc", ss[i], w,
                            BITDEPTH))
             {
-                for (int h = imax(w / 4, 4); h <= imin(w * 4, 128); h <<= 1)
+                for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1)
                 {
                     int sign = rnd() & 1;
 #if BITDEPTH == 16
@@ -600,11 +585,11 @@ static void random_offset_for_edge(int *const x, int *const y,
 }
 
 static void check_emuedge(Dav1dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, c_dst, 135 * 192,);
-    ALIGN_STK_64(pixel, a_dst, 135 * 192,);
-    ALIGN_STK_64(pixel, src,   160 * 160,);
+    ALIGN_STK_64(pixel, c_dst, (64 + 7) * 128,);
+    ALIGN_STK_64(pixel, a_dst, (64 + 7) * 128,);
+    ALIGN_STK_64(pixel, src,   96 * 96,);
 
-    for (int i = 0; i < 160 * 160; i++)
+    for (int i = 0; i < 96 * 96; i++)
         src[i] = rnd() & ((1U << BITDEPTH) - 1);
 
     declare_func(void, intptr_t bw, intptr_t bh, intptr_t iw, intptr_t ih,
@@ -613,27 +598,27 @@ static void check_emuedge(Dav1dMCDSPContext *const c) {
                  const pixel *src, ptrdiff_t src_stride);
 
     int x, y, iw, ih;
-    for (int w = 4; w <= 128; w <<= 1)
+    for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->emu_edge, "emu_edge_w%d_%dbpc", w, BITDEPTH)) {
-            for (int h = imax(w / 4, 4); h <= imin(w * 4, 128); h <<= 1) {
+            for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1) {
                 // we skip 0xf, since it implies that we don't need emu_edge
                 for (enum EdgeFlags edge = 0; edge < 0xf; edge++) {
                     const int bw = w + (rnd() & 7);
                     const int bh = h + (rnd() & 7);
                     random_offset_for_edge(&x, &y, bw, bh, &iw, &ih, edge);
                     call_ref(bw, bh, iw, ih, x, y,
-                             c_dst, 192 * sizeof(pixel), src, 160 * sizeof(pixel));
+                             c_dst, 128 * sizeof(pixel), src, 96 * sizeof(pixel));
                     call_new(bw, bh, iw, ih, x, y,
-                             a_dst, 192 * sizeof(pixel), src, 160 * sizeof(pixel));
-                    checkasm_check_pixel(c_dst, 192 * sizeof(pixel),
-                                         a_dst, 192 * sizeof(pixel),
+                             a_dst, 128 * sizeof(pixel), src, 96 * sizeof(pixel));
+                    checkasm_check_pixel(c_dst, 128 * sizeof(pixel),
+                                         a_dst, 128 * sizeof(pixel),
                                          bw, bh, "dst");
                 }
             }
             for (enum EdgeFlags edge = 1; edge < 0xf; edge <<= 1) {
                 random_offset_for_edge(&x, &y, w + 7, w + 7, &iw, &ih, edge);
                 bench_new(w + 7, w + 7, iw, ih, x, y,
-                          a_dst, 192 * sizeof(pixel), src, 160 * sizeof(pixel));
+                          a_dst, 128 * sizeof(pixel), src, 96 * sizeof(pixel));
             }
         }
     report("emu_edge");
