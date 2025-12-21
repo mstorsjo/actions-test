@@ -2391,7 +2391,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                           dav1d_msac_decode_bool_bypass(&ts->msac);
                             if (s) diff[n].x = -diff[n].x;
                         }
-                        mv_reduce_prec(&b->mv[n], mv_prec);
+                        if (!amvd && mv_prec <= 3)
+                            mv_reduce_prec(&b->mv[n], mv_prec);
                         b->mv[n].x += diff[n].x;
                         b->mv[n].y += diff[n].y;
                         DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
@@ -2405,7 +2406,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         diff[n] = mv_projection(diff[!n], refdist[1], refdist[0]);
                         jmvd_scale(&diff[n], amvd, jmvd_scale_mode);
                         b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
-                        mv_reduce_prec(&b->mv[n], mv_prec);
+                        if (!amvd && mv_prec <= 3)
+                            mv_reduce_prec(&b->mv[n], mv_prec);
                         b->mv[n].x += diff[n].x;
                         b->mv[n].y += diff[n].y;
                     }
@@ -2825,7 +2827,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                       dav1d_msac_decode_bool_bypass(&ts->msac);
                         if (s) diff.x = -diff.x;
                     }
-                    if (mv_prec <= 3)
+                    if (!amvd && mv_prec <= 3)
                         mv_reduce_prec(&b->mv[0], mv_prec);
                     b->mv[0].x += diff.x;
                     b->mv[0].y += diff.y;
