@@ -246,8 +246,9 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
 #define add_sample(dx, dy, sx, sy, rp) do { \
     pts[np][0][0] = 16 * (2 * dx + sx * bs(rp)[0]) - 8; \
     pts[np][0][1] = 16 * (2 * dy + sy * bs(rp)[1]) - 8; \
-    pts[np][1][0] = pts[np][0][0] + (rp)->lmv.mv[0].x; \
-    pts[np][1][1] = pts[np][0][1] + (rp)->lmv.mv[0].y; \
+    const union mv *const rmv = (rp)->mf & 2 ? (rp)->lmv.mv : (rp)->mv.mv; \
+    pts[np][1][0] = pts[np][0][0] + rmv[0].x; \
+    pts[np][1][1] = pts[np][0][1] + rmv[0].y; \
     np++; \
 } while (0)
 
@@ -561,7 +562,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     tmpl.ref.ref[0] = b->ref[0] + 1;
     tmpl.ref.ref[1] = -1;
     tmpl.bs = bs;
-    tmpl.lmv.mv[0] = b->mv[0];
+    tmpl.mv.mv[0] = b->mv[0];
     tmpl.bx4 = t->bx;
     tmpl.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
@@ -574,19 +575,14 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
         f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
-        debug_warp_matrix(depth, f, t, b);
     } else {
-        tmpl.mf = b->inter_mode == GLOBALMV,
+        if (b->ref[0] == TIP_FRAME && f->seq_hdr->tip_refine_mv) {
+            tmpl.mf = 4;
+        } else {
+            tmpl.mf = b->inter_mode == GLOBALMV;
+        }
         f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
-        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n",
-                           depth, "", b->mv[0].y, b->mv[0].x);
     }
-
-    if (t->f->seq_hdr->refmv_bank)
-        dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
-    if (b->ref[0] != TIP_FRAME && b->motion_mode > MM_INTERINTRA)
-        dav1d_refmvs_warp_add(&t->rt, &t->warpmv,
-                              DB_ONLY(t->by, t->bx) b->ref[0]);
 }
 
 static inline void splat_intrabc_mv(DB_ONLY(const int depth)
@@ -599,7 +595,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
         .ref.ref = { 0, -1 },
-        .lmv.mv[0] = b->mv[0],
+        .mv.mv[0] = b->mv[0],
         .bs = bs,
         .mf = 0,
         .bx4 = t->bx,
@@ -623,9 +619,9 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     tmpl.ref.ref[0] = b->ref[0] + 1;
     tmpl.ref.ref[1] = b->ref[1] + 1;
     tmpl.bs = bs;
-    tmpl.mf = b->cwp_idx * 4;
-    tmpl.lmv.mv[0] = b->mv[0];
-    tmpl.lmv.mv[1] = b->mv[1];
+    tmpl.mf = (b->cwp_idx + 4) << 3;
+    tmpl.mv.mv[0] = b->mv[0];
+    tmpl.mv.mv[1] = b->mv[1];
     tmpl.bx4 = t->bx;
     tmpl.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
@@ -639,15 +635,15 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
         f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
     } else {
-        tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
+        if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
+            (b->refine_mv && b->comp_type == COMP_INTER_AVG))
+        {
+            tmpl.mf |= 4;
+        } else {
+            tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
+        }
         f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
-        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n",
-                           depth, "", b->mv[0].y, b->mv[0].x,
-                           b->mv[1].y, b->mv[1].x);
     }
-
-    if (t->f->seq_hdr->refmv_bank)
-        dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
 }
 
 static inline void splat_intraref(const Dav1dContext *const c,
@@ -658,7 +654,7 @@ static inline void splat_intraref(const Dav1dContext *const c,
     refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
         .ref.ref = { -1, -1 },
-        .lmv.mv[0].n = INVALID_MV,
+        .mv.mv[0].n = INVALID_MV,
         .bs = bs,
         .mf = 0,
         .bx4 = t->bx,
@@ -2423,7 +2419,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                             (1 << OPFL_NEARMV_NEARMV) |
                                             (1 << OPFL_JOINT_NEWMV)))
                 {
-                    b->refine_mv = 1;
+                    b->refine_mv = 2; // implicitly enabled
                 } else {
                     const int ctx = b->inter_mode - NEARMV_NEARMV;
                     b->refine_mv = dav1d_msac_decode_bool_adapt(&ts->msac,
@@ -2442,6 +2438,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
+                b->refine_mv != 1 /* disabled, or implicitly enabled */ &&
                 !(b->inter_mode == JOINT_NEWMV && amvd) &&
                 f->seq_hdr->masked_compound && imin(bw4, bh4) >= 2)
             {
@@ -2981,6 +2978,21 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->filter = f->frame_hdr->subpel_filter_mode;
         }
 
+        if (is_comp) {
+            DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n",
+                               depth, "", b->mv[0].y, b->mv[0].x,
+                               b->mv[1].y, b->mv[1].x);
+        } else if (b->motion_mode > MM_INTERINTRA) {
+            debug_warp_matrix(depth, f, t, b);
+        } else {
+            DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n",
+                               depth, "", b->mv[0].y, b->mv[0].x);
+        }
+        if (t->f->seq_hdr->refmv_bank)
+            dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
+        if (b->motion_mode > MM_INTERINTRA)
+            dav1d_refmvs_warp_add(&t->rt, &t->warpmv,
+                                  DB_ONLY(t->by, t->bx) b->ref[0]);
         if (is_comp)
             splat_tworef_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
         else

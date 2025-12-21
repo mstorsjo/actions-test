@@ -83,11 +83,17 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 
 // FIXME the size of this array can be reduced if we generate mv on-the-fly
 // from the (separately stored) warp matrix.
+// bx4/by4 can be stored in one-byte elements as relative offset to start of
+// the block (see how it's used in decode.c:derive_warpmv()
 PACKED(typedef struct refmvs_block {
-    refmvs_mvpair mv, lmv; // for non-warp blocks, lmv==mv (see #1146)
+    refmvs_mvpair mv;
+    union {
+        refmvs_mvpair lmv; // for non-warp blocks, lmv==mv (see #1146)
+        refmvs_mvpair omv; // for opfl
+    };
     refmvs_refpair ref;
     uint8_t bs;
-    int8_t mf; // 1 = globalmv+affine, 2 = warp[not gmv], 3-7: cwp-idx
+    uint8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2: opfl, 3-7: cwp_idx+4
     uint16_t bx4, by4; // top/left coordinates (in 4px units) of this block
 }) ALIGN(refmvs_block, 4);
 CHECK_SIZE(refmvs_block, 24);

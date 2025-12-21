@@ -331,7 +331,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         }};
         add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                    y_off, x_off, "spc")
-                           st->mv, st->cnt, 6, weight, b->mf >> 2,
+                           st->mv, st->cnt, 6, weight, (b->mf >> 3) - 4,
                            cand_mv, &st->iter_cntr, 16);
     } else {
         if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
@@ -1581,26 +1581,29 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
         const refmvs_block *const b = &rr[((y & 31) * 2 + 1) * 128];
         for (int x = col_start8; x < col_end8; x++) {
             const refmvs_block *const cand_b = &b[((x * 2) & 127) + 1];
+            const union mv *const cand_mv =
+                cand_b->mf & 4 ? cand_b->lmv.mv : cand_b->mv.mv;
 
             // FIXME opfl, refinemv
             if (cand_b->ref.ref[0] - 1 == TIP_FRAME) {
-                const mv tmv = rp_proj[x].mv;
-                const mv tip0mv = scale_mv(tmv, tip_sf[0]);
-                const mv tip1mv = scale_mv(tmv, tip_sf[1]);
-                rp[x].mv.mv[0] = quantize_mv((mv) {
-                    .y = iclip(tip0mv.y + b->mv.mv[0].y, -0xffff, 0xffff),
-                    .x = iclip(tip0mv.x + b->mv.mv[0].x, -0xffff, 0xffff),
+                const union mv tmv = rp_proj[x].mv;
+                const union mv tip0mv = scale_mv(tmv, tip_sf[0]);
+                const union mv tip1mv = scale_mv(tmv, tip_sf[1]);
+                rp[x].mv.mv[0] = quantize_mv((union mv) {
+                    .y = iclip(tip0mv.y + cand_mv[0].y, -0xffff, 0xffff),
+                    .x = iclip(tip0mv.x + cand_mv[0].x, -0xffff, 0xffff),
                 });
-                rp[x].mv.mv[1] = quantize_mv((mv) {
-                    .y = iclip(tip1mv.y + b->mv.mv[0].y, -0xffff, 0xffff),
-                    .x = iclip(tip1mv.x + b->mv.mv[0].x, -0xffff, 0xffff),
+                const int i = (cand_b->mf & 4) >> 2;
+                rp[x].mv.mv[1] = quantize_mv((union mv) {
+                    .y = iclip(tip1mv.y + cand_mv[i].y, -0xffff, 0xffff),
+                    .x = iclip(tip1mv.x + cand_mv[i].x, -0xffff, 0xffff),
                 });
                 rp[x].ref.ref[0] = tip_ref[0] + 1;
                 rp[x].ref.ref[1] = tip_ref[1] + 1;
             } else if (cand_b->ref.ref[0] > 0) {
-                rp[x].mv.mv[0] = quantize_mv(cand_b->mv.mv[0]);
+                rp[x].mv.mv[0] = quantize_mv(cand_mv[0]);
                 rp[x].mv.mv[1] = cand_b->ref.ref[1] > 0 ?
-                    quantize_mv(cand_b->mv.mv[1]) :
+                    quantize_mv(cand_mv[1]) :
                     (union qmv) { .n = INVALID_TRAJ };
                 rp[x].ref.pair = cand_b->ref.pair;
             } else {
@@ -1939,7 +1942,6 @@ end:
 static void splat_mv_c(refmvs_block *r, refmvs_block *const rmv,
                        const int bw4, int bh4)
 {
-    rmv->mv.n = rmv->lmv.n;
     do {
         for (int x = 0; x < bw4; x++) {
             r[x] = *rmv;
@@ -1953,6 +1955,7 @@ static void splat_warpmv_c(refmvs_block *r, int32_t (*m)[7],
                            const Dav1dWarpedMotionParams *const mat,
                            const int bw4, int bh4)
 {
+    rmv->lmv = rmv->mv;
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {

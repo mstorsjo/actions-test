@@ -116,6 +116,26 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, int alpha, int beta, \
             int w, int h HIGHBD_DECL_SUFFIX)
 typedef decl_morph_fn(*morph_fn);
 
+struct OpflOffset {
+    int8_t y, x;
+};
+#define decl_sad_refine_mv_fn(name) \
+void (name)(const pixel *p0, ptrdiff_t p0_stride, \
+            const pixel *p1, ptrdiff_t p1_stride, \
+            int w, int h, int is_implicit, struct OpflOffset *o)
+typedef decl_sad_refine_mv_fn(*sad_refine_mv_fn);
+
+struct OpflRegressionData {
+    int32_t su2, suv, sv2, suw, svw;
+};
+#define decl_opfl_derive_mv_fn(name) \
+void (name)(struct OpflRegressionData *out, \
+            const pixel *p0, ptrdiff_t p0_stride, \
+            const pixel *p1, ptrdiff_t p1_stride, \
+            int w, int h, int bs, const struct OpflOffset *o, \
+            const int8_t d[2])
+typedef decl_opfl_derive_mv_fn(*opfl_derive_mv_fn);
+
 #define decl_8tap_gen(decl_name, fn_name, opt) \
     decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular, opt)); \
     decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth,  opt)); \
@@ -149,6 +169,8 @@ typedef struct Dav1dMCDSPContext {
     emu_edge_fn emu_edge;
     resize_fn resize;
     morph_fn morph;
+    opfl_derive_mv_fn opfl_derive_mv;
+    sad_refine_mv_fn sad_refine_mv;
 } Dav1dMCDSPContext;
 
 bitfn_decls(void dav1d_mc_dsp_init, Dav1dMCDSPContext *c);

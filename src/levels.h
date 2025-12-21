@@ -316,7 +316,8 @@ typedef struct Av1Block {
             };
             uint8_t comp_type, inter_mode, motion_mode, warp_ii;
             int8_t cwp_idx, ref[2];
-            uint8_t bawp[2], filter, refine_mv;
+            uint8_t bawp[2], filter;
+            uint8_t refine_mv; // 1 = enabled, 2 = implicitly enabled
         }; // inter
     };
 } Av1Block;

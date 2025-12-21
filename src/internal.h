@@ -474,7 +474,15 @@ struct Dav1dTaskContext {
         };
     } scratch;
 
-    Dav1dWarpedMotionParams warpmv;
+    union {
+        Dav1dWarpedMotionParams warpmv;
+        union OpflMvDeltaBlock {
+            struct OpflMvDelta {
+                int8_t x, y;
+            } d[2];
+            unsigned n;
+        } opfl[8 * 8];
+    };
     Av1Filter *lf_mask;
     int top_pre_cdef_toggle;
     // for chroma sub8x8, we need to know the filter for all 4 subblocks in

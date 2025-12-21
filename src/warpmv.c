@@ -40,7 +40,7 @@ static inline int iclip_wmp(const int v) {
     return apply_sign((abs(cv) + 32) >> 6, cv) * (1 << 6);
 }
 
-static inline int resolve_divisor_32(const unsigned d, int *const shift) {
+int resolve_divisor_32(const unsigned d, int *const shift) {
     *shift = ulog2(d);
     const int e = d - (1 << *shift);
     const int f = *shift > 7 ? (e + (1 << (*shift - 8))) >> (*shift - 7) :

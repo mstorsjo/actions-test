@@ -453,7 +453,8 @@ static void put_bilin_c(pixel *dst, ptrdiff_t dst_stride,
     src_stride = PXSTRIDE(src_stride);
 
     assert(!(w & (w - 1)) && w >= 2 && w <= 64);
-    assert(!(h & (h - 1)) && h >= 2 && h <= 64);
+    // h=24 can happen for refinemv slices of height 16 and 8 pixels padding
+    assert((!(h & (h - 1)) && h >= 2 && h <= 64) || h == 24);
 
     if (mx) {
         if (my) {
@@ -971,6 +972,147 @@ static void morph_c(pixel *dst, const ptrdiff_t dst_stride,
     }
 }
 
+static int sad_nxn(const pixel *p0, const ptrdiff_t p0_stride,
+                   const pixel *p1, const ptrdiff_t p1_stride,
+                   const int w, const int h,
+                   const int emulate_l0a, const int emulate_l0b)
+{
+    int sad = 0;
+    for (int y = 0; y < h; y += 2) {
+        for (int x = 0, e0 = emulate_l0a, e1 = emulate_l0b; x < w; x++, e0 = e1 = 0) {
+            sad += abs(p0[x + e0] - p1[x + e1]);
+        }
+        p0 += PXSTRIDE(p0_stride) * 2;
+        p1 += PXSTRIDE(p1_stride) * 2;
+    }
+    return sad;
+}
+
+static void sad_refine_mv_c(const pixel *p0, const ptrdiff_t p0_stride,
+                            const pixel *p1, const ptrdiff_t p1_stride,
+                            const int w, const int h, const int is_implicit,
+                            struct OpflOffset *o)
+{
+    assert(w >= 8 && w <= 64 && !(w & (w - 1)));
+    assert(h == 8 || h == 16);
+    assert(w * h >= 64);
+
+    const int bw = imin(w, 16);
+    const int sadw = bw + 4, sadh = h + 4;
+    const unsigned sad_thr = sadw * sadh * 2;
+    for (int x = 0; x < w; x += bw, o++) {
+        unsigned best_sad = ~0U;
+        int best_dx = 0, best_dy = 0;
+        if (is_implicit) {
+            best_sad = sad_nxn(&p0[2 * PXSTRIDE(p0_stride) + 2], p0_stride,
+                               &p1[2 * PXSTRIDE(p1_stride) + 2], p1_stride,
+                               sadw, sadh, 0, 0);
+            best_sad = (best_sad * 7 + 7) >> 3;
+            if (best_sad < sad_thr) goto next;
+        }
+        for (int y_off = -2; y_off <= 2; y_off++) {
+            for (int x_off = -2; x_off <= 2; x_off++) {
+                if (!(x_off | y_off)) continue;
+                const unsigned sad =
+                    sad_nxn(&p0[(2 + y_off) * PXSTRIDE(p0_stride) + (2 + x_off)],
+                            p0_stride,
+                            &p1[(2 - y_off) * PXSTRIDE(p1_stride) + (2 - x_off)],
+                            p1_stride, sadw, sadh, x_off == -2, x_off == 2);
+                if (sad >= best_sad) continue;
+                best_sad = sad;
+                best_dx = x_off;
+                best_dy = y_off;
+            }
+        }
+    next:
+        o->x = best_dx;
+        o->y = best_dy;
+        assert(best_sad != ~0U);
+        p0 += bw;
+        p1 += bw;
+    }
+}
+
+static void opfl_derive_mv_c(struct OpflRegressionData *out,
+                             const pixel *p0, const ptrdiff_t p0_stride,
+                             const pixel *p1, const ptrdiff_t p1_stride,
+                             const int w, const int h, const int bs,
+                             const struct OpflOffset *o, const int8_t d[2])
+{
+    assert(bs == 4 || bs == 8);
+    assert(bs == 8 || (w == 8 && h == 8));
+    assert(!(w & (w - 1)));
+    assert(h == 8 || h == 16);
+    assert(w >= 8 && w <= 64);
+
+    // distance-weighted pixel difference & regular pixel difference
+    int16_t tmp0[64 * 16], tmp1[64 * 16];
+    for (int bx = 0; bx < w; bx += 16, o++) {
+        const int x_end = imin(bx + 16, w);
+        const pixel *p0p = &p0[+o->y * PXSTRIDE(p0_stride) + o->x];
+        const pixel *p1p = &p1[-o->y * PXSTRIDE(p1_stride) - o->x];
+        for (int y = 0; y < h; y++) {
+            for (int x = bx; x < x_end; x++) {
+                const int p0pp = p0p[y * PXSTRIDE(p0_stride) + x];
+                const int p1pp = p1p[y * PXSTRIDE(p1_stride) + x];
+                tmp0[y * 64 + x] = d[0] * p0pp - d[1] * p1pp;
+                tmp1[y * 64 + x] = p0pp - p1pp;
+            }
+        }
+    }
+
+    // subpel gradient in both directions
+    int16_t gx0[64 * 16], gy0[64 * 16];
+    for (int bx = 0; bx < w; bx += 16, o++) {
+        const int x_end = imin(bx + 16, w);
+        const int min_x = bx & ~15, max_x = x_end - 1;
+        const int min_y = 0, max_y = h - 1;
+        for (int y = 0; y < h; y++) {
+            for (int x = bx; x < x_end; x++) {
+                const int p0 = tmp0[y * 64 + imax(min_x, x - 2)];
+                const int p1 = tmp0[y * 64 + imax(min_x, x - 1)];
+                const int p2 = tmp0[y * 64 + imin(max_x, x + 1)];
+                const int p3 = tmp0[y * 64 + imin(max_x, x + 2)];
+                const int e1 = x + 1 > max_x || x - 1 < min_x;
+                const int x0 = ((p2 - p1) * 42 + (p3 - p0) * -5) * (1 + e1);
+                gx0[y * 64 + x] = (x0 + 63 + (x0 > 0)) >> 7;
+
+                const int q0 = tmp0[imax(min_y, y - 2) * 64 + x];
+                const int q1 = tmp0[imax(min_y, y - 1) * 64 + x];
+                const int q2 = tmp0[imin(max_y, y + 1) * 64 + x];
+                const int q3 = tmp0[imin(max_y, y + 2) * 64 + x];
+                const int e2 = y + 1 > max_y || y - 1 < min_y;
+                const int y0 = ((q2 - q1) * 42 + (q3 - q0) * -5) * (1 + e2);
+                gy0[y * 64 + x] = (y0 + 63 + (y0 > 0)) >> 7;
+            }
+        }
+    }
+
+    // set up regression data for flow-derived sub-pixel offset
+    for (int y = 0; y < h; y += bs) {
+        for (int x = 0; x < w; x += bs, out++) {
+            int su2 = bs * bs, suv = 0, sv2 = bs * bs, suw = 0, svw = 0;
+            for (int py = y; py < y + bs; py++) {
+                for (int px = x; px < x + bs; px++) {
+                    const int u = gx0[py * 64 + px];
+                    const int v = gy0[py * 64 + px];
+                    const int w = tmp1[py * 64 + px];
+                    su2 += u * u;
+                    suv += u * v;
+                    sv2 += v * v;
+                    suw += u * w;
+                    svw += v * w;
+                }
+            }
+            out->su2 = su2;
+            out->suv = suv;
+            out->sv2 = sv2;
+            out->suw = suw;
+            out->svw = svw;
+        }
+    }
+}
+
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/mc.h"
@@ -1010,6 +1152,8 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->emu_edge = emu_edge_c;
     c->resize   = resize_c;
     c->morph    = morph_c;
+    c->opfl_derive_mv = opfl_derive_mv_c;
+    c->sad_refine_mv = sad_refine_mv_c;
 
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
