@@ -496,7 +496,7 @@ typedef struct Dav1dFrameHeader {
         uint8_t lf_sub_pu;
         uint8_t level_y[2 /* dir */];
         uint8_t level_u, level_v;
-        uint8_t delta_q_y[2], delta_q_u, delta_q_v;
+        int8_t delta_q_y[2], delta_q_u, delta_q_v;
     } loopfilter;
     struct {
         enum Dav1dAdaptiveBoolean enabled;
