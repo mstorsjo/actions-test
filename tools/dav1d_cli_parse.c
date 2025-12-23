@@ -356,7 +356,7 @@ static int parse_enum_mask(const char *const optargs, unsigned const start_mask,
     size_t len = snprintf(err_msg, sizeof(err_msg), "plus/min-separated values from ");
     for (int n = 0; n < tbl_sz; n++) {
         len += snprintf(err_msg + len, sizeof(err_msg) - len, "%s%s",
-                        n ? tbl[n + 1].str ? ", " : " or " : "",
+                        n ? n + 1 < tbl_sz ? ", " : " or " : "",
                         tbl[n].str);
     }
 
