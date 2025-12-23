@@ -266,6 +266,7 @@ static const EnumParseTable cpu_mask_tbl[] = {
 };
 
 static const EnumParseTable inloop_filters_tbl[] = {
+    { "none",          0 },
     { "deblock",       DAV1D_INLOOPFILTER_DEBLOCK },
     { "cdef",          DAV1D_INLOOPFILTER_CDEF },
     { "ccso",          DAV1D_INLOOPFILTER_CCSO },
