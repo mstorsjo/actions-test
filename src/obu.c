@@ -1225,6 +1225,7 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                 if (seqhdr->tip_hole_fill)
                     hdr->tip.hole_fill = dav1d_get_bit(gb);
                 if (/* do not have both-sides-refs || */
+                    !seqhdr->tip_refine_mv ||
                     (!seqhdr->opfl_refine && !seqhdr->refine_mv))
                 {
                     hdr->tip.global_wtd_idx = dav1d_get_bits(gb, 3);
