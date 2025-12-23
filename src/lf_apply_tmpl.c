@@ -182,8 +182,8 @@ static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
 {
     const Dav1dDSPContext *const dsp = f->dsp;
 
-    const unsigned q_thr = f->lf.thr_lut.thr[0][0][0];
-    const unsigned side_thr = f->lf.thr_lut.thr[0][1][0];
+    const unsigned q_thr = f->lf.thr_lut.thr[1][0][0];
+    const unsigned side_thr = f->lf.thr_lut.thr[1][1][0];
     //                                 block1
     // filter edges between rows (e.g. ------)
     //                                 block2
