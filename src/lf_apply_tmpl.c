@@ -160,7 +160,7 @@ static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
             hmask[3] |= (uint64_t) mask[x][3][y] << shift;
         }
         // TODO: Fix strength at end of tile columns
-        dsp->lf.loop_filter_sb[0][0](&dst[x * 4], ls, hmask, q_thr, side_thr,
+        dsp->lf.loop_filter_sb[0][0](&dst[x * 4], ls, hmask, q_thr, side_thr, 0,
                                      &f->lf.thr_lut, endy4 - starty4 HIGHBD_CALL_SUFFIX);
     }
 }
@@ -187,8 +187,7 @@ static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
             mask[y][2][0] | (uint64_t) mask[y][2][1] << 16 | (uint64_t) mask[y][2][2] << 32 | (uint64_t) mask[y][2][3] << 48,
             mask[y][3][0] | (uint64_t) mask[y][3][1] << 16 | (uint64_t) mask[y][3][2] << 32 | (uint64_t) mask[y][3][3] << 48,
         };
-        // TODO: Fix strength every 64 pix row
-        dsp->lf.loop_filter_sb[0][1](dst, ls, vmask, q_thr, side_thr,
+        dsp->lf.loop_filter_sb[0][1](dst, ls, vmask, q_thr, side_thr, (y & 15) == 0,
                                      &f->lf.thr_lut, w HIGHBD_CALL_SUFFIX);
     }
 }

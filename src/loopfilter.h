@@ -40,7 +40,7 @@
 //       * Add a flag to shift down q_thr/side_thr for sub_pu_edge
 #define decl_loopfilter_sb_fn(name) \
 void (name)(pixel *dst, ptrdiff_t stride, const uint64_t *mask, \
-            unsigned q_thr, unsigned side_thr, \
+            unsigned q_thr, unsigned side_thr, int edge, \
             const Av1FilterLUT *lut, int w HIGHBD_DECL_SUFFIX)
 typedef decl_loopfilter_sb_fn(*loopfilter_sb_fn);
 

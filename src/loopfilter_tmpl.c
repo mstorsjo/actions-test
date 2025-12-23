@@ -34,7 +34,7 @@
 
 #include "src/loopfilter.h"
 
-static const int8_t max_width_y[4] = { 1, 3, 6, 8 };
+static const int8_t max_width_y[4] = { 1, 3, 6, 8 }; // 4x4,
 
 static const int8_t q_first[5] = { 45, 40, 32 };
 static const int8_t q_thresh_mults[8] = { 32, 25, 19, 19, 0, 18, 0, 17 };
@@ -98,13 +98,12 @@ static int filter_choice(const pixel *const s, const pixel *const t, const ptrdi
 
 static NOINLINE void
 loop_filter(pixel *dst, unsigned q_thr, unsigned side_thr,
-            const ptrdiff_t stridea, const ptrdiff_t strideb, const int idx
+            const ptrdiff_t stridea, const ptrdiff_t strideb,
+            const int max_width_pos, const int max_width_neg
             HIGHBD_DECL_SUFFIX)
 {
-    const int max_width_pos = max_width_y[idx];
-    const int max_width_neg = max_width_pos;
     const int width = filter_choice(dst, dst + 3 * stridea, strideb, max_width_neg, max_width_pos, q_thr, side_thr);
-    const int width_neg = width;
+    const int width_neg = imin(width, max_width_neg);
     const int width_pos = width;
 
     if (width_pos < 1) return;
@@ -130,6 +129,7 @@ static void loop_filter_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
                                    const uint64_t *const vmask,
                                    const unsigned q_thr,
                                    const unsigned side_thr,
+                                   const int edge,
                                    const Av1FilterLUT *lut, const int h
                                    HIGHBD_DECL_SUFFIX)
 {
@@ -137,8 +137,10 @@ static void loop_filter_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
     for (uint64_t y = 1; vm & ~(y - 1); y <<= 1, dst += 4 * PXSTRIDE(stride)) {
         if (vm & y) {
             const int idx = (vmask[3] & y) ? 3 : (vmask[2] & y) ? 2 : !!(vmask[1] & y);
-            loop_filter(dst, q_thr, side_thr, PXSTRIDE(stride), 1, idx
-                        HIGHBD_TAIL_SUFFIX);
+            const int max_width_pos = max_width_y[idx];
+            const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
+            loop_filter(dst, q_thr, side_thr, PXSTRIDE(stride), 1,
+                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
@@ -147,6 +149,7 @@ static void loop_filter_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
                                    const uint64_t *const vmask,
                                    const unsigned q_thr,
                                    const unsigned side_thr,
+                                   const int edge,
                                    const Av1FilterLUT *lut, const int w
                                    HIGHBD_DECL_SUFFIX)
 {
@@ -154,8 +157,10 @@ static void loop_filter_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
     for (uint64_t x = 1; vm & ~(x - 1); x <<= 1, dst += 4) {
         if (vm & x) {
             const int idx = (vmask[3] & x) ? 3 : (vmask[2] & x) ? 2 : !!(vmask[1] & x);
-            loop_filter(dst, q_thr, side_thr, 1, PXSTRIDE(stride), idx
-                        HIGHBD_TAIL_SUFFIX);
+            const int max_width_pos = max_width_y[idx];
+            const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
+            loop_filter(dst, q_thr, side_thr, 1, PXSTRIDE(stride),
+                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
@@ -164,6 +169,7 @@ static void loop_filter_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const uint64_t *const vmask,
                                     const unsigned q_thr,
                                     const unsigned side_thr,
+                                    const int edge,
                                     const Av1FilterLUT *lut, const int h
                                     HIGHBD_DECL_SUFFIX)
 {
@@ -189,6 +195,7 @@ static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const uint64_t *const vmask,
                                     const unsigned q_thr,
                                     const unsigned side_thr,
+                                    const int edge,
                                     const Av1FilterLUT *lut, const int h
                                     HIGHBD_DECL_SUFFIX)
 {
