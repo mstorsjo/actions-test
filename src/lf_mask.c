@@ -298,12 +298,12 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
             rem_h4 -= th4_small;
             if (rem_h4 > 0) {
                 cby4 += th4_small;
-                ly += th4_small >> 2;
+                ly += th4_small;
                 mask_edges_intra(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_big), tx_big, ay, ly);
                 rem_h4 -= th4_big;
                 if (rem_h4 > 0) {
                     cby4 += th4_big;
-                    ly += th4_big >> 2;
+                    ly += th4_big;
                     mask_edges_intra(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
                 }
             }
@@ -319,12 +319,12 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
             rem_w4 -= tw4_small;
             if (rem_w4 > 0) {
                 cbx4 += tw4_small;
-                ay += tw4_small >> 2;
+                ay += tw4_small;
                 mask_edges_intra(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_big), bh4, tx_big, ay, ly);
                 rem_w4 -= tw4_big;
                 if (rem_w4 > 0) {
                     cbx4 += tw4_big;
-                    ay += tw4_big >> 2;
+                    ay += tw4_big;
                     mask_edges_intra(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
                 }
             }
