@@ -1432,7 +1432,7 @@ static int tip_pred(Dav1dTaskContext *const t,
                     x0 + bw4 * 4 >= w || x1 + bw4 * 4 >= w ||
                     y0 + bh4 * 4 >= h || y1 + bh4 * 4 >= h)
                 {
-                    gen_mask(&mask[(y * bw4 + x) * 4], bw4 * 4,
+                    gen_mask(&mask[(y * bw4 * 4 + x) * 4], bw4 * 4,
                              step * 4, step * 4, x0, y0, x1, y1, w, h);
                     have_bacp = 1;
                 }
