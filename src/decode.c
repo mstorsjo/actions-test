@@ -4687,14 +4687,11 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
     for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)
         reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr), 0);
 
-    // no threading - we explicitly interleave tile/sbrow decoding
-    // and post-filtering, so that the full process runs in-line
     for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
+        const int sby_start = f->frame_hdr->tiling.t.row_start_sb[tile_row];
         const int sbh_end =
             imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1], f->sbh);
-        for (int sby = f->frame_hdr->tiling.t.row_start_sb[tile_row];
-             sby < sbh_end; sby++)
-        {
+        for (int sby = sby_start; sby < sbh_end; sby++) {
             t->by = sby << (4 + f->frame_hdr->sb128);
             const int by_end = (t->by + f->sb_step) >> 1;
             if (f->frame_hdr->use_ref_frame_mvs) {
@@ -4705,8 +4702,10 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
                 t->ts = &f->ts[tile_row * f->frame_hdr->tiling.t.cols + tile_col];
                 if (dav1d_decode_tile_sbrow(t)) goto error;
             }
-
-            // loopfilter + cdef + restoration
+        }
+        // post filters (deblock + cdef + ccso + ...)
+        // do this after completing full tiles, so that intra bc works correctly
+        for (int sby = sby_start; sby < sbh_end; sby++) {
             f->bd_fn.filter_sbrow(f, sby);
         }
     }
