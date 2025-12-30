@@ -1747,16 +1747,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (has_luma) {
-            if (f->frame_hdr->loopfilter.level_y[0] ||
-                f->frame_hdr->loopfilter.level_y[1])
-            {
-                dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->w4, f->h4, bs,
-                                           b->tx_part, b->uvtx, f->cur.p.layout,
-                                           &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
-                                           has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
-                                           has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
-            }
-
             // update contexts
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
@@ -3067,6 +3057,17 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         case_set(b_dim[2]);
 #undef set_ctx
     }
+
+    if (b->intra && has_luma &&
+        (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
+    {
+        dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->w4, f->h4, bs,
+                                   b->tx_part, b->uvtx, f->cur.p.layout,
+                                   &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
+                                   has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
+                                   has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
+    }
+
     if (!b->skip_txfm) {
         uint16_t (*noskip_mask)[4] = &t->lf_mask->noskip_mask[by4 >> 1];
         const unsigned mask = (~0U >> imax(0, 32 - bw4)) << (bx4 & 15);
