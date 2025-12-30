@@ -561,6 +561,7 @@ L(blend_tbl):
         pop             {r4-r5,pc}
 endfunc
 
+#if 0
 function blend_h_8bpc_neon, export=1
         push            {r4-r5,lr}
         ldr             r4,  [sp, #12]
@@ -840,6 +841,7 @@ L(blend_v_tbl):
         bgt             32b
         pop             {r4,pc}
 endfunc
+#endif
 
 
 // This has got the same signature as the put_8tap functions,

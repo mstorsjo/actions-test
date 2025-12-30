@@ -691,6 +691,7 @@ jumptable blend_tbl
         .word 40b  - blend_tbl
 endjumptable
 
+#if 0
 function blend_h_16bpc_neon, export=1
         movrel          x6,  blend_h_tbl
         movrel          x5,  X(obmc_masks)
@@ -1018,6 +1019,7 @@ jumptable blend_v_tbl
         .word 40b  - blend_v_tbl
         .word 20b  - blend_v_tbl
 endjumptable
+#endif
 
 
 // This has got the same signature as the put_8tap functions,

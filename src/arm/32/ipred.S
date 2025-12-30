@@ -963,6 +963,7 @@ L(ipred_paeth_tbl):
         pop             {r4-r8, pc}
 endfunc
 
+#if 0
 // void ipred_smooth_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                             const pixel *const topleft,
 //                             const int width, const int height, const int a,
@@ -1405,6 +1406,7 @@ L(ipred_smooth_h_tbl):
         vpop            {q4-q7}
         pop             {r4-r8, pc}
 endfunc
+#endif
 
 // void ipred_filter_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                             const pixel *const topleft,

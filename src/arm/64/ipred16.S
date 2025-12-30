@@ -958,6 +958,7 @@ jumptable ipred_paeth_tbl
         .word 40b  - ipred_paeth_tbl
 endjumptable
 
+#if 0
 // void ipred_smooth_16bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                              const pixel *const topleft,
 //                              const int width, const int height, const int a,
@@ -1423,6 +1424,7 @@ jumptable ipred_smooth_h_tbl
         .word 80b  - ipred_smooth_h_tbl
         .word 40b  - ipred_smooth_h_tbl
 endjumptable
+#endif
 
 const padding_mask_buf
         .byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
