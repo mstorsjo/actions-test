@@ -483,6 +483,10 @@ static int model_from_corners(DB_ARGS(const int idx)
 {
     if (topright_mv.n == topleft_mv.n && bottomleft_mv.n == topleft_mv.n)
         return 0;
+    if (imin(imin(topleft_mv.x, bottomleft_mv.x), topright_mv.x + b_dim[0] * 32) < -xpos * 8)
+        return 0;
+    if (imin(imin(topleft_mv.y, topright_mv.y), bottomleft_mv.y + b_dim[1] * 32) < -ypos * 8)
+        return 0;
 
     mat[2] = ((topright_mv.x - topleft_mv.x) * (1 << 11)) >> b_dim[2];
     mat[4] = ((topright_mv.y - topleft_mv.y) * (1 << 11)) >> b_dim[2];
