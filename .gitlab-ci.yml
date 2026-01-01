@@ -9,6 +9,20 @@ stages:
         - docker
         - amd64
 
+.debian-aarch64-common:
+    image: registry.videolan.org/dav1d-debian-bookworm-aarch64:20250215002814
+    stage: build
+    tags:
+        - docker
+        - aarch64
+
+.debian-armv7-common:
+    image: registry.videolan.org/dav1d-debian-bookworm-armv7:20250215014239
+    stage: build
+    tags:
+        - docker
+        - armv7
+
 style-check:
     extends: .debian-amd64-common
     stage: style
@@ -183,3 +197,18 @@ build-debian:
               fi
           done
 
+build-debian-aarch64:
+    extends: .debian-aarch64-common
+    script:
+        - meson setup build --buildtype debugoptimized
+                            -Dtrim_dsp=false
+        - ninja -C build
+        - meson test -v -C build
+
+build-debian-armv7:
+    extends: .debian-armv7-common
+    script:
+        - linux32 meson setup build --buildtype debugoptimized
+                            -Dtrim_dsp=false
+        - ninja -C build
+        - meson test -v -C build
