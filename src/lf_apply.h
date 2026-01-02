@@ -37,7 +37,7 @@
 
 void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *f,
                                          pixel *const p[3], Av1Filter *lflvl,
-                                         int sby);
+                                         int sby, int start_of_tile_row);
 void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *f,
                                          pixel *const p[3], Av1Filter *lflvl,
                                          int sby);

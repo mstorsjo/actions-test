@@ -3905,8 +3905,8 @@ static void reset_context(BlockContext *const ctx, const int keyframe, const int
     memset(ctx->partition, 0, sizeof(ctx->partition));
     memset(ctx->skip_txfm, 0, sizeof(ctx->skip_txfm));
     memset(ctx->skip_mode, 0, sizeof(ctx->skip_mode));
-    memset(ctx->tx_lpf_y, 2, sizeof(ctx->tx_lpf_y));
-    memset(ctx->tx_lpf_uv, 1, sizeof(ctx->tx_lpf_uv));
+    memset(ctx->tx_lpf_y, 3, sizeof(ctx->tx_lpf_y));
+    memset(ctx->tx_lpf_uv, 2, sizeof(ctx->tx_lpf_uv));
     if (!keyframe) {
         memset(ctx->ref, -1, sizeof(ctx->ref));
         memset(ctx->comp_type, 0, sizeof(ctx->comp_type));
@@ -4270,13 +4270,13 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
 
     // backup t->a/l.tx_lpf_y/uv at tile boundaries to use them to "fix"
     // up the initial value in neighbour tiles when running the loopfilter
-    int align_h = (f->bh + 31) & ~31;
+    int align_h = (f->bh + 63) & ~63;
     memcpy(&f->lf.tx_lpf_right_edge[0][align_h * tile_col + t->by],
-           &t->l.tx_lpf_y[t->by & 16], sb_step);
+           &t->l.tx_lpf_y[t->by & 0x30], sb_step);
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
     align_h >>= ss_ver;
     memcpy(&f->lf.tx_lpf_right_edge[1][align_h * tile_col + (t->by >> ss_ver)],
-           &t->l.tx_lpf_uv[(t->by & 16) >> ss_ver], sb_step >> ss_ver);
+           &t->l.tx_lpf_uv[(t->by & 0x30) >> ss_ver], sb_step >> ss_ver);
 
     // error out on symbol decoder overread
     if (ts->msac.cnt <= -15) return 1;
