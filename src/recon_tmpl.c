@@ -3196,7 +3196,11 @@ void bytefn(dav1d_filter_sbrow_deblock_rows)(Dav1dFrameContext *const f, const i
     {
         bytefn(dav1d_loopfilter_sbrow_rows)(f, p, mask, sby);
     }
-    if (f->seq_hdr->cdef || f->lf.restore_planes) {
+    if ((f->seq_hdr->cdef &&
+         f->c->inloop_filters & DAV1D_INLOOPFILTER_CDEF) ||
+        (f->lf.restore_planes &&
+         f->c->inloop_filters & DAV1D_INLOOPFILTER_RESTORATION))
+    {
         // Store loop filtered pixels required by CDEF / LR
         bytefn(dav1d_copy_lpf)(f, p, sby);
     }
