@@ -152,6 +152,8 @@ jobs:
       fail-fast: false
       matrix:
         arch:
+          - x86
+          - x64
           - arm
           - arm64
     steps:
@@ -193,6 +195,14 @@ jobs:
 
           arch=${{matrix.arch}}
           case $arch in
+          x86)
+              cpu=i686
+              cpu_family=x86
+              ;;
+          x64)
+              cpu=x86_64
+              cpu_family=x86_64
+              ;;
           arm)
               cpu=armv7
               cpu_family=arm
@@ -208,7 +218,6 @@ jobs:
           cpp = 'cl'
           ar = 'lib'
           windres = 'rc'
-          exe_wrapper = ['wine']
 
           [properties]
           needs_exe_wrapper = true
@@ -225,4 +234,3 @@ jobs:
                             -Ddefault_library=both
           cd build
           ninja
-          meson test -v
