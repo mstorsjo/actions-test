@@ -119,6 +119,8 @@ if arch_x86
   cdata.set10('FORCE_VEX_ENCODING', cc.get_define('__AVX__').strip() != '')
 endif
 
+cc.get_define('FOO')
+
 if arch_aarch64
   if use_gaspp
     python3 = import('python').find_installation()
