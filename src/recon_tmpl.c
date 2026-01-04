@@ -1821,17 +1821,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             };
             const int have_left = t->bx > ts->tiling.col_start;
             const int have_above = t->by > ts->tiling.row_start;
-            const int lw4 = imin(b_dim[2], 2), lh4 = imin(b_dim[3], 2);
+            const int lw4 = imin(ulog2(w4), 2), lh4 = imin(ulog2(h4), 2);
             const int idx = (have_above << 1) | have_left;
             const int n_above_l2 = n_edge_samples[idx][lh4][lw4][0];
             const int n_left_l2 = n_edge_samples[idx][lh4][lw4][1];
 
-            static const uint8_t bawp_sz[17] = {
-                0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 16, 16, 16, 16
-            };
-
-            const int bw = imin(bw4 * 4, 16);
-            const int bh = imin(bh4 * 4, 16);
             const pixel *const ref = dst + mvy * PXSTRIDE(f->cur.stride[0]) + mvx;
 
             assert(n_above_l2 == 0 || n_left_l2 == 0 || n_above_l2 == n_left_l2);
@@ -1839,11 +1833,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 n_above_l2 + (n_above_l2 == n_left_l2 ? 1 : n_left_l2);
             int sum_x = 0, sum_y = 0, sum_xy = 0, sum_x2 = 0;
             if (n_above_l2) {
+                const int bw = 4 << lw4;
                 const int step = bw >> n_above_l2;
                 assert(step > 0);
                 const int start = step >> 1;
-                const int bawp_w = bawp_sz[bw];
-                for (int i = start; i < bawp_w; i += step) {
+                for (int i = start; i < bw; i += step) {
                     const int x = ref[i - PXSTRIDE(f->cur.stride[0])];
                     const int y = dst[i - PXSTRIDE(f->cur.stride[0])];
                     sum_x += x;
@@ -1854,11 +1848,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             }
 
             if (n_left_l2) {
+                const int bh = 4 << lh4;
                 const int step = bh >> n_left_l2;
                 assert(step > 0);
                 const int start = step >> 1;
-                const int bawp_h = bawp_sz[bh];
-                for (int i = start; i < bawp_h; i += step) {
+                for (int i = start; i < bh; i += step) {
                     const int x = ref[(i * PXSTRIDE(f->cur.stride[0])) - 1];
                     const int y = dst[(i * PXSTRIDE(f->cur.stride[0])) - 1];
                     sum_x += x;
