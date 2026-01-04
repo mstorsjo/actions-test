@@ -2088,7 +2088,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             bytefn(t->scratch.pal);
         f->dsp->ipred.pal_pred(dst, f->cur.stride[0], pal,
                                pal_idx, bw4 * 4, bh4 * 4);
-        if (DEBUG_BLOCK_INFO && DEBUG_B_PIXELS)
+        if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             hex_dump(dst, f->cur.stride[0], bw4 * 4, bh4 * 4, "y-pal-pred");
     }
 
