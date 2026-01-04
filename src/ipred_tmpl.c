@@ -221,7 +221,8 @@ static inline unsigned fast_div32_dc(const unsigned num, const unsigned den) {
 }
 
 static unsigned dc_gen(const pixel *const topleft,
-                       const int width, const int height)
+                       const int width, const int height
+                       HIGHBD_DECL_SUFFIX)
 {
     const int n_pel = width + height;
     unsigned dc = 0;
@@ -232,7 +233,7 @@ static unsigned dc_gen(const pixel *const topleft,
     if (width == height)
         return (dc + width) >> ctz(n_pel);
 
-    return fast_div32_dc(dc, n_pel);
+    return iclip_pixel(fast_div32_dc(dc, n_pel));
 }
 
 static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
@@ -241,7 +242,7 @@ static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const unsigned dc = dc_gen(topleft, width, height);
+    const unsigned dc = dc_gen(topleft, width, height HIGHBD_TAIL_SUFFIX);
 
     if (a & ANGLE_IBP_FLAG) {
         pixel *const p_dst = dst;
@@ -282,7 +283,7 @@ static void ipred_cfl_c(pixel *dst, const ptrdiff_t stride,
                         const int16_t *ac, const int alpha
                         HIGHBD_DECL_SUFFIX)
 {
-    unsigned dc = dc_gen(topleft, width, height);
+    unsigned dc = dc_gen(topleft, width, height HIGHBD_TAIL_SUFFIX);
     cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
 
