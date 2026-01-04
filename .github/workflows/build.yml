@@ -1,0 +1,21 @@
+name: Builds
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install meson ninja
+      - name: Set up the environment
+        uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: |
+          mkdir build
+          cd build
+          meson setup ..
