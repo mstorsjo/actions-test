@@ -1895,10 +1895,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                         if (shift0 >= 0) {
                             alpha =
                                 imin((dav1d_div_recip[f_d] * f_n) >> shift0, (2 << 8) - 1);
+                            alpha = apply_sign(alpha, num);
+                            if (!alpha) alpha = 1 << 8;
                         } else {
                             alpha = (2 << 8) - 1;
                         }
-                        alpha = apply_sign(alpha, num);
                     }
                 }
 
