@@ -1200,7 +1200,7 @@ void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
                 if (c == 8)
                     rt->bank.ref[n1].pair = rt->bank.ref[n2].pair;
                 if (c >= 6)
-                    rt->bank.cwp_idx[c][n1] = rt->bank.cwp_idx[c][n2];
+                    rt->bank.cwp_idx[c - 6][n1] = rt->bank.cwp_idx[c - 6][n2];
             }
             rt->bank.mv[c][to].n = mv_bak.n;
             if (c == 8)
