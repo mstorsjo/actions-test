@@ -960,8 +960,8 @@ static void morph_c(pixel *dst, const ptrdiff_t dst_stride,
                     const int alpha, const int beta,
                     const int w, const int h HIGHBD_DECL_SUFFIX)
 {
-    assert(w <= 64 && h <= 64);
-    assert(w != 64 || h != 64);
+    assert(!(w & (w - 1)) && !(h & (h - 1)));
+    assert(w >= 4 && w <= 64 && h >= 4 && h <= 64);
     assert(alpha > -512 && alpha < 512);
 
     for (int y = 0; y < h; y++) {

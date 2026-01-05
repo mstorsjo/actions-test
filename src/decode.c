@@ -2633,15 +2633,18 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         const int ctx = b->inter_mode == NEWMV ? 2 - amvd : 0;
                         b->bawp[0] += dav1d_msac_decode_bool_adapt(&ts->msac,
                                           ts->cdf.m.bawp_explicit[ctx]);
-                        if (b->bawp[0] == 2)
+                        if (b->bawp[0] == 2) {
                             b->bawp[0] += dav1d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.bawp_explicit_scale);
+                            b->bawp[0] |= ctx << 2;
+                        }
                         if (has_chroma)
                             b->bawp[1] = dav1d_msac_decode_bool_adapt(&ts->msac,
                                              ts->cdf.m.bawp[1]);
                     }
                     DEBUG_BLOCK_printf("%*sPost-bawp[%d,%d]: r=%d\n",
-                                       depth, "", b->bawp[0], b->bawp[1], ts->msac.rng);
+                                       depth, "", b->bawp[0] & 3,
+                                       b->bawp[1], ts->msac.rng);
                 }
 
                 // inter-intra (motion-mode)

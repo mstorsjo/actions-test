@@ -2033,6 +2033,152 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     b->y_mode = orig_y_mode;
 }
 
+static void bawp(Dav1dTaskContext *const t,
+                 const int bawp_idx, const union mv mv,
+                 pixel *const dst, const ptrdiff_t stride,
+                 const Dav1dThreadPicture *const refp, const int refidx,
+                 const int bw4, const int bh4, const int w4, const int h4)
+{
+    Dav1dTileState *const ts = t->ts;
+    const Dav1dFrameContext *const f = t->f;
+    const Dav1dDSPContext *const dsp = f->dsp;
+
+    const int tile_top_edge = ts->tiling.row_start * 4;
+    const int tile_left_edge = ts->tiling.col_start * 4;
+    const int mvx = (mv.x + 3 + (mv.x >= 0)) >> 3;
+    const int mvy = (mv.y + 3 + (mv.y >= 0)) >> 3;
+    const int ref_y = (t->by * 4 + mvy);
+    const int ref_x = (t->bx * 4 + mvx);
+    const int ref_tmplt_x = ref_x - 1;
+    const int ref_tmplt_y = ref_y - 1;
+    const int ref_bottom_edge = ref_y + h4 * 4;
+    const int ref_right_edge = ref_x + w4 * 4;
+    const int tile_bottom_edge = ts->tiling.row_end * 4;
+    const int tile_right_edge = ts->tiling.col_end * 4;
+
+    const int can_morph =
+        ref_y >= tile_top_edge && ref_x >= tile_left_edge &&
+        ref_bottom_edge <= tile_bottom_edge &&
+        ref_right_edge <= tile_right_edge &&
+        ref_tmplt_y >= tile_top_edge && ref_tmplt_x >= tile_left_edge;
+    if (!can_morph) return;
+
+    // TODO (optimization): Consider moving this code (and associated
+    // size lookup tables) to a DSP function. SIMD could specialize on
+    // edge sizes (4/8/16/32/64) and step values.
+    static const uint8_t n_edge_samples[3 /* have edges */][3 /* h */]
+                                       [3 /* w */][2 /* above, left */] = {
+        { // !have_above && have_left
+            { { 0, 2 }, { 0, 2 }, { 0, 2 } },
+            { { 0, 3 }, { 0, 3 }, { 0, 3 } },
+            { { 0, 4 }, { 0, 4 }, { 0, 4 } },
+        }, { // have_above && !have_left
+            { { 2, 0 }, { 2, 0 }, { 2, 0 } },
+            { { 3, 0 }, { 3, 0 }, { 3, 0 } },
+            { { 4, 0 }, { 4, 0 }, { 4, 0 } },
+        }, { // have_above && have_left
+            { { 2, 2 }, { 2, 2 }, { 4, 0 } },
+            { { 2, 2 }, { 3, 3 }, { 3, 3 } },
+            { { 0, 4 }, { 3, 3 }, { 4, 4 } },
+        }
+    };
+    const int have_left = t->bx > ts->tiling.col_start;
+    const int have_above = t->by > ts->tiling.row_start;
+    if (!have_left && !have_above) return;
+    const int lw4 = imin(ulog2(w4), 2), lh4 = imin(ulog2(h4), 2);
+    const int idx = ((have_above << 1) | have_left) - 1;
+    const int n_above_l2 = n_edge_samples[idx][lh4][lw4][0];
+    const int n_left_l2 = n_edge_samples[idx][lh4][lw4][1];
+
+    const pixel *const ref =
+        &((const pixel *) refp->p.data[0])[ref_y * PXSTRIDE(refp->p.stride[0]) +
+                                           ref_x];
+
+    assert(n_above_l2 == 0 || n_left_l2 == 0 || n_above_l2 == n_left_l2);
+    const int count_l2 =
+        n_above_l2 + (n_above_l2 == n_left_l2 ? 1 : n_left_l2);
+    int sum_x = 0, sum_y = 0, sum_xy = 0, sum_x2 = 0;
+    if (n_above_l2) {
+        const int bw = 4 << lw4;
+        const int step = bw >> n_above_l2;
+        assert(step > 0);
+        const int start = step >> 1;
+        for (int i = start; i < bw; i += step) {
+            const int x = ref[i - PXSTRIDE(refp->p.stride[0])];
+            const int y = dst[i - PXSTRIDE(f->cur.stride[0])];
+            sum_x += x;
+            sum_y += y;
+            sum_xy += x * y;
+            sum_x2 += x * x;
+        }
+    }
+
+    if (n_left_l2) {
+        const int bh = 4 << lh4;
+        const int step = bh >> n_left_l2;
+        assert(step > 0);
+        const int start = step >> 1;
+        for (int i = start; i < bh; i += step) {
+            const int x = ref[(i * PXSTRIDE(refp->p.stride[0])) - 1];
+            const int y = dst[(i * PXSTRIDE(f->cur.stride[0])) - 1];
+            sum_x += x;
+            sum_y += y;
+            sum_xy += x * y;
+            sum_x2 += x * x;
+        }
+    }
+    assert(count_l2);
+
+    int alpha, beta;
+    if (bawp_idx == 1) {
+        const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
+        const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
+        alpha = 1 << 8;
+        if (den && num) {
+            const int num_abs = abs(num);
+            const int shift_n = ulog2(num_abs);
+            assert(den >= 0);
+            const int shift_d = ulog2(den);
+            const int e_d = den - (1U << shift_d);
+            int f_d, f_n;
+            if (shift_d > 7)
+                f_d = (e_d + (1 << (shift_d - 8))) >> (shift_d - 7);
+            else
+                f_d = e_d << (7 - shift_d);
+
+            if (shift_n > 7)
+                f_n = (num_abs + (1 << (shift_n - 8))) >> (shift_n - 7);
+            else
+                f_n = num_abs << (7 - shift_n);
+
+            const int shift_add = shift_d - shift_n - 8;
+            if (shift_add <= 1) {
+                const int shift0 = 9 + 7 + shift_add;
+                if (shift0 >= 0) {
+                    alpha =
+                        imin((dav1d_div_recip[f_d] * f_n) >> shift0, (2 << 8) - 1);
+                    alpha = apply_sign(alpha, num);
+                    if (!alpha) alpha = 1 << 8;
+                } else {
+                    alpha = (2 << 8) - 1;
+                }
+            }
+        }
+    } else {
+        assert(bawp_idx & 2);
+        const int idx = (1 + (bawp_idx >> 2) + (f->absrefdist[refidx] > 4)) *
+                         (bawp_idx & 1 ? 1 : -1);
+        alpha = 256 + 16 * idx;
+    }
+
+    const int diff = (sum_y << 8) - sum_x * alpha;
+    const int abs_diff = abs(diff);
+    beta = apply_sign(abs_diff >> count_l2, diff);
+
+    dsp->mc.morph(dst, f->cur.stride[0], alpha, beta,
+                  bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+}
+
 void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                            DB_ONLY(const int depth)
                            const enum BlockSize lbs,
@@ -2105,135 +2251,9 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         mc(t, dst, NULL, f->cur.stride[0], bw4, bh4, t->bx, t->by, 0,
            b->mv[0], &f->sr_cur, 0 /* unused */, DAV1D_FILTER_BILINEAR,
            0, f->bw * 4, 0, f->bh * 4);
-
-        const int tile_top_edge = ts->tiling.row_start * 4;
-        const int tile_left_edge = ts->tiling.col_start * 4;
-        const int mvx = (b->mv[0].x + 3 + (b->mv[0].x >= 0)) >> 3;
-        const int mvy = (b->mv[0].y + 3 + (b->mv[0].y >= 0)) >> 3;
-        const int ref_y = (t->by * 4 + mvy);
-        const int ref_x = (t->bx * 4 + mvx);
-        const int ref_tmplt_x = ref_x - 1;
-        const int ref_tmplt_y = ref_y - 1;
-        const int ref_bottom_edge = ref_y + bh4 * 4;
-        const int ref_right_edge = ref_x + bw4 * 4;
-        const int tile_bottom_edge = ts->tiling.row_end * 4;
-        const int tile_right_edge = ts->tiling.col_end * 4;
-
-        const int can_morph =
-            ref_y >= tile_top_edge && ref_x >= tile_left_edge &&
-            ref_bottom_edge <= tile_bottom_edge &&
-            ref_right_edge <= tile_right_edge &&
-            ref_tmplt_y >= tile_top_edge && ref_tmplt_x >= tile_left_edge;
-
-        if (b->morph_pred && can_morph) {
-            // TODO (optimization): Consider moving this code (and associated
-            // size lookup tables) to a DSP function. SIMD could specialize on
-            // edge sizes (4/8/16/32/64) and step values.
-            static const uint8_t n_edge_samples[4 /* have edges */][3 /* h */]
-                                               [3 /* w */][2 /* above, left */] = {
-                { // !have_above && !have_left
-                    { { 0, 0 }, { 0, 0 }, { 0, 0 } },
-                    { { 0, 0 }, { 0, 0 }, { 0, 0 } },
-                    { { 0, 0 }, { 0, 0 }, { 0, 0 } },
-                }, { // !have_above && have_left
-                    { { 0, 2 }, { 0, 2 }, { 0, 2 } },
-                    { { 0, 3 }, { 0, 3 }, { 0, 3 } },
-                    { { 0, 4 }, { 0, 4 }, { 0, 4 } },
-                }, { // have_above && !have_left
-                    { { 2, 0 }, { 2, 0 }, { 2, 0 } },
-                    { { 3, 0 }, { 3, 0 }, { 3, 0 } },
-                    { { 4, 0 }, { 4, 0 }, { 4, 0 } },
-                }, { // have_above && have_left
-                    { { 2, 2 }, { 2, 2 }, { 4, 0 } },
-                    { { 2, 2 }, { 3, 3 }, { 3, 3 } },
-                    { { 0, 4 }, { 3, 3 }, { 4, 4 } },
-                }
-            };
-            const int have_left = t->bx > ts->tiling.col_start;
-            const int have_above = t->by > ts->tiling.row_start;
-            const int lw4 = imin(ulog2(w4), 2), lh4 = imin(ulog2(h4), 2);
-            const int idx = (have_above << 1) | have_left;
-            const int n_above_l2 = n_edge_samples[idx][lh4][lw4][0];
-            const int n_left_l2 = n_edge_samples[idx][lh4][lw4][1];
-
-            const pixel *const ref = dst + mvy * PXSTRIDE(f->cur.stride[0]) + mvx;
-
-            assert(n_above_l2 == 0 || n_left_l2 == 0 || n_above_l2 == n_left_l2);
-            const int count_l2 =
-                n_above_l2 + (n_above_l2 == n_left_l2 ? 1 : n_left_l2);
-            int sum_x = 0, sum_y = 0, sum_xy = 0, sum_x2 = 0;
-            if (n_above_l2) {
-                const int bw = 4 << lw4;
-                const int step = bw >> n_above_l2;
-                assert(step > 0);
-                const int start = step >> 1;
-                for (int i = start; i < bw; i += step) {
-                    const int x = ref[i - PXSTRIDE(f->cur.stride[0])];
-                    const int y = dst[i - PXSTRIDE(f->cur.stride[0])];
-                    sum_x += x;
-                    sum_y += y;
-                    sum_xy += x * y;
-                    sum_x2 += x * x;
-                }
-            }
-
-            if (n_left_l2) {
-                const int bh = 4 << lh4;
-                const int step = bh >> n_left_l2;
-                assert(step > 0);
-                const int start = step >> 1;
-                for (int i = start; i < bh; i += step) {
-                    const int x = ref[(i * PXSTRIDE(f->cur.stride[0])) - 1];
-                    const int y = dst[(i * PXSTRIDE(f->cur.stride[0])) - 1];
-                    sum_x += x;
-                    sum_y += y;
-                    sum_xy += x * y;
-                    sum_x2 += x * x;
-                }
-            }
-
-            int alpha = 256, beta = 0;
-            if (count_l2) {
-                const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
-                const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
-                if (den && num) {
-                    const int num_abs = abs(num);
-                    const int shift_n = ulog2(num_abs);
-                    assert(den >= 0);
-                    const int shift_d = ulog2(den);
-                    const int e_d = den - (1U << shift_d);
-                    int f_d, f_n;
-                    if (shift_d > 7)
-                        f_d = (e_d + (1 << (shift_d - 8))) >> (shift_d - 7);
-                    else
-                        f_d = e_d << (7 - shift_d);
-
-                    if (shift_n > 7)
-                        f_n = (num_abs + (1 << (shift_n - 8))) >> (shift_n - 7);
-                    else
-                        f_n = num_abs << (7 - shift_n);
-
-                    const int shift_add = shift_d - shift_n - 8;
-                    if (shift_add <= 1) {
-                        const int shift0 = 9 + 7 + shift_add;
-                        if (shift0 >= 0) {
-                            alpha =
-                                imin((dav1d_div_recip[f_d] * f_n) >> shift0, (2 << 8) - 1);
-                            alpha = apply_sign(alpha, num);
-                            if (!alpha) alpha = 1 << 8;
-                        } else {
-                            alpha = (2 << 8) - 1;
-                        }
-                    }
-                }
-
-                const int diff = (sum_y << 8) - sum_x * alpha;
-                const int abs_diff = abs(diff);
-                beta = apply_sign(abs_diff >> count_l2, diff);
-            }
-            dsp->mc.morph(dst, f->cur.stride[0], alpha, beta,
-                          bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
-        }
+        if (b->morph_pred)
+            bawp(t, 1, b->mv[0], dst, f->cur.stride[0],
+                 &f->sr_cur, 0 /* unused */, bw4, bh4, w4, h4);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(dst, f->cur.stride[0], bw4 * 4, bh4 * 4, "y-pred");
         }
@@ -2254,7 +2274,10 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                    t->bx, t->by, 0, b->mv[0], refp, b->ref[0], b->filter,
                    0, f->cur.p.w, 0, f->cur.p.h);
             }
-            if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
+            if (b->bawp[0]) {
+                bawp(t, b->bawp[0], b->mv[0], dst, f->cur.stride[0],
+                     refp, b->ref[0], bw4, bh4, w4, h4);
+            } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 pixel *const tl_edge = bitfn(t->scratch.edge) + 32;
                 enum IntraPredMode m = b->interintra_mode == II_SMOOTH_PRED ?
                                        SMOOTH_PRED : b->interintra_mode;
