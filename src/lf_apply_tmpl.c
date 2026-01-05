@@ -299,11 +299,9 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
         x >>= 2 - sb128;
 
         uint16_t (*const y_hmask)[4] = lflvl[x].filter_y[0][bx4];
-        int y;
-        uint64_t mask;
-        for (y = starty4, mask = 1 << y; y < endy4; y++, mask <<= 1) {
+        for (int y = starty4; y < endy4; y++) {
             const int sidx = y >> 4;
-            const unsigned smask = mask >> (y & ~0xf);
+            const unsigned smask = 1 << (y & 0xf);
             const int idx = 3 * !!(y_hmask[3][sidx] & smask) +
                             2 * !!(y_hmask[2][sidx] & smask) +
                             !!(y_hmask[1][sidx] & smask);
@@ -340,10 +338,10 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
              x < f->sb256w; x++, a++)
         {
             uint16_t (*const y_vmask)[4] = lflvl[x].filter_y[1][starty4];
-            const unsigned w = imin(64, f->w4 - (x << 6));
-            for (uint64_t mask = 1, i = 0; i < w; mask <<= 1, i++) {
+            const int w = imin(64, f->w4 - (x << 6));
+            for (int i = 0; i < w; i++) {
                 const int sidx = i >> 4;
-                const unsigned smask = mask >> (i & ~0xf);
+                const unsigned smask = 1 << (i & 0xf);
                 const int idx = 3 * !!(y_vmask[3][sidx] & smask) +
                                 2 * !!(y_vmask[2][sidx] & smask) +
                                     !!(y_vmask[1][sidx] & smask);
