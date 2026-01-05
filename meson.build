@@ -1,4 +1,3 @@
-project('hello', 'c', default_options: ['c_std=c11'])
-cc = meson.get_compiler('c')
-cc.get_define('FOO')
-executable('hello', 'hello.c')
+project('hello', 'c')
+lib = static_library('hello_lib', 'hello_lib.c')
+executable('hello_main', 'hello_main.c', link_with: lib)

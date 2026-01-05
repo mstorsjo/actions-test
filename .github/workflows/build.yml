@@ -13,9 +13,34 @@ jobs:
           pip install meson ninja
       - name: Set up the environment
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm64
       - uses: actions/checkout@v4
+      - name: Create cross file
+        shell: bash
+        run: |
+          cat >cross.txt <<EOF
+          [binaries]
+          c = 'cl'
+          cpp = 'cl'
+          ar = 'lib'
+          windres = 'rc'
+
+          [built-in options]
+          c_args = ['-arm64EC']
+          c_link_args = ['-machine:arm64ec']
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = 'aarch64'
+          cpu = 'arm64ec'
+          endian = 'little'
+          EOF
       - name: Build and test
         run: |
-          mkdir build
+          meson setup build --cross-file cross.txt
           cd build
-          meson setup ..
+          ninja -v
