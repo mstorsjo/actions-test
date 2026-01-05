@@ -2031,6 +2031,37 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     b->y_mode = orig_y_mode;
 }
 
+static inline int derive_alpha(const int num, const int den, int alpha) {
+    const int max = (2 << 8) - 1;
+    if (num && den) {
+        const int num_abs = abs(num);
+        const int shift_n = ulog2(num_abs);
+        assert(den >= 0);
+        const int shift_d = ulog2(den);
+        const int e_d = den - (1U << shift_d);
+        int f_d, f_n;
+        if (shift_d > 7)
+            f_d = (e_d + (1 << (shift_d - 8))) >> (shift_d - 7);
+        else
+            f_d = e_d << (7 - shift_d);
+
+        if (shift_n > 7)
+            f_n = (num_abs + (1 << (shift_n - 8))) >> (shift_n - 7);
+        else
+            f_n = num_abs << (7 - shift_n);
+
+        const int shift_add = shift_d - shift_n - 8;
+        if (shift_add <= 1) {
+            const int shift0 = 9 + 7 + shift_add;
+            alpha = shift0 < 0 ? max :
+                imin((dav1d_div_recip[f_d] * f_n) >> shift0, max);
+            if (!alpha) return 1 << 8;
+            alpha = apply_sign(alpha, num);
+        }
+    }
+    return alpha;
+}
+
 static void bawp(Dav1dTaskContext *const t,
                  const int bawp_idx, const union mv mv,
                  pixel *const dst, const ptrdiff_t stride,
@@ -2128,39 +2159,9 @@ static void bawp(Dav1dTaskContext *const t,
 
     int alpha, beta;
     if (bawp_idx == 1) {
-        const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
         const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
-        alpha = 1 << 8;
-        if (den && num) {
-            const int num_abs = abs(num);
-            const int shift_n = ulog2(num_abs);
-            assert(den >= 0);
-            const int shift_d = ulog2(den);
-            const int e_d = den - (1U << shift_d);
-            int f_d, f_n;
-            if (shift_d > 7)
-                f_d = (e_d + (1 << (shift_d - 8))) >> (shift_d - 7);
-            else
-                f_d = e_d << (7 - shift_d);
-
-            if (shift_n > 7)
-                f_n = (num_abs + (1 << (shift_n - 8))) >> (shift_n - 7);
-            else
-                f_n = num_abs << (7 - shift_n);
-
-            const int shift_add = shift_d - shift_n - 8;
-            if (shift_add <= 1) {
-                const int shift0 = 9 + 7 + shift_add;
-                if (shift0 >= 0) {
-                    alpha =
-                        imin((dav1d_div_recip[f_d] * f_n) >> shift0, (2 << 8) - 1);
-                    alpha = apply_sign(alpha, num);
-                    if (!alpha) alpha = 1 << 8;
-                } else {
-                    alpha = (2 << 8) - 1;
-                }
-            }
-        }
+        const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
+        alpha = derive_alpha(num, den, 256);
     } else {
         assert(bawp_idx & 2);
         const int idx = (1 + (bawp_idx >> 2) + (f->absrefdist[refidx] > 4)) *
@@ -2645,9 +2646,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
     // chroma
 chroma: {}
-#if DEBUG_B_PIXELS
-    const char *const pred_names[] = { "u-intra-pred", "v-intra-pred" };
-#endif
+    uint16_t cfl_y_edge_mem[256], *const cfl_y_edge = &cfl_y_edge_mem[128];
     coef *const cf = bitfn(t->cf);
     const enum RectTxfmSize uvtx = dav1d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
@@ -2658,10 +2657,43 @@ chroma: {}
     const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
     const ptrdiff_t stride = f->cur.stride[1];
+    const int sbsz = f->sb_step;
+
     const enum IntraPredMode orig_uv_mode = b->uv_mode;
     int angle = b->uv_angle;
     if (b->intra)
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
+
+    // CFL calc AC / gen Y edge
+    int16_t *const ac = t->scratch.ac;
+    if (b->intra && !b->intrabc &&
+        b->uv_mode == CFL_PRED && b->cfl_type < CFL_MHCCP)
+    {
+        const int sby = t->cby >> f->sb_shift;
+        const ptrdiff_t ystride = f->cur.stride[0];
+        const pixel *const y_src = ((pixel *) f->cur.data[0]) +
+            (t->cby * PXSTRIDE(ystride) + t->cbx) * 4;
+        const int is_top_sb_edge = !(t->cby & (sbsz - 1));
+        const pixel *const top = t->cby == ts->tiling.row_start ? NULL :
+            !is_top_sb_edge ? y_src - (1 + ss_ver) * PXSTRIDE(ystride) :
+            f->ipred_edge[0] + f->sb256w * 256 * (sby - 1);
+        const pixel *const left = t->cbx > ts->tiling.col_start ? y_src - (1 + ss_hor) : NULL;
+        const int filter_type = f->c->seq_hdr->cfl_ds_filter_index |
+            (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
+
+        const int cbw4 = (bw4 + ss_hor) >> ss_hor, cbh4 = (bh4 + ss_ver) >> ss_ver;
+        const int wpad = uv_t_dim->w > cbw4 ? uv_t_dim->w - cbw4 : cbw4 - ctw4;
+        const int hpad = uv_t_dim->h > cbh4 ? uv_t_dim->h - cbh4 : cbh4 - cth4;
+        const int dc =
+            dsp->ipred.cfl_dc[f->cur.p.layout - 1](cfl_y_edge, top, left, ystride,
+                                                   wpad << ss_hor, hpad << ss_ver,
+                                                   top ? uv_t_dim->w * 4 << ss_hor : 0,
+                                                   left ? uv_t_dim->h * 4 << ss_ver : 0,
+                                                   filter_type);
+        dsp->ipred.cfl_ac[f->cur.p.layout - 1](ac, dc, y_src, ystride, wpad, hpad,
+                                               uv_t_dim->w * 4, uv_t_dim->h * 4,
+                                               filter_type);
+    }
 
     for (int pl = 0; pl < 2; pl++) {
         // decode coefficients
@@ -2690,11 +2722,88 @@ chroma: {}
             4 * (ssby * PXSTRIDE(stride) + ssbx);
         if (b->intra && !b->intrabc) {
             // intra prediction
-            const int sbsz = f->sb_step;
             pixel *const edge = bitfn(t->scratch.edge) + 128;
+            const pixel *top_sb_edge = NULL;
+            if (!(t->cby & (sbsz - 1))) {
+                top_sb_edge = f->ipred_edge[1 + pl];
+                const int sby = t->cby >> f->sb_shift;
+                top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
+            }
 
-            if (b->uv_mode == CFL_PRED) {
-                // FIXME implement
+            if (b->uv_mode == CFL_PRED &&
+                (b->cfl_alpha[pl] || b->cfl_type > CFL_EXPLICIT))
+            {
+                int alpha = b->cfl_alpha[pl] * 32;
+                if (b->cfl_type == CFL_IMPLICIT) {
+                    const int have_top = t->cby > ts->tiling.row_start;
+                    const int have_left = t->cbx > ts->tiling.col_start;
+                    int n_top = 0, n_left = 0;
+                    if (have_top && have_left) {
+                        if (ctw > 2 * cth) {
+                            n_top = 8;
+                            n_left = 0;
+                        } else if (cth > 2 * ctw) {
+                            n_top = 0;
+                            n_left = 8;
+                        } else {
+                            n_top = 4;
+                            n_left = 4;
+                        }
+                    } else {
+                        n_top = have_top ? 4 : 0;
+                        n_left = have_left ? 4 : 0;
+                    }
+
+                    int sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
+                    if (n_top) {
+                        const pixel *const src = top_sb_edge ? top_sb_edge :
+                            ((pixel *) f->cur.data[1 + pl]) +
+                            (ssby * 4 - 1) * PXSTRIDE(stride) + ssbx * 4;
+                        const int step = ctw >> ctz(n_top);
+                        const int start = step >> 1;
+                        for (int i = start; i < ctw; i += step) {
+                            const int l = cfl_y_edge[i] >> 3, c = src[i];
+                            sum_x += l;
+                            sum_y += c;
+                            sum_xx += l * l;
+                            sum_xy += l * c;
+                        }
+                    }
+                    if (n_left) {
+                        const pixel *const src = ((pixel *) f->cur.data[1 + pl]) +
+                            (ssby * PXSTRIDE(stride) + ssbx) * 4 - 1;
+                        const int step = cth >> ctz(n_left);
+                        const int start = step >> 1;
+                        for (int i = start; i < cth; i += step) {
+                            const int l = cfl_y_edge[-1 - i] >> 3;
+                            const int c = src[i * PXSTRIDE(stride)];
+                            sum_x += l;
+                            sum_y += c;
+                            sum_xx += l * l;
+                            sum_xy += l * c;
+                        }
+                    }
+                    const int count_l2 = ctz(n_top + n_left);
+                    const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
+                    const int den = sum_xx - (int)(((int64_t)sum_x * sum_x) >> count_l2);
+                    alpha = derive_alpha(num, den, 0);
+                }
+                const int intra_flags =
+                    ((t->cbx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
+                    ((t->cby > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+                pixel *src = ((pixel *) f->cur.data[1 + pl]) +
+                    4 * (ssby * PXSTRIDE(stride) + ssbx);
+                const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
+                    DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
+                    ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
+                    0, 0, src, stride, top_sb_edge, DC_PRED, NULL,
+                    uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
+                dsp->ipred.cfl_pred[m](dst, stride, edge,
+                                       uv_t_dim->w * 4, uv_t_dim->h * 4,
+                                       ac, alpha HIGHBD_CALL_SUFFIX);
+                if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    hex_dump(dst, stride, ctw, cth, pl ? "v-intra-pred" : "u-intra-pred");
+                }
             } else {
                 int n_tr = 0, n_bl = 0;
                 if (t->cby > ts->tiling.row_start) {
@@ -2727,12 +2836,6 @@ chroma: {}
                     }
                 }
 
-                const pixel *top_sb_edge = NULL;
-                if (!(t->cby & (sbsz - 1))) {
-                    top_sb_edge = f->ipred_edge[1 + pl];
-                    const int sby = t->cby >> f->sb_shift;
-                    top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_ver;
-                }
                 const int apply_ibp = f->seq_hdr->ibp &&
                     uvtx != (enum RectTxfmSize) TX_4X4 && b->uv_mode == DC_PRED;
                 const int sm_top = sm_uv_flag(t->a, cbx4);
@@ -2744,13 +2847,15 @@ chroma: {}
                     (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
                     ((t->cbx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
                     ((t->cby > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+                const enum IntraPredMode uv_mode =
+                    b->uv_mode == CFL_PRED ? DC_PRED : b->uv_mode;
 
                 const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
                     // don't print chroma as avm does things in a different order
                     // (decode coefs of both planes first then pred + itx)
                     DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
                     ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-                    n_tr, n_bl, dst, stride, top_sb_edge, b->uv_mode,
+                    n_tr, n_bl, dst, stride, top_sb_edge, uv_mode,
                     &angle, uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
 
                 // FIXME this is a hack so that we fill in the edges orip needs,
@@ -2762,11 +2867,9 @@ chroma: {}
                                          4 * f->bw - 4 * t->cbx,
                                          4 * f->bh - 4 * t->cby HIGHBD_CALL_SUFFIX);
 
-#if DEBUG_B_PIXELS
-                if (0 && BLOCK_TO_DEBUG) {
-                    hex_dump(dst, stride, ctw, cth, pred_names[pl]);
+                if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    hex_dump(dst, stride, ctw, cth, pl ? "v-intra-pred" : "u-intra-pred");
                 }
-#endif
                 const int has_orip = uvtx && (
                     b->uv_mode == VERT_PRED ? uv_t_dim->w < 8 : b->uv_mode == HOR_PRED ? uv_t_dim->h < 8 :
                         b->uv_mode == SMOOTH_PRED && uv_t_dim->w < 8 && uv_t_dim->h < 8);

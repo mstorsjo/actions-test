@@ -61,6 +61,8 @@
 #define ANGLE_SMOOTH_TOP_EDGE_FLAG  (1 << 10)
 #define ANGLE_SMOOTH_LEFT_EDGE_FLAG (1 << 9)
 
+#define CFL_IS_TOP_SB_EDGE (1 << 4)
+
 /*
  * Intra prediction.
  * - a is the angle (in degrees) for directional intra predictors. For other
@@ -75,14 +77,22 @@ void (name)(pixel *dst, ptrdiff_t stride, const pixel *topleft, \
 typedef decl_angular_ipred_fn(*angular_ipred_fn);
 
 /*
- * Create a subsampled Y plane with the DC subtracted.
+ * Create a subsampled Y edge and calculate its DC.
+ */
+#define decl_cfl_dc_fn(name) \
+int (name)(uint16_t *edge, const pixel *top, const pixel *left, \
+           ptrdiff_t stride, int wpad, int hpad, int w, int h, int filter_type)
+typedef decl_cfl_dc_fn(*cfl_dc_fn);
+
+/*
+ * Create a subsampled Y plane with the edge DC subtracted.
  * - w/h_pad is the edge of the width/height that extends outside the visible
  *   portion of the frame in 4px units;
  * - ac has a stride of 16.
  */
 #define decl_cfl_ac_fn(name) \
-void (name)(int16_t *ac, const pixel *y, ptrdiff_t stride, \
-            int w_pad, int h_pad, int cw, int ch)
+void (name)(int16_t *ac, int dc, const pixel *y, ptrdiff_t stride, \
+            int w_pad, int h_pad, int cw, int ch, int filter_type)
 typedef decl_cfl_ac_fn(*cfl_ac_fn);
 
 /*
@@ -120,6 +130,7 @@ typedef struct Dav1dIntraPredDSPContext {
     angular_ipred_fn intra_pred[N_IMPL_INTRA_PRED_MODES];
 
     // chroma-from-luma
+    cfl_dc_fn cfl_dc[3 /* 420, 422, 444 */];
     cfl_ac_fn cfl_ac[3 /* 420, 422, 444 */];
     cfl_pred_fn cfl_pred[DC_128_PRED + 1];
 

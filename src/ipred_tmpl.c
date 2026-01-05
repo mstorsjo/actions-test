@@ -108,7 +108,7 @@ cfl_pred(pixel *dst, const ptrdiff_t stride,
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             const int diff = alpha * ac[x];
-            dst[x] = iclip_pixel(dc + apply_sign((abs(diff) + 32) >> 6, diff));
+            dst[x] = iclip_pixel(dc + apply_sign((abs(diff) + 1024) >> 11, diff));
         }
         ac += width;
         dst += PXSTRIDE(stride);
@@ -914,10 +914,148 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
 #define FLT_INCR 1
 #endif
 
+static int cfl_dc_420(uint16_t *const edge,
+                      const pixel *const top, const pixel *left,
+                      const ptrdiff_t stride, const int w, const int h,
+                      const int filter_type)
+{
+    const int is_top_sb_edge = filter_type & CFL_IS_TOP_SB_EDGE;
+    int dc = 0, v;
+    if (filter_type & 2) {
+        const int above = is_top_sb_edge ? 0 : -PXSTRIDE(stride);
+        for (int i = 0; i < w; i += 2) {
+            v = top[imax(0, i - 1)] + 4 * top[i] + top[i + 1] +
+                top[i + above] + top[i + PXSTRIDE(stride)];
+            edge[i >> 1] = v;
+            dc += v;
+        }
+        for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
+            v = left[-1] + 4 * left[0] + left[1] +
+                left[i ? -PXSTRIDE(stride) : 0] + left[PXSTRIDE(stride)];
+            edge[-1 - (i >> 1)] = v;
+            dc += v;
+        }
+    } else if (filter_type & 1) {
+        for (int i = 0; i < w; i += 2) {
+            v = top[imax(0, i - 1)] + 2 * top[i] + top[i + 1] +
+                top[imax(0, i - 1) + PXSTRIDE(stride)] +
+                2 * top[i + PXSTRIDE(stride)] + top[i + 1 + PXSTRIDE(stride)];
+            edge[i >> 1] = v;
+            dc += v;
+        }
+        for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
+            v = left[-1] + 2 * left[0] + left[1] + left[-1 + PXSTRIDE(stride)] +
+                2 * left[PXSTRIDE(stride)] + left[1 + PXSTRIDE(stride)];
+            edge[-1 - (i >> 1)] = v;
+            dc += v;
+        }
+    } else {
+        for (int i = 0; i < w; i += 2) {
+            v = (top[i] + top[i + 1] +
+                 top[i + PXSTRIDE(stride)] + top[i + 1 + PXSTRIDE(stride)]) << 1;
+            edge[i >> 1] = v;
+            dc += v;
+        }
+        for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
+            v = (left[0] + left[1] +
+                 left[PXSTRIDE(stride)] + left[1 + PXSTRIDE(stride)]) << 1;
+            edge[-1 - (i >> 1)] = v;
+            dc += v;
+        }
+    }
+    return dc;
+}
+
+static int cfl_dc_422(uint16_t *const edge,
+                      const pixel *const top, const pixel *left,
+                      const ptrdiff_t stride, const int w, const int h,
+                      const int filter_type)
+{
+    int dc = 0, v;
+    if (filter_type & 2) {
+        for (int i = 0; i < w; i += 2) {
+            v = top[i] << 3;
+            edge[i >> 1] = v;
+            dc += v;
+        }
+        for (int i = 0; i < h; i += 2, left += PXSTRIDE(stride)) {
+            v = left[0] << 3;
+            edge[-1 - i] = v;
+            dc += v;
+        }
+    } else if (filter_type & 1) {
+        for (int i = 0; i < w; i += 2) {
+            v = (top[imax(0, i - 1)] + 2 * top[i] + top[i + 1]) << 1;
+            edge[i >> 1] = v;
+            dc += v;
+        }
+        for (int i = 0; i < h; i += 2, left += PXSTRIDE(stride)) {
+            v = (left[-1] + 2 * left[0] + left[1]) << 1;
+            edge[-1 - i] = v;
+            dc += v;
+        }
+    } else {
+        for (int i = 0; i < w; i += 2) {
+            v = (top[i] + top[i + 1]) << 2;
+            edge[i >> 1] = v;
+            dc += v;
+        }
+        for (int i = 0; i < h; i += 2, left += PXSTRIDE(stride)) {
+            v = (left[0] + left[1]) << 2;
+            edge[-1 - i] = v;
+            dc += v;
+        }
+    }
+    return dc;
+}
+
+static int cfl_dc_444(uint16_t *const edge,
+                      const pixel *const top, const pixel *left,
+                      const ptrdiff_t stride, const int w, const int h,
+                      const int filter_type)
+{
+    int dc = 0, v;
+    for (int i = 0; i < w; i++) {
+        v = top[i] << 3;
+        edge[i] = v;
+        dc += v;
+    }
+    for (int i = 0; i < h; i++) {
+        v = left[i * PXSTRIDE(stride)] << 3;
+        edge[-1 - i] = v;
+        dc += v;
+    }
+    return dc;
+}
+
+#define cfl_dc_fn(fmt, ss_hor, ss_ver) \
+static int cfl_dc_##fmt##_c(uint16_t *const edge, \
+                            const pixel *const top, const pixel *const left, \
+                            const ptrdiff_t stride, const int wpad, const int hpad, \
+                            const int w, const int h, const int filter_type) \
+{ \
+    const int xlim = w - 4 * (wpad << ss_hor); \
+    const int ylim = h - 4 * (hpad << ss_ver); \
+    int dc = cfl_dc_##fmt(edge, top, left, stride, xlim, ylim, filter_type); \
+    for (int i = xlim >> ss_hor; i < w >> ss_hor; i++) { \
+        edge[i] = edge[(xlim >> ss_hor) - 1]; \
+        dc += edge[i]; \
+    } \
+    for (int i = ylim >> ss_ver; i < h >> ss_ver; i++) { \
+        edge[-1 - i] = edge[-(ylim >> ss_ver)]; \
+        dc += edge[-1 - i]; \
+    } \
+    return fast_div32_dc(dc, (w >> ss_hor) + (h >> ss_ver)); \
+}
+
+cfl_dc_fn(420, 1, 1)
+cfl_dc_fn(422, 1, 0)
+cfl_dc_fn(444, 0, 0)
+
 static NOINLINE void
-cfl_ac_c(int16_t *ac, const pixel *ypx, const ptrdiff_t stride,
+cfl_ac_c(int16_t *ac, const int dc, const pixel *ypx, const ptrdiff_t stride,
          const int w_pad, const int h_pad, const int width, const int height,
-         const int ss_hor, const int ss_ver)
+         const int filter_type, const int ss_hor, const int ss_ver)
 {
     int y, x;
     int16_t *const ac_orig = ac;
@@ -927,13 +1065,32 @@ cfl_ac_c(int16_t *ac, const pixel *ypx, const ptrdiff_t stride,
 
     for (y = 0; y < height - 4 * h_pad; y++) {
         for (x = 0; x < width - 4 * w_pad; x++) {
-            int ac_sum = ypx[x << ss_hor];
-            if (ss_hor) ac_sum += ypx[x * 2 + 1];
-            if (ss_ver) {
-                ac_sum += ypx[(x << ss_hor) + PXSTRIDE(stride)];
-                if (ss_hor) ac_sum += ypx[x * 2 + 1 + PXSTRIDE(stride)];
+            const int left = imax((x * 2) & -64, x * 2 - 1);
+            if (!(ss_hor | ss_ver)) {
+                ac[x] = ypx[x << ss_hor] << 3;
+            } else if (!(ss_hor ^ ss_ver)) {
+                const int bot = x * 2 + PXSTRIDE(stride);
+                if (filter_type & 2) {
+                    const int top = ((y & 63) == 0) ? x * 2 : (x * 2 - PXSTRIDE(stride));
+                    ac[x] = ypx[left] + 4 * ypx[x * 2] + ypx[x * 2 + 1] +
+                            ypx[top] + ypx[bot];
+                } else if (filter_type & 1) {
+                    ac[x] = ypx[left] + 2 * ypx[x * 2] + ypx[x * 2 + 1] +
+                            ypx[left + PXSTRIDE(stride)] +
+                            2 * ypx[bot] + ypx[bot + 1];
+                } else {
+                    ac[x] = (ypx[x * 2] + ypx[x * 2 + 1] +
+                             ypx[bot] + ypx[bot + 1]) << 1;
+                }
+            } else {
+                if (filter_type & 2)
+                    ac[x] = ypx[x * 2] << 3;
+                else if (filter_type & 1)
+                    ac[x] = (ypx[left] + 2 * ypx[x * 2] + ypx[x * 2 + 1]) << 1;
+                else
+                    ac[x] = (ypx[x * 2] + ypx[x * 2 + 1]) << 2;
             }
-            ac[x] = ac_sum << (1 + !ss_ver + !ss_hor);
+            ac[x] -= dc;
         }
         for (; x < width; x++)
             ac[x] = ac[x - 1];
@@ -944,30 +1101,15 @@ cfl_ac_c(int16_t *ac, const pixel *ypx, const ptrdiff_t stride,
         memcpy(ac, &ac[-width], width * sizeof(*ac));
         ac += width;
     }
-
-    const int log2sz = ctz(width) + ctz(height);
-    int sum = (1 << log2sz) >> 1;
-    for (ac = ac_orig, y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            sum += ac[x];
-        ac += width;
-    }
-    sum >>= log2sz;
-
-    // subtract DC
-    for (ac = ac_orig, y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            ac[x] -= sum;
-        ac += width;
-    }
 }
 
 #define cfl_ac_fn(fmt, ss_hor, ss_ver) \
-static void cfl_ac_##fmt##_c(int16_t *const ac, const pixel *const ypx, \
-                             const ptrdiff_t stride, const int w_pad, \
-                             const int h_pad, const int cw, const int ch) \
+static void cfl_ac_##fmt##_c(int16_t *const ac, const int dc, \
+                             const pixel *const ypx, const ptrdiff_t stride, \
+                             const int w_pad, const int h_pad, \
+                             const int cw, const int ch, const int filter_type) \
 { \
-    cfl_ac_c(ac, ypx, stride, w_pad, h_pad, cw, ch, ss_hor, ss_ver); \
+    cfl_ac_c(ac, dc, ypx, stride, w_pad, h_pad, cw, ch, filter_type, ss_hor, ss_ver); \
 }
 
 cfl_ac_fn(420, 1, 1)
@@ -1242,6 +1384,9 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
     c->intra_pred[Z3_PRED      ] = ipred_z3_c;
     c->intra_pred[DIP_PRED     ] = ipred_dip_c;
 
+    c->cfl_dc[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_dc_420_c;
+    c->cfl_dc[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_dc_422_c;
+    c->cfl_dc[DAV1D_PIXEL_LAYOUT_I444 - 1] = cfl_dc_444_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_ac_420_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_ac_422_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I444 - 1] = cfl_ac_444_c;

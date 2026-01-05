@@ -169,12 +169,10 @@ build-debian:
               fi
           done
           files=(
-              "./media/avm-v12.0.0-sdp0-cctx0.ivf"
+              "./media/avm-v12.0.0-sdp0-cctx0-cfl1.ivf"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"
-              a_file="/tmp/${base}.avm.yuv"
-              d_file="/tmp/${base}.dav2d.yuv"
               a_md5=$(./avm/x86-64/aomdec "$file" -o - --inloopfilters=deblock+cdef+ccso --md5 --rawvideo | cut -d' ' -f1)
               d_md5=$(./build/tools/dav1d -i "$file" -o - --inloopfilters=deblock+cdef+ccso --threads=1 --quiet --muxer=md5)
               if [[ "$a_md5" == "$d_md5" ]]; then
