@@ -369,6 +369,26 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
         }
     }
 
+    // Crop deblock size on the bottom of the frame
+    if (starty4 + sby * sbsz + 4 > f->bh) {
+        // For luma, we crop 32 long tx edges that overhang by 24 pixels.
+        // Frame dimensions are multiples of 8 so we only need to crop a single row.
+        const int luma_crop_y4 = endy4 - 2;
+
+        // check if this was handled by the previous sb row
+        if (luma_crop_y4 >= 0) {
+            for (x = 0; x < f->sb256w; x++) {
+                const int w = imin(64, f->bw - (x << 6));
+                uint16_t (*const y_vmask)[4] = lflvl[x].filter_y[1][luma_crop_y4];
+                for (int i = 0; i < (w + 15) >> 4; i++) {
+                    unsigned mask = y_vmask[3][i];
+                    y_vmask[3][i] = 0;
+                    y_vmask[2][i] |= mask;
+                }
+            }
+        }
+    }
+
     if (f->frame_hdr->loopfilter.level_y[0]) {
         pixel *ptr;
         int tile_col = 1;
