@@ -3004,7 +3004,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 ytx  = (enum RectTxfmSize) TX_4X4;
                 uvtx = (enum RectTxfmSize) TX_4X4;
             }
-            dav1d_create_lf_mask_inter(t->lf_mask, t->bx, t->by, f->w4, f->h4, b->skip_txfm,
+            dav1d_create_lf_mask_inter(t->lf_mask, t->bx, t->by, f->bw, f->bh, b->skip_txfm,
                                        bs, ytx, tx_split, uvtx, f->cur.p.layout,
                                        &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                        has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
@@ -3061,7 +3061,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (b->intra && has_luma &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
-        dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->w4, f->h4, bs,
+        dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->bw, f->bh, bs,
                                    b->tx_part, b->uvtx, f->cur.p.layout,
                                    &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                    has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
@@ -5032,8 +5032,6 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     f->ss_hor = f->cur.p.layout - 1 < (unsigned) DAV1D_PIXEL_LAYOUT_I444 - 1;
     f->root_bs = (const uint8_t[]) { BS_64x64, BS_128x128,
                                      BS_256x256 }[f->frame_hdr->sb128];
-    f->w4 = (f->frame_hdr->width + 3) >> 2;
-    f->h4 = (f->frame_hdr->height + 3) >> 2;
     f->bw = ((f->frame_hdr->width + 7) >> 3) << 1;
     f->bh = ((f->frame_hdr->height + 7) >> 3) << 1;
     f->sb256w = (f->bw + 63) >> 6;

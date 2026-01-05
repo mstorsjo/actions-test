@@ -283,7 +283,7 @@ struct Dav1dFrameContext {
     int ipred_edge_sz;
     pixel *ipred_edge[3];
     ptrdiff_t b4_stride;
-    int w4, h4, bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
+    int bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
     int ss_ver, ss_hor;
     uint32_t dq[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];

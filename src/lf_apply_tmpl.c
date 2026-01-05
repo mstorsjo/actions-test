@@ -280,7 +280,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     const int vmask = 16 >> ss_ver, hmask = 16 >> ss_hor;
     const unsigned vmax = 1U << vmask, hmax = 1U << hmask;
 #endif
-    const int endy4 = starty4 + imin(f->h4 - sby * sbsz, sbsz);
+    const int endy4 = starty4 + imin(f->bh - sby * sbsz, sbsz);
     const unsigned uv_endy4 = (endy4 + ss_ver) >> ss_ver;
 
     if (f->frame_hdr->segmentation.enabled) {
@@ -338,7 +338,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
              x < f->sb256w; x++, a++)
         {
             uint16_t (*const y_vmask)[4] = lflvl[x].filter_y[1][starty4];
-            const int w = imin(64, f->w4 - (x << 6));
+            const int w = imin(64, f->bw - (x << 6));
             for (int i = 0; i < w; i++) {
                 const int sidx = i >> 4;
                 const unsigned smask = 1 << (i & 0xf);
@@ -379,7 +379,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
                 tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] * sbsz;
             }
             filter_plane_cols_y(f, have_left, &lflvl[x >> 2].filter_y[0][(x & 3) * 16], ptr, f->cur.stride[0],
-                                imin(16, f->w4 - x * 16), starty4, endy4, tile_end - x * 16);
+                                imin(16, f->bw - x * 16), starty4, endy4, tile_end - x * 16);
         }
     }
 
@@ -392,7 +392,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     {
         filter_plane_cols_uv(f, have_left, lflvl[x].filter_uv[0],
                              &p[1][uv_off], &p[2][uv_off], f->cur.stride[1],
-                             (imin(64, f->w4 - x * 64) + ss_hor) >> ss_hor,
+                             (imin(64, f->bw - x * 64) + ss_hor) >> ss_hor,
                              starty4 >> ss_ver, uv_endy4, ss_ver);
     }
 }
@@ -408,14 +408,14 @@ void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *const f,
     const int starty4 = (sby * sbsz) & 0x30;
     const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
-    const unsigned endy4 = starty4 + imin(f->h4 - sby * sbsz, sbsz);
+    const unsigned endy4 = starty4 + imin(f->bh - sby * sbsz, sbsz);
     const unsigned uv_endy4 = (endy4 + ss_ver) >> ss_ver;
 
     pixel *ptr;
     if (f->frame_hdr->loopfilter.level_y[1]) {
         for (ptr = p[0], x = 0; x < f->sb256w; x++, ptr += 256) {
             filter_plane_rows_y(f, have_top, lflvl[x].filter_y[1], ptr, f->cur.stride[0],
-                                imin(64, f->w4 - x * 64), starty4, endy4);
+                                imin(64, f->bw - x * 64), starty4, endy4);
         }
     }
 
@@ -426,7 +426,7 @@ void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *const f,
     for (uv_off = 0, x = 0; x < f->sb256w; x++, uv_off += 256 >> ss_hor) {
         filter_plane_rows_uv(f, have_top, lflvl[x].filter_uv[1],
                              &p[1][uv_off], &p[2][uv_off], f->cur.stride[1],
-                             (imin(64, f->w4 - x * 64) + ss_hor) >> ss_hor,
+                             (imin(64, f->bw - x * 64) + ss_hor) >> ss_hor,
                              starty4 >> ss_ver, uv_endy4, ss_hor);
     }
 }
