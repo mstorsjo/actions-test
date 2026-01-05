@@ -1913,7 +1913,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             const Dav1dThreadPicture *const refp = &f->refp[b->ref[0]];
             if ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
                 (b->motion_mode >= MM_WARP_CAUSAL &&
-                 t->warpmv.type > DAV1D_WM_TYPE_TRANSLATION))
+                 t->warpmv.type > DAV1D_WM_TYPE_INVALID))
             {
                 const int res =
                     warp_affine(t, dst, NULL, f->cur.stride[0], b_dim, 0, refp,
