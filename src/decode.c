@@ -3007,6 +3007,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
         }
 
+#if 0
         if (f->frame_hdr->loopfilter.level_y[0] ||
             f->frame_hdr->loopfilter.level_y[1])
         {
@@ -3022,6 +3023,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
                                        has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
         }
+#endif
 
         // context updates
         BlockContext *edge = t->a;
@@ -3070,7 +3072,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #undef set_ctx
     }
 
-    if (b->intra && has_luma &&
+    if (has_luma &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
         dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->bw, f->bh, bs,
