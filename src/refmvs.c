@@ -1934,7 +1934,7 @@ static void splat_mv_c(refmvs_block *r, refmvs_block *const rmv,
 {
     do {
         for (int x = 0; x < bw4; x++) {
-            memcpy(&r[x], rmv, offsetof(refmvs_block, m));
+            memcpy(&r[x], rmv, offsetof(refmvs_block, lmv));
         }
         r += 128;
     } while (--bh4);
