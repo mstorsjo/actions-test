@@ -1861,15 +1861,12 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         const int mrl_mul = b->multi_mrl && tx != (int) TX_4X4;
         pixel *const edge = bitfn(t->scratch.edge) + (mrl_idx ? 384 : 128);
 
-        const int is_hv5 = b->tx_part == TX_PARTITION_H5 || b->tx_part == TX_PARTITION_V5;
-        const uint8_t *const b_dim = dav1d_block_dimensions[b->bs];
-        const int bw4 = b_dim[0], bh4 = b_dim[1];
+        const int is_hv5 = (t->by > t->pb.row_start || t->bx > t->pb.col_start) &&
+            (b->tx_part == TX_PARTITION_H5 || b->tx_part == TX_PARTITION_V5);
         int n_tr = 0, n_bl = 0;
         if (t->by > ts->tiling.row_start) {
             int w = imin(t_dim->w, ts->tiling.col_end - t->bx - t_dim->w);
-            if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
-                           t->bx + bw4 > t->pb.col_end))
-            {
+            if (is_hv5) {
                 n_tr = 0;
             } else if (!(t->by & (sbsz - 1))) {
                 // top sb boundary
@@ -1892,9 +1889,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t->bx > ts->tiling.col_start) {
             const int end = imin((t->by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
             const int h = imin(t_dim->h, end - t->by - t_dim->h);
-            if (is_hv5 && (t->by + bh4 > t->pb.row_end ||
-                           t->bx + bw4 > t->pb.col_end))
-            {
+            if (is_hv5) {
                 n_bl = 0;
             } else if (!h) {
                 // bottom sb or tile/frame boundary
@@ -2443,9 +2438,8 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
     // luma
     const enum RectTxfmSize tx = tp[b->tx_part];
-    const int bx = t->bx, by = t->by;
-    t->pb.col_end = bx + bw4;
-    t->pb.row_end = by + bh4;
+    t->pb.col_start = t->bx;
+    t->pb.row_start = t->by;
     switch (b->tx_part) {
     case TX_PARTITION_NONE:
         recon_b_luma_tx(t, DB_ONLY(depth) tx, b);

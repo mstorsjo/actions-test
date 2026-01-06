@@ -414,8 +414,8 @@ struct Dav1dTaskContext {
     struct SBEdgeCtx a_sb_cache;
     uint64_t is_coded[2 /* luma, chroma */][64];
     struct {
-        int col_end;
-        int row_end;
+        int col_start;
+        int row_start;
         uint8_t a_is_sm, l_is_sm;
     } pb;
     refmvs_tile rt;
