@@ -42,7 +42,7 @@ typedef void (*dav1d_memset_pow2_fn)(void *ptr, int value);
 EXTERN const dav1d_memset_pow2_fn dav1d_memset_pow2[7];
 
 static inline void dav1d_memset_likely_pow2(void *const ptr, const int value, const int n) {
-    assert(n >= 1 && n <= 32);
+    assert(n >= 1 && n <= 64);
     if ((n&(n-1)) == 0) {
         dav1d_memset_pow2[ulog2(n)](ptr, value);
     } else {
