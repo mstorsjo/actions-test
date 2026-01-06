@@ -2057,7 +2057,6 @@ static void bawp(Dav1dTaskContext *const t,
     const int tile_right_edge = ts->tiling.col_end * 4;
 
     const int can_morph =
-        ref_y >= tile_top_edge && ref_x >= tile_left_edge &&
         ref_bottom_edge <= tile_bottom_edge &&
         ref_right_edge <= tile_right_edge &&
         ref_tmplt_y >= tile_top_edge && ref_tmplt_x >= tile_left_edge;
