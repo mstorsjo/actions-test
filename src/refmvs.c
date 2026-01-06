@@ -564,36 +564,29 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
 
     const int is_sb_boundary = !(by4 & (rf->sbsz - 1));
     const int have_left = bx4 > rt->tile_col.start;
-    const int bml_pos = ((by4 + bh4 - 1) & 63) * 128 + ((bx4 - 1) & 127);
-    const refmvs_block *const bml = have_left && bh4 == h4 ? &rt->r[bml_pos] : NULL;
+    const refmvs_block *const bml = have_left && bh4 == h4 ?
+        &rt->r[((by4 + bh4 - 1) & 63) * 128 + ((bx4 - 1) & 127)] : NULL;
     const int have_top = by4 > rt->tile_row.start;
-    int tl_pos, lmt_pos, rmt_pos, tr_pos, x_off, abw4;
+    int x_off, abw4;
     const refmvs_block *tl = NULL, *lmt = NULL, *rmt = NULL, *tr = NULL;
     if (have_top) {
         if (is_sb_boundary) {
             x_off = bx4 & 1;
             abw4 = (bw4 + 1) & ~1;
-            tl_pos = (bx4 >> 1) - 1;
             if (bx4 - x_off - 2 >= rt->tile_col.start)
-                tl = bx4 & (rf->sbsz - 2) ? &rt->ra[tl_pos] : &rt->ra_tl;
-            lmt_pos = (bx4 >> 1);
-            if (bw4 > 2) lmt = &rt->ra[lmt_pos];
-            rmt_pos = (bx4 >> 1) + (abw4 >> 1) - 1;
-            if (bw4 == w4) rmt = &rt->ra[rmt_pos];
-            tr_pos = (bx4 >> 1) + (abw4 >> 1);
-            if (bx4 - x_off + abw4 < rt->tile_col.end) tr = &rt->ra[tr_pos];
+                tl = bx4 & (rf->sbsz - 2) ? &rt->ra[(bx4 >> 1) - 1] : &rt->ra_tl;
+            if (bw4 > 2) lmt = &rt->ra[bx4 >> 1];
+            if (bw4 == w4) rmt = &rt->ra[(bx4 >> 1) + (abw4 >> 1) - 1];
+            if (bx4 - x_off + abw4 < rt->tile_col.end)
+                    tr = &rt->ra[(bx4 >> 1) + (abw4 >> 1)];
         } else {
             x_off = 0;
             abw4 = bw4;
-            tl_pos = ((by4 - 1) & 63) * 128 + ((bx4 - 1) & 127);
-            if (have_left) tl = &rt->r[tl_pos];
-            lmt_pos = ((by4 - 1) & 63) * 128 + (bx4 & 127);
-            if (bw4 > 1) lmt = &rt->r[lmt_pos];
-            rmt_pos = ((by4 - 1) & 63) * 128 + ((bx4 + bw4 - 1) & 127);
-            if (bw4 == w4) rmt = &rt->r[rmt_pos];
-            tr_pos = ((by4 - 1) & 63) * 128 + ((bx4 + bw4) & 127);
+            if (have_left) tl = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 - 1) & 127)];
+            if (bw4 > 1) lmt = &rt->r[((by4 - 1) & 63) * 128 + (bx4 & 127)];
+            if (bw4 == w4) rmt = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4 - 1) & 127)];
             if ((bx4 + bw4) & (rf->sbsz - 1) && bx4 + bw4 < rt->tile_col.end)
-                tr = &rt->r[tr_pos];
+                tr = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4) & 127)];
         }
     }
     if (warp) {
@@ -604,7 +597,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         {
             int tl_ref_idx, tr_ref_idx;
             const mv bl_mv = !(bml->mf & 2) ? bml->mv.mv[bl_ref_idx] :
-                get_warpmv_proj(rt->m[bml_pos], bx4 * 4, (by4 + bh4) * 4);
+                get_warpmv_proj(bml->m, bx4 * 4, (by4 + bh4) * 4);
             if (tl && (!(tl_ref_idx = (tl->ref.ref[0] != ref.ref[0])) ||
                        tl->ref.ref[1] == ref.ref[0]) &&
                 rmt && (!(tr_ref_idx = (rmt->ref.ref[0] != ref.ref[0])) ||
@@ -612,9 +605,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             {
                 // FIXME top at sb boundary
                 const mv tl_mv = !(tl->mf & 2) ? tl->mv.mv[tl_ref_idx] :
-                    get_warpmv_proj(rt->m[tl_pos], bx4 * 4, by4 * 4);
+                    get_warpmv_proj(tl->m, bx4 * 4, by4 * 4);
                 const mv tr_mv = !(rmt->mf & 2) ? rmt->mv.mv[tr_ref_idx] :
-                    get_warpmv_proj(rt->m[rmt_pos], (bx4 + bw4) * 4, by4 * 4);
+                    get_warpmv_proj(rmt->m, (bx4 + bw4) * 4, by4 * 4);
                 cnt[1] = model_from_corners(DB_ARGS(0)
                                             warp[0], tl_mv, tr_mv, bl_mv,
                                             bx4 * 4, by4 * 4, b_dim);
@@ -627,9 +620,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             {
                 // FIXME top at sb boundary
                 const mv tl_mv = !(lmt->mf & 2) ? lmt->mv.mv[tl_ref_idx] :
-                    get_warpmv_proj(rt->m[lmt_pos], bx4 * 4, by4 * 4);
+                    get_warpmv_proj(lmt->m, bx4 * 4, by4 * 4);
                 const mv tr_mv = !(tr->mf & 2) ? tr->mv.mv[tr_ref_idx] :
-                    get_warpmv_proj(rt->m[tr_pos], (bx4 + bw4) * 4, by4 * 4);
+                    get_warpmv_proj(tr->m, (bx4 + bw4) * 4, by4 * 4);
                 cnt[1] = model_from_corners(DB_ARGS(1)
                                             warp[0], tl_mv, tr_mv, bl_mv,
                                             bx4 * 4, by4 * 4, b_dim);
@@ -668,7 +661,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               rt, &st, 1, bml, bms_8x8y + left_8x8x,
                               ref, gmv);
         if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0])
-            memcpy(warp[cnt[1]++], rt->m[bml_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], bml->m, sizeof(int32_t) * 7);
     }
 
     // right-most top
@@ -680,19 +673,18 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               top_8x8y + ((bx4 + bw4 - 1) >> 1), ref, gmv);
         if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0]) {
             // FIXME top at sb boundary
-            memcpy(warp[cnt[1]++], rt->m[rmt_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], rmt->m, sizeof(int32_t) * 7);
         }
     }
 
     // top-most left
     const refmvs_block *tml = NULL;
     if (have_left && bh4 > 1) {
-        const int tml_pos = (by4 & 63) * 128 + ((bx4 - 1) & 127);
-        tml = &rt->r[tml_pos];
+        tml = &rt->r[(by4 & 63) * 128 + ((bx4 - 1) & 127)];
         add_spatial_candidate(0, -1,
                               rt, &st, 1, tml, tms_8x8y + left_8x8x, ref, gmv);
         if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0])
-            memcpy(warp[cnt[1]++], rt->m[tml_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], tml->m, sizeof(int32_t) * 7);
     }
 
     // left-most top
@@ -702,7 +694,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               ref, gmv);
         if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0]) {
             // FIXME top at sb boundary
-            memcpy(warp[cnt[1]++], rt->m[lmt_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], lmt->m, sizeof(int32_t) * 7);
         }
     }
 
@@ -710,14 +702,13 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (have_left && (by4 + bh4) & (rf->sbsz - 1) &&
         by4 + bh4 < rt->tile_row.end)
     {
-        const int bl_pos = ((by4 + bh4) & 63) * 128 + ((bx4 - 1) & 127);
-        const refmvs_block *const bl = &rt->r[bl_pos];
+        const refmvs_block *const bl = &rt->r[((by4 + bh4) & 63) * 128 + ((bx4 - 1) & 127)];
         add_spatial_candidate(bh4, -1,
                               rt, &st, 1, bl, left_8x8x +
                               (((by4 + bh4) & (rf->sbsz - 1)) >> 1) * stride,
                               ref, gmv);
         if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0])
-            memcpy(warp[cnt[1]++], rt->m[bl_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], bl->m, sizeof(int32_t) * 7);
     }
 
     // top-right
@@ -727,7 +718,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               ref, gmv);
         if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0]) {
             // FIXME top at sb boundary
-            memcpy(warp[cnt[1]++], rt->m[tr_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], tr->m, sizeof(int32_t) * 7);
         }
     }
 
@@ -758,7 +749,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               rt, &st, 0, tl, top_8x8y + left_8x8x, ref, gmv);
         if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0]) {
             // FIXME top at sb boundary
-            memcpy(warp[cnt[1]++], rt->m[tl_pos], sizeof(int32_t) * 7);
+            memcpy(warp[cnt[1]++], tl->m, sizeof(int32_t) * 7);
         }
     }
 
@@ -783,7 +774,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                     if (warp && cnt[1] < 4 && cand_b->mf & 2 &&
                         cand_b->ref.ref[0] == ref.ref[0])
                     {
-                        memcpy(warp[cnt[1]++], rt->m[pos], sizeof(int32_t) * 7);
+                        memcpy(warp[cnt[1]++], cand_b->m, sizeof(int32_t) * 7);
                     }
                 }
             }
@@ -802,7 +793,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                     if (warp && cnt[1] < 4 && cand_b->mf & 2 &&
                         cand_b->ref.ref[0] == ref.ref[0])
                     {
-                        memcpy(warp[cnt[1]++], rt->m[pos], sizeof(int32_t) * 7);
+                        memcpy(warp[cnt[1]++], cand_b->m, sizeof(int32_t) * 7);
                     }
             }
             }
@@ -1569,14 +1560,12 @@ static inline union qmv quantize_mv(const union mv mv) {
 }
 
 static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
-                        refmvs_block *const ra, refmvs_block *const ra_tl,
                         const refmvs_block *const rr,
                         const refmvs_sngl_mv_block *rp_proj,
                         const int32_t tip_sf[2], const uint8_t tip_ref[2],
                         const int col_end8, const int row_end8,
                         const int col_start8, const int row_start8)
 {
-    if (!rp) goto spatial;
     for (int y = row_start8; y < row_end8; y++) {
         const refmvs_block *const b = &rr[((y & 31) * 2 + 1) * 128];
         for (int x = col_start8; x < col_end8; x++) {
@@ -1614,14 +1603,6 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
         rp += stride;
         rp_proj += stride;
     }
-
-spatial: {}
-    const refmvs_block *const b = &rr[(((row_end8 - 1) & 31) * 2 + 1) * 128];
-    *ra_tl = ra[col_end8 - 1];
-    for (int x = col_start8; x < col_end8; x++) {
-        const refmvs_block *const cand_b = &b[((x * 2) & 127) + 0];
-        ra[x] = *cand_b;
-    }
 }
 
 // cache the current tile/sbrow (or frame/sbrow)'s projectable motion vectors
@@ -1644,9 +1625,18 @@ void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *const dsp,
         (rf->seq_hdr->ref_frame_mvs && IS_INTER_OR_SWITCH(rf->frm_hdr)) ?
         &rf->rp[row_start8 * stride] : NULL;
 
-    dsp->save_tmvs(rp, stride, rt->ra, &rt->ra_tl, rt->r, rt->rp_proj,
-                   rf->tip_sf, rf->frm_hdr->tip.refs,
-                   col_end8, row_end8, col_start8, row_start8);
+    if (rp)
+        dsp->save_tmvs(rp, stride, rt->r, rt->rp_proj,
+                       rf->tip_sf, rf->frm_hdr->tip.refs,
+                       col_end8, row_end8, col_start8, row_start8);
+
+    // keep a backup of top (at 8x8 resolution) for next sbrow
+    const refmvs_block *const b = &rt->r[(((row_end8 - 1) & 31) * 2 + 1) * 128];
+    rt->ra_tl = rt->ra[col_end8 - 1];
+    for (int x = col_start8; x < col_end8; x++) {
+        const refmvs_block *const cand_b = &b[((x * 2) & 127) + 0];
+        rt->ra[x] = *cand_b;
+    }
 }
 
 static unsigned abs_closest_ref(const int8_t *const ref2ref,
@@ -1944,18 +1934,21 @@ static void splat_mv_c(refmvs_block *r, refmvs_block *const rmv,
 {
     do {
         for (int x = 0; x < bw4; x++) {
-            r[x] = *rmv;
+            memcpy(&r[x], rmv, offsetof(refmvs_block, m));
         }
         r += 128;
     } while (--bh4);
 }
 
-static void splat_warpmv_c(refmvs_block *r, int32_t (*m)[7],
+static void splat_warpmv_c(refmvs_block *r,
                            refmvs_block *const rmv, int64_t mvy, int64_t mvx,
                            const Dav1dWarpedMotionParams *const mat,
                            const int bw4, int bh4)
 {
+    assert(bw4 > 1);
     rmv->lmv = rmv->mv;
+    memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
+    rmv->m[6] = mat->type;
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
@@ -1964,16 +1957,8 @@ static void splat_warpmv_c(refmvs_block *r, int32_t (*m)[7],
             rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
                                     -0xffff, 0xffff);
             r[x] = r[x + 1] = *rmv;
-            memcpy(m[x], mat->matrix, sizeof(int32_t) * 6);
-            m[x][6] = mat->type;
-            memcpy(m[x + 1], mat->matrix, sizeof(int32_t) * 6);
-            m[x + 1][6] = mat->type;
             if (bh4 > 1) {
                 r[x + 128] = r[x + 128 + 1] = *rmv;
-                memcpy(m[x + 128], mat->matrix, sizeof(int32_t) * 6);
-                m[x + 128][6] = mat->type;
-                memcpy(m[x + 129], mat->matrix, sizeof(int32_t) * 6);
-                m[x + 129][6] = mat->type;
             }
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
@@ -1981,7 +1966,6 @@ static void splat_warpmv_c(refmvs_block *r, int32_t (*m)[7],
         mvx += mat->matrix[3] * 8;
         mvy += (mat->matrix[5] - 0x10000) * 8;
         r += 2 * 128;
-        m += 2 * 128;
         bh4 -= 2;
     } while (bh4);
 }

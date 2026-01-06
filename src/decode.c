@@ -350,7 +350,7 @@ static void extend_warpmv(Dav1dTaskContext *const t,
     int32_t *const m = wmp->matrix;
 
     if (r->mf & 2) {
-        memcpy(m, t->rt.m[off], sizeof(*m) * 6);
+        memcpy(m, r->m, sizeof(*m) * 6);
     } else if (r->mf & 1) {
         memcpy(m, t->f->frame_hdr->gmv[b->ref[0]].matrix, sizeof(*m) * 6);
     } else {
@@ -573,8 +573,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                             (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
-        int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
-        f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
+        f->c->refmvs_dsp.splat_warpmv(rb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
     } else {
         if (b->ref[0] == TIP_FRAME && f->seq_hdr->tip_refine_mv) {
             tmpl.mf = 4;
@@ -631,9 +630,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                             (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 +
                             (int64_t) mat[5] * (t->by + 1) * 4 + mat[1];
-        // FIXME this presumably needs a warp matrix per ref?
-        int32_t (*const mb)[7] = &t->rt.m[by4 * 128 + (t->bx & 127)];
-        f->c->refmvs_dsp.splat_warpmv(rb, mb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
+        f->c->refmvs_dsp.splat_warpmv(rb, &tmpl, mvy, mvx, &t->warpmv, bw4, bh4);
     } else {
         if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
             (b->refine_mv && b->comp_type == COMP_INTER_AVG))

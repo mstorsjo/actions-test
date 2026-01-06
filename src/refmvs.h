@@ -87,16 +87,15 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 // the block (see how it's used in decode.c:derive_warpmv()
 PACKED(typedef struct refmvs_block {
     refmvs_mvpair mv;
-    union {
-        refmvs_mvpair lmv; // for non-warp blocks, lmv==mv (see #1146)
-        refmvs_mvpair omv; // for opfl
-    };
     refmvs_refpair ref;
     uint8_t bs;
     uint8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2: opfl, 3-7: cwp_idx+4
     uint16_t bx4, by4; // top/left coordinates (in 4px units) of this block
+    refmvs_mvpair lmv; // for non-warp blocks, lmv==mv (see #1146)
+                       // also used to signal temporal MVs for opfl/refinemv
+    int32_t m[7]; // warp matrix
 }) ALIGN(refmvs_block, 4);
-CHECK_SIZE(refmvs_block, 24);
+CHECK_SIZE(refmvs_block, 52);
 
 typedef struct refmvs_frame {
     const Dav1dSequenceHeader *seq_hdr;
@@ -129,6 +128,7 @@ typedef struct refmvs_frame {
     mv *rp_traj[7]; // FIXME we may not need 7?
     refmvs_traj_map *rp_map[3][7];
     refmvs_block *ra;
+    int32_t (*ram)[7];
 #if 0
     int n_frame_threads;
 #endif
@@ -141,7 +141,6 @@ typedef struct refmvs_tile {
     mv *rp_traj[7];
     refmvs_block *ra, ra_tl;
     refmvs_block r[64 * 64 * 2]; // one sb may be enough? smaller sb sizes than 256x256?
-    int32_t m[64 * 64 * 2][7]; // FIXME cross-sb top edge? 8x8 res? comp-ref?
     struct {
         int start, end;
     } tile_col, tile_row;
@@ -167,7 +166,6 @@ typedef struct refmvs_candidate {
 
 #define decl_save_tmvs_fn(name) \
 void (name)(refmvs_temporal_block *rp, const ptrdiff_t stride, \
-            refmvs_block *ra, refmvs_block *ra_tl, \
             const refmvs_block *rr, const refmvs_sngl_mv_block *rp_proj, \
             const int32_t tip_sf[2], const uint8_t tip_ref[2], \
             int col_end8, int row_end8, int col_start8, int row_start8)
@@ -178,7 +176,7 @@ void (name)(refmvs_block *r, refmvs_block *rmv, int bw4, int bh4)
 typedef decl_splat_mv_fn(*splat_mv_fn);
 
 #define decl_splat_warpmv_fn(name) \
-void (name)(refmvs_block *r, int32_t (*m)[7], refmvs_block *rmv, \
+void (name)(refmvs_block *r, refmvs_block *rmv, \
             int64_t mvy, int64_t mvx, const Dav1dWarpedMotionParams *const matrix, \
             int bw4, int bh4)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
