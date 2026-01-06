@@ -821,7 +821,7 @@ static void warp_affine_8x8_c(pixel *dst, const ptrdiff_t dst_stride,
     for (int y = 0; y < 15; y++, mx += abcd[1]) {
         for (int x = 0, tmx = mx; x < 8; x++, tmx += abcd[0]) {
             const int8_t *const filter =
-                dav1d_mc_warp_filter[64 + ((tmx + 512) >> 10)];
+                dav1d_mc_warp_filter[3*64 + ((tmx + 512) >> 10)];
 
             mid_ptr[x] = FILTER_WARP_RND(src, x, filter, 1,
                                          7 - intermediate_bits);
@@ -834,7 +834,7 @@ static void warp_affine_8x8_c(pixel *dst, const ptrdiff_t dst_stride,
     for (int y = 0; y < 8; y++, my += abcd[3]) {
         for (int x = 0, tmy = my; x < 8; x++, tmy += abcd[2]) {
             const int8_t *const filter =
-                dav1d_mc_warp_filter[64 + ((tmy + 512) >> 10)];
+                dav1d_mc_warp_filter[3*64 + ((tmy + 512) >> 10)];
 
             dst[x] = FILTER_WARP_CLIP(mid_ptr, x, filter, 8,
                                       7 + intermediate_bits);

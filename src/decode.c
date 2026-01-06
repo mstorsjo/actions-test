@@ -242,14 +242,16 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     const refmvs_block *const r = &t->rt.r[(t->by & 63) * 128], *ra;
 
 #define bs(rp) dav1d_block_dimensions[(rp)->bs]
-    // FIXME manage ref1 also (once that's part of rp[])
 #define add_sample(dx, dy, sx, sy, rp) do { \
-    pts[np][0][0] = 16 * (2 * dx + sx * bs(rp)[0]) - 8; \
-    pts[np][0][1] = 16 * (2 * dy + sy * bs(rp)[1]) - 8; \
     const union mv *const rmv = (rp)->mf & 2 ? (rp)->lmv.mv : (rp)->mv.mv; \
-    pts[np][1][0] = pts[np][0][0] + rmv[0].x; \
-    pts[np][1][1] = pts[np][0][1] + rmv[0].y; \
-    np++; \
+    for (int n = 0; n < 2; n++) { \
+        if ((rp)->ref.ref[n] != ref + 1) continue; \
+        pts[np][0][0] = 16 * (2 * (dx) + sx * bs(rp)[0]) - 8; \
+        pts[np][0][1] = 16 * (2 * dy + sy * bs(rp)[1]) - 8; \
+        pts[np][1][0] = pts[np][0][0] + rmv[n].x; \
+        pts[np][1][1] = pts[np][0][1] + rmv[n].y; \
+        if (++np == 8) break; \
+    } \
 } while (0)
 
     const Dav1dFrameContext *const f = t->f;
@@ -260,7 +262,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
         int off;
         if (is_not_sb_boundary) {
             ra = &t->rt.r[((t->by - 1) & 63) * 128];
-            const refmvs_block *r2 = &ra[(t->bx & 63)];
+            const refmvs_block *r2 = &ra[(t->bx & 127)];
             off = r2->bx4 - t->bx;
             have_topleft = !off;
             do {
@@ -268,12 +270,13 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
                 off += bs(&r2[off])[0];
             } while (off < w4 && np < 8);
         } else {
-            const refmvs_block *r2 = ra = t->rt.ra;
+            ra = t->rt.ra;
+            const refmvs_block *r2 = &ra[t->bx >> 1];
             off = r2->bx4 - t->bx;
             have_topleft = !off;
             do {
-                add_sample(off, 0, 1, -1, &r2[off >> 1]);
-                off += bs(&r2[off >> 1])[0];
+                add_sample(r2[off >> 1].bx4 - t->bx, 0, 1, -1, &r2[off >> 1]);
+                off += imax(2, bs(&r2[off >> 1])[0]);
             } while (off < w4 && np < 8);
         }
         have_topright = off <= bw4 && t->bx + bw4 < t->ts->tiling.col_end &&
@@ -283,7 +286,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     }
 
     if (np < 8 && have_left) {
-        const refmvs_block *r2 = &r[(t->bx - 1) & 63];
+        const refmvs_block *r2 = &r[(t->bx - 1) & 127];
         int off = r2->by4 - t->by;
         have_topleft &= !off;
         do {
@@ -295,15 +298,17 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
 
     if (is_not_sb_boundary) {
         if (np < 8 && have_topleft) // top/left
-            add_sample(0, 0, -1, -1, &ra[((t->bx - 1) & 63)]);
+            add_sample(0, 0, -1, -1, &ra[((t->bx - 1) & 127)]);
         if (np < 8 && have_topright) // top/right
-            add_sample(bw4, 0, 1, -1, &ra[((t->bx + bw4) & 63)]);
+            add_sample(bw4, 0, 1, -1, &ra[((t->bx + bw4) & 127)]);
     } else {
         if (np < 8 && have_topleft) // top/left
             add_sample(0, 0, -1, -1, (t->bx & ~1) & (f->sb_step - 1) ?
                        &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl);
-        if (np < 8 && have_topright) // top/right
-            add_sample(bw4, 0, 1, -1, &ra[(t->bx >> 1) + ((bw4 + 1) >> 1)]);
+        if (np < 8 && have_topright) { // top/right
+            const refmvs_block *const r2 = &ra[(t->bx >> 1) + ((bw4 + 1) >> 1)];
+            add_sample(r2->bx4 - t->bx, 0, 1, -1, r2);
+        }
     }
     assert(np > 0 && np <= 8);
 #undef bs

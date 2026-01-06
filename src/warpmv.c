@@ -35,9 +35,7 @@
 #include "src/warpmv.h"
 
 static inline int iclip_wmp(const int v) {
-    const int cv = iclip(v, INT16_MIN, INT16_MAX);
-
-    return apply_sign((abs(cv) + 32) >> 6, cv) * (1 << 6);
+    return iclip((v + 0x20 - (v < 0)) & ~0x3f, -0x7fc0, 0x7fc0);
 }
 
 int resolve_divisor_32(const unsigned d, int *const shift) {
@@ -69,8 +67,8 @@ int dav1d_get_shear_params(Dav1dWarpedMotionParams *const wm) {
                           apply_sign64((int) ((llabs(v2) + rnd) >> shift), v2) -
                           0x10000);
 
-    return (4 * abs(wm->u.p.alpha) + 7 * abs(wm->u.p.beta) >= 0x10000) ||
-           (4 * abs(wm->u.p.gamma) + 4 * abs(wm->u.p.delta) >= 0x10000);
+    return (4 * abs(wm->u.p.alpha) + 7 * abs(wm->u.p.beta) >= 0x30000) ||
+           (4 * abs(wm->u.p.gamma) + 4 * abs(wm->u.p.delta) >= 0x30000);
 }
 
 static int resolve_divisor_64(const uint64_t d, int *const shift) {
@@ -90,7 +88,7 @@ static int get_mult_shift_ndiag(const int64_t px, const int idet,
     const int64_t v1 = px * idet;
     const int v2 = (int) ((v1 + rnd - (v1 < 0)) >> sh);
     const int v3 = (v2 + 0x20 - (v2 < 0)) & ~0x3f;
-    return iclip(v3, -0x1fc0, 0x1fc0);
+    return iclip(v3, -0x7fc0, 0x7fc0);
 }
 
 static int get_mult_shift_diag(const int64_t px, const int idet,
@@ -99,7 +97,7 @@ static int get_mult_shift_diag(const int64_t px, const int idet,
     const int64_t v1 = px * idet;
     const int v2 = (int) ((v1 + rnd - (v1 < 0)) >> sh);
     const int v3 = (v2 + 0x20 - (v2 < 0)) & ~0x3f;
-    return iclip(v3, 0xe040, 0x11fc0);
+    return iclip(v3, 0x8040, 0x17fc0);
 }
 
 void dav1d_set_affine_mv2d(const int bw4, const int bh4,
