@@ -2277,6 +2277,47 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                                        SMOOTH_PRED : b->interintra_mode;
                 pixel *const tmp = bitfn(t->scratch.interintra);
                 int angle = (const uint8_t[4]) { 0, 90, 180, 0 }[b->interintra_mode];
+                int n_tr = 0, n_bl = 0;
+                const int bx4 = t->bx & 63, by4 = t->by & 63, sbsz = f->sb_step;
+                if (t->by > ts->tiling.row_start) {
+                    int w = imin(bw4, ts->tiling.col_end - t->bx - bw4);
+                    if (!(t->by & (sbsz - 1))) {
+                        // top sb boundary
+                        n_tr = w;
+                    } else {
+                        const int end = imin((t->bx + sbsz) & ~(sbsz - 1),
+                                             ts->tiling.col_end);
+                        w = imin(w, end - t->bx - bw4);
+                        if (!w) {
+                            // right sb or tile/frame boundary
+                            n_tr = 0;
+                        } else {
+                            const int xpos = (bx4 + bw4) & 63;
+                            const unsigned bits = (unsigned) (t->is_coded[0][by4 - 1] >> xpos);
+                            n_tr = imin(ctz(~bits), w);
+                        }
+                    }
+                }
+
+                if (t->bx > ts->tiling.col_start) {
+                    const int end = imin((t->by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
+                    const int h = imin(bh4, end - t->by - bh4);
+                    if (!h) {
+                        // bottom sb or tile/frame boundary
+                        n_bl = 0;
+                    } else if (!(t->bx & (sbsz - 1))) {
+                        // left sb boundary
+                        n_bl = h;
+                    } else {
+                        const uint64_t mask = 1ULL << ((bx4 - 1) & 63);
+                        int y;
+                        for (y = 0; y < h; y++) {
+                            if (!(t->is_coded[0][by4 + y + bh4] & mask))
+                                break;
+                        }
+                        n_bl = y;
+                    }
+                }
                 const pixel *top_sb_edge = NULL;
                 if (!(t->by & (f->sb_step - 1))) {
                     top_sb_edge = f->ipred_edge[0];
@@ -2289,7 +2330,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 m = bytefn(dav1d_prepare_intra_edges)(
                         DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                         t->bx, t->by, ts->tiling.col_end, ts->tiling.row_end,
-                        0, 0, dst, f->cur.stride[0], top_sb_edge, m, &angle,
+                        n_tr, n_bl, dst, f->cur.stride[0], top_sb_edge, m, &angle,
                         bw4, bh4, intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
                 dsp->ipred.intra_pred[m](tmp, 4 * bw4 * sizeof(pixel),
                                          tl_edge, bw4 * 4, bh4 * 4,
