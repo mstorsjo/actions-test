@@ -2883,7 +2883,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         t->warpmv.matrix[1] += diff.y * (1 << 13);
                     }
                     b->mv[0] = get_warpmv_2d(t->warpmv.matrix, t->bx, t->by,
-                                             bw4, bh4, mv_prec);
+                                             bw4, bh4, warpmv_with_mvd ? mv_prec : 6);
                 }
                 // yes this re-calculates the warpmatrix from mv after (for
                 // warpmv) we've just done the opposite. The round-trip error
