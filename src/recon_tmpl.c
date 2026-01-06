@@ -2648,10 +2648,10 @@ chroma: {}
         }
         dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx, ctw4);
         dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx, cth4);
+        pixel *dst = ((pixel *) f->cur.data[1 + pl]) +
+            4 * (ssby * PXSTRIDE(stride) + ssbx);
         if (b->intra && !b->intrabc) {
             // intra prediction
-            pixel *dst = ((pixel *) f->cur.data[1 + pl]) +
-                4 * (ssby * PXSTRIDE(stride) + ssbx);
             const int sbsz = f->sb_step;
             pixel *const edge = bitfn(t->scratch.edge) + 128;
 
@@ -2741,20 +2741,20 @@ chroma: {}
                         hex_dump(dst, stride, ctw, cth, "orip");
                 }
             }
+        }
 
-            // inverse transform
-            if (eob != -1) {
-                // don't print chroma as avm does things in a different order
-                // (decode coefs of both planes first then pred + itx)
-                if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    coef_dump(cf, imin(uv_t_dim->w, 8) * 4,
-                              imin(uv_t_dim->h, 8) * 4, 3, "dq");
-                }
-                dsp->itx.itxfm_add[uvtx](dst, stride, cf, txtp, eob HIGHBD_CALL_SUFFIX);
-            }
+        // inverse transform
+        if (eob != -1) {
+            // don't print chroma as avm does things in a different order
+            // (decode coefs of both planes first then pred + itx)
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                hex_dump(dst, stride, uv_t_dim->w * 4, uv_t_dim->h * 4, "recon");
+                coef_dump(cf, imin(uv_t_dim->w, 8) * 4,
+                          imin(uv_t_dim->h, 8) * 4, 3, "dq");
             }
+            dsp->itx.itxfm_add[uvtx](dst, stride, cf, txtp, eob HIGHBD_CALL_SUFFIX);
+        }
+        if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+            hex_dump(dst, stride, uv_t_dim->w * 4, uv_t_dim->h * 4, "recon");
         }
     }
 
