@@ -2043,8 +2043,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->mv[0] = mvstack[drl_idx].mv.mv[0];
             b->mv[1] = mvstack[drl_idx].mv.mv[1];
             b->cwp_idx = mvstack[drl_idx].cwp_idx;
-            mv_reduce_prec(&b->mv[0], 3 + f->frame_hdr->mv_precision);
-            mv_reduce_prec(&b->mv[0], 3 + f->frame_hdr->mv_precision);
         } else if (is_comp) {
             const int n_refs = f->frame_hdr->n_ref_frames;
             if (n_refs > 1) {
