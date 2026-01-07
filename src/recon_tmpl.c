@@ -1213,8 +1213,7 @@ static void mc(Dav1dTaskContext *const t,
     const pixel *ref;
 
     assert(left >= 0 && top >= 0 && left < right && top < bottom &&
-           right <= (refp->p.data[0] == f->cur.data[0] ? f->bw * 4 : f->cur.p.w) &&
-           bottom <= (refp->p.data[0] == f->cur.data[0] ? f->bh * 4 : f->cur.p.h));
+           right <= f->bw * 4 && bottom <= f->bh * 4);
 
     if (refp->p.p.w == f->cur.p.w && refp->p.p.h == f->cur.p.h) {
         const int mx = mvx & (15 >> !ss_hor), my = mvy & (15 >> !ss_ver);
@@ -1336,7 +1335,7 @@ static void mc_opfl(Dav1dTaskContext *const t,
     const int dx = bx4 * 4 + (mvx >> 4);
     const int dy = by4 * 4 + (mvy >> 4);
     assert(top >= 0 && left >= 0 && left < right && top < bottom &&
-           right <= f->cur.p.w && bottom <= f->cur.p.h);
+           right <= f->bw * 4 && bottom <= f->bh * 4);
 
     if (dx - !!mx * 3 < left || dy - !!my * 3 < top ||
         dx + bw4 * 4 + !!mx * 4 > right ||
@@ -1499,7 +1498,7 @@ static int tip_pred(Dav1dTaskContext *const t,
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8 &&
         !f->svc[refs[0]][0].scale && !f->svc[refs[1]][0].scale;
-    const int w = f->frame_hdr->width, h = f->frame_hdr->height;
+    const int w = f->bw * 4, h = f->bh * 4;
     if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
     int have_bacp = 0;
 
@@ -1543,7 +1542,7 @@ static int tip_pred(Dav1dTaskContext *const t,
                        step + 2, step + 2, t->bx + x, t->by + y, 0,
                        (union mv) { .y = cmv[i].y - 32, .x = cmv[i].x - 32 },
                        refp[i], refs[i], DAV1D_FILTER_BILINEAR,
-                       0, f->cur.p.w, 0, f->cur.p.h);
+                       0, f->bw * 4, 0, f->bh * 4);
                 struct OpflOffset o;
                 f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
                                          step * 4, step * 4, 1, &o);
@@ -1577,7 +1576,8 @@ static int tip_pred(Dav1dTaskContext *const t,
                 for (int i = 0; i < 2; i++)
                     mc(t, NULL, &tmp[i][off_y + x * 4], bw4 * 4,
                        step, step, t->bx + x, t->by + y, 0,
-                       cmv[i], refp[i], refs[i], b->filter, 0, w, 0, h);
+                       cmv[i], refp[i], refs[i], b->filter,
+                       0, f->bw * 4, 0, f->bh * 4);
             }
             if (bacp) {
                 const int x0 = (t->bx + x) * 4 + (cmv[0].x >> (3 + refine));
@@ -1612,7 +1612,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
     const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
     assert(opfl || refine);
     assert(bw4 >= 2 && bh4 >= 2);
-    const int w = f->frame_hdr->width, h = f->frame_hdr->height;
+    const int w = f->bw * 4, h = f->bh * 4;
     pixel *const p1 = bitfn(t->scratch.interintra);
     const ptrdiff_t p1_stride = (bw4 + refine * 2) * 4 * sizeof(pixel);
 
@@ -2266,7 +2266,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             } else {
                 mc(t, dst, NULL, f->cur.stride[0], bw4, bh4,
                    t->bx, t->by, 0, b->mv[0], refp, b->ref[0], b->filter,
-                   0, f->cur.p.w, 0, f->cur.p.h);
+                   0, f->bw * 4, 0, f->bh * 4);
             }
             if (b->bawp[0]) {
                 bawp(t, b->bawp[0], b->mv[0], dst, f->cur.stride[0],
@@ -2392,7 +2392,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                     } else {
                         mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
                            b->mv[i], refp, b->ref[i], b->filter,
-                           0, f->cur.p.w, 0, f->cur.p.h);
+                           0, f->bw * 4, 0, f->bh * 4);
                     }
                     if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                         ac_dump(tmp[i], bw4 * 4, bh4 * 4, "y-single-pred");
@@ -2427,8 +2427,8 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 if (wt == 8) {
                     int y0, y1, x0, x1, w, h;
                     if (bacp == 2) {
-                        w = f->frame_hdr->width;
-                        h = f->frame_hdr->height;
+                        w = f->bw * 4;
+                        h = f->bh * 4;
                         x0 = t->bx * 4 + (b->mv[0].x >> 3);
                         y0 = t->by * 4 + (b->mv[0].y >> 3);
                         x1 = t->bx * 4 + (b->mv[1].x >> 3);
