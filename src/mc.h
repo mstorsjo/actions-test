@@ -122,7 +122,8 @@ struct OpflOffset {
 #define decl_sad_refine_mv_fn(name) \
 void (name)(const pixel *p0, ptrdiff_t p0_stride, \
             const pixel *p1, ptrdiff_t p1_stride, \
-            int w, int h, int is_implicit, struct OpflOffset *o)
+            int w, int h, int is_implicit, \
+            struct OpflOffset *o HIGHBD_DECL_SUFFIX)
 typedef decl_sad_refine_mv_fn(*sad_refine_mv_fn);
 
 struct OpflRegressionData {
@@ -133,7 +134,7 @@ void (name)(struct OpflRegressionData *out, \
             const pixel *p0, ptrdiff_t p0_stride, \
             const pixel *p1, ptrdiff_t p1_stride, \
             int w, int h, int bs, const struct OpflOffset *o, \
-            const int8_t d[2])
+            const int8_t d[2] HIGHBD_DECL_SUFFIX)
 typedef decl_opfl_derive_mv_fn(*opfl_derive_mv_fn);
 
 #define decl_8tap_gen(decl_name, fn_name, opt) \

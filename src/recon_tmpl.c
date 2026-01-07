@@ -1545,7 +1545,8 @@ static int tip_pred(Dav1dTaskContext *const t,
                        0, f->bw * 4, 0, f->bh * 4);
                 struct OpflOffset o;
                 f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
-                                         step * 4, step * 4, 1, &o);
+                                         step * 4, step * 4, 1, &o
+                                         HIGHBD_CALL_SUFFIX);
                 const int dy = o.y, dx = o.x;
                 union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
                 // FIXME for 256x256 blocks, sad-refinement is done at 16x16,
@@ -1555,7 +1556,8 @@ static int tip_pred(Dav1dTaskContext *const t,
                 struct OpflRegressionData res[4];
                 f->dsp->mc.opfl_derive_mv(res, &p0[4 * PXSTRIDE(p0_stride) + 4],
                                           p0_stride, &p1[4 * PXSTRIDE(p1_stride) + 4],
-                                          p1_stride, step * 4, step * 4, 8, &o, d);
+                                          p1_stride, step * 4, step * 4, 8, &o, d
+                                          HIGHBD_CALL_SUFFIX);
                 opfl_mv_adj(res, dd, d);
                 cmv[0].x = cmv[0].x * 2 + dx * 16 + dd->d[0].x;
                 cmv[0].y = cmv[0].y * 2 + dy * 16 + dd->d[0].y;
@@ -1658,7 +1660,8 @@ static int opfl_pred(Dav1dTaskContext *const t,
         struct OpflOffset o[4];
         if (refine) {
             f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
-                                     bw4 * 4, sh4 * 4, b->refine_mv == 2, o);
+                                     bw4 * 4, sh4 * 4, b->refine_mv == 2,
+                                     o HIGHBD_CALL_SUFFIX);
         } else memset(o, 0, sizeof(o));
 
         if (opfl) {
@@ -1667,7 +1670,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
             const int ro = refine ? 4 : 0;
             f->dsp->mc.opfl_derive_mv(res, &p0[ro * PXSTRIDE(p0_stride) + ro], p0_stride,
                                       &p1[ro * PXSTRIDE(p1_stride) + ro], p1_stride,
-                                      bw4 * 4, sh4 * 4, bs * 4, o, d);
+                                      bw4 * 4, sh4 * 4, bs * 4, o, d HIGHBD_CALL_SUFFIX);
             for (int by = 0, byy = 0; by < imin(h4 - y, sh4) * 4; by += bs * 4, byy++) {
                 const int bym = by & refareamask;
                 for (int bx = 0, bxx = 0; bx < w4 * 4; bx += bs * 4, bxx++) {

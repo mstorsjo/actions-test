@@ -991,15 +991,17 @@ static int sad_nxn(const pixel *p0, const ptrdiff_t p0_stride,
 static void sad_refine_mv_c(const pixel *p0, const ptrdiff_t p0_stride,
                             const pixel *p1, const ptrdiff_t p1_stride,
                             const int w, const int h, const int is_implicit,
-                            struct OpflOffset *o)
+                            struct OpflOffset *o HIGHBD_DECL_SUFFIX)
 {
+    const int bd_min8 = bitdepth_from_max(bitdepth_max) - 8;
+
     assert(w >= 8 && w <= 64 && !(w & (w - 1)));
     assert(h == 8 || h == 16);
     assert(w * h >= 64);
 
     const int bw = imin(w, 16);
     const int sadw = bw + 4, sadh = h + 4;
-    const unsigned sad_thr = sadw * sadh * 2;
+    const unsigned sad_thr = sadw * sadh * 2 << bd_min8;
     for (int x = 0; x < w; x += bw, o++) {
         unsigned best_sad = ~0U;
         int best_dx = 0, best_dy = 0;
@@ -1037,8 +1039,14 @@ static void opfl_derive_mv_c(struct OpflRegressionData *out,
                              const pixel *p0, const ptrdiff_t p0_stride,
                              const pixel *p1, const ptrdiff_t p1_stride,
                              const int w, const int h, const int bs,
-                             const struct OpflOffset *o, const int8_t d[2])
+                             const struct OpflOffset *o, const int8_t d[2]
+                             HIGHBD_DECL_SUFFIX)
 {
+#if BITDEPTH != 8
+    const int bd_min8 = bitdepth_from_max(bitdepth_max) - 8;
+    const int rnd = (1 << bd_min8) >> 1;
+#endif
+
     assert(bs == 4 || bs == 8);
     assert(bs == 8 || (w == 8 && h == 8));
     assert(!(w & (w - 1)));
@@ -1055,8 +1063,14 @@ static void opfl_derive_mv_c(struct OpflRegressionData *out,
             for (int x = bx; x < x_end; x++) {
                 const int p0pp = p0p[y * PXSTRIDE(p0_stride) + x];
                 const int p1pp = p1p[y * PXSTRIDE(p1_stride) + x];
-                tmp0[y * 64 + x] = d[0] * p0pp - d[1] * p1pp;
+                const int v = d[0] * p0pp - d[1] * p1pp;
+#if BITDEPTH == 8
+                tmp0[y * 64 + x] = v;
                 tmp1[y * 64 + x] = p0pp - p1pp;
+#else
+                tmp0[y * 64 + x] = (v + rnd - (v < 0)) >> bd_min8;
+                tmp1[y * 64 + x] = (p0pp - p1pp + rnd - (p1pp > p0pp)) >> bd_min8;
+#endif
             }
         }
     }
