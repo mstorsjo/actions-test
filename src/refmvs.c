@@ -335,7 +335,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                            cand_mv, &st->iter_cntr, 16);
     } else {
         if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
-            b->ref.ref[0] - 1 != TIP_FRAME &&
+            b->ref.ref[0] - 1 != TIP_FRAME && ref.ref[0] != ref.ref[1] &&
             rt->rp_traj[ref.ref[0] - 1][st->b8x8].n != INVALID_MV &&
             rt->rp_traj[ref.ref[1] - 1][st->b8x8].n != INVALID_MV)
         {
@@ -724,7 +724,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
 
     // normal priority TMVP
     DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
-    if (rf->use_ref_frame_mvs) {
+    if (rf->use_ref_frame_mvs && ref.ref[0] != ref.ref[1]) {
         const int bw8 = imin(bw4 >> 1, 8), bh8 = imin(bh4 >> 1, 8);
         const int step_h = bw4 >= 16 ? 2 : 1, step_v = bh4 >= 16 ? 2 : 1;
         const int first = (unsigned) bw4 - 2 * step_h <= (unsigned) w4 &&
