@@ -1,22 +1,23 @@
-From 59aeb19f7f88de17d8faa70598e417fe6339868d Mon Sep 17 00:00:00 2001
+From 24b0a79af0f9714b6c3e1a4e120a9daff7cc368e Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  helpers.
 
 ---
- aom/debug.h               |  16 +
- av1/common/mvref_common.c | 558 ++++++++++++++++++++++++++-
- av1/decoder/decodeframe.c | 282 ++++++++++----
- av1/decoder/decodemv.c    | 791 +++++++++++++++++++++++++++++++-------
- av1/decoder/decodemv.h    |  18 +-
- av1/decoder/decoder.c     |   5 +-
- av1/decoder/decoder.h     |  12 +-
- av1/decoder/decodetxb.c   | 229 ++++++++---
- av1/decoder/decodetxb.h   |  14 +-
- av1/decoder/detokenize.c  |   8 +-
- av1/decoder/detokenize.h  |   3 +-
- 11 files changed, 1647 insertions(+), 289 deletions(-)
+ aom/debug.h                 |  16 +
+ av1/common/av1_common_int.h |   2 +
+ av1/common/mvref_common.c   | 558 ++++++++++++++++++++++++-
+ av1/decoder/decodeframe.c   | 282 +++++++++----
+ av1/decoder/decodemv.c      | 791 +++++++++++++++++++++++++++++-------
+ av1/decoder/decodemv.h      |  18 +-
+ av1/decoder/decoder.c       |   5 +-
+ av1/decoder/decoder.h       |  12 +-
+ av1/decoder/decodetxb.c     | 229 +++++++++--
+ av1/decoder/decodetxb.h     |  14 +-
+ av1/decoder/detokenize.c    |   8 +-
+ av1/decoder/detokenize.h    |   3 +-
+ 12 files changed, 1649 insertions(+), 289 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -44,6 +45,20 @@ index 8c8847f1eb..b203c56cfa 100644
 +#endif
  
  #endif /* AOM_DEBUG_H */
+diff --git a/av1/common/av1_common_int.h b/av1/common/av1_common_int.h
+index bcc274e046..5a8313a386 100644
+--- a/av1/common/av1_common_int.h
++++ b/av1/common/av1_common_int.h
+@@ -3840,7 +3840,9 @@ static INLINE void av1_reset_refmv_bank(const AV1_COMMON *const cm,
+   if (sb_mi_row > tile_info->mi_row_start) {
+     int row_hits = 0;
+     int mi_col = 0;
++    xd->mi_row = sb_mi_row;
+     while (mi_col < block_mi_wide && row_hits < BANK_SB_ABOVE_ROW_MAX_HITS) {
++      xd->mi_col = mi_col;
+       // Previous row position of SB boundary
+       const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
+       const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av1/common/mvref_common.c b/av1/common/mvref_common.c
 index b50cd22ed5..728698a71e 100644
 --- a/av1/common/mvref_common.c

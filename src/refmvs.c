@@ -1001,24 +1001,6 @@ void dav1d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
     memset(rt->warp.idx, 0, sizeof(rt->warp.idx));
 }
 
-void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
-    // FIXME should (eventually) be able to re-use is_coded
-    for (int y = by & 63; y < (by & 63) + rt->rf->sbsz; y++) {
-        for (int x = bx & 127; x < (bx & 127) + rt->rf->sbsz; x++) {
-            rt->r[y * 128 + x].mv.mv[0].n = INVALID_MV;
-        }
-    }
-
-    const refmvs_frame *const rf = rt->rf;
-    if (rf->seq_hdr->refmv_bank) {
-        rt->bank.hits[0] = 0;
-        rt->bank.hits[1] = 0;
-        rt->bank.avail = 0;
-    }
-
-    rt->warp.hits = 0;
-}
-
 void dav1d_refmvs_bank_update(refmvs_tile *const rt, const enum BlockSize bs,
                               const int by4, const int bx4)
 {
@@ -1135,39 +1117,26 @@ static void debug_refbank(const refmvs_tile *const rt, const int c,
 #define debug_refbank(...)
 #endif
 
-void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
-                           const int by4, const int bx4, const Av1Block *const b)
+static void refmvs_bank_add(refmvs_tile *const rt,
+                            DB_ONLY(const int by4, const int bx4)
+                            const int8_t ref[2], const union mv mv[2],
+                            const int cwp_idx)
 {
     RDB_ONLY(const refmvs_frame *const rf = rt->rf);
-    assert(rt->rf->seq_hdr->refmv_bank);
-    assert(!b->intra || b->intrabc);
-    dav1d_refmvs_bank_update(rt, bs, by4, bx4);
 
-    if (rt->bank.hits[0] >= 64 ||
-        rt->bank.hits[1] >= 16 ||
-        !rt->bank.avail)
-    {
-        DEBUG_REFMV_printf("Refbank is full: remain=%d|hits=%d|%d\n",
-                           rt->bank.avail,
-                           rt->bank.hits[1],
-                           rt->bank.hits[0]);
-        return;
-    }
     rt->bank.hits[0]++;
-    rt->bank.hits[1]++;
-    rt->bank.avail--;
 
-    const int c = b->ref[1] == -1 ? ((unsigned) b->ref[0] <= 5U ? b->ref[0] : 8) :
-                  (!b->ref[0] && b->ref[1] <= 1) ? 6 + b->ref[1] : 8;
+    const int c = ref[1] == -1 ? ((unsigned) ref[0] <= 5U ? ref[0] : 8) :
+                  (!ref[0] && ref[1] <= 1) ? 6 + ref[1] : 8;
     const int sz = rt->bank.size[c], idx = rt->bank.idx[c];
-    const int comp = b->ref[1] != -1;
+    const int comp = ref[1] != -1;
     int n;
     for (n = 0; n < sz; n++) {
         const int i = (idx + n) & 3;
-        if (b->mv[0].n == rt->bank.mv[c][i].mv[0].n &&
-            b->mv[comp].n == rt->bank.mv[c][i].mv[comp].n &&
-            (c < 8 || (b->ref[0] + 1 == rt->bank.ref[i].ref[0] &&
-                       b->ref[comp] + 1 == rt->bank.ref[i].ref[comp])))
+        if (mv[0].n == rt->bank.mv[c][i].mv[0].n &&
+            mv[comp].n == rt->bank.mv[c][i].mv[comp].n &&
+            (c < 8 || (ref[0] + 1 == rt->bank.ref[i].ref[0] &&
+                       ref[comp] + 1 == rt->bank.ref[i].ref[comp])))
         {
             break;
         }
@@ -1202,17 +1171,81 @@ void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
     }
 
     const int tgt = sz == 4 ? rt->bank.idx[c]++ & 3 : rt->bank.size[c]++;
-    rt->bank.mv[c][tgt].mv[0] = b->mv[0];
-    rt->bank.mv[c][tgt].mv[1] = b->mv[1];
+    rt->bank.mv[c][tgt].mv[0] = mv[0];
+    rt->bank.mv[c][tgt].mv[1] = mv[1];
     if (c == 8) {
-        rt->bank.ref[tgt].ref[0] = b->ref[0] + 1;
-        rt->bank.ref[tgt].ref[1] = b->ref[1] + (b->ref[1] >= 0);
+        rt->bank.ref[tgt].ref[0] = ref[0] + 1;
+        rt->bank.ref[tgt].ref[1] = ref[1] + (ref[1] >= 0);
     }
-    if (b->ref[1] != -1)
-        rt->bank.cwp_idx[c - 6][tgt] = b->cwp_idx;
+    if (ref[1] != -1)
+        rt->bank.cwp_idx[c - 6][tgt] = cwp_idx;
     DEBUG_REFMV_printf("Adding new refbank entry in %d | remain=%d|hits=%d|%d\n",
                        tgt, rt->bank.avail, rt->bank.hits[1], rt->bank.hits[0]);
     debug_refbank(rt, c, by4, bx4);
+}
+
+void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
+                           const int by4, const int bx4, const Av1Block *const b)
+{
+    RDB_ONLY(const refmvs_frame *const rf = rt->rf);
+
+    assert(rt->rf->seq_hdr->refmv_bank);
+    assert(!b->intra || b->intrabc);
+    dav1d_refmvs_bank_update(rt, bs, by4, bx4);
+    if (rt->bank.hits[0] >= 64 ||
+        rt->bank.hits[1] >= 16 ||
+        !rt->bank.avail)
+    {
+        DEBUG_REFMV_printf("Refbank is full: remain=%d|hits=%d|%d\n",
+                           rt->bank.avail,
+                           rt->bank.hits[1],
+                           rt->bank.hits[0]);
+        return;
+    }
+    rt->bank.hits[1]++;
+    rt->bank.avail--;
+    refmvs_bank_add(rt, DB_ONLY(by4, bx4) b->ref, b->mv, b->cwp_idx);
+}
+
+void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
+    // FIXME should (eventually) be able to re-use is_coded
+    for (int y = by & 63; y < (by & 63) + rt->rf->sbsz; y++) {
+        for (int x = bx & 127; x < (bx & 127) + rt->rf->sbsz; x++) {
+            rt->r[y * 128 + x].mv.mv[0].n = INVALID_MV;
+        }
+    }
+
+    const refmvs_frame *const rf = rt->rf;
+    if (rf->seq_hdr->refmv_bank) {
+        rt->bank.hits[0] = 0;
+        rt->bank.hits[1] = 0;
+        rt->bank.avail = 0;
+    }
+
+    rt->warp.hits = 0;
+
+    if (by == rt->tile_row.start || IS_KEY_OR_INTRA(rf->frm_hdr)) return;
+
+    const int end_x4 = imin(bx + rf->sbsz, rt->tile_col.end);
+    for (int x = bx, sz4, hits = 0; x < end_x4; x += sz4) {
+        const refmvs_block *const r = &rt->ra[x >> 1];
+        sz4 = dav1d_block_dimensions[r->bs][0];
+        if (r->ref.ref[0] == -1) continue;
+        if (rf->seq_hdr->refmv_bank) {
+            int8_t ref[2];
+            ref[0] = r->ref.ref[0] - 1;
+            ref[1] = r->ref.ref[1] - (r->ref.ref[1] > 0);
+            refmvs_bank_add(rt, DB_ONLY(by, x) ref,
+                            r->mf & 2 ? r->lmv.mv : r->mv.mv, (r->mf >> 3) - 4);
+        }
+        if (r->mf & 2) {
+            Dav1dWarpedMotionParams wmp;
+            wmp.type = r->m[6];
+            memcpy(wmp.matrix, r->m, sizeof(int32_t) * 6);
+            dav1d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0] - 1);
+        }
+        if (++hits == 4) break;
+    }
 }
 
 static inline int dequantize_mv_comp(const int v) {
