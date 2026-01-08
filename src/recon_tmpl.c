@@ -1440,11 +1440,11 @@ static void opfl_mv_adj(const struct OpflRegressionData *const r,
                         union OpflMvDeltaBlock *const dd, const int8_t d[2])
 {
     int su2 = r->su2, suv = r->suv, sv2 = r->sv2, suw = r->suw, svw = r->svw;
-    const int nbits_su2 = 1 + ulog2(su2);
-    const int nbits_sv2 = 1 + ulog2(sv2);
-    const int nbits_suv = 1 + ulog2(abs(suv));
-    const int nbits_suw = 1 + ulog2(abs(suw));
-    const int nbits_svw = 1 + ulog2(abs(svw));
+    const int nbits_su2 = 1 + ulog2(su2 + !su2);
+    const int nbits_sv2 = 1 + ulog2(sv2 + !sv2);
+    const int nbits_suv = 1 + ulog2(abs(suv) + !suv);
+    const int nbits_suw = 1 + ulog2(abs(suw) + !suw);
+    const int nbits_svw = 1 + ulog2(abs(svw) + !svw);
     const int nbits_max =
         imax(nbits_su2 + nbits_sv2,
              imax(imax(nbits_sv2 + nbits_suw, nbits_suv + nbits_svw),
