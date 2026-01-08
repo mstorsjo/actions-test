@@ -1266,11 +1266,14 @@ static inline mv dequantize_mv(const union qmv mv) {
 static void fill_holes(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
                        const int col_start8, const int col_end8,
                        const int row_start8, int row_end8,
-                       const int sbsz8, const int tmvp_sample_step)
+                       const int mfmv_sbsz8, const int sbsz8,
+                       const int tmvp_sample_step)
 {
-    for (int sx = col_start8; sx < col_end8; sx += sbsz8) {
-        const int xend = imin(col_end8, sx + sbsz8);
+    for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
+        const int xend = imin(col_end8, sx + mfmv_sbsz8);
         for (int y = row_start8; y < row_end8; y++) {
+            const int ystart = y & ~(mfmv_sbsz8 - 1);
+            const int yend = imin(ystart + mfmv_sbsz8, row_end8);
             const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
                 const ptrdiff_t pos = pos_base + x;
@@ -1284,9 +1287,9 @@ static void fill_holes(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stri
                     copy(-tmvp_sample_step);
                 if (x + tmvp_sample_step < xend)
                     copy(+tmvp_sample_step);
-                if (y - tmvp_sample_step >= row_start8)
+                if (y - tmvp_sample_step >= ystart)
                     copy(-tmvp_sample_step * stride);
-                if (y + tmvp_sample_step < row_end8)
+                if (y + tmvp_sample_step < yend)
                     copy(+tmvp_sample_step * stride);
 #undef copy
             }
@@ -1297,16 +1300,19 @@ static void fill_holes(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stri
 static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
                      const int col_start8, const int col_end8,
                      const int row_start8, int row_end8,
-                     const int sbsz8, const int tmvp_sample_step)
+                     const int mfmv_sbsz8, const int sbsz8,
+                     const int tmvp_sample_step)
 {
     static const unsigned idiv[] = {
         65536, 32768, 21845, 16384, 13107
     };
     union mv mv_line[32];
-    for (int sx = col_start8; sx < col_end8; sx += sbsz8) {
-        const int xend = imin(col_end8, sx + sbsz8);
+    for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
+        const int xend = imin(col_end8, sx + mfmv_sbsz8);
         int first_line = 1, y;
         for (y = row_start8; y < row_end8; y++, first_line = 0) {
+            const int ystart = y & ~(mfmv_sbsz8 - 1);
+            const int yend = imin(ystart + mfmv_sbsz8, row_end8);
             const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
                 const ptrdiff_t pos = pos_base + x;
@@ -1323,9 +1329,9 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
                     add(pos - tmvp_sample_step,"left");
                 if (x + tmvp_sample_step < xend)
                     add(pos + tmvp_sample_step,"right");
-                if (y - tmvp_sample_step >= row_start8)
+                if (y - tmvp_sample_step >= ystart)
                     add(pos - tmvp_sample_step * stride,"up");
-                if (y + tmvp_sample_step < row_end8)
+                if (y + tmvp_sample_step < yend)
                     add(pos + tmvp_sample_step * stride,"bottom");
 #undef add
                 if (!first_line) {
@@ -1342,7 +1348,7 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
             }
         }
         if (!first_line) {
-            const ptrdiff_t pos_base = (y - 1) * stride;
+            const ptrdiff_t pos_base = ((y - 1) & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
                 rp_proj[pos_base + x].mv.n = mv_line[x - sx].n;
             }
@@ -1564,10 +1570,10 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
 
     if (rf->seq_hdr->tip_hole_fill) {
         fill_holes(rp_proj, stride,
-                   col_start8, col_end8, row_start8, row_end8, sbsz8,
+                   col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
                    rf->frm_hdr->tmvp_sample_step);
         smoothen(rp_proj, stride,
-                 col_start8, col_end8, row_start8, row_end8, sbsz8,
+                 col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
                  rf->frm_hdr->tmvp_sample_step);
     }
     // FIXME fill_gap()
