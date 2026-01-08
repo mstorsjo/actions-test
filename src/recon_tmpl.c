@@ -1822,7 +1822,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     const enum IntraPredMode orig_y_mode = b->y_mode;
     int angle = b->y_angle;
-    if (b->intra)
+    if (b->intra && !b->intrabc)
         b->y_mode = wide_angle_remap(t_dim, b->y_mode, &angle, b->mrl_index);
 
     // decode coefficients
@@ -2659,7 +2659,7 @@ chroma: {}
 
     const enum IntraPredMode orig_uv_mode = b->uv_mode;
     int angle = b->uv_angle;
-    if (b->intra)
+    if (b->intra && !b->intrabc)
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
 
     // CFL calc AC / gen Y edge
