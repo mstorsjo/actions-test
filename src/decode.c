@@ -3078,8 +3078,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (has_luma &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
-        dav1d_create_lf_mask_intra(t->lf_mask, t->bx, t->by, f->bw, f->bh, bs,
-                                   b->tx_part, b->uvtx, f->cur.p.layout,
+        dav1d_create_lf_mask_intra(t->lf_mask, b, t->bx, t->by, f->bw, f->bh,
+                                   f->cur.p.layout,
                                    &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                    has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
                                    has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);

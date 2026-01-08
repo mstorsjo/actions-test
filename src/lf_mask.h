@@ -58,10 +58,8 @@ typedef struct Av1Restoration {
     Av1RestorationUnit lr[3][4];
 } Av1Restoration;
 
-void dav1d_create_lf_mask_intra(Av1Filter *lflvl, int bx, int by,
-                                int iw, int ih, enum BlockSize bs,
-                                const enum TxPartition tx_part, enum RectTxfmSize uvtx,
-                                enum Dav1dPixelLayout layout, uint8_t *ay,
+void dav1d_create_lf_mask_intra(Av1Filter *lflvl, const Av1Block *b, int bx, int by,
+                                int iw, int ih, enum Dav1dPixelLayout layout, uint8_t *ay,
                                 uint8_t *ly, uint8_t *auv, uint8_t *luv);
 void dav1d_create_lf_mask_inter(Av1Filter *lflvl, int bx, int by,
                                 int iw, int ih, int skip_inter,
