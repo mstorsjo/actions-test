@@ -370,7 +370,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     }
 
     // Crop deblock size on the bottom of the frame
-    if (starty4 + sby * sbsz + 4 > f->bh) {
+    if ((sby + 1) * sbsz + 4 > f->bh) {
         // For luma, we crop 32 long tx edges that overhang by 24 pixels.
         // Frame dimensions are multiples of 8 so we only need to crop a single row.
         const int luma_crop_y4 = endy4 - 2;
