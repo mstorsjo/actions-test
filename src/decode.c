@@ -375,23 +375,19 @@ static void extend_warpmv(Dav1dTaskContext *const t,
         const int ay = t->by * 4 - 1, sh = 1 + b_dim[3];
         const int64_t apx = (int64_t) m[2] * sx + (int64_t) m[3] * ay + m[0];
         const int64_t apy = (int64_t) m[4] * sx + (int64_t) m[5] * ay + m[1];
-        m[3] = (int) ((px - apx + bh4 - (px < apx)) >> sh);
-        m[5] = (int) ((py - apy + bh4 - (py < apy)) >> sh);
-        m[3] += 0x20 - (m[3] < 0);
-        m[5] += 0x20 - (m[5] < 0);
-        m[3] &= ~0x3f;
-        m[5] &= ~0x3f;
+        const int m3 = (int) ((px - apx + bh4 - (px < apx)) >> sh);
+        const int m5 = (int) ((py - apy + bh4 - (py < apy)) >> sh);
+        m[3] = iclip((m3 + 0x20 - (m3 < 0)) & ~0x3f, -0x7fc0, 0x7fc0);
+        m[5] = iclip((m5 + 0x20 - (m5 < 0)) & ~0x3f, 0x8040, 0x17fc0);
     } else {
         assert(x_off == -1 || !(t->by & (t->f->sb_step - 1)));
         const int ax = t->bx * 4 - 1, sh = 1 + b_dim[2];
         const int64_t lpx = (int64_t) m[2] * ax + (int64_t) m[3] * sy + m[0];
         const int64_t lpy = (int64_t) m[4] * ax + (int64_t) m[5] * sy + m[1];
-        m[2] = (int) ((px - lpx + bh4 - (px < lpx)) >> sh);
-        m[4] = (int) ((py - lpy + bh4 - (py < lpy)) >> sh);
-        m[2] += 0x20 - (m[3] < 0);
-        m[4] += 0x20 - (m[5] < 0);
-        m[2] &= ~0x3f;
-        m[4] &= ~0x3f;
+        const int m2 = (int) ((px - lpx + bh4 - (px < lpx)) >> sh);
+        const int m4 = (int) ((py - lpy + bh4 - (py < lpy)) >> sh);
+        m[2] = iclip((m2 + 0x20 - (m2 < 0)) & ~0x3f, 0x8040, 0x17fc0);
+        m[4] = iclip((m4 + 0x20 - (m4 < 0)) & ~0x3f, -0x7fc0, 0x7fc0);
     }
     dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], wmp, t->bx, t->by);
     wmp->type = dav1d_get_shear_params(wmp) ? DAV1D_WM_TYPE_INVALID :
