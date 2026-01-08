@@ -445,7 +445,6 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
                            rf->frm_hdr->tip.frame_mode ?
                                rf->tip_delta : rt->rp_proj[off_8x8].ref);
     }
-    fix_mv_precision(rf->frm_hdr, &mv);
 
     if (ref.ref[1] == -1) {
         const int weight = 1 + (rf->abspocdiff[ref.ref[0] - 1] <= 2);
@@ -464,7 +463,6 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
                             rf->frm_hdr->tip.frame_mode ?
                                 rf->tip_delta : rt->rp_proj[off_8x8].ref);
     }
-    fix_mv_precision(rf->frm_hdr, &mv2);
     const refmvs_mvpair mvp = { .mv = {
         [0] = mv,
         [1] = mv2,
@@ -1273,8 +1271,9 @@ static void fill_holes(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stri
     for (int sx = col_start8; sx < col_end8; sx += sbsz8) {
         const int xend = imin(col_end8, sx + sbsz8);
         for (int y = row_start8; y < row_end8; y++) {
+            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
-                const ptrdiff_t pos = y * stride + x;
+                const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_proj[pos].mv; \
                 if (mv.n == INVALID_MV) continue;
 #define copy(off) do { \
@@ -1308,7 +1307,7 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
         const int xend = imin(col_end8, sx + sbsz8);
         int first_line = 1, y;
         for (y = row_start8; y < row_end8; y++, first_line = 0) {
-            const ptrdiff_t pos_base = y * stride;
+            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
                 const ptrdiff_t pos = pos_base + x;
                 int sum_x = 0, sum_y = 0, sum_n = 0;
@@ -1506,10 +1505,10 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     check_traj_intersect(rf, rp_traj, rp_map,
                                          ref, ref2idx, y, x, b_mv);
                 const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref - 1][0]);
-                const int y1 = (y + apply_sign(abs(mv1.y) >> 6, mv1.y)) & mask;
+                const int y1 = (y - apply_sign(abs(mv1.y) >> 6, mv1.y)) & mask;
                 if (y1 < 0 || y1 >= rf->ih8) continue;
-                const int x1 = (x + apply_sign(abs(mv1.x) >> 6, mv1.x)) & mask;
-                if (x1 < 0 || x >= rf->iw8) continue;
+                const int x1 = (x - apply_sign(abs(mv1.x) >> 6, mv1.x)) & mask;
+                if (x1 < 0 || x1 >= rf->iw8) continue;
                 const int y_proj_start = y1 & ~(mfmv_sbsz8 - 1);
                 const int y_proj_end = imin(y_proj_start + mfmv_sbsz8, row_end8);
                 if (y < y_proj_start || y >= y_proj_end) continue;
@@ -1535,11 +1534,11 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                         const mv mv2 =
                             scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref - 1][1]);
                         rp_traj[ref2idx][pos1] = mv2;
-                        const int y2 = (y + apply_sign(abs(mv2.y) >> 6,
-                                                       mv2.y)) & mask;
+                        const int y2 = (y1 + apply_sign(abs(mv2.y) >> 6,
+                                                        mv2.y)) & mask;
                         if (y2 < y_proj_start || y2 >= y_proj_end) break;
-                        const int x2 = (x + apply_sign(abs(mv2.x) >> 6,
-                                                       mv2.x)) & mask;
+                        const int x2 = (x1 + apply_sign(abs(mv2.x) >> 6,
+                                                        mv2.x)) & mask;
                         if (x2 < x_proj_start || x2 >= x_proj_end) break;
                         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
                         rp_map[k][ref2idx][pos2].y = y1 - y2;
@@ -1555,8 +1554,8 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                         mv_projection(b_mv, rf->tip_delta, abs(ref2ref));
                 } else {
                     rp_proj[pos1].mv = b_mv;
-                    rp_proj[pos1].ref = abs(ref2ref);
                 }
+                rp_proj[pos1].ref = abs(ref2ref);
             }
         }
     }
