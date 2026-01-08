@@ -1202,7 +1202,8 @@ void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
     }
     rt->bank.hits[1]++;
     rt->bank.avail--;
-    refmvs_bank_add(rt, DB_ONLY(by4, bx4) b->ref, b->mv, b->cwp_idx);
+    refmvs_bank_add(rt, DB_ONLY(by4, bx4) b->ref, b->mv,
+                    b->ref[1] == -1 ? 0 : b->cwp_idx);
 }
 
 void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
