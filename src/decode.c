@@ -2389,8 +2389,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         diff[n] = mv_projection(diff[!n], refdist[1], refdist[0]);
                         jmvd_scale(&diff[n], amvd, jmvd_scale_mode);
                         b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
-                        if (!amvd && mv_prec <= 3)
-                            mv_reduce_prec(&b->mv[n], mv_prec);
                         b->mv[n].x += diff[n].x;
                         b->mv[n].y += diff[n].y;
                     }
