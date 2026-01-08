@@ -37,6 +37,7 @@ typedef struct {
         uint8_t ii_nondc[N_BS_SIZES - BS_64x64 - 2];
     } offsets;
     uint8_t ALIGN(wedge[68 * (64 + 32 + 16 + 8) * (64 + 32 + 16 + 8)], 64);
+    uint8_t ALIGN(wedge_tmvp[68 * (8 + 4 + 2 + 1) * (8 + 4 + 2 + 1)], 64);
     uint8_t ALIGN(ii_dc[64 * 64], 64);
     uint8_t ALIGN(ii_nondc[((64 + 32 + 16 + 8 + 4) * (64 + 32 + 16 + 8 + 4) -
                             (4 * 4 + 8 * 4 + 4 * 8)) * 3], 64);
@@ -50,6 +51,10 @@ typedef struct {
 #define WEDGE_MASK(bs, bw4, bh4, widx) \
     &dav1d_masks.wedge[dav1d_masks.offsets.wedge[bs - BS_64x64] * 0x1100 + \
                        16 * bw4 * bh4 * widx]
+
+#define WEDGE_TMVP(bs, bw4, bh4, widx) \
+    &dav1d_masks.wedge_tmvp[dav1d_masks.offsets.wedge[bs - BS_64x64] * 68 + \
+                            (bw4 * bh4 >> 2) * widx]
 
 EXTERN Dav1dMasks dav1d_masks;
 

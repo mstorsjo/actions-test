@@ -2620,24 +2620,40 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
     refmvs_block *rb = &t->rt.r[(t->by & 63) * 128 + (t->bx & 127)];
     if (rb->mf & 4) {
-        const ptrdiff_t opfl_stride = (bw4 + 1) >> 1;
-        const union OpflMvDeltaBlock *opfl_dxy = t->opfl;
-        const int si = b->ref[0] != TIP_FRAME;
-        for (int y = 0; y < h4; y += 2) {
-            for (int x = 0; x < w4; x += 2) {
-                const union OpflMvDeltaBlock *const o = &opfl_dxy[x >> 1];
-                rb[x].lmv.mv[0].x = rb[x].mv.mv[0].x  + o->d[0].x;
-                rb[x].lmv.mv[0].y = rb[x].mv.mv[0].y  + o->d[0].y;
-                rb[x].lmv.mv[1].x = rb[x].mv.mv[si].x + o->d[1].x;
-                rb[x].lmv.mv[1].y = rb[x].mv.mv[si].y + o->d[1].y;
-                if (x + 1 < w4) rb[x + 1].lmv = rb[x].lmv;
-                if (y + 1 < h4) {
+        if (b->comp_type == COMP_INTER_WEDGE) {
+            const uint8_t *wedge = WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx);
+            for (int y = 0; y < h4; y += 2) {
+                for (int x = 0; x < w4; x += 2) {
+                    const int d = wedge[x >> 1];
+                    rb[x].lmv.mv[0].n = d ==  b->wedge_sign ? INVALID_MV : rb[x].mv.mv[0].n;
+                    rb[x].lmv.mv[1].n = d == !b->wedge_sign ? INVALID_MV : rb[x].mv.mv[1].n;
+                    rb[x + 1].lmv = rb[x].lmv;
                     rb[x + 128].lmv = rb[x].lmv;
-                    if (x + 1 < w4) rb[x + 129].lmv = rb[x].lmv;
+                    rb[x + 129].lmv = rb[x].lmv;
                 }
+                wedge += bw4 >> 1;
+                rb += 128 * 2;
             }
-            opfl_dxy += opfl_stride;
-            rb += 128 * 2;
+        } else {
+            const ptrdiff_t opfl_stride = (bw4 + 1) >> 1;
+            const union OpflMvDeltaBlock *opfl_dxy = t->opfl;
+            const int si = b->ref[0] != TIP_FRAME;
+            for (int y = 0; y < h4; y += 2) {
+                for (int x = 0; x < w4; x += 2) {
+                    const union OpflMvDeltaBlock *const o = &opfl_dxy[x >> 1];
+                    rb[x].lmv.mv[0].x = rb[x].mv.mv[0].x  + o->d[0].x;
+                    rb[x].lmv.mv[0].y = rb[x].mv.mv[0].y  + o->d[0].y;
+                    rb[x].lmv.mv[1].x = rb[x].mv.mv[si].x + o->d[1].x;
+                    rb[x].lmv.mv[1].y = rb[x].mv.mv[si].y + o->d[1].y;
+                    if (x + 1 < w4) rb[x + 1].lmv = rb[x].lmv;
+                    if (y + 1 < h4) {
+                        rb[x + 128].lmv = rb[x].lmv;
+                        if (x + 1 < w4) rb[x + 129].lmv = rb[x].lmv;
+                    }
+                }
+                opfl_dxy += opfl_stride;
+                rb += 128 * 2;
+            }
         }
     }
 

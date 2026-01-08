@@ -1629,11 +1629,19 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
                 rp[x].ref.ref[0] = tip_ref[0] + 1;
                 rp[x].ref.ref[1] = tip_ref[1] + 1;
             } else if (cand_b->ref.ref[0] > 0) {
-                rp[x].mv.mv[0] = quantize_mv(cand_mv[0]);
-                rp[x].mv.mv[1] = cand_b->ref.ref[1] > 0 ?
-                    quantize_mv(cand_mv[1]) :
-                    (union qmv) { .n = INVALID_TRAJ };
-                rp[x].ref.pair = cand_b->ref.pair;
+                if (cand_b->ref.ref[1] > 0 && cand_mv[0].n == INVALID_MV) {
+                    // switch order
+                    rp[x].mv.mv[0] = quantize_mv(cand_mv[1]);
+                    rp[x].mv.mv[1].n = INVALID_TRAJ;
+                    rp[x].ref.ref[0] = cand_b->ref.ref[1];
+                    rp[x].ref.ref[1] = cand_b->ref.ref[0];
+                } else {
+                    rp[x].mv.mv[0] = quantize_mv(cand_mv[0]);
+                    rp[x].mv.mv[1] = cand_b->ref.ref[1] > 0 ?
+                        quantize_mv(cand_mv[1]) :
+                        (union qmv) { .n = INVALID_TRAJ };
+                    rp[x].ref.pair = cand_b->ref.pair;
+                }
             } else {
                 rp[x].mv.n = INVALID_TRAJ * 0x10001U;
                 rp[x].ref.pair = 0;

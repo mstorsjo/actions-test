@@ -634,12 +634,12 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         f->c->refmvs_dsp.splat_warpmv(rb, &tmpl, mvy, mvx, &t->warpmv[0], bw4, bh4);
     } else {
+        tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
-            (b->refine_mv && b->comp_type == COMP_INTER_AVG))
+            (b->refine_mv && b->comp_type == COMP_INTER_AVG) ||
+            b->comp_type == COMP_INTER_WEDGE)
         {
             tmpl.mf |= 4;
-        } else {
-            tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         }
         f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
     }

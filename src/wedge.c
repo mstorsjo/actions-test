@@ -105,6 +105,27 @@ static void copy2d(uint8_t *dst, const uint8_t *src,
     }
 }
 
+static void fill_tmvp(uint8_t *dst, const uint8_t *src,
+                      const int w8, const int h8)
+{
+    for (int y = 0; y < h8; y++) {
+        for (int x = 0; x < w8; x++) {
+            int score[2] = { 0 };
+            const uint8_t *sptr = src;
+            for (int yy = y * 8; yy < y * 8 + 8; yy++) {
+                for (int xx = x * 8; xx < x * 8 + 8; xx++) {
+                    score[0] += sptr[xx] < 4;
+                    score[1] += sptr[xx] > 60;
+                }
+                sptr += w8 * 8;
+            }
+            dst[x] = score[0] > 60 ? 0 : score[1] > 60 ? 1 : 2;
+        }
+        dst += w8;
+        src += w8 * 8 * 8;
+    }
+}
+
 static void gen_master(uint8_t *master, const int mul,
                        const enum WedgeDirectionType wd)
 {
@@ -145,9 +166,11 @@ static COLD void init_wedge_masks(void) {
             gen_master(master, 2 /* sharp edge */, cb->direction);
             wd = cb->direction;
         }
-#define fill(w8, h8, sz) \
-        copy2d(WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx), \
-               master, w8, h8, cb->x_offset, cb->y_offset)
+#define fill(w8, h8, sz) do { \
+        uint8_t *const wm = WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx); \
+        copy2d(wm, master, w8, h8, cb->x_offset, cb->y_offset); \
+        fill_tmvp(WEDGE_TMVP(BS_##sz, w8 * 2, h8 * 2, widx), wm, w8, h8); \
+    } while (0)
         fill(1, 1, 8x8);
         fill(1, 2, 8x16);
         fill(2, 1, 16x8);
