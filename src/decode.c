@@ -2152,8 +2152,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 };
                 const int mode_ctx = amvd_mode_context[b->inter_mode - NEARMV_NEWMV];
                 const int ctx =
-                    (nx[0]->amvd[xoff[0]] && nx[0]->ref[0][xoff[0]] == b->ref[0]) +
-                    (nx[1]->amvd[xoff[1]] && nx[1]->ref[0][xoff[1]] == b->ref[0]);
+                    (nx[0]->ref[0][xoff[0]] == b->ref[0] && nx[0]->amvd[xoff[0]]) +
+                    (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
                 amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[mode_ctx][ctx]);
                 mvprec_def = 2 - (!amvd || f->frame_hdr->mv_precision < 3);
@@ -2587,8 +2587,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             if (f->seq_hdr->adaptive_mvd && b->inter_mode == NEWMV) {
                 const int ctx =
-                    (nx[0]->amvd[xoff[0]] && nx[0]->ref[0][xoff[0]] == b->ref[0]) +
-                    (nx[1]->amvd[xoff[1]] && nx[1]->ref[0][xoff[1]] == b->ref[0]);
+                    (nx[0]->ref[0][xoff[0]] == b->ref[0] && nx[0]->amvd[xoff[0]]) +
+                    (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
                 amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[4][ctx]);
                 mvprec_def = 2 - (!amvd || f->frame_hdr->mv_precision < 3);
