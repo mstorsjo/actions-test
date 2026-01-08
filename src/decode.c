@@ -101,8 +101,7 @@ static void init_deblock_lut(const Dav1dSequenceHeader *const seq_hdr,
                              const Dav1dFrameHeader *const frame_hdr,
                              const int qidx, Av1FilterLUT *const lut)
 {
-    const int bitdepth_min_8 = 2 * seq_hdr->hbd;
-    const int qmax = 255 + bitdepth_min_8;
+    const int qmax = 255 + 48 * seq_hdr->hbd;
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
         const int yac = frame_hdr->segmentation.enabled ?
             iclip(qidx + frame_hdr->segmentation.seg_data.d[i].delta_q, 0, qmax) : qidx;
