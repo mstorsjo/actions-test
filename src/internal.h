@@ -475,7 +475,7 @@ struct Dav1dTaskContext {
     } scratch;
 
     union {
-        Dav1dWarpedMotionParams warpmv;
+        Dav1dWarpedMotionParams warpmv[2];
         union OpflMvDeltaBlock {
             struct OpflMvDelta {
                 int8_t x, y;

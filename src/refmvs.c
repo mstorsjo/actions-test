@@ -1979,11 +1979,14 @@ static void splat_warpmv_c(refmvs_block *r,
 {
     assert(bw4 > 1);
     rmv->lmv = rmv->mv;
+    // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
     memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
     rmv->m[6] = mat->type;
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
+            // FIXME for compound-warp_causal-newmv^2, do we need to adjust
+            // block MVs for the 2nd ref here?
             rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
                                     -0xffff, 0xffff);
             rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),

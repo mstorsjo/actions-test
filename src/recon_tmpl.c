@@ -1360,11 +1360,11 @@ static void mc_opfl(Dav1dTaskContext *const t,
                                             HIGHBD_CALL_SUFFIX);
 }
 
-static int warp_affine(Dav1dTaskContext *const t,
-                       pixel *dst8, int16_t *dst16, const ptrdiff_t dstride,
-                       const uint8_t *const b_dim, const int pl,
-                       const Dav1dThreadPicture *const refp,
-                       const Dav1dWarpedMotionParams *const wmp)
+static void warp_affine(Dav1dTaskContext *const t,
+                        pixel *dst8, int16_t *dst16, const ptrdiff_t dstride,
+                        const uint8_t *const b_dim, const int pl,
+                        const Dav1dThreadPicture *const refp,
+                        const Dav1dWarpedMotionParams *const wmp)
 {
     assert((dst8 != NULL) ^ (dst16 != NULL));
     const Dav1dFrameContext *const f = t->f;
@@ -1418,7 +1418,6 @@ static int warp_affine(Dav1dTaskContext *const t,
         if (dst8) dst8  += 8 * PXSTRIDE(dstride);
         else      dst16 += 8 * dstride;
     }
-    return 0;
 }
 
 static void gen_mask(uint8_t *mask, const ptrdiff_t stride,
@@ -2260,13 +2259,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             const Dav1dThreadPicture *const refp = &f->refp[b->ref[0]];
             if ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
                 (b->motion_mode >= MM_WARP_CAUSAL &&
-                 t->warpmv.type > DAV1D_WM_TYPE_INVALID))
+                 t->warpmv[0].type > DAV1D_WM_TYPE_INVALID))
             {
-                const int res =
-                    warp_affine(t, dst, NULL, f->cur.stride[0], b_dim, 0, refp,
-                                b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv :
-                                    &f->frame_hdr->gmv[b->ref[0]]);
-                if (res) return;
+                warp_affine(t, dst, NULL, f->cur.stride[0], b_dim, 0, refp,
+                            b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
+                                &f->frame_hdr->gmv[b->ref[0]]);
             } else {
                 mc(t, dst, NULL, f->cur.stride[0], bw4, bh4,
                    t->bx, t->by, 0, b->mv[0], refp, b->ref[0], b->filter,
@@ -2379,20 +2376,21 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 bacp = opfl_pred(t, dst, f->cur.stride[0], tmp, b, bw4, bh4, w4, h4);
                 if (bacp < 0) return;
             } else {
-                // FIXME also exclude newmv^2 warp-causal
                 bacp = 2 * (f->seq_hdr->imp_msk_bld &&
+                            b->motion_mode != MM_WARP_CAUSAL &&
                             b->inter_mode != GLOBALMV_GLOBALMV &&
                             !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale);
                 for (int i = 0; i < 2; i++) {
                     const Dav1dThreadPicture *const refp = &f->refp[b->ref[i]];
 
-                    if (b->inter_mode == GLOBALMV_GLOBALMV &&
-                        f->gmv_warp_allowed[b->ref[i]])
+                    if ((b->inter_mode == GLOBALMV_GLOBALMV &&
+                         f->gmv_warp_allowed[b->ref[i]]) ||
+                        (b->motion_mode == MM_WARP_CAUSAL &&
+                         t->warpmv[i].type > DAV1D_WM_TYPE_INVALID))
                     {
-                        const int res =
-                            warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
-                                        &f->frame_hdr->gmv[b->ref[i]]);
-                        if (res) return;
+                        warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
+                                    b->motion_mode >= MM_WARP_CAUSAL ?
+                                        &t->warpmv[i] : &f->frame_hdr->gmv[b->ref[i]]);
                     } else {
                         mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
                            b->mv[i], refp, b->ref[i], b->filter,
