@@ -183,10 +183,18 @@ void (name)(refmvs_block *r, refmvs_block *rmv, \
             int bw4, int bh4)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
 
+#define decl_splat_comp_warpmv_fn(name) \
+void (name)(refmvs_block *r, refmvs_block *rmv, \
+            int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
+            const Dav1dWarpedMotionParams *const matrix, \
+            int bw4, int bh4)
+typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
+
 typedef struct Dav1dRefmvsDSPContext {
     save_tmvs_fn save_tmvs;
     splat_mv_fn splat_mv;
     splat_warpmv_fn splat_warpmv;
+    splat_comp_warpmv_fn splat_comp_warpmv;
 } Dav1dRefmvsDSPContext;
 
 // call once per frame

@@ -2010,14 +2010,11 @@ static void splat_warpmv_c(refmvs_block *r,
 {
     assert(bw4 > 1);
     rmv->lmv = rmv->mv;
-    // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
     memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
     rmv->m[6] = mat->type;
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
-            // FIXME for compound-warp_causal-newmv^2, do we need to adjust
-            // block MVs for the 2nd ref here?
             rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
                                     -0xffff, 0xffff);
             rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
@@ -2031,6 +2028,46 @@ static void splat_warpmv_c(refmvs_block *r,
         }
         mvx += mat->matrix[3] * 8;
         mvy += (mat->matrix[5] - 0x10000) * 8;
+        r += 2 * 128;
+        bh4 -= 2;
+    } while (bh4);
+}
+
+static void splat_comp_warpmv_c(refmvs_block *r,
+                                refmvs_block *const rmv, int64_t mvy1, int64_t mvx1,
+                                int64_t mvy2, int64_t mvx2,
+                                const Dav1dWarpedMotionParams *const mat,
+                                const int bw4, int bh4)
+{
+    assert(bw4 > 1);
+    rmv->lmv = rmv->mv;
+    // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
+    memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
+    rmv->m[6] = mat->type;
+    do {
+        int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
+        for (int x = 0; x < bw4; x += 2) {
+            rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
+                                    -0xffff, 0xffff);
+            rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
+                                    -0xffff, 0xffff);
+            rmv->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
+                                    -0xffff, 0xffff);
+            rmv->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
+                                    -0xffff, 0xffff);
+            r[x] = r[x + 1] = *rmv;
+            if (bh4 > 1) {
+                r[x + 128] = r[x + 128 + 1] = *rmv;
+            }
+            mvxi1 += (mat[0].matrix[2] - 0x10000) * 8;
+            mvyi1 += mat[0].matrix[4] * 8;
+            mvxi2 += (mat[1].matrix[2] - 0x10000) * 8;
+            mvyi2 += mat[1].matrix[4] * 8;
+        }
+        mvx1 += mat[0].matrix[3] * 8;
+        mvy1 += (mat[0].matrix[5] - 0x10000) * 8;
+        mvx2 += mat[1].matrix[3] * 8;
+        mvy2 += (mat[1].matrix[5] - 0x10000) * 8;
         r += 2 * 128;
         bh4 -= 2;
     } while (bh4);
@@ -2051,6 +2088,7 @@ COLD void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *const c)
     c->save_tmvs = save_tmvs_c;
     c->splat_mv = splat_mv_c;
     c->splat_warpmv = splat_warpmv_c;
+    c->splat_comp_warpmv = splat_comp_warpmv_c;
 
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM

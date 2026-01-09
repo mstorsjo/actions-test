@@ -629,12 +629,18 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
         tmpl.mf |= 2;
-        const int32_t *const mat = t->warpmv[0].matrix;
-        const int64_t mvx = (int64_t) (mat[2] - 0x10000) * (t->bx + 1) * 4 +
-                            (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
-        const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
-                            (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
-        f->c->refmvs_dsp.splat_warpmv(rb, &tmpl, mvy, mvx, &t->warpmv[0], bw4, bh4);
+        const int32_t *const mat1 = t->warpmv[0].matrix;
+        const int32_t *const mat2 = t->warpmv[1].matrix;
+        const int64_t mvx1 = (int64_t) (mat1[2] - 0x10000) * (t->bx + 1) * 4 +
+                            (int64_t) mat1[3] * (t->by + 1) * 4 + mat1[0];
+        const int64_t mvy1 = (int64_t) mat1[4] * (t->bx + 1) * 4 + mat1[1] +
+                            (int64_t) (mat1[5] - 0x10000) * (t->by + 1) * 4;
+        const int64_t mvx2 = (int64_t) (mat2[2] - 0x10000) * (t->bx + 1) * 4 +
+                            (int64_t) mat2[3] * (t->by + 1) * 4 + mat2[0];
+        const int64_t mvy2 = (int64_t) mat2[4] * (t->bx + 1) * 4 + mat2[1] +
+                            (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
+        f->c->refmvs_dsp.splat_comp_warpmv(rb, &tmpl, mvy1, mvx1, mvy2, mvx2,
+                                           t->warpmv, bw4, bh4);
     } else {
         tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
