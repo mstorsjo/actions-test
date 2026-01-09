@@ -2700,7 +2700,7 @@ chroma: {}
         const int cbw4 = (bw4 + ss_hor) >> ss_hor, cbh4 = (bh4 + ss_ver) >> ss_ver;
         const int wpad = uv_t_dim->w > cbw4 ? uv_t_dim->w - cbw4 : cbw4 - ctw4;
         const int hpad = uv_t_dim->h > cbh4 ? uv_t_dim->h - cbh4 : cbh4 - cth4;
-        const int dc =
+        const int dc = (!top && !left) ? 4 << f->cur.p.bpc :
             dsp->ipred.cfl_dc[f->cur.p.layout - 1](cfl_y_edge, top, left, ystride,
                                                    wpad << ss_hor, hpad << ss_ver,
                                                    top ? uv_t_dim->w * 4 << ss_hor : 0,
