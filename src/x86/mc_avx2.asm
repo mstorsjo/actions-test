@@ -180,25 +180,25 @@ cextern z_filter_s
 
 %define table_offset(type, fn) type %+ fn %+ SUFFIX %+ _table - type %+ SUFFIX
 
-BASE_JMP_TABLE   put,  avx2,            2, 4, 8, 16, 32, 64, 128
-BASE_JMP_TABLE   prep, avx2,               4, 8, 16, 32, 64, 128
-HV_JMP_TABLE     put,  bilin, avx2,  7, 2, 4, 8, 16, 32, 64, 128
-HV_JMP_TABLE     prep, bilin, avx2,  7,    4, 8, 16, 32, 64, 128
-HV_JMP_TABLE     put,  6tap,  avx2,  3, 2, 4, 8, 16, 32, 64, 128
-HV_JMP_TABLE     put,  8tap,  avx2,  3, 2, 4, 8, 16, 32, 64, 128
-HV_JMP_TABLE     prep, 6tap,  avx2,  1,    4, 8, 16, 32, 64, 128
-HV_JMP_TABLE     prep, 8tap,  avx2,  1,    4, 8, 16, 32, 64, 128
-SCALED_JMP_TABLE put_8tap_scaled, avx2, 2, 4, 8, 16, 32, 64, 128
-SCALED_JMP_TABLE prep_8tap_scaled, avx2,   4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  avg, avx2,                4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  w_avg, avx2,              4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  mask, avx2,               4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  w_mask_420, avx2,         4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  w_mask_422, avx2,         4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  w_mask_444, avx2,         4, 8, 16, 32, 64, 128
-BIDIR_JMP_TABLE  blend, avx2,              4, 8, 16, 32
-BIDIR_JMP_TABLE  blend_v, avx2,         2, 4, 8, 16, 32
-BIDIR_JMP_TABLE  blend_h, avx2,         2, 4, 8, 16, 32, 32, 32
+BASE_JMP_TABLE   put,               avx2,    2, 4, 8, 16, 32, 64
+BASE_JMP_TABLE   prep,              avx2,       4, 8, 16, 32, 64
+HV_JMP_TABLE     put,  bilin,       avx2, 7, 2, 4, 8, 16, 32, 64
+HV_JMP_TABLE     prep, bilin,       avx2, 7,    4, 8, 16, 32, 64
+HV_JMP_TABLE     put,  6tap,        avx2, 3, 2, 4, 8, 16, 32, 64
+HV_JMP_TABLE     put,  8tap_sharp,  avx2, 3, 2, 4, 8, 16, 32, 64
+HV_JMP_TABLE     prep, 6tap,        avx2, 1,    4, 8, 16, 32, 64
+HV_JMP_TABLE     prep, 8tap,        avx2, 1,    4, 8, 16, 32, 64
+SCALED_JMP_TABLE put_8tap_scaled,   avx2,    2, 4, 8, 16, 32, 64
+SCALED_JMP_TABLE prep_8tap_scaled,  avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  avg,               avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  w_avg,             avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  mask,              avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  w_mask_420,        avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  w_mask_422,        avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  w_mask_444,        avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  blend,             avx2,       4, 8, 16, 32
+BIDIR_JMP_TABLE  blend_v,           avx2,    2, 4, 8, 16, 32
+BIDIR_JMP_TABLE  blend_h,           avx2,    2, 4, 8, 16, 32, 32
 
 SECTION .text
 
@@ -251,8 +251,8 @@ cglobal put_bilin_8bpc, 4, 8, 0, dst, ds, src, ss, w, h, mxy
     movu                 m0, [srcq+ssq*0]
     movu                 m1, [srcq+ssq*1]
     lea                srcq, [srcq+ssq*2]
-    mova       [dstq+dsq*0], m0
-    mova       [dstq+dsq*1], m1
+    movu       [dstq+dsq*0], m0
+    movu       [dstq+dsq*1], m1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
     jg .put_w16
@@ -262,8 +262,8 @@ INIT_YMM avx2
     movu                 m0, [srcq+ssq*0]
     movu                 m1, [srcq+ssq*1]
     lea                srcq, [srcq+ssq*2]
-    mova       [dstq+dsq*0], m0
-    mova       [dstq+dsq*1], m1
+    movu       [dstq+dsq*0], m0
+    movu       [dstq+dsq*1], m1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
     jg .put_w32
@@ -281,20 +281,6 @@ INIT_YMM avx2
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
     jg .put_w64
-    RET
-.put_w128:
-    movu                 m0, [srcq+32*0]
-    movu                 m1, [srcq+32*1]
-    movu                 m2, [srcq+32*2]
-    movu                 m3, [srcq+32*3]
-    add                srcq, ssq
-    mova        [dstq+32*0], m0
-    mova        [dstq+32*1], m1
-    mova        [dstq+32*2], m2
-    mova        [dstq+32*3], m3
-    add                dstq, dsq
-    dec                  hd
-    jg .put_w128
     RET
 .h:
     ; (16 * src[x] + (mx * (src[x + 1] - src[x])) + 8) >> 4
@@ -371,7 +357,7 @@ INIT_YMM avx2
     pmulhrsw             m0, m3
     pmulhrsw             m1, m3
     packuswb             m0, m1
-    mova         [dstq+dsq*0], xm0
+    movu         [dstq+dsq*0], xm0
     vextracti128 [dstq+dsq*1], m0, 1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
@@ -388,7 +374,7 @@ INIT_YMM avx2
     pmulhrsw             m0, m3
     pmulhrsw             m1, m3
     packuswb             m0, m1
-    mova             [dstq], m0
+    movu             [dstq], m0
     add                dstq, dsq
     dec                  hd
     jg .h_w32
@@ -418,26 +404,6 @@ INIT_YMM avx2
     add                dstq, dsq
     dec                  hd
     jg .h_w64
-    RET
-.h_w128:
-    mov                  r6, -32*3
-.h_w128_loop:
-    movu                 m0, [srcq+r6+32*3+8*0]
-    movu                 m1, [srcq+r6+32*3+8*1]
-    pshufb               m0, m4
-    pshufb               m1, m4
-    pmaddubsw            m0, m5
-    pmaddubsw            m1, m5
-    pmulhrsw             m0, m3
-    pmulhrsw             m1, m3
-    packuswb             m0, m1
-    mova     [dstq+r6+32*3], m0
-    add                  r6, 32
-    jle .h_w128_loop
-    add                srcq, ssq
-    add                dstq, dsq
-    dec                  hd
-    jg .h_w128
     RET
 .v:
     movzx                wd, word [r7+wq*2+table_offset(put, _bilin_v)]
@@ -517,16 +483,15 @@ INIT_YMM avx2
     pmulhrsw             m1, m5
     pmulhrsw             m2, m5
     packuswb             m1, m2
-    mova         [dstq+dsq*0], xm1
+    movu         [dstq+dsq*0], xm1
     vextracti128 [dstq+dsq*1], m1, 1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
     jg .v_w16_loop
     RET
 .v_w32:
-%macro PUT_BILIN_V_W32 0
     movu                 m0, [srcq+ssq*0]
-%%loop:
+.v_w32_loop:
     movu                 m3, [srcq+ssq*1]
     lea                srcq, [srcq+ssq*2]
     punpcklbw            m1, m0, m3
@@ -544,13 +509,11 @@ INIT_YMM avx2
     pmulhrsw             m2, m5
     pmulhrsw             m3, m5
     packuswb             m2, m3
-    mova       [dstq+dsq*0], m1
-    mova       [dstq+dsq*1], m2
+    movu       [dstq+dsq*0], m1
+    movu       [dstq+dsq*1], m2
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
-    jg %%loop
-%endmacro
-    PUT_BILIN_V_W32
+    jg .v_w32_loop
     RET
 .v_w64:
     movu                 m0, [srcq+32*0]
@@ -580,20 +543,6 @@ INIT_YMM avx2
     add                dstq, dsq
     dec                  hd
     jg .v_w64_loop
-    RET
-.v_w128:
-    lea                 r6d, [hq+(3<<8)]
-    mov                  r4, srcq
-    mov                  r7, dstq
-.v_w128_loop:
-    PUT_BILIN_V_W32
-    add                  r4, 32
-    add                  r7, 32
-    movzx                hd, r6b
-    mov                srcq, r4
-    mov                dstq, r7
-    sub                 r6d, 1<<8
-    jg .v_w128_loop
     RET
 .hv:
     ; (16 * src[x] + (my * (src[x + src_stride] - src[x])) + 128) >> 8
@@ -708,15 +657,12 @@ INIT_YMM avx2
     psrlw                m3, 4
     packuswb             m1, m3
     vpermq               m1, m1, q3120
-    mova         [dstq+dsq*0], xm1
+    movu         [dstq+dsq*0], xm1
     vextracti128 [dstq+dsq*1], m1, 1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
     jg .hv_w16_loop
     RET
-.hv_w128:
-    lea                 r6d, [hq+(3<<16)]
-    jmp .hv_w32_start
 .hv_w64:
     lea                 r6d, [hq+(1<<16)]
 .hv_w32_start:
@@ -754,7 +700,7 @@ INIT_YMM avx2
     psrlw                m8, 4
     psrlw                m2, 4
     packuswb             m8, m2
-    mova             [dstq], m8
+    movu             [dstq], m8
     add                dstq, dsq
     dec                  hd
     jg .hv_w32_loop
@@ -1438,39 +1384,32 @@ cglobal prep_bilin_8bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
 %assign FILTER_SMOOTH  (1*15 << 16) | 4*15
 %assign FILTER_SHARP   (2*15 << 16) | 3*15
 
-%macro FN 4-5 ; fn, type, type_h, type_v, jmp_to
+%macro FN 3-4 ; fn, name, type, jmp_to
 cglobal %1_%2_8bpc
     mov                 t0d, FILTER_%3
-%ifidn %3, %4
-    mov                 t1d, t0d
-%else
-    mov                 t1d, FILTER_%4
-%endif
-%if %0 == 5 ; skip the jump in the last filter
-    jmp mangle(private_prefix %+ _%5 %+ SUFFIX)
+%if %0 == 4 ; skip the jump in the last filter
+    jmp mangle(private_prefix %+ _%4 %+ SUFFIX)
 %endif
 %endmacro
 
 %if WIN64
-DECLARE_REG_TMP 4, 5
+DECLARE_REG_TMP 5
 %else
-DECLARE_REG_TMP 7, 8
+DECLARE_REG_TMP 8
 %endif
 
 %define PUT_8TAP_FN FN put_8tap,
-PUT_8TAP_FN smooth,         SMOOTH,  SMOOTH,  put_6tap_8bpc
-PUT_8TAP_FN smooth_regular, SMOOTH,  REGULAR, put_6tap_8bpc
-PUT_8TAP_FN regular_smooth, REGULAR, SMOOTH,  put_6tap_8bpc
-PUT_8TAP_FN regular,        REGULAR, REGULAR
+PUT_8TAP_FN smooth,  SMOOTH,  put_6tap_8bpc
+PUT_8TAP_FN regular, REGULAR
 
 cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     imul                mxd, mxm, 0x010101
-    add                 mxd, t0d ; 6tap_h, mx, 4tap_h
     imul                myd, mym, 0x010101
-    add                 myd, t1d ; 6tap_v, my, 4tap_v
-    lea                  r8, [put_avx2]
     mov                  wd, wm
     movifnidn            hd, hm
+    add                 mxd, t0d ; 6tap_h, mx, 4tap_h
+    add                 myd, t0d ; 6tap_v, my, 4tap_v
+    lea                  r8, [put_avx2]
     test                mxd, 0xf00
     jnz .h
     test                myd, 0xf00
@@ -1581,7 +1520,7 @@ cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     lea                srcq, [srcq+ssq*2]
     PUT_6TAP_H            1, 2, 3
     packuswb             m0, m1
-    mova         [dstq+dsq*0], xm0
+    movu         [dstq+dsq*0], xm0
     vextracti128 [dstq+dsq*1], m0, 1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
@@ -1592,12 +1531,9 @@ cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     jmp .h_start
 .h_w64:
     mov                  r6, -32*1
-    jmp .h_start
-.h_w128:
-    mov                  r6, -32*3
-.h_start:
     sub                srcq, r6
     sub                dstq, r6
+.h_start:
     mov                  r4, r6
 .h_loop:
     movu                 m0, [srcq+r6+8*0]
@@ -1605,7 +1541,7 @@ cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     PUT_6TAP_H            0, 2, 3
     PUT_6TAP_H            1, 2, 3
     packuswb             m0, m1
-    mova          [dstq+r6], m0
+    movu          [dstq+r6], m0
     add                  r6, 32
     jle .h_loop
     add                srcq, ssq
@@ -1731,7 +1667,6 @@ cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
 .v_w16:
 .v_w32:
 .v_w64:
-.v_w128:
     lea                 r6d, [wq*8-128]
     WIN64_PUSH_XMM       12
     lea                 r6d, [hq+r6*2]
@@ -1774,7 +1709,7 @@ cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     pmulhrsw            m11, m8
     packuswb            m10, m11
     vpermq              m10, m10, q3120
-    mova         [r7+dsq*0], xm10
+    movu         [r7+dsq*0], xm10
     vextracti128 [r7+dsq*1], m10, 1
     lea                  r7, [r7+dsq*2]
     sub                  hd, 2
@@ -2010,20 +1945,14 @@ cglobal put_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     jg .hv_w8_loop0
     RET
 
-PUT_8TAP_FN smooth_sharp,   SMOOTH,  SHARP,  put_8tap_8bpc
-PUT_8TAP_FN sharp_smooth,   SHARP,   SMOOTH, put_8tap_8bpc
-PUT_8TAP_FN regular_sharp,  REGULAR, SHARP,  put_8tap_8bpc
-PUT_8TAP_FN sharp_regular,  SHARP,   REGULAR, put_8tap_8bpc
-PUT_8TAP_FN sharp,          SHARP,   SHARP
-
-cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
+cglobal put_8tap_sharp_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     imul                mxd, mxm, 0x010101
-    add                 mxd, t0d ; 8tap_h, mx, 4tap_h
     imul                myd, mym, 0x010101
-    add                 myd, t1d ; 8tap_v, my, 4tap_v
-    lea                  r8, [put_avx2]
-    movsxd               wq, wm
+    mov                  wd, wm
     movifnidn            hd, hm
+    add                 mxd, FILTER_SHARP ; 8tap_h, mx, 4tap_h
+    add                 myd, FILTER_SHARP ; 8tap_v, my, 4tap_v
+    lea                  r8, [put_avx2]
     test                mxd, 0xf00
     jnz .h
     test                myd, 0xf00
@@ -2035,7 +1964,7 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     cmp                  hd, 6
     cmovs               myd, mxd
     tzcnt               r6d, wd
-    movzx               r6d, word [r8+r6*2+table_offset(put, _8tap_v)]
+    movzx               r6d, word [r8+r6*2+table_offset(put, _8tap_sharp_v)]
     vpbroadcastd         m7, [pw_512]
     lea                 myq, [r8+myq*8+subpel_filters-put_avx2]
     vpbroadcastw         m8, [myq+0]
@@ -2173,7 +2102,6 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
 .v_w16:
 .v_w32:
 .v_w64:
-.v_w128:
     lea                 r6d, [wq*8-128]
     WIN64_PUSH_XMM       15
     lea                 r6d, [hq+r6*2]
@@ -2228,7 +2156,7 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     pmulhrsw            m14, m7
     packuswb            m13, m14
     vpermq              m13, m13, q3120
-    mova         [r7+dsq*0], xm13
+    movu         [r7+dsq*0], xm13
     vextracti128 [r7+dsq*1], m13, 1
     lea                  r7, [r7+dsq*2]
     sub                  hd, 2
@@ -2254,7 +2182,7 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     vbroadcasti128       m7, [subpel_h_shufB]
     sub                srcq, 3
     vbroadcasti128       m8, [subpel_h_shufC]
-    movzx                wd, word [r8+wq*2+table_offset(put, _8tap_h)]
+    movzx                wd, word [r8+wq*2+table_offset(put, _8tap_sharp_h)]
     vpbroadcastd         m9, [r8+mxq*8+subpel_filters-put_avx2+0]
     vpbroadcastd        m10, [r8+mxq*8+subpel_filters-put_avx2+4]
     add                  wq, r8
@@ -2295,7 +2223,7 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     lea                srcq, [srcq+ssq*2]
     PUT_8TAP_H            1, 2, 3, 4
     packuswb             m0, m1
-    mova         [dstq+dsq*0], xm0
+    movu         [dstq+dsq*0], xm0
     vextracti128 [dstq+dsq*1], m0, 1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
@@ -2306,12 +2234,9 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     jmp .h_start
 .h_w64:
     mov                  r6, -32*1
-    jmp .h_start
-.h_w128:
-    mov                  r6, -32*3
-.h_start:
     sub                srcq, r6
     sub                dstq, r6
+.h_start:
     mov                  r4, r6
 .h_loop:
     movu                 m0, [srcq+r6+8*0]
@@ -2319,7 +2244,7 @@ cglobal put_8tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ss3
     PUT_8TAP_H            0, 2, 3, 4
     PUT_8TAP_H            1, 2, 3, 4
     packuswb             m0, m1
-    mova          [dstq+r6], m0
+    movu          [dstq+r6], m0
     add                  r6, 32
     jle .h_loop
     add                srcq, ssq
@@ -2600,16 +2525,14 @@ DECLARE_REG_TMP 6, 7
 %endif
 
 %define PREP_8TAP_FN FN prep_8tap,
-PREP_8TAP_FN smooth,         SMOOTH,  SMOOTH,  prep_6tap_8bpc
-PREP_8TAP_FN smooth_regular, SMOOTH,  REGULAR, prep_6tap_8bpc
-PREP_8TAP_FN regular_smooth, REGULAR, SMOOTH,  prep_6tap_8bpc
-PREP_8TAP_FN regular,        REGULAR, REGULAR
+PREP_8TAP_FN smooth,  SMOOTH,  prep_6tap_8bpc
+PREP_8TAP_FN regular, REGULAR
 
 cglobal prep_6tap_8bpc, 3, 8, 0, tmp, src, ss, w, h, mx, my, ns
     imul                mxd, mxm, 0x010101
     add                 mxd, t0d ; 6tap_h, mx, 4tap_h
     imul                myd, mym, 0x010101
-    add                 myd, t1d ; 6tap_v, my, 4tap_v
+    add                 myd, t0d ; 6tap_v, my, 4tap_v
     lea                  r7, [prep%+SUFFIX]
     mov                  wd, wm
     movifnidn            hd, hm
@@ -3056,17 +2979,13 @@ cglobal prep_6tap_8bpc, 3, 8, 0, tmp, src, ss, w, h, mx, my, ns
     jg .hv_w8_loop0
     RET
 
-PREP_8TAP_FN smooth_sharp,   SMOOTH,  SHARP,   prep_8tap_8bpc
-PREP_8TAP_FN sharp_smooth,   SHARP,   SMOOTH,  prep_8tap_8bpc
-PREP_8TAP_FN regular_sharp,  REGULAR, SHARP,   prep_8tap_8bpc
-PREP_8TAP_FN sharp_regular,  SHARP,   REGULAR, prep_8tap_8bpc
-PREP_8TAP_FN sharp,          SHARP,   SHARP
+PREP_8TAP_FN sharp, SHARP
 
 cglobal prep_8tap_8bpc, 3, 8, 0, tmp, src, stride, w, h, mx, my, stride3
     imul                mxd, mxm, 0x010101
     add                 mxd, t0d ; 8tap_h, mx, 4tap_h
     imul                myd, mym, 0x010101
-    add                 myd, t1d ; 8tap_v, my, 4tap_v
+    add                 myd, t0d ; 8tap_v, my, 4tap_v
     lea                  r7, [prep%+SUFFIX]
     mov                  wd, wm
     movifnidn            hd, hm
@@ -4917,15 +4836,9 @@ DECLARE_REG_TMP 6, 8
 %define PREP_8TAP_SCALED_FN FN prep_8tap_scaled,
 
 BILIN_SCALED_FN put
-PUT_8TAP_SCALED_FN sharp,          SHARP,   SHARP,   put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN sharp_smooth,   SHARP,   SMOOTH,  put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN smooth_sharp,   SMOOTH,  SHARP,   put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN smooth,         SMOOTH,  SMOOTH,  put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN sharp_regular,  SHARP,   REGULAR, put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN regular_sharp,  REGULAR, SHARP,   put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN smooth_regular, SMOOTH,  REGULAR, put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN regular_smooth, REGULAR, SMOOTH,  put_8tap_scaled_8bpc
-PUT_8TAP_SCALED_FN regular,        REGULAR, REGULAR
+PUT_8TAP_SCALED_FN sharp,   SHARP,   put_8tap_scaled_8bpc
+PUT_8TAP_SCALED_FN smooth,  SMOOTH,  put_8tap_scaled_8bpc
+PUT_8TAP_SCALED_FN regular, REGULAR
 MC_8TAP_SCALED put
 
 %if WIN64
@@ -4935,15 +4848,9 @@ DECLARE_REG_TMP 6, 7
 %endif
 
 BILIN_SCALED_FN prep
-PREP_8TAP_SCALED_FN sharp,          SHARP,   SHARP,   prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN sharp_smooth,   SHARP,   SMOOTH,  prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN smooth_sharp,   SMOOTH,  SHARP,   prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN smooth,         SMOOTH,  SMOOTH,  prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN sharp_regular,  SHARP,   REGULAR, prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN regular_sharp,  REGULAR, SHARP,   prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN smooth_regular, SMOOTH,  REGULAR, prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN regular_smooth, REGULAR, SMOOTH,  prep_8tap_scaled_8bpc
-PREP_8TAP_SCALED_FN regular,        REGULAR, REGULAR
+PREP_8TAP_SCALED_FN sharp,   SHARP,   prep_8tap_scaled_8bpc
+PREP_8TAP_SCALED_FN smooth,  SMOOTH,  prep_8tap_scaled_8bpc
+PREP_8TAP_SCALED_FN regular, REGULAR
 MC_8TAP_SCALED prep
 
 %macro WARP_V 5 ; dst, 02, 46, 13, 57
