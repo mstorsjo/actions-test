@@ -185,7 +185,7 @@ mv scale_mv(const mv in, const int sf) {
 }
 
 struct refmvs_state {
-    refmvs_candidate dr[4], *mv;
+    refmvs_candidate dr[6], *mv;
     refmvs_sngl_mv_block sngl[4];
     int drvd_cnt, sngl_cnt, *cnt;
     int drvd_iter_cntr, sngl_iter_cntr, iter_cntr;
@@ -391,20 +391,20 @@ static void add_spatial_candidate(const int y_off, const int x_off,
     }
 }
 
-static void add_derived(DB_ARGS(const refmvs_frame *const rf)
+static void add_derived(DB_ARGS(const refmvs_frame *const rf,
+                                const char *const tag)
                         struct refmvs_state *const st,
                         const int lim, const int comp)
 {
-    if (*st->cnt >= lim) return;
     for (int n = 0; n < st->drvd_cnt; n++)
         if (comp) {
             add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
-                                       0, 0, "derived")
+                                       st->dr[n].y_off, st->dr[n].x_off, tag)
                                st->mv, st->cnt, lim, 0, 8,
                                st->dr[n].mv, &st->iter_cntr, 16);
         } else {
             add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
-                                       0, 0, "derived", n)
+                                       st->dr[n].y_off, st->dr[n].x_off, tag, n)
                                st->mv, st->cnt, lim, 0, st->dr[n].mv.mv[0],
                                0, 0, &st->iter_cntr, 16);
         }
@@ -817,7 +817,8 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                        *cnt, warp ? cnt[1] : 0);
     const int lim = 1 + (ref.ref[0] ? rf->frm_hdr->max_drl_bits :
                                       rf->frm_hdr->max_bvp_drl_bits);
-    if (ref.ref[1] != -1) add_derived(DB_ARGS(rf) &st, lim, 1);
+    if (ref.ref[1] != -1 && *cnt < lim)
+        add_derived(DB_ARGS(rf, "derived") &st, lim, 1);
     if (rf->seq_hdr->refmv_bank) {
         const int c = ref.ref[1] == -1 ? (ref.ref[0] - 1U <= 5U ? ref.ref[0] - 1 : 8) :
                       (ref.ref[0] == 1 && ref.ref[1] <= 2) ? 5 + ref.ref[1] : 8;
@@ -871,7 +872,8 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         end: {}
         }
     }
-    if (ref.ref[1] == -1) add_derived(DB_ARGS(rf) &st, lim, 0);
+    if (ref.ref[1] == -1 && *cnt < lim)
+        add_derived(DB_ARGS(rf, "derived") &st, lim, 0);
 
     DEBUG_REFMV_printf("GMVs [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
     if (*cnt < 6 && ref.ref[0] > 0) {
@@ -902,6 +904,34 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                            last, gmv[0].y, gmv[0].x, gmv[1].y, gmv[1].x, 0);
         *cnt = last + 1;
     end_gmv: {}
+    }
+
+    if (imin(bw4, bh4) > 8) {
+        DEBUG_REFMV_printf("Ext MVP candidates [%d|%d]\n",
+                           *cnt, warp ? cnt[1] : 0);
+        if (*cnt >= 2 && *cnt < 6) {
+            static const struct { uint8_t y, x; } ext_mvp[] = {
+                { .y = 0, .x = 1 }, { .y = 1, .x = 0 },
+                { .y = 0, .x = 2 }, { .y = 2, .x = 0 },
+                { .y = 1, .x = 2 }, { .y = 2, .x = 1 },
+            };
+            for (int c = 0, n; c < 2; c++) {
+                for (n = c * 2; n < c * 4 + 2; n++) {
+                    const int yidx = ext_mvp[n].y, xidx = ext_mvp[n].x;
+                    st.dr[n].mv.mv[0].y = mvstack[yidx].mv.mv[0].y;
+                    st.dr[n].mv.mv[0].x = mvstack[xidx].mv.mv[0].x;
+                    if (ref.ref[1] > 0) {
+                        st.dr[n].mv.mv[1].y = mvstack[yidx].mv.mv[1].y;
+                        st.dr[n].mv.mv[1].x = mvstack[xidx].mv.mv[1].x;
+                    }
+                    RDB_ONLY(st.dr[n].x_off = xidx;
+                             st.dr[n].y_off = yidx);
+                }
+                st.drvd_cnt = n;
+                if (*cnt == 2) break;
+            }
+            add_derived(DB_ARGS(rf, "insert_cand") &st, 6, ref.ref[1] > 0);
+        }
     }
 
     if (warp && cnt[1] < 4) {

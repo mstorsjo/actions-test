@@ -1,4 +1,4 @@
-From 24b0a79af0f9714b6c3e1a4e120a9daff7cc368e Mon Sep 17 00:00:00 2001
+From 2bfed568aec1d8fb70bf32b899b9e922db504e22 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -7,7 +7,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
 ---
  aom/debug.h                 |  16 +
  av1/common/av1_common_int.h |   2 +
- av1/common/mvref_common.c   | 558 ++++++++++++++++++++++++-
+ av1/common/mvref_common.c   | 593 ++++++++++++++++++++++++++-
  av1/decoder/decodeframe.c   | 282 +++++++++----
  av1/decoder/decodemv.c      | 791 +++++++++++++++++++++++++++++-------
  av1/decoder/decodemv.h      |  18 +-
@@ -17,7 +17,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  av1/decoder/decodetxb.h     |  14 +-
  av1/decoder/detokenize.c    |   8 +-
  av1/decoder/detokenize.h    |   3 +-
- 12 files changed, 1649 insertions(+), 289 deletions(-)
+ 12 files changed, 1682 insertions(+), 291 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -60,7 +60,7 @@ index bcc274e046..5a8313a386 100644
        const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
        const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av1/common/mvref_common.c b/av1/common/mvref_common.c
-index b50cd22ed5..728698a71e 100644
+index b50cd22ed5..d0b8e85244 100644
 --- a/av1/common/mvref_common.c
 +++ b/av1/common/mvref_common.c
 @@ -12,6 +12,8 @@
@@ -756,41 +756,84 @@ index b50cd22ed5..728698a71e 100644
    assert(valid_points <= 3);
    return valid_points;
  }
-@@ -2291,6 +2598,7 @@ static AOM_INLINE int generate_points_from_corners(
+@@ -2291,6 +2598,8 @@ static AOM_INLINE int generate_points_from_corners(
  #endif  // CONFIG_WRL_CORNER_MVS
  
  static int insert_mvp_candidate(
-+    DB_ARGS(const AV1_COMMON *cm, int mi_row, int mi_col, int cidx)
++    DB_ARGS(const AV1_COMMON *cm, int mi_row, int mi_col, int cidx,
++            const int yidx, const int xidx)
      MV_REFERENCE_FRAME rf[2], CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
      uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
      MV_COMP_DATA_TYPE this_mv_col, MV_COMP_DATA_TYPE this_mv_row,
-@@ -2322,6 +2630,12 @@ static int insert_mvp_candidate(
+@@ -2310,6 +2619,20 @@ static int insert_mvp_candidate(
+           (rf[1] == NONE_FRAME ||
+            (rf[1] > NONE_FRAME &&
+             ref_mv_stack[idx].comp_mv.as_int == ext_mv.comp_mv.as_int))) {
++          if (rf[1] > NONE_FRAME) {
++                DEBUG_REFMV_printf("insert_cand-c[%d]: increasing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                                   "w+=%d at offset y=%d,x=%d\n",
++                                   *drl_pr_count, idx,
++                                   ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                                   ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
++                                   0, yidx, xidx);
++          } else {
++              DEBUG_REFMV_printf("insert_cand[%d:%d]: increasing[%d] y=%d,x=%d,"
++                                 "w+=%d at offset y=%d,x=%d\n",
++                                 cidx, *drl_pr_count, idx,
++                                 ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                                 0, yidx, xidx);
++          }
+         break;
+       }
+     }
+@@ -2320,8 +2643,22 @@ static int insert_mvp_candidate(
+       ref_mv_stack[idx].row_offset = OFFSET_NONSPATIAL;
+       ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
-       ref_mv_weight[idx] = weight;
+-      ref_mv_weight[idx] = weight;
++      ref_mv_weight[idx] = DEBUG_BLOCK_INFO ? 0 : weight;
        ++(*refmv_count);
-+        DEBUG_REFMV_printf("insert_cand: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
-+                           "w=%d at mix_idx=%d\n",
-+                           idx,
-+                           ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
-+                           ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
-+                           weight, cidx);
++        if (rf[1] > NONE_FRAME) {
++            DEBUG_REFMV_printf("insert_cand-c[%d]: adding[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                               "w=%d at offset y=%d,x=%d\n",
++                               *drl_pr_count, idx,
++                               ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                               ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
++                               0, yidx, xidx);
++        } else {
++            DEBUG_REFMV_printf("insert_cand[%d:%d]: adding[%d] y=%d,x=%d,"
++                               "w=%d,y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                               cidx, *drl_pr_count, idx,
++                               ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                               0, yidx, xidx);
++        }
        return 1;
      }
      return 0;
-@@ -2333,6 +2647,12 @@ static int insert_mvp_candidate(
+@@ -2332,7 +2669,21 @@ static int insert_mvp_candidate(
+       ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
-       ref_mv_weight[*refmv_count] = weight;
-+        DEBUG_REFMV_printf("insert_cand: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
-+                           "w=%d at mix_idx=%d\n",
-+                           *refmv_count,
-+                           ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
-+                           ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
-+                           weight, cidx);
+-      ref_mv_weight[*refmv_count] = weight;
++      ref_mv_weight[*refmv_count] = DEBUG_BLOCK_INFO ? 0 : weight;
++        if (rf[1] > NONE_FRAME) {
++            DEBUG_REFMV_printf("insert_cand-c[%d]: tailing[%d] y=%d,x=%d,y2=%d,x2=%d,"
++                               "w=%d at offset y=%d,x=%d\n",
++                               *drl_pr_count, *refmv_count,
++                               ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                               ext_mv.comp_mv.as_mv.row, ext_mv.comp_mv.as_mv.col,
++                               0, yidx, xidx);
++        } else {
++            DEBUG_REFMV_printf("insert_cand[%d:%d]: tailing[%d] y=%d,x=%d,"
++                               "w=%d,y_off=0,x_off=0 at offset y=%d,x=%d\n",
++                               cidx, *drl_pr_count, *refmv_count,
++                               ext_mv.this_mv.as_mv.row, ext_mv.this_mv.as_mv.col,
++                               0, yidx, xidx);
++        }
        ++(*refmv_count);
        return 1;
      }
-@@ -2342,8 +2662,8 @@ static int insert_mvp_candidate(
+@@ -2342,8 +2693,8 @@ static int insert_mvp_candidate(
  }
  
  static AOM_INLINE void setup_ref_mv_list(
@@ -801,7 +844,7 @@ index b50cd22ed5..728698a71e 100644
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
      uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
      int_mv mv_ref_list[MAX_MV_REF_CANDIDATES], int_mv *gm_mv_candidates,
-@@ -2360,6 +2680,21 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2360,6 +2711,21 @@ static AOM_INLINE void setup_ref_mv_list(
    av1_set_ref_frame(rf, ref_frame);
    *refmv_count = 0;
  
@@ -823,7 +866,7 @@ index b50cd22ed5..728698a71e 100644
    int drl_pr_count = 0;
    int drl_dr_pr_count = 0;
    int drl_dr_single_pr_count = 0;
-@@ -2387,9 +2722,14 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2387,9 +2753,14 @@ static AOM_INLINE void setup_ref_mv_list(
    MVP_UNIT_STATUS row_smvp_state[4] = { 0 };
    get_row_smvp_states(cm, xd, row_smvp_state);
  
@@ -838,7 +881,7 @@ index b50cd22ed5..728698a71e 100644
  #if CONFIG_WRL_CORNER_MVS
  // 0: top_left, top_right, bottom_left
  // 1: top, top_right_next, bottom_left
-@@ -2488,10 +2828,14 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2488,10 +2859,14 @@ static AOM_INLINE void setup_ref_mv_list(
  
    const int is_tmvp_high_priority = assign_tmvp_high_priority(cm, rf);
    if (is_tmvp_high_priority) {
@@ -853,7 +896,7 @@ index b50cd22ed5..728698a71e 100644
    if (xd->left_available) {
      scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
                    ref_mv_stack, ref_mv_weight, &col_match_count, &newmv_count,
-@@ -2555,10 +2899,14 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2555,10 +2930,14 @@ static AOM_INLINE void setup_ref_mv_list(
    }
  
    if (!is_tmvp_high_priority) {
@@ -868,7 +911,7 @@ index b50cd22ed5..728698a71e 100644
    if (row_smvp_state[3].is_available) {
      uint8_t dummy_ref_match_count = 0;
      uint8_t dummy_new_mv_count = 0;
-@@ -2575,6 +2923,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2575,6 +2954,8 @@ static AOM_INLINE void setup_ref_mv_list(
    const uint8_t nearest_refmv_count = *refmv_count;
  
    if (xd->left_available) {
@@ -877,7 +920,7 @@ index b50cd22ed5..728698a71e 100644
      for (int idx = 2; idx <= MVREF_COLS; ++idx) {
        const int col_offset = -(idx << 1) + 1 + col_adj;
        const MVP_UNIT_STATUS col_units_status[SMVP_COL_SEARCH_COUNT] = {
-@@ -2628,6 +2978,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2628,6 +3009,8 @@ static AOM_INLINE void setup_ref_mv_list(
    }
  
    const int is_compound = is_inter_ref_frame(rf[1]);
@@ -886,7 +929,7 @@ index b50cd22ed5..728698a71e 100644
    if (is_compound) {
      add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
                                  ref_mv_weight, derived_mv_stack,
-@@ -2653,6 +3005,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2653,6 +3036,8 @@ static AOM_INLINE void setup_ref_mv_list(
      }
    }
  
@@ -895,7 +938,7 @@ index b50cd22ed5..728698a71e 100644
    if (rf[1] == NONE_FRAME && mv_ref_list != NULL) {
      for (int idx = *refmv_count; idx < MAX_MV_REF_CANDIDATES; ++idx) {
        mv_ref_list[idx].as_int = gm_mv_candidates[0].as_int;
-@@ -2676,6 +3030,13 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2676,6 +3061,13 @@ static AOM_INLINE void setup_ref_mv_list(
              (rf[1] == NONE_FRAME ||
               (rf[1] > NONE_FRAME && ref_mv_stack[idx].comp_mv.as_int ==
                                          gm_mv_candidates[1].as_int))) {
@@ -909,7 +952,7 @@ index b50cd22ed5..728698a71e 100644
            break;
          }
        }
-@@ -2688,6 +3049,13 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2688,6 +3080,13 @@ static AOM_INLINE void setup_ref_mv_list(
          ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
          ref_mv_weight[idx] = REF_CAT_LEVEL;
@@ -923,7 +966,7 @@ index b50cd22ed5..728698a71e 100644
          ++(*refmv_count);
        }
      } else {
-@@ -2698,6 +3066,13 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2698,6 +3097,13 @@ static AOM_INLINE void setup_ref_mv_list(
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = REF_CAT_LEVEL;
@@ -937,7 +980,7 @@ index b50cd22ed5..728698a71e 100644
          ++(*refmv_count);
        }
      }
-@@ -2710,6 +3085,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2710,6 +3116,8 @@ static AOM_INLINE void setup_ref_mv_list(
        max_ext_stack_size = 6;
  
      if (max_ext_stack_size) {
@@ -946,55 +989,55 @@ index b50cd22ed5..728698a71e 100644
        MV_COMP_DATA_TYPE row = 0;
        MV_COMP_DATA_TYPE col = 0;
        MV_COMP_DATA_TYPE comp_mv_row = 0;
-@@ -2724,6 +3101,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2724,6 +3132,7 @@ static AOM_INLINE void setup_ref_mv_list(
          comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
          curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
          added_ext_cnt += insert_mvp_candidate(
-+            DB_ARGS(cm, mi_row, mi_col, 0)
++            DB_ARGS(cm, mi_row, mi_col, 0, 0, 1)
              rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
              curr_mv_weight, refmv_count, &drl_pr_count);
          if (*refmv_count < MAX_REF_MV_STACK_SIZE &&
-@@ -2735,6 +3113,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2735,6 +3144,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 1)
++              DB_ARGS(cm, mi_row, mi_col, 1, 1, 0)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2748,6 +3127,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2748,6 +3158,7 @@ static AOM_INLINE void setup_ref_mv_list(
          comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
          curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
          added_ext_cnt += insert_mvp_candidate(
-+            DB_ARGS(cm, mi_row, mi_col, 2)
++            DB_ARGS(cm, mi_row, mi_col, 2, 0, 2)
              rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
              curr_mv_weight, refmv_count, &drl_pr_count);
  
-@@ -2760,6 +3140,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2760,6 +3171,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 3)
++              DB_ARGS(cm, mi_row, mi_col, 3, 2, 0)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2773,6 +3154,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2773,6 +3185,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 4)
++              DB_ARGS(cm, mi_row, mi_col, 4, 1, 2)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2785,6 +3167,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2785,6 +3198,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 5)
++              DB_ARGS(cm, mi_row, mi_col, 5, 2, 1)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
            (void)added_ext_cnt;
-@@ -2795,6 +3178,9 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2795,6 +3209,9 @@ static AOM_INLINE void setup_ref_mv_list(
  
    if (warp_param_stack && valid_num_warp_candidates &&
        *valid_num_warp_candidates < max_num_of_warp_candidates) {
@@ -1004,7 +1047,7 @@ index b50cd22ed5..728698a71e 100644
      // Insert warp parameters from the bank
  #if WARP_CU_BANK
      const WARP_PARAM_BANK *warp_param_bank = &xd->warp_param_bank;
-@@ -2821,6 +3207,9 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2821,6 +3238,9 @@ static AOM_INLINE void setup_ref_mv_list(
        }
      }
  
@@ -1014,7 +1057,7 @@ index b50cd22ed5..728698a71e 100644
      // Insert Global motion of the current
      if (*valid_num_warp_candidates < max_num_of_warp_candidates) {
        if (!xd->global_motion[ref_frame].invalid &&
-@@ -2834,6 +3223,9 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2834,6 +3254,9 @@ static AOM_INLINE void setup_ref_mv_list(
        }
      }
  
@@ -1024,7 +1067,7 @@ index b50cd22ed5..728698a71e 100644
      // Filled with default values( currently all params are zeros)
      int max_num_of_default_allowed = AOMMIN(2, max_num_of_warp_candidates);
      int current_number_of_defaults = 0;
-@@ -2852,6 +3244,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2852,6 +3275,8 @@ static AOM_INLINE void setup_ref_mv_list(
    // If there are open slots in reference BV candidate list
    // fetch reference BVs from the default BVPs
    if (xd->mi[0]->use_intrabc[xd->tree_type == CHROMA_PART]) {
@@ -1033,7 +1076,7 @@ index b50cd22ed5..728698a71e 100644
      const int w = xd->width * MI_SIZE;
      const int h = xd->height * MI_SIZE;
      const int sb_width = block_size_wide[cm->sb_size];
-@@ -2874,6 +3268,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2874,6 +3299,8 @@ static AOM_INLINE void setup_ref_mv_list(
        add_to_ref_bv_list(tmp_mv, ref_mv_stack, ref_mv_weight, refmv_count);
      }
    }
@@ -1042,7 +1085,7 @@ index b50cd22ed5..728698a71e 100644
  }
  
  void get_skip_mode_ref_offsets(const AV1_COMMON *cm, int ref_order_hint[2]) {
-@@ -3001,7 +3397,7 @@ void av1_find_mv_refs(
+@@ -3001,7 +3428,7 @@ void av1_find_mv_refs(
          (SKIP_MODE_MVP_LIST *)&(xd->skip_mvp_candidate_list);
      av1_initialize_ref_mv_stack(skip_list->ref_mv_stack,
                                  USABLE_REF_MV_STACK_SIZE);
@@ -1051,7 +1094,7 @@ index b50cd22ed5..728698a71e 100644
                        skip_list->ref_mv_stack, skip_list->weight,
                        mv_ref_list ? mv_ref_list[ref_frame] : NULL, gm_mv,
                        mi_row, mi_col, NULL, 0, NULL);
-@@ -3023,14 +3419,14 @@ void av1_find_mv_refs(
+@@ -3023,14 +3450,14 @@ void av1_find_mv_refs(
      } else {
        av1_initialize_ref_mv_stack(ref_mv_stack[rf[0]], MAX_REF_MV_STACK_SIZE);
      }
@@ -1068,7 +1111,7 @@ index b50cd22ed5..728698a71e 100644
        assert(rf[0] == mi->ref_frame[0]);
        assert(rf[1] == mi->ref_frame[1]);
        const BLOCK_SIZE bsize = mi->sb_type[PLANE_TYPE_Y];
-@@ -3040,7 +3436,7 @@ void av1_find_mv_refs(
+@@ -3040,7 +3467,7 @@ void av1_find_mv_refs(
        gm_mv[1].as_int = 0;
  
        av1_initialize_ref_mv_stack(ref_mv_stack[rf[1]], MAX_REF_MV_STACK_SIZE);
@@ -1077,7 +1120,7 @@ index b50cd22ed5..728698a71e 100644
                          ref_mv_stack[rf[1]], ref_mv_weight[rf[1]],
                          mv_ref_list ? mv_ref_list[rf[1]] : NULL, gm_mv, mi_row,
                          mi_col, derive_wrl ? warp_param_stack[rf[1]] : NULL,
-@@ -4690,6 +5086,9 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
+@@ -4690,6 +5117,9 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
    if (xd->tree_type == CHROMA_PART) return;
    const int mi_sb_size = cm->mib_size;
    const int mi_sb_size_log2 = cm->mib_size_log2;
@@ -1087,7 +1130,7 @@ index b50cd22ed5..728698a71e 100644
    const int mi_row_in_sb = xd->mi_row % mi_sb_size;
    const int mi_col_in_sb = xd->mi_col % mi_sb_size;
    const int rmb_unit_mi_size_log2 = mi_sb_size_log2 - SB_TO_RMB_UNITS_LOG2;
-@@ -4704,23 +5103,79 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
+@@ -4704,23 +5134,79 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
      xd->ref_mv_bank.remain_hits =
          AOMMAX(rmb_units_count, BANK_1ST_UNIT_UPDATE_COUNT);
      xd->ref_mv_bank.rmb_unit_hits = 0;
@@ -1167,7 +1210,7 @@ index b50cd22ed5..728698a71e 100644
        return;
      }
  
-@@ -4728,7 +5183,13 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+@@ -4728,7 +5214,13 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
      ref_mv_bank->rmb_unit_hits++;
    } else {
      // If max hits have been reached return.
@@ -1182,7 +1225,7 @@ index b50cd22ed5..728698a71e 100644
    }
  
    // else increment count and proceed with updating.
-@@ -4768,11 +5229,18 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+@@ -4768,11 +5260,18 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
          rmb_ref_frame[idx0] = rmb_ref_frame[idx1];
        }
      }
@@ -1201,7 +1244,7 @@ index b50cd22ed5..728698a71e 100644
      return;
    }
  
-@@ -4785,11 +5253,16 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+@@ -4785,11 +5284,16 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
      rmb_ref_frame[idx] = ref_frame;
    }
    queue[idx].cwp_idx = mbmi->cwp_idx;
@@ -1218,7 +1261,7 @@ index b50cd22ed5..728698a71e 100644
  }
  
  void av1_update_ref_mv_bank(const AV1_COMMON *const cm, MACROBLOCKD *const xd,
-@@ -4852,12 +5325,40 @@ void span_submv(const AV1_COMMON *cm, SUBMB_INFO **submi, int mi_row,
+@@ -4852,12 +5356,40 @@ void span_submv(const AV1_COMMON *cm, SUBMB_INFO **submi, int mi_row,
    }
  }
  
@@ -1260,7 +1303,7 @@ index b50cd22ed5..728698a71e 100644
  #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
                                            int cand_from_sb_above,
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
-@@ -4877,7 +5378,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4877,7 +5409,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
        int found = -1;
  
        // If max hits have been reached return.
@@ -1273,7 +1316,7 @@ index b50cd22ed5..728698a71e 100644
        // else increment count and proceed with updating.
        ++warp_param_bank->wpb_sb_hits;
  
-@@ -4914,6 +5419,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4914,6 +5450,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
          }
          const int tail = (start_idx + count - 1) % WARP_PARAM_BANK_SIZE;
          queue[tail] = cand;
@@ -1290,7 +1333,7 @@ index b50cd22ed5..728698a71e 100644
          return;
        }
  
-@@ -4933,6 +5448,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4933,6 +5479,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
        } else {
          ++warp_param_bank->wpb_start_idx[ref_frame];
        }
@@ -1307,7 +1350,7 @@ index b50cd22ed5..728698a71e 100644
      }
    }
  }
-@@ -4944,7 +5469,8 @@ void av1_update_warp_param_bank(const AV1_COMMON *const cm,
+@@ -4944,7 +5500,8 @@ void av1_update_warp_param_bank(const AV1_COMMON *const cm,
                                  const MB_MODE_INFO *const mbmi) {
    (void)cm;
    if (is_warp_mode(mbmi->motion_mode)) {
