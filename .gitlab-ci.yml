@@ -72,7 +72,7 @@ build-debian:
           sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
           sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/debug.h
           git diff
-        - meson setup build -Dtrim_dsp=false && ninja -C build
+        - meson setup build --buildtype debugoptimized -Dtrim_dsp=false && ninja -C build
         - meson test -v -C build
         - |
           for sdp in 0 1; do
