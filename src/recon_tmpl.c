@@ -1641,6 +1641,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
     const ptrdiff_t opfl_stride = bw4 >> (bs == 2);
 
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4);
+    const int oh4 = refine ? sh4 : 2, ow4 = refine ? sw4 : 2;
     const int refareamask = ~(15 >> !refine);
     for (int y = 0; y < h4; y += sh4) {
         int left[2];
@@ -1694,9 +1695,9 @@ static int opfl_pred(Dav1dTaskContext *const t,
                         mc_opfl(t, &tmp[i][(y * 4 + by) * bw4 * 4 + bx], bw4 * 4, bs, bs,
                                 t->bx + (bx >> 2), t->by + y + (by >> 2), mv[i], refp[i],
                                 iclip(left[i] + bxm, 0, w - 1),
-                                iclip(left[i] + bxm + 7 + sw4 * 4, 1, w),
+                                iclip(left[i] + bxm + 7 + ow4 * 4, 1, w),
                                 iclip(top[i] + bym, 0, h - 1),
-                                iclip(top[i] + bym + 7 + sh4 * 4, 1, h));
+                                iclip(top[i] + bym + 7 + oh4 * 4, 1, h));
                     if (bs > 1) {
                         dd->d[0].x = ((dd->d[0].x + (dd->d[0].x > 0)) >> 1) + dx * 8;
                         dd->d[0].y = ((dd->d[0].y + (dd->d[0].y > 0)) >> 1) + dy * 8;
