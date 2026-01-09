@@ -427,11 +427,14 @@ static NOINLINE int parse_seq_hdr(Dav1dSequenceHeader *const hdr,
         hdr->motion_modes = 1 << MM_TRANSLATION;
     } else {
         hdr->motion_modes = (1 << MM_TRANSLATION) + (dav1d_get_bits(gb, 4) << 1);
-        hdr->frame_motion_modes_present = dav1d_get_bit(gb);
-        hdr->six_param_warp_delta = dav1d_get_bit(gb);
+        if (hdr->motion_modes & ~(1 << MM_TRANSLATION))
+            hdr->frame_motion_modes_present = dav1d_get_bit(gb);
+        if (hdr->motion_modes & (1 << MM_WARP_DELTA))
+            hdr->six_param_warp_delta = dav1d_get_bit(gb);
         hdr->masked_compound = dav1d_get_bit(gb);
         hdr->ref_frame_mvs = dav1d_get_bit(gb);
-        hdr->reduced_ref_frame_mvs_mode = dav1d_get_bit(gb);
+        if (hdr->ref_frame_mvs)
+            hdr->reduced_ref_frame_mvs_mode = dav1d_get_bit(gb);
         hdr->order_hint_n_bits = dav1d_get_bits(gb, 3) + 1;
 #if DEBUG_SEQ_HDR
         printf("SEQHDR: post-interframetools[mm:%x,fmm:%d,6pwarp:%d,"
