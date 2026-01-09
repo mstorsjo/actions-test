@@ -575,7 +575,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 tl = bx4 & (rf->sbsz - 2) ? &rt->ra[(bx4 >> 1) - 1] : &rt->ra_tl;
             if (bw4 > 2) lmt = &rt->ra[bx4 >> 1];
             if (bw4 == w4) rmt = &rt->ra[(bx4 >> 1) + (abw4 >> 1) - 1];
-            if (bx4 - x_off + abw4 < rt->tile_col.end)
+            if (bx4 - x_off + abw4 < rt->tile_col.end && bw4 <= 16)
                     tr = &rt->ra[(bx4 >> 1) + (abw4 >> 1)];
         } else {
             x_off = 0;
@@ -583,7 +583,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             if (have_left) tl = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 - 1) & 127)];
             if (bw4 > 1) lmt = &rt->r[((by4 - 1) & 63) * 128 + (bx4 & 127)];
             if (bw4 == w4) rmt = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4 - 1) & 127)];
-            if ((bx4 + bw4) & (rf->sbsz - 1) && bx4 + bw4 < rt->tile_col.end)
+            if ((bx4 + bw4) & (rf->sbsz - 1) && bx4 + bw4 < rt->tile_col.end && bw4 <= 16)
                 tr = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4) & 127)];
         }
     }
