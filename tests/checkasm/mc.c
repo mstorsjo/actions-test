@@ -443,7 +443,6 @@ static void check_blend(Dav1dMCDSPContext *const c) {
     for (int w = 4; w <= 64; w <<= 1) {
         if (check_func(c->blend, "blend_w%d_%dbpc", w, BITDEPTH)) {
             pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
-            const int max_x = w == 64 ? w : w + 4;
             for (int h = 4; h <= 64; h <<= 1) {
 #if BITDEPTH == 16
                 const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
@@ -459,9 +458,9 @@ static void check_blend(Dav1dMCDSPContext *const c) {
                 CLEAR_PIXEL_RECT(a_dst);
 
                 for (int y = 0; y < h; y++)
-                    for (int x = 0; x < max_x; x++)
+                    for (int x = 0; x < w; x++)
                         c_dst[y*PXSTRIDE(c_dst_stride) + x] =
-                        a_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
+                        u_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
 
                 call_ref(c_dst, c_dst_stride, tmp, w, h, mask);
                 call_new(u_dst, a_dst_stride, tmp, w, h, mask);
