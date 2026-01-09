@@ -564,6 +564,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     tmpl.ref.ref[1] = -1;
     tmpl.bs = bs;
     tmpl.mv.mv[0] = b->mv[0];
+    tmpl.mv.mv[1].n = INVALID_MV;
     tmpl.bx4 = t->bx;
     tmpl.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
@@ -596,6 +597,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
         .ref.ref = { 0, -1 },
         .mv.mv[0] = b->mv[0],
+        .mv.mv[1].n = INVALID_MV,
         .bs = bs,
         .mf = 0,
         .bx4 = t->bx,
@@ -654,6 +656,7 @@ static inline void splat_intraref(const Dav1dContext *const c,
     refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
         .ref.ref = { -1, -1 },
         .mv.mv[0].n = INVALID_MV,
+        .mv.mv[1].n = INVALID_MV,
         .bs = bs,
         .mf = 0,
         .bx4 = t->bx,
