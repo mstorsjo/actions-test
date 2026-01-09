@@ -1363,7 +1363,7 @@ static void check_traj_intersect(const refmvs_frame *const rf,
     const unsigned sbsz8 = rf->sbsz >> 1;
     const int mfmv_sbsz8 = rf->mfmv_sbsz8;
     const int mfmv_edge = rf->mfmv_edge;
-    const int shift = rf->frm_hdr->tmvp_sample_step - 1, mask = ~shift;
+    const int shift = rf->mfmv_k_shift, mask = ~(rf->frm_hdr->tmvp_sample_step - 1);
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t pos = (y & (sbsz8 - 1)) * stride + x;
     for (int k = 0; k < 3; k++) {
@@ -1482,7 +1482,7 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     }
 
     rp_proj = &rf->rp_proj[offset];
-    const int shift = rf->frm_hdr->tmvp_sample_step - 1, mask = ~shift;
+    const int shift = rf->mfmv_k_shift, mask = ~(rf->frm_hdr->tmvp_sample_step - 1);
     for (int n = 0; n < rf->n_mfmvs; n++) {
         const int ref2cur = rf->mfmv_ref2cur[n];
         if (ref2cur == INVALID_REF2CUR) continue;
@@ -1597,7 +1597,8 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
                         const refmvs_sngl_mv_block *rp_proj,
                         const int32_t tip_sf[2], const uint8_t tip_ref[2],
                         const int col_end8, const int row_end8,
-                        const int col_start8, const int row_start8)
+                        const int col_start8, const int row_start8,
+                        const uint64_t flipmask)
 {
     for (int y = row_start8; y < row_end8; y++) {
         const refmvs_block *const b = &rr[((y & 31) * 2 + 1) * 128];
@@ -1636,9 +1637,14 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
                         rp[x].mv.n = quantize_mv(cand_mv[0]).n * 0x10001U;
                         rp[x].ref.pair = cand_b->ref.ref[0] * 0x101U;
                     } else {
-                        rp[x].mv.mv[0] = quantize_mv(cand_mv[0]);
-                        rp[x].mv.mv[1] = quantize_mv(cand_mv[1]);
-                        rp[x].ref.pair = cand_b->ref.pair;
+                        const int r0 = cand_b->ref.ref[0] - 1;
+                        const int r1 = cand_b->ref.ref[1] - 1;
+                        const int ridx = r0 * 8 + r1;
+                        const int f = !!(flipmask & (1ULL << ridx));
+                        rp[x].mv.mv[0] = quantize_mv(cand_mv[ f]);
+                        rp[x].mv.mv[1] = quantize_mv(cand_mv[!f]);
+                        rp[x].ref.ref[0] = cand_b->ref.ref[ f];
+                        rp[x].ref.ref[1] = cand_b->ref.ref[!f];
                     }
                 }
             }
@@ -1671,7 +1677,8 @@ void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *const dsp,
     if (rp)
         dsp->save_tmvs(rp, stride, rt->r, rt->rp_proj,
                        rf->tip_sf, rf->frm_hdr->tip.refs,
-                       col_end8, row_end8, col_start8, row_start8);
+                       col_end8, row_end8, col_start8, row_start8,
+                       rf->ref_flip);
 
     // keep a backup of top (at 8x8 resolution) for next sbrow
     const refmvs_block *const b = &rt->r[(((row_end8 - 1) & 31) * 2 + 1) * 128];
@@ -1726,7 +1733,9 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
     const int n_blocks = rp_stride * n_tile_rows;
 
     rf->sbsz = 16 << frm_hdr->sb128;
-    rf->mfmv_sbsz8 = 8 << (frm_hdr->sb128 && frm_hdr->tmvp_sample_step > 1);
+    const int mfmv_sb128 = frm_hdr->sb128 && frm_hdr->tmvp_sample_step > 1;
+    rf->mfmv_k_shift = 3 + mfmv_sb128;
+    rf->mfmv_sbsz8 = 8 << mfmv_sb128;
     rf->mfmv_edge = rf->mfmv_sbsz8 >> (frm_hdr->tmvp_sample_step == 1);
     rf->seq_hdr = seq_hdr;
     rf->frm_hdr = frm_hdr;
@@ -1789,6 +1798,17 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
             refref2curref_idx[i][n] = m == frm_hdr->n_ref_frames ? -1 : m;
         }
     }
+    uint64_t flipmask = 0;
+    for (int i = 0; i < frm_hdr->n_ref_frames; i++) {
+        for (int n = 0; n < frm_hdr->n_ref_frames; n++) {
+            const int flip = rf->ref_sign[i] == rf->ref_sign[n] ?
+                             get_poc_diff(seq_hdr->order_hint_n_bits,
+                                          ref_poc[i], ref_poc[n]) < 0 :
+                             rf->ref_sign[n];
+            flipmask |= ((uint64_t) flip) << (i * 8 + n);
+        }
+    }
+    rf->ref_flip = flipmask;
 
     // tip setup
     if (rf->frm_hdr->tip.frame_mode) {

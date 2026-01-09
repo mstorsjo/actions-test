@@ -102,12 +102,13 @@ typedef struct refmvs_frame {
     const Dav1dFrameHeader *frm_hdr;
     int iw4, ih4, iw8, ih8;
     int sbsz /* in 4px units */;
-    int mfmv_sbsz8, mfmv_edge;
+    int mfmv_sbsz8, mfmv_edge, mfmv_k_shift;
     int use_ref_frame_mvs;
     int32_t tip_sf[2];
     int8_t tip_delta;
     uint8_t ref_sign[7];
     int8_t pocdiff[7];
+    uint64_t ref_flip;
     uint8_t abspocdiff[7];
     struct MfmvRef {
         uint8_t ref;
@@ -168,7 +169,8 @@ typedef struct refmvs_candidate {
 void (name)(refmvs_temporal_block *rp, const ptrdiff_t stride, \
             const refmvs_block *rr, const refmvs_sngl_mv_block *rp_proj, \
             const int32_t tip_sf[2], const uint8_t tip_ref[2], \
-            int col_end8, int row_end8, int col_start8, int row_start8)
+            int col_end8, int row_end8, int col_start8, int row_start8, \
+            uint64_t flipmask)
 typedef decl_save_tmvs_fn(*save_tmvs_fn);
 
 #define decl_splat_mv_fn(name) \
