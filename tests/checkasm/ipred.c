@@ -152,8 +152,8 @@ static void check_cfl_ac(Dav1dIntraPredDSPContext *const c) {
     ALIGN_STK_64(int16_t, a_dst, 32 * 32,);
     ALIGN_STK_64(pixel, luma, 32 * 32,);
 
-    declare_func(void, int16_t *ac, const pixel *y, ptrdiff_t stride,
-                 int w_pad, int h_pad, int cw, int ch);
+    declare_func(void, int16_t *ac, int dc, const pixel *y, ptrdiff_t stride,
+                 int w_pad, int h_pad, int cw, int ch, int filter_type);
 
     for (int layout = 1; layout <= DAV1D_PIXEL_LAYOUT_I444; layout++) {
         const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
@@ -182,15 +182,18 @@ static void check_cfl_ac(Dav1dIntraPredDSPContext *const c) {
                                 for (int x = 0; x < (w << ss_hor); x++)
                                     luma[y * 32 + x] = rnd() & bitdepth_max;
 
-                            call_ref(c_dst, luma, stride, w_pad, h_pad, w, h);
-                            call_new(a_dst, luma, stride, w_pad, h_pad, w, h);
+                            const int dc = rnd() & bitdepth_max;
+                            const int filter_type = rnd() & 7;
+
+                            call_ref(c_dst, dc, luma, stride, w_pad, h_pad, w, h, filter_type);
+                            call_new(a_dst, dc, luma, stride, w_pad, h_pad, w, h, filter_type);
                             checkasm_check(int16_t, c_dst, w * sizeof(*c_dst),
                                                     a_dst, w * sizeof(*a_dst),
                                                     w, h, "dst");
                         }
                     }
 
-                    bench_new(a_dst, luma, stride, 0, 0, w, h);
+                    bench_new(a_dst, 128, luma, stride, 0, 0, w, h, 0);
                 }
             }
     }
