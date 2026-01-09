@@ -1542,7 +1542,8 @@ static int tip_pred(Dav1dTaskContext *const t,
                        step + 2, step + 2, t->bx + x, t->by + y, 0,
                        (union mv) { .y = cmv[i].y - 32, .x = cmv[i].x - 32 },
                        refp[i], refs[i], DAV1D_FILTER_BILINEAR,
-                       0, f->bw * 4, 0, f->bh * 4);
+                       iclip(left[i], 0, w - 1), iclip(left[i] + 7 + 8, 1, w),
+                       iclip(top[i], 0, h - 1), iclip(top[i] + 7 + 8, 1, h));
                 struct OpflOffset o;
                 f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
                                          step * 4, step * 4, 1, &o
