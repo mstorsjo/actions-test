@@ -1242,11 +1242,12 @@ static void mc(Dav1dTaskContext *const t,
             if (bw4 & (bw4 - 1)) {
                 assert(!ss_hor && !ss_ver && v_mul == 4 && h_mul == 4 &&
                        filter == DAV1D_FILTER_BILINEAR);
-                f->dsp->mc.mc[filter](dst8, dst_stride, ref, ref_stride, 8,
+                assert(!((bw4 - 2) & (bw4 - 3)));
+                f->dsp->mc.mc[filter](dst8, dst_stride, ref, ref_stride, bw4 * 4 - 8,
                                       bh4 * 4, mx << 1, my << 1 HIGHBD_CALL_SUFFIX);
-                bw4 -= 2;
-                dst8 += 8;
-                ref += 8;
+                dst8 += 4 * (bw4 - 2);
+                ref += 4 * (bw4 - 2);
+                bw4 = 2;
             }
             f->dsp->mc.mc[filter](dst8, dst_stride, ref, ref_stride, bw4 * h_mul,
                                   bh4 * v_mul, mx << !ss_hor, my << !ss_ver
@@ -1511,7 +1512,7 @@ static int tip_pred(Dav1dTaskContext *const t,
         p[0] = p0;
         p[1] = p1;
         p_stride[0] = p0_stride;
-        p1_stride = p_stride[1] = (step + 2) * 4 * sizeof(pixel);
+        p1_stride = p_stride[1] = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
         const int d0 = f->absrefdist[refs[0]], d1 = f->absrefdist[refs[1]];
         d[0] = apply_sign(1 + (d0 > d1), -f->refdist[refs[0]]);
         d[1] = apply_sign(1 + (d1 > d0), -f->refdist[refs[1]]);
@@ -1615,7 +1616,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
     assert(bw4 >= 2 && bh4 >= 2);
     const int w = f->bw * 4, h = f->bh * 4;
     pixel *const p1 = bitfn(t->scratch.interintra);
-    const ptrdiff_t p1_stride = (bw4 + refine * 2) * 4 * sizeof(pixel);
+    const ptrdiff_t p1_stride = ((bw4 + refine * 2) * 4 * sizeof(pixel) + 63) & ~63;
 
     const Dav1dThreadPicture *refp[2] = { &f->refp[b->ref[0]],
                                           &f->refp[b->ref[1]] };
