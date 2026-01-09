@@ -601,7 +601,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 rmt && (!(tr_ref_idx = (rmt->ref.ref[0] != ref.ref[0])) ||
                         rmt->ref.ref[1] == ref.ref[0]))
             {
-                // FIXME top at sb boundary
                 const mv tl_mv = !(tl->mf & 2) ? tl->mv.mv[tl_ref_idx] :
                     get_warpmv_proj(tl->m, bx4 * 4, by4 * 4);
                 const mv tr_mv = !(rmt->mf & 2) ? rmt->mv.mv[tr_ref_idx] :
@@ -616,7 +615,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 tr && (!(tr_ref_idx = (tr->ref.ref[0] != ref.ref[0])) ||
                         tr->ref.ref[1] == ref.ref[0]))
             {
-                // FIXME top at sb boundary
                 const mv tl_mv = !(lmt->mf & 2) ? lmt->mv.mv[tl_ref_idx] :
                     get_warpmv_proj(lmt->m, bx4 * 4, by4 * 4);
                 const mv tr_mv = !(tr->mf & 2) ? tr->mv.mv[tr_ref_idx] :
@@ -670,7 +668,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               rt, &st, xpos >= 0, rmt,
                               top_8x8y + ((bx4 + bw4 - 1) >> 1), ref, gmv);
         if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0]) {
-            // FIXME top at sb boundary
             memcpy(warp[cnt[1]++], rmt->m, sizeof(int32_t) * 7);
         }
     }
@@ -691,7 +688,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               rt, &st, !x_off, lmt, top_8x8y + lms_8x8x,
                               ref, gmv);
         if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0]) {
-            // FIXME top at sb boundary
             memcpy(warp[cnt[1]++], lmt->m, sizeof(int32_t) * 7);
         }
     }
@@ -715,7 +711,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               rt, &st, 1, tr, top_8x8y + ((bx4 + bw4) >> 1),
                               ref, gmv);
         if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0]) {
-            // FIXME top at sb boundary
             memcpy(warp[cnt[1]++], tr->m, sizeof(int32_t) * 7);
         }
     }
@@ -746,7 +741,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         add_spatial_candidate(-1, -(1 << is_sb_boundary) - x_off,
                               rt, &st, 0, tl, top_8x8y + left_8x8x, ref, gmv);
         if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0]) {
-            // FIXME top at sb boundary
             memcpy(warp[cnt[1]++], tl->m, sizeof(int32_t) * 7);
         }
     }
