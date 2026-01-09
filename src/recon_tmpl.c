@@ -2711,7 +2711,7 @@ chroma: {}
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
     const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     const int cth4 = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
-    const int ctw = ctw4 * 4, cth = cth4 * 4;
+    const int ctw = uv_t_dim->w * 4, cth = uv_t_dim->h * 4;
     const int bx4 = t->cbx & 63, by4 = t->cby & 63;
     const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
