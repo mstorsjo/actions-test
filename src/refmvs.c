@@ -1359,7 +1359,7 @@ static void check_traj_intersect(const refmvs_frame *const rf,
                                  const int y, const int x,
                                  const union mv mv_in)
 {
-    if (ref2 == -1) return;
+    assert(ref2 != -1);
     const unsigned sbsz8 = rf->sbsz >> 1;
     const int mfmv_sbsz8 = rf->mfmv_sbsz8;
     const int mfmv_edge = rf->mfmv_edge;
@@ -1497,14 +1497,14 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 const refmvs_temporal_block *rb = &r[pos];
                 const int b_ref = rb->ref.ref[ref_sign];
                 if (!b_ref) continue;
-                int ref2ref = rf->mfmv_ref2ref[n][b_ref - 1];
-                if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
                 const int ref2idx = rf->mfmv_ref2idx[n][b_ref - 1];
                 mv b_mv = dequantize_mv(rb->mv.mv[ref_sign]);
                 if (b_mv.n == INVALID_MV) continue;
-                if (rf->seq_hdr->mv_traj)
+                if (rf->seq_hdr->mv_traj && ref2idx != -1)
                     check_traj_intersect(rf, rp_traj, rp_map,
                                          ref, ref2idx, y, x, b_mv);
+                int ref2ref = rf->mfmv_ref2ref[n][b_ref - 1];
+                if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
                 const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref - 1][0]);
                 const int y1 = (y - apply_sign(abs(mv1.y) >> 6, mv1.y)) & mask;
                 if (y1 < 0 || y1 >= rf->ih8) continue;
