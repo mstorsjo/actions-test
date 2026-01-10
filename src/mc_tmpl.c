@@ -987,59 +987,52 @@ static int sad_nxn(const pixel *p0, const ptrdiff_t p0_stride,
     return sad;
 }
 
-static void sad_refine_mv_c(const pixel *p0, const ptrdiff_t p0_stride,
-                            const pixel *p1, const ptrdiff_t p1_stride,
+static void sad_refine_mv_c(const pixel *const p0, const ptrdiff_t p0_stride,
+                            const pixel *const p1, const ptrdiff_t p1_stride,
                             const int w, const int h, const int is_implicit,
-                            struct OpflOffset *o HIGHBD_DECL_SUFFIX)
+                            struct OpflOffset *const o HIGHBD_DECL_SUFFIX)
 {
     const int bd_min8 = bitdepth_from_max(bitdepth_max) - 8;
 
-    assert(w >= 8 && w <= 64 && !(w & (w - 1)));
+    assert(w == 8 || w == 16);
     assert(h == 8 || h == 16);
-    assert(w * h >= 64);
 
-    const int bw = imin(w, 16);
-    const int sadw = bw + 4, sadh = h + 4;
+    const int sadw = w + 4, sadh = h + 4;
     const unsigned sad_thr = sadw * sadh * 2 << bd_min8;
-    for (int x = 0; x < w; x += bw, o++) {
-        unsigned best_sad = ~0U;
-        int best_dx = 0, best_dy = 0;
-        if (is_implicit) {
-            best_sad = sad_nxn(&p0[2 * PXSTRIDE(p0_stride) + 2], p0_stride,
-                               &p1[2 * PXSTRIDE(p1_stride) + 2], p1_stride,
-                               sadw, sadh);
-            best_sad = (best_sad * 7 + 7) >> 3;
-            if (best_sad < sad_thr) goto next;
-        }
-        for (int y_off = -2; y_off <= 2; y_off++) {
-            for (int x_off = -2; x_off <= 2; x_off++) {
-                if (!(x_off | y_off)) continue;
-                const unsigned sad =
-                    sad_nxn(&p0[(2 + y_off) * PXSTRIDE(p0_stride) + (2 + x_off)],
-                            p0_stride,
-                            &p1[(2 - y_off) * PXSTRIDE(p1_stride) + (2 - x_off)],
-                            p1_stride, sadw, sadh);
-                if (sad >= best_sad) continue;
-                best_sad = sad;
-                best_dx = x_off;
-                best_dy = y_off;
-            }
-        }
-    next:
-        o->x = best_dx;
-        o->y = best_dy;
-        assert(best_sad != ~0U);
-        p0 += bw;
-        p1 += bw;
+    unsigned best_sad = ~0U;
+    int best_dx = 0, best_dy = 0;
+    if (is_implicit) {
+        best_sad = sad_nxn(&p0[2 * PXSTRIDE(p0_stride) + 2], p0_stride,
+                           &p1[2 * PXSTRIDE(p1_stride) + 2], p1_stride,
+                           sadw, sadh);
+        best_sad = (best_sad * 7 + 7) >> 3;
+        if (best_sad < sad_thr) goto end;
     }
+    for (int y_off = -2; y_off <= 2; y_off++) {
+        for (int x_off = -2; x_off <= 2; x_off++) {
+            if (!(x_off | y_off)) continue;
+            const unsigned sad =
+                sad_nxn(&p0[(2 + y_off) * PXSTRIDE(p0_stride) + (2 + x_off)],
+                        p0_stride,
+                        &p1[(2 - y_off) * PXSTRIDE(p1_stride) + (2 - x_off)],
+                        p1_stride, sadw, sadh);
+            if (sad >= best_sad) continue;
+            best_sad = sad;
+            best_dx = x_off;
+            best_dy = y_off;
+        }
+    }
+end:
+    assert(best_sad != ~0U);
+    o->y = best_dy;
+    o->x = best_dx;
 }
 
 static void opfl_derive_mv_c(struct OpflRegressionData *out,
                              const pixel *p0, const ptrdiff_t p0_stride,
                              const pixel *p1, const ptrdiff_t p1_stride,
                              const int w, const int h, const int bs,
-                             const struct OpflOffset *o, const int8_t d[2]
-                             HIGHBD_DECL_SUFFIX)
+                             const int8_t d[2] HIGHBD_DECL_SUFFIX)
 {
 #if BITDEPTH != 8
     const int bd_min8 = bitdepth_from_max(bitdepth_max) - 8;
@@ -1054,29 +1047,24 @@ static void opfl_derive_mv_c(struct OpflRegressionData *out,
 
     // distance-weighted pixel difference & regular pixel difference
     int16_t tmp0[64 * 16], tmp1[64 * 16];
-    for (int bx = 0; bx < w; bx += 16, o++) {
-        const int x_end = imin(bx + 16, w);
-        const pixel *p0p = &p0[+o->y * PXSTRIDE(p0_stride) + o->x];
-        const pixel *p1p = &p1[-o->y * PXSTRIDE(p1_stride) - o->x];
-        for (int y = 0; y < h; y++) {
-            for (int x = bx; x < x_end; x++) {
-                const int p0pp = p0p[y * PXSTRIDE(p0_stride) + x];
-                const int p1pp = p1p[y * PXSTRIDE(p1_stride) + x];
-                const int v = d[0] * p0pp - d[1] * p1pp;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const int p0p = p0[y * PXSTRIDE(p0_stride) + x];
+            const int p1p = p1[y * PXSTRIDE(p1_stride) + x];
+            const int v = d[0] * p0p - d[1] * p1p;
 #if BITDEPTH == 8
-                tmp0[y * 64 + x] = v;
-                tmp1[y * 64 + x] = p0pp - p1pp;
+            tmp0[y * 64 + x] = v;
+            tmp1[y * 64 + x] = p0p - p1p;
 #else
-                tmp0[y * 64 + x] = (v + rnd - (v < 0)) >> bd_min8;
-                tmp1[y * 64 + x] = (p0pp - p1pp + rnd - (p1pp > p0pp)) >> bd_min8;
+            tmp0[y * 64 + x] = (v + rnd - (v < 0)) >> bd_min8;
+            tmp1[y * 64 + x] = (p0p - p1p + rnd - (p1p > p0p)) >> bd_min8;
 #endif
-            }
         }
     }
 
     // subpel gradient in both directions
     int16_t gx0[64 * 16], gy0[64 * 16];
-    for (int bx = 0; bx < w; bx += 16, o++) {
+    for (int bx = 0; bx < w; bx += 16) {
         const int x_end = imin(bx + 16, w);
         const int min_x = bx & ~15, max_x = x_end - 1;
         const int min_y = 0, max_y = h - 1;

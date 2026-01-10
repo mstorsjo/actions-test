@@ -133,8 +133,7 @@ struct OpflRegressionData {
 void (name)(struct OpflRegressionData *out, \
             const pixel *p0, ptrdiff_t p0_stride, \
             const pixel *p1, ptrdiff_t p1_stride, \
-            int w, int h, int bs, const struct OpflOffset *o, \
-            const int8_t d[2] HIGHBD_DECL_SUFFIX)
+            int w, int h, int bs, const int8_t d[2] HIGHBD_DECL_SUFFIX)
 typedef decl_opfl_derive_mv_fn(*opfl_derive_mv_fn);
 
 #define decl_8tap_gen(decl_name, fn_name, opt) \

@@ -1555,9 +1555,12 @@ static int tip_pred(Dav1dTaskContext *const t,
                 // need a loop to reconstruct that correctly. Alternatively,
                 // opfl refinement might need to be done at 16x16.
                 struct OpflRegressionData res[4];
-                f->dsp->mc.opfl_derive_mv(res, &p0[4 * PXSTRIDE(p0_stride) + 4],
-                                          p0_stride, &p1[4 * PXSTRIDE(p1_stride) + 4],
-                                          p1_stride, step * 4, step * 4, 8, &o, d
+                f->dsp->mc.opfl_derive_mv(res,
+                                          &p0[(4 + dy) * PXSTRIDE(p0_stride) +
+                                              (4 + dx)], p0_stride,
+                                          &p1[(4 - dy) * PXSTRIDE(p1_stride) +
+                                              (4 - dx)], p1_stride,
+                                          step * 4, step * 4, 8, d
                                           HIGHBD_CALL_SUFFIX);
                 opfl_mv_adj(res, dd, d);
                 cmv[0].x = cmv[0].x * 2 + dx * 16 + dd->d[0].x;
@@ -1643,87 +1646,166 @@ static int opfl_pred(Dav1dTaskContext *const t,
     const ptrdiff_t opfl_stride = bw4 >> (bs == 2);
 
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4);
-    const int oh4 = refine ? sh4 : 2, ow4 = refine ? sw4 : 2;
-    const int refareamask = ~(15 >> !refine);
     for (int y = 0; y < h4; y += sh4) {
-        int left[2];
-        for (int n = 0; n < 2; n++) {
-            union mv mv = b->mv[n];
-            left[n] = t->bx * 4 + (mv.x >> 3) - 3;
-            mv.x -= 32 * refine;
-            mv.y -= 32 * refine;
-            // FIXME bh/w4+refine*2 can result in a non-exp2 value
-            mc(t, p[n], NULL, p_stride[n], bw4 + refine * 2, sh4 + refine * 2,
-               t->bx, t->by + y, 0, mv, refp[n], b->ref[n], DAV1D_FILTER_BILINEAR,
-               0, w, iclip(top[n], 0, h - 1), h);
-        }
-
-        // sad-based mv refinement (refinemv)
-        struct OpflOffset o[4];
+        int left[2] = { t->bx * 4 + (b->mv[0].x >> 3) - 3,
+                        t->bx * 4 + (b->mv[1].x >> 3) - 3 };
         if (refine) {
-            f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
-                                     bw4 * 4, sh4 * 4, b->refine_mv == 2,
-                                     o HIGHBD_CALL_SUFFIX);
-        } else memset(o, 0, sizeof(o));
-
-        if (opfl) {
-            // subpel-gradient based mv refinement (optical flow = opfl)
-            struct OpflRegressionData res[8 * 8];
-            const int ro = refine ? 4 : 0;
-            f->dsp->mc.opfl_derive_mv(res, &p0[ro * PXSTRIDE(p0_stride) + ro], p0_stride,
-                                      &p1[ro * PXSTRIDE(p1_stride) + ro], p1_stride,
-                                      bw4 * 4, sh4 * 4, bs * 4, o, d HIGHBD_CALL_SUFFIX);
-            for (int by = 0, byy = 0; by < imin(h4 - y, sh4) * 4; by += bs * 4, byy++) {
-                const int bym = by & refareamask;
-                for (int bx = 0, bxx = 0; bx < w4 * 4; bx += bs * 4, bxx++) {
-                    const int bxm = bx & refareamask;
-                    // calculate pixel offset from regression data
-                    const struct OpflRegressionData *const r = &res[byy * opfl_stride + bxx];
-                    union OpflMvDeltaBlock *const dd =
-                        &t->opfl[((y >> 1) + byy) * opfl_stride + bxx];
-                    int dy = o[bx >> 4].y, dx = o[bx >> 4].x;
-                    // final pred using d0/d1 * mv_delta
-                    union mv mv[2] = {
-                        [0] = { .y = b->mv[0].y * 2, .x = b->mv[0].x * 2 },
-                        [1] = { .y = b->mv[1].y * 2, .x = b->mv[1].x * 2 },
+            for (int x = 0; x < w4; x += sw4) {
+                for (int n = 0; n < 2; n++)
+                    mc(t, p[n], NULL, p_stride[n], sw4 + 2, sh4 + 2,
+                       t->bx + x, t->by + y, 0,
+                       (union mv) { .y = b->mv[n].y - 32, .x = b->mv[n].x - 32 },
+                       refp[n], b->ref[n], DAV1D_FILTER_BILINEAR,
+                       iclip(left[n], 0, w - 1), iclip(left[n] + 4 * sw4 + 7, 1, w),
+                       iclip(top[n], 0, h - 1), iclip(top[n] + 4 * sh4 + 7, 1, h));
+                struct OpflOffset o;
+                f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
+                                         sw4 * 4, sh4 * 4, b->refine_mv == 2,
+                                         &o HIGHBD_CALL_SUFFIX);
+                const int dy = o.y, dx = o.x;
+                union OpflMvDeltaBlock *delta_line =
+                    &t->opfl[(y >> 1) * opfl_stride + (x >> 1)];
+                if (opfl) {
+                    struct OpflRegressionData res[2 * 2];
+                    // subpel-gradient based mv refinement (optical flow = opfl)
+                    f->dsp->mc.opfl_derive_mv(res,
+                                              &p0[(4 + dy) * PXSTRIDE(p0_stride) +
+                                                  (4 + dx)], p0_stride,
+                                              &p1[(4 - dy) * PXSTRIDE(p1_stride) +
+                                                  (4 - dx)], p1_stride,
+                                              sw4 * 4, sh4 * 4, bs * 4, d
+                                              HIGHBD_CALL_SUFFIX);
+                    const struct OpflRegressionData *r = res;
+                    for (int by = 0; by < sh4; by += 2, delta_line += opfl_stride) {
+                        union OpflMvDeltaBlock *dd = delta_line;
+                        for (int bx = 0; bx < sw4; bx += 2, dd++, r++) {
+                            opfl_mv_adj(r, dd, d);
+                            const union mv mv[2] = {
+                                [0] = { .y = b->mv[0].y * 2 + dd->d[0].y + dy * 16,
+                                        .x = b->mv[0].x * 2 + dd->d[0].x + dx * 16 },
+                                [1] = { .y = b->mv[1].y * 2 + dd->d[1].y - dy * 16,
+                                        .x = b->mv[1].x * 2 + dd->d[1].x - dx * 16 },
+                            };
+                            for (int i = 0; i < 2; i++)
+                                mc_opfl(t, &tmp[i][((y + by) * bw4 * 4 + x + bx) * 4],
+                                        bw4 * 4, bs, bs, t->bx + x + bx, t->by + y + by,
+                                        mv[i], refp[i],
+                                        iclip(left[i], 0, w - 1),
+                                        iclip(left[i] + sw4 * 4 + 7, 1, w),
+                                        iclip(top[i], 0, h - 1),
+                                        iclip(top[i] + sh4 * 4 + 7, 1, h));
+                            dd->d[0].x = ((dd->d[0].x + (dd->d[0].x > 0)) >> 1) + dx * 8;
+                            dd->d[0].y = ((dd->d[0].y + (dd->d[0].y > 0)) >> 1) + dy * 8;
+                            dd->d[1].x = ((dd->d[1].x + (dd->d[1].x > 0)) >> 1) - dx * 8;
+                            dd->d[1].y = ((dd->d[1].y + (dd->d[1].y > 0)) >> 1) - dy * 8;
+                            if (bacp) {
+                                const int x0 = (t->bx + x + bx) * 4 + (mv[0].x >> 4);
+                                const int x1 = (t->bx + x + bx) * 4 + (mv[1].x >> 4);
+                                const int y0 = (t->by + y + by) * 4 + (mv[0].y >> 4);
+                                const int y1 = (t->by + y + by) * 4 + (mv[1].y >> 4);
+                                if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
+                                    x0 + 8 >= w || x1 + 8 >= w ||
+                                    y0 + 8 >= h || y1 + 8 >= h)
+                                {
+                                    gen_mask(&mask[((y + by) * bw4 * 4 + x + bx) * 4],
+                                             bw4 * 4, 8, 8, x0, y0, x1, y1, w, h);
+                                    have_bacp = 1;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    union OpflMvDeltaBlock *const dd = delta_line;
+                    dd->d[0].x = +dx * 8;
+                    dd->d[0].y = +dy * 8;
+                    dd->d[1].x = -dx * 8;
+                    dd->d[1].y = -dy * 8;
+                    dd[1] = dd[opfl_stride] = dd[opfl_stride + 1] = *dd;
+                    const union mv mv[2] = {
+                        [0] = { .y = b->mv[0].y + dy * 8,
+                                .x = b->mv[0].x + dx * 8 },
+                        [1] = { .y = b->mv[1].y - dy * 8,
+                                .x = b->mv[1].x - dx * 8 },
                     };
-                    opfl_mv_adj(r, dd, d);
-                    mv[0].x += dd->d[0].x + dx * 16;
-                    mv[0].y += dd->d[0].y + dy * 16;
-                    mv[1].x += dd->d[1].x - dx * 16;
-                    mv[1].y += dd->d[1].y - dy * 16;
-                    // actual pred
                     for (int i = 0; i < 2; i++)
-                        mc_opfl(t, &tmp[i][(y * 4 + by) * bw4 * 4 + bx], bw4 * 4, bs, bs,
-                                t->bx + (bx >> 2), t->by + y + (by >> 2), mv[i], refp[i],
-                                iclip(left[i] + bxm, 0, w - 1),
-                                iclip(left[i] + bxm + 7 + ow4 * 4, 1, w),
-                                iclip(top[i] + bym, 0, h - 1),
-                                iclip(top[i] + bym + 7 + oh4 * 4, 1, h));
+                        mc(t, NULL, &tmp[i][(y * 4 * bw4 + x) * 4], bw4 * 4,
+                           sw4, sh4, t->bx + x, t->by + y, 0,
+                           mv[i], refp[i], b->ref[i], b->filter,
+                           iclip(left[i], 0, w - 1),
+                           iclip(left[i] + sw4 * 4 + 7, 1, w),
+                           iclip(top[i], 0, h - 1),
+                           iclip(top[i] + sh4 * 4 + 7, 1, h));
+                    if (bacp) {
+                        const int x0 = (t->bx + x) * 4 + (mv[0].x >> 3);
+                        const int y0 = (t->by + y) * 4 + (mv[0].y >> 3);
+                        const int x1 = (t->bx + x) * 4 + (mv[1].x >> 3);
+                        const int y1 = (t->by + y) * 4 + (mv[1].y >> 3);
+                        if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
+                            x0 + sw4 * 4 >= w || x1 + sw4 * 4 >= w ||
+                            y0 + sh4 * 4 >= h || y1 + sh4 * 4 >= h)
+                        {
+                            gen_mask(&mask[(y * 4 * bw4 + x) * 4], bw4 * 4,
+                                     sw4 * 4, sh4 * 4, x0, y0, x1, y1, w, h);
+                            have_bacp = 1;
+                        }
+                    }
+                }
+                for (int n = 0; n < 2; n++)
+                    left[n] += 16;
+            }
+        } else {
+            assert(opfl);
+            for (int n = 0; n < 2; n++)
+                mc(t, p[n], NULL, p_stride[n], bw4, sh4, t->bx, t->by + y,
+                   0, b->mv[n], refp[n], b->ref[n], DAV1D_FILTER_BILINEAR,
+                   0, w, 0, h);
+            struct OpflRegressionData res[2 * 8];
+            f->dsp->mc.opfl_derive_mv(res, p0, p0_stride, p1, p1_stride,
+                                      bw4 * 4, sh4 * 4, bs * 4, d
+                                      HIGHBD_CALL_SUFFIX);
+            union OpflMvDeltaBlock *delta_line = &t->opfl[(y >> 1) * opfl_stride];
+            const struct OpflRegressionData *r = res;
+            for (int by = 0; by < sh4; by += bs, delta_line += opfl_stride) {
+                union OpflMvDeltaBlock *dd = delta_line;
+                for (int bx = 0; bx < w4; bx += bs, dd++, r++) {
+                    opfl_mv_adj(r, dd, d);
+                    const union mv mv[2] = {
+                        [0] = { .y = b->mv[0].y * 2 + dd->d[0].y,
+                                .x = b->mv[0].x * 2 + dd->d[0].x },
+                        [1] = { .y = b->mv[1].y * 2 + dd->d[1].y,
+                                .x = b->mv[1].x * 2 + dd->d[1].x },
+                    };
+                    for (int i = 0; i < 2; i++)
+                        mc_opfl(t, &tmp[i][((y + by) * bw4 * 4 + bx) * 4],
+                                bw4 * 4, bs, bs, t->bx + bx, t->by + y + by,
+                                mv[i], refp[i],
+                                iclip(left[i] + bx * 4, 0, w - 1),
+                                iclip(left[i] + bx * 4 + 7 + 8, 1, w),
+                                iclip(top[i] + by * 4, 0, h - 1),
+                                iclip(top[i] + by * 4 + 7 + 8, 1, h));
                     if (bs > 1) {
-                        dd->d[0].x = ((dd->d[0].x + (dd->d[0].x > 0)) >> 1) + dx * 8;
-                        dd->d[0].y = ((dd->d[0].y + (dd->d[0].y > 0)) >> 1) + dy * 8;
-                        dd->d[1].x = ((dd->d[1].x + (dd->d[1].x > 0)) >> 1) - dx * 8;
-                        dd->d[1].y = ((dd->d[1].y + (dd->d[1].y > 0)) >> 1) - dy * 8;
+                        dd->d[0].x = (dd->d[0].x + (dd->d[0].x > 0)) >> 1;
+                        dd->d[0].y = (dd->d[0].y + (dd->d[0].y > 0)) >> 1;
+                        dd->d[1].x = (dd->d[1].x + (dd->d[1].x > 0)) >> 1;
+                        dd->d[1].y = (dd->d[1].y + (dd->d[1].y > 0)) >> 1;
                     }
                     if (bacp) {
-                        const int x0 = t->bx * 4 + bx + (mv[0].x >> 4);
-                        const int y0 = (t->by + y) * 4 + by + (mv[0].y >> 4);
-                        const int x1 = t->bx * 4 + bx + (mv[1].x >> 4);
-                        const int y1 = (t->by + y) * 4 + by + (mv[1].y >> 4);
+                        const int x0 = (t->bx + bx) * 4 + (mv[0].x >> 4);
+                        const int x1 = (t->bx + bx) * 4 + (mv[1].x >> 4);
+                        const int y0 = (t->by + y + by) * 4 + (mv[0].y >> 4);
+                        const int y1 = (t->by + y + by) * 4 + (mv[1].y >> 4);
                         if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
                             x0 + bs * 4 >= w || x1 + bs * 4 >= w ||
                             y0 + bs * 4 >= h || y1 + bs * 4 >= h)
                         {
-                            gen_mask(&mask[(y * 4 + by) * bw4 * 4 + bx], bw4 * 4,
-                                     bs * 4, bs * 4, x0, y0, x1, y1, w, h);
+                            gen_mask(&mask[((y + by) * bw4 * 4 + bx) * 4],
+                                     bw4 * 4, bs * 4, bs * 4, x0, y0, x1, y1, w, h);
                             have_bacp = 1;
                         }
                     }
                 }
             }
             if (bs == 1) {
-                assert(!refine);
                 union OpflMvDeltaBlock *const dd = &t->opfl[0];
                 dd->d[0].x = dd[0].d[0].x + dd[1].d[0].x + dd[2].d[0].x + dd[3].d[0].x;
                 dd->d[0].x = (dd->d[0].x + 3 + (dd->d[0].x > 0)) >> 3;
@@ -1733,46 +1815,6 @@ static int opfl_pred(Dav1dTaskContext *const t,
                 dd->d[1].x = (dd->d[1].x + 3 + (dd->d[1].x > 0)) >> 3;
                 dd->d[1].y = dd[0].d[1].y + dd[1].d[1].y + dd[2].d[1].y + dd[3].d[1].y;
                 dd->d[1].y = (dd->d[1].y + 3 + (dd->d[1].y > 0)) >> 3;
-            }
-        } else {
-            for (int x = 0, xx = 0; x < bw4; x += sw4, xx++) {
-                const int bxm = (x * 4) & refareamask;
-                const int dy = o[xx].y, dx = o[xx].x;
-                const union mv mv[2] = {
-                    [0] = { .y = b->mv[0].y + dy * 8,
-                            .x = b->mv[0].x + dx * 8 },
-                    [1] = { .y = b->mv[1].y - dy * 8,
-                            .x = b->mv[1].x - dx * 8 },
-                };
-                union OpflMvDeltaBlock *const dd =
-                    &t->opfl[(y >> 1) * opfl_stride + (x >> 1)];
-                dd[0].d[0].x = +dx * 8;
-                dd[0].d[0].y = +dy * 8;
-                dd[0].d[1].x = -dx * 8;
-                dd[0].d[1].y = -dy * 8;
-                dd[1].n = dd[opfl_stride].n = dd[opfl_stride + 1].n = dd[0].n;
-                for (int i = 0; i < 2; i++)
-                    mc(t, NULL, &tmp[i][y * 16 * bw4 + x * 4], bw4 * 4,
-                       sw4, sh4, t->bx + x, t->by + y, 0,
-                       mv[i], refp[i], b->ref[i], b->filter,
-                       iclip(left[i] + bxm, 0, w - 1),
-                       iclip(left[i] + bxm + 7 + sw4 * 4, 1, w),
-                       iclip(top[i], 0, h - 1),
-                       iclip(top[i] + 7 + sh4 * 4, 1, h));
-                if (bacp) {
-                    const int x0 = (t->bx + x) * 4 + (mv[0].x >> 3);
-                    const int y0 = (t->by + y) * 4 + (mv[0].y >> 3);
-                    const int x1 = (t->bx + x) * 4 + (mv[1].x >> 3);
-                    const int y1 = (t->by + y) * 4 + (mv[1].y >> 3);
-                    if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
-                        x0 + sw4 * 4 >= w || x1 + sw4 * 4 >= w ||
-                        y0 + sh4 * 4 >= h || y1 + sh4 * 4 >= h)
-                    {
-                        gen_mask(&mask[y * bw4 * 16 + x * 4], bw4 * 4,
-                                 sw4 * 4, sh4 * 4, x0, y0, x1, y1, w, h);
-                        have_bacp = 1;
-                    }
-                }
             }
         }
         for (int n = 0; n < 2; n++)
