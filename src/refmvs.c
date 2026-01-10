@@ -720,8 +720,8 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (rf->use_ref_frame_mvs && ref.ref[0] != ref.ref[1]) {
         const int bw8 = imin(bw4 >> 1, 8), bh8 = imin(bh4 >> 1, 8);
         const int step_h = bw4 >= 16 ? 2 : 1, step_v = bh4 >= 16 ? 2 : 1;
-        const int first = (unsigned) bw4 - 2 * step_h <= (unsigned) w4 &&
-                          (unsigned) bh4 - 2 * step_v <= (unsigned) h4 &&
+        const int first = (unsigned) 2 * bw8 - 2 * step_h <= (unsigned) w4 &&
+                          (unsigned) 2 * bh8 - 2 * step_v <= (unsigned) h4 &&
             add_temporal_candidate(rt, &st,
                                    (((by4 + 2 * bh8 - 2 * step_v) &
                                      (rf->sbsz - 1)) >> 1) * stride +
