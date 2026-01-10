@@ -4224,6 +4224,9 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
             memset(t->lf_mask->cdef_idx, -1, 16);
             break;
         }
+        if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
+            dav1d_refmvs_reset_sb(&t->rt, t->by, t->bx);
+        }
         // Restoration filter
         const int sbsz = f->sb_step * 4;
         for (int p = 0, ss_ver = 0, ss_hor = 0; p < 3;
@@ -4270,9 +4273,6 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         }
         int dir = 0;
         t->sdp_cfl_disallowed = 0;
-        if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
-            dav1d_refmvs_reset_sb(&t->rt, t->by, t->bx);
-        }
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
             // for some contexts related to warp-motion, AVM uses 8x8 (instead
             // of 4x4) context resolution when we cross SB boundaries. However,
