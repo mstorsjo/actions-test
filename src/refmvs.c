@@ -432,6 +432,7 @@ mv mv_projection(const union mv mv, const int num, const int den) {
 static int add_temporal_candidate(const refmvs_tile *const rt,
                                   struct refmvs_state *const st,
                                   const ptrdiff_t off_8x8,
+                                  DB_ARGS(const int x_off, const int y_off)
                                   const union refmvs_refpair ref)
 {
     const refmvs_frame *const rf = rt->rf;
@@ -448,10 +449,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
 
     if (ref.ref[1] == -1) {
         const int weight = 1 + (rf->abspocdiff[ref.ref[0] - 1] <= 2);
-        return add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
-                                          (int) (off_8x8 / rf->rp_stride),
-                                          (int) (off_8x8 % rf->rp_stride),
-                                          "tpl", 0)
+        return add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4, y_off, x_off, "tpl", 0)
                                   st->mv, st->cnt, 6, weight, mv, 0, 0,
                                   &st->iter_cntr, 16);
     }
@@ -467,9 +465,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         [0] = mv,
         [1] = mv2,
     }};
-    return add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
-                                      (int) (off_8x8 / rf->rp_stride),
-                                      (int) (off_8x8 % rf->rp_stride), "tpl")
+    return add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4, y_off, x_off, "tpl")
                               st->mv, st->cnt, 6, 1, 8, mvp, &st->iter_cntr, 16);
 }
 
@@ -721,18 +717,21 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (rf->use_ref_frame_mvs && (ref.ref[0] != ref.ref[1] || skip_mode)) {
         const int bw8 = imin(bw4 >> 1, 8), bh8 = imin(bh4 >> 1, 8);
         const int step_h = bw4 >= 16 ? 2 : 1, step_v = bh4 >= 16 ? 2 : 1;
-        const int first = (unsigned) 2 * bw8 - 2 * step_h <= (unsigned) w4 &&
-                          (unsigned) 2 * bh8 - 2 * step_v <= (unsigned) h4 &&
+        const int x_off = 2 * bw8 - 2 * step_h, y_off = 2 * bh8 - 2 * step_v;
+        const int first = (unsigned) x_off <= (unsigned) w4 &&
+                          (unsigned) y_off <= (unsigned) h4 &&
             add_temporal_candidate(rt, &st,
-                                   (((by4 + 2 * bh8 - 2 * step_v) &
+                                   (((by4 + y_off) &
                                      (rf->sbsz - 1)) >> 1) * stride +
-                                   ((bx4 + 2 * bw8 - 2 * step_h) >> 1),
-                                   ref);
+                                   ((bx4 + x_off) >> 1),
+                                   DB_ARGS((bx4 + x_off) >> 1,
+                                           (by4 + y_off) >> 1) ref);
         if (!first && (bw4 > 4 || bh4 > 4)) {
             add_temporal_candidate(rt, &st,
                                    (((by4 + bh8) & (rf->sbsz - 1)) >> 1) *
                                        stride + ((bx4 + bw8) >> 1),
-                                   ref);
+                                   DB_ARGS((bx4 + bw8) >> 1,
+                                           (by4 + bh8) >> 1) ref);
         }
     }
 
