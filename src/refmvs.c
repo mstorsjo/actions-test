@@ -591,15 +591,15 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         DEBUG_REFMV_printf("Warp corners [%d|%d]\n", *cnt, cnt[1]);
         int bl_ref_idx;
         if (bml && (!(bl_ref_idx = (bml->ref.ref[0] != ref.ref[0])) ||
-                    bml->ref.ref[1] == ref.ref[0]))
+                    (bml->ref.ref[1] == ref.ref[0] && !(bml->mf & 2))))
         {
             int tl_ref_idx, tr_ref_idx;
             const mv bl_mv = !(bml->mf & 2) ? bml->mv.mv[bl_ref_idx] :
                 get_warpmv_proj(bml->m, bx4 * 4, (by4 + bh4) * 4);
             if (tl && (!(tl_ref_idx = (tl->ref.ref[0] != ref.ref[0])) ||
-                       tl->ref.ref[1] == ref.ref[0]) &&
+                       (tl->ref.ref[1] == ref.ref[0] && !(tl->mf & 2))) &&
                 rmt && (!(tr_ref_idx = (rmt->ref.ref[0] != ref.ref[0])) ||
-                        rmt->ref.ref[1] == ref.ref[0]))
+                        (rmt->ref.ref[1] == ref.ref[0] && !(rmt->mf & 2))))
             {
                 const mv tl_mv = !(tl->mf & 2) ? tl->mv.mv[tl_ref_idx] :
                     get_warpmv_proj(tl->m, bx4 * 4, by4 * 4);
@@ -611,9 +611,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             }
             if (!cnt[1] &&
                 lmt && (!(tl_ref_idx = (lmt->ref.ref[0] != ref.ref[0])) ||
-                        lmt->ref.ref[1] == ref.ref[0]) &&
+                        (lmt->ref.ref[1] == ref.ref[0] && !(lmt->mf & 2))) &&
                 tr && (!(tr_ref_idx = (tr->ref.ref[0] != ref.ref[0])) ||
-                        tr->ref.ref[1] == ref.ref[0]))
+                        (tr->ref.ref[1] == ref.ref[0] && !(tr->mf & 2))))
             {
                 const mv tl_mv = !(lmt->mf & 2) ? lmt->mv.mv[tl_ref_idx] :
                     get_warpmv_proj(lmt->m, bx4 * 4, by4 * 4);
