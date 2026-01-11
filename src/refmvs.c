@@ -370,7 +370,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
             ns = 0;
         } else if (ref.ref[1] != b->ref.ref[0] && ref.ref[1] != b->ref.ref[1])
             return;
-        const int nc = ref.ref[ns] == b->ref.ref[1];
+        const int nc = ref.ref[ns] != b->ref.ref[0];
         int oidx;
         for (oidx = 0; oidx < st->sngl_cnt; oidx++)
             if (ref.ref[!ns] == st->sngl[oidx].ref)
