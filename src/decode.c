@@ -313,30 +313,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     assert(np > 0 && np <= 8);
 #undef bs
 
-    // select according to motion vector difference against a threshold
-    int mvd[8], ret = 0;
-    const int thresh = 4 * iclip(imax(bw4, bh4), 4, 28);
-    for (int i = 0; i < np; i++) {
-        mvd[i] = abs(pts[i][1][0] - pts[i][0][0] - mv.x) +
-                 abs(pts[i][1][1] - pts[i][0][1] - mv.y);
-        if (mvd[i] > thresh)
-            mvd[i] = -1;
-        else
-            ret++;
-    }
-    if (!ret) {
-        ret = 1;
-    } else for (int i = 0, j = np - 1, k = 0; k < np - ret; k++, i++, j--) {
-        while (mvd[i] != -1) i++;
-        while (mvd[j] == -1) j--;
-        assert(i != j);
-        if (i > j) break;
-        // replace the discarded samples;
-        mvd[i] = mvd[j];
-        memcpy(pts[i], pts[j], sizeof(*pts));
-    }
-
-    if (!dav1d_find_affine_int(pts, ret, bw4, bh4, mv, wmp, t->bx, t->by) &&
+    if (!dav1d_find_affine_int(pts, np, bw4, bh4, mv, wmp, t->bx, t->by) &&
         !dav1d_get_shear_params(wmp))
     {
         wmp->type = DAV1D_WM_TYPE_AFFINE;
