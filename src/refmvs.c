@@ -436,7 +436,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
 {
     const refmvs_frame *const rf = rt->rf;
 
-    if (ref.ref[0] - 1 == TIP_FRAME) return 0;
+    if (ref.ref[0] - 1 == TIP_FRAME || !ref.ref[0] /* intrabc */) return 0;
     union mv mv = rt->rp_traj[ref.ref[0] - 1][off_8x8];
     if (mv.n == INVALID_MV) {
         mv = rt->rp_proj[off_8x8].mv;
