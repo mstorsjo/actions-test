@@ -1810,6 +1810,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
     }
     const int poc = frm_hdr->frame_offset;
     int8_t ref2ref[7][7], ref2cur[7][7], refref2curref_idx[7][7];
+    uint8_t have_ref_sign[7][2] = { { 0 } };
     for (int i = 0; i < frm_hdr->n_ref_frames; i++) {
         const int poc_diff = get_poc_diff(seq_hdr->order_hint_n_bits,
                                           ref_poc[i], poc);
@@ -1820,6 +1821,8 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         for (int n = 0; n < 7; n++) {
             ref2ref[i][n] = get_poc_diff(seq_hdr->order_hint_n_bits,
                                          ref_poc[i], ref_ref_poc[i][n]);
+            if (ref2ref[i][n] > 0) have_ref_sign[i][0] = 1;
+            if (ref2ref[i][n] < 0) have_ref_sign[i][1] = 1;
             ref2cur[i][n] = get_poc_diff(seq_hdr->order_hint_n_bits,
                                          poc, ref_ref_poc[i][n]);
             int m;
@@ -1890,21 +1893,34 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         for (int n = 0; n < frm_hdr->n_ref_frames; n++)
             if (!rp_ref[n]) ref_done[n][0] = ref_done[n][1] = 1;
 
-        if (seq_hdr->tip) {
+        if (seq_hdr->tip && (rf->ref_sign[frm_hdr->tip.refs[0]] ||
+                             rf->ref_sign[frm_hdr->tip.refs[1]]))
+        {
             const int o = rev_topo_order[frm_hdr->tip.refs[0]] >
                               rev_topo_order[frm_hdr->tip.refs[1]];
+            const int dir = get_poc_diff(seq_hdr->order_hint_n_bits,
+                                         ref_poc[frm_hdr->tip.refs[!o]],
+                                         ref_poc[frm_hdr->tip.refs[o]]) < 0;
             rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
                 .ref = frm_hdr->tip.refs[!o],
                 .tgt = frm_hdr->tip.refs[o],
-                .dir = o,
+                .dir = dir,
             };
-            ref_done[frm_hdr->tip.refs[!o]][o] = 1;
+            ref_done[frm_hdr->tip.refs[!o]][dir] = 1;
         }
         // adjacent refs
         for (int n = 0; n < 2; n++) {
-            const int ref1 = first_fut - n > 0 ? order[first_fut - n - 1] : -1;
-            const int ref2 = first_fut + n < frm_hdr->n_ref_frames ?
-                             order[first_fut + n] : -1;
+            int ref1 = -1, ref2 = -1;
+            if (first_fut - n > 0) {
+                ref1 = order[first_fut - n - 1];
+                if (!have_ref_sign[ref1][1])
+                    ref1 = -1;
+            }
+            if (first_fut + n < frm_hdr->n_ref_frames) {
+                ref2 = order[first_fut + n];
+                if (!have_ref_sign[ref2][0])
+                    ref2 = -1;
+            }
             int order = 0;
             if (ref1 >= 0 && ref2 >= 0) {
                 uint8_t acr1 = abs_closest_ref(ref2ref[ref1], ref2cur[ref1], 0);
@@ -1957,7 +1973,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
                     rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
                         .ref = ref2,
                         .tgt = -1,
-                        .dir = 1,
+                        .dir = 0,
                     };
                     ref_done[ref2][0] = 1;
                 }
@@ -1965,7 +1981,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         }
         for (int n = topo_cnt - 1; n >= 0; n--) {
             const int ref = topo_order[n];
-            const int dir = rf->pocdiff[ref] < 0;
+            const int dir = rf->pocdiff[ref] >= 0;
             if (!ref_done[ref][dir]) {
                 rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
                     .ref = ref,
@@ -1993,7 +2009,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
             if (abs(diff1) > 31) {
                 rf->mfmv_ref2cur[n] = INVALID_REF2CUR;
             } else {
-                rf->mfmv_ref2cur[n] = rf->mfmv[n].ref < 4 ? -diff1 : diff1;
+                rf->mfmv_ref2cur[n] = diff1;
                 for (int m = 0; m < 7; m++) {
                     const int rrpoc = ref_ref_poc[rf->mfmv[n].ref][m];
                     const int diff2 = get_poc_diff(seq_hdr->order_hint_n_bits,
@@ -2004,7 +2020,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
                         if (rrpoc == ref_poc[l])
                             break;
                     rf->mfmv_ref2idx[n][m] = l == 7 ? -1 : l;
-                    const int d1 = -rf->mfmv_ref2cur[n];
+                    const int d1 = rf->mfmv_ref2cur[n];
                     const int d2 = rf->mfmv_ref2ref[n][m];
                     const int dv = div_mult[imin(abs(d2), 31)];
                     rf->mfmv_ref2sf[n][m][0] = imin(abs(d1), 31) * dv;
