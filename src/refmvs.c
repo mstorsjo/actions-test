@@ -658,7 +658,8 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     }
 
     // right-most top
-    const ptrdiff_t top_8x8y = (((by4 - 1) & (rf->sbsz - 1)) >> 1) * stride;
+    const ptrdiff_t top_8x8y = by4 & (rf->sbsz - 1) ?
+        (((by4 - 1) & (rf->sbsz - 1)) >> 1) * stride : -stride;
     if (rmt) {
         const int xpos = abw4 - (1 << is_sb_boundary) - x_off;
         add_spatial_candidate(-1, xpos,
@@ -1007,8 +1008,9 @@ void dav1d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
 {
     if (rf->n_tile_threads == 1) tile_row_idx = 0;
     const ptrdiff_t off1 = rf->rp_stride * tile_row_idx;
-    const ptrdiff_t off2 = (rf->sbsz >> 1) * off1;
-    rt->rp_proj = &rf->rp_proj[off2];
+    const int sbsz8 = rf->sbsz >> 1;
+    const ptrdiff_t off2 = sbsz8 * off1, off3 = (sbsz8 + 1) * off1 + rf->rp_stride;
+    rt->rp_proj = &rf->rp_proj[off3];
     for (int n = 0; n < 7; n++)
         rt->rp_traj[n] = &rf->rp_traj[n][off2];
     rt->ra = &rf->ra[off1];
@@ -1484,7 +1486,11 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
 
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t offset = sbsz8 * stride * tile_row_idx;
-    refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[offset];
+    const ptrdiff_t poffset = (sbsz8 + 1) * stride * tile_row_idx + stride;
+    refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[poffset];
+    memcpy(&rp_proj[col_start8 - rf->rp_stride],
+           &rp_proj[col_start8 + (sbsz8 - 1) * rf->rp_stride],
+           (col_end8 - col_start8) * sizeof(*rp_proj));
     for (int y = row_start8; y < row_end8; y++) {
         for (int x = col_start8; x < col_end8; x++)
             rp_proj[x].mv.n = INVALID_MV;
@@ -1511,7 +1517,7 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
         }
     }
 
-    rp_proj = &rf->rp_proj[offset];
+    rp_proj = &rf->rp_proj[poffset];
     const int shift = rf->mfmv_k_shift, mask = ~(rf->frm_hdr->tmvp_sample_step - 1);
     for (int n = 0; n < rf->n_mfmvs; n++) {
         const int ref2cur = rf->mfmv_ref2cur[n];
@@ -1781,7 +1787,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
 #endif
     if (n_blocks * rf->sbsz > rf->n_blocks) {
         const int sbsz8 = rf->sbsz >> 1;
-        const size_t rp_proj_sz = sizeof(*rf->rp_proj) * sbsz8 * n_blocks;
+        const size_t rp_proj_sz = sizeof(*rf->rp_proj) * (1 + sbsz8) * n_blocks;
         const size_t rp_traj_sz = sizeof(mv) * sbsz8 * n_blocks;
         const size_t rp_map_sz = sizeof(**rf->rp_map) * sbsz8 * n_blocks;
         const size_t r_above_sz = sizeof(*rf->ra) * n_blocks;
