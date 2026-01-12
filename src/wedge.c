@@ -119,7 +119,7 @@ static void fill_tmvp(uint8_t *dst, const uint8_t *src,
                 }
                 sptr += w8 * 8;
             }
-            dst[x] = score[0] > 60 ? 0 : score[1] > 60 ? 1 : 2;
+            dst[x] = score[0] >= 60 ? 0 : score[1] >= 60 ? 1 : 2;
         }
         dst += w8;
         src += w8 * 8 * 8;
