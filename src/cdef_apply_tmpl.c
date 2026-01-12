@@ -162,6 +162,14 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
 
                 const pixel *top, *bot;
                 ptrdiff_t offset;
+                const enum Backup2x8Flags flag = BACKUP_2X8_Y;
+                const enum Backup2x8Flags do_left = (prev_flag ^ flag) & flag;
+                prev_flag = flag;
+                if (do_left && edges & CDEF_HAVE_LEFT) {
+                    // we didn't backup the prefilter data because it wasn't
+                    // there, so do it here instead
+                    backup2x8(lr_bak[bit], iptrs, f->cur.stride, 0, layout, do_left);
+                }
 
                 enum CdefEdgeFlags sb_edges = edges;
                 if ((sbx + 1) * sbsz >= f->bw) sb_edges &= ~CDEF_HAVE_RIGHT;
