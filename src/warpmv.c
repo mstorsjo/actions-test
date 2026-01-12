@@ -96,7 +96,7 @@ static int get_mult_shift_diag(const int64_t px, const int idet,
 {
     const int64_t v1 = px * idet;
     const int v2 = (int) ((v1 + rnd - (v1 < 0)) >> sh);
-    const int v3 = (v2 + 0x20 - (v2 < 0)) & ~0x3f;
+    const int v3 = (v2 + 0x20 - (v2 < 0x10000)) & ~0x3f;
     return iclip(v3, 0x8040, 0x17fc0);
 }
 
