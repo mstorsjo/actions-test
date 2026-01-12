@@ -1793,7 +1793,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         int n_mvs;
         dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
                           (union refmvs_refpair) { .ref = { 0, -1 }},
-                          bs, t->by, t->bx);
+                          bs, 0, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
         if (BLOCK_TO_DEBUG) {
             printf("%*sfind_mv_refs(intra)\n", depth, "");
@@ -2034,7 +2034,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
-                              bs, t->by, t->bx);
+                              bs, 1, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
                 printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
@@ -2176,11 +2176,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[0] + 1, b->ref[1] + 1 } },
-                                  bs, t->by, t->bx);
+                                  bs, 0, t->by, t->bx);
             } else if (b->ref[0] == b->ref[1]) {
                 dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                   (union refmvs_refpair) { .ref = {
-                                      b->ref[0] + 1, -1 } }, bs, t->by, t->bx);
+                                      b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
                     mvstack[n].mv.mv[1] = mvstack[n].mv.mv[0];
                     mvstack[n].weight *= 0x11;
@@ -2189,11 +2189,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else {
                 dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                   (union refmvs_refpair) { .ref = {
-                                      b->ref[0] + 1, -1 } }, bs, t->by, t->bx);
+                                      b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
                 refmvs_candidate mvstack2[6];
                 dav1d_refmvs_find(&t->rt, mvstack2, NULL, &n_mvs[1],
                                   (union refmvs_refpair) { .ref = {
-                                      b->ref[1] + 1, -1 } }, bs, t->by, t->bx);
+                                      b->ref[1] + 1, -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
                     mvstack[n].mv.mv[1] = mvstack2[n].mv.mv[0];
                     mvstack[n].weight = (mvstack[n].weight & 0xf) |
@@ -2612,7 +2612,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                               b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV ?
                                   warp : NULL, n_mvs,
                               (union refmvs_refpair) { .ref = { b->ref[0] + 1, -1 }},
-                              bs, t->by, t->bx);
+                              bs, 0, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
                 printf("%*sfind_mv_refs(%d,-1)\n", depth, "", b->ref[0]);

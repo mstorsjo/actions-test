@@ -237,7 +237,7 @@ void dav1d_refmvs_warp_add(refmvs_tile *rt, const Dav1dWarpedMotionParams *const
 // call for each block
 void dav1d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],
                        int32_t (*warp)[7], int *cnt, const refmvs_refpair ref,
-                       enum BlockSize bs, int by4, int bx4);
+                       enum BlockSize bs, int skip_mode, int by4, int bx4);
 
 void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *dsp);
 void dav1d_refmvs_dsp_init_arm(Dav1dRefmvsDSPContext *dsp);

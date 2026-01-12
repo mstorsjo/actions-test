@@ -530,7 +530,8 @@ static int model_from_corners(DB_ARGS(const int idx)
 void dav1d_refmvs_find(const refmvs_tile *const rt,
                        refmvs_candidate mvstack[6], int32_t (*const warp)[7],
                        int *const cnt, const union refmvs_refpair ref,
-                       const enum BlockSize bs, const int by4, const int bx4)
+                       const enum BlockSize bs, const int skip_mode,
+                       const int by4, const int bx4)
 {
     const refmvs_frame *const rf = rt->rf;
     const uint8_t *const b_dim = dav1d_block_dimensions[bs];
@@ -717,7 +718,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
 
     // normal priority TMVP
     DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
-    if (rf->use_ref_frame_mvs && ref.ref[0] != ref.ref[1]) {
+    if (rf->use_ref_frame_mvs && (ref.ref[0] != ref.ref[1] || skip_mode)) {
         const int bw8 = imin(bw4 >> 1, 8), bh8 = imin(bh4 >> 1, 8);
         const int step_h = bw4 >= 16 ? 2 : 1, step_v = bh4 >= 16 ? 2 : 1;
         const int first = (unsigned) 2 * bw8 - 2 * step_h <= (unsigned) w4 &&
