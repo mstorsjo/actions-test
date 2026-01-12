@@ -605,6 +605,8 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
         tmpl.mf |= 2;
+        if (b->comp_type == COMP_INTER_WEDGE)
+            tmpl.mf |= 4;
         const int32_t *const mat1 = t->warpmv[0].matrix;
         const int32_t *const mat2 = t->warpmv[1].matrix;
         const int64_t mvx1 = (int64_t) (mat1[2] - 0x10000) * (t->bx + 1) * 4 +
