@@ -974,7 +974,7 @@ static void morph_c(pixel *dst, const ptrdiff_t dst_stride,
 
 static int sad_nxn(const pixel *p0, const ptrdiff_t p0_stride,
                    const pixel *p1, const ptrdiff_t p1_stride,
-                   const int w, const int h)
+                   const int w, const int h, const int bd_min8)
 {
     int sad = 0;
     for (int y = 0; y < h; y += 2) {
@@ -984,7 +984,7 @@ static int sad_nxn(const pixel *p0, const ptrdiff_t p0_stride,
         p0 += PXSTRIDE(p0_stride) * 2;
         p1 += PXSTRIDE(p1_stride) * 2;
     }
-    return sad;
+    return sad >> bd_min8;
 }
 
 static void sad_refine_mv_c(const pixel *const p0, const ptrdiff_t p0_stride,
@@ -998,13 +998,13 @@ static void sad_refine_mv_c(const pixel *const p0, const ptrdiff_t p0_stride,
     assert(h == 8 || h == 16);
 
     const int sadw = w + 4, sadh = h + 4;
-    const unsigned sad_thr = sadw * sadh * 2 << bd_min8;
+    const unsigned sad_thr = sadw * sadh * 2;
     unsigned best_sad = ~0U;
     int best_dx = 0, best_dy = 0;
     if (is_implicit) {
         best_sad = sad_nxn(&p0[2 * PXSTRIDE(p0_stride) + 2], p0_stride,
                            &p1[2 * PXSTRIDE(p1_stride) + 2], p1_stride,
-                           sadw, sadh);
+                           sadw, sadh, bd_min8);
         best_sad = (best_sad * 7 + 7) >> 3;
         if (best_sad < sad_thr) goto end;
     }
@@ -1015,7 +1015,7 @@ static void sad_refine_mv_c(const pixel *const p0, const ptrdiff_t p0_stride,
                 sad_nxn(&p0[(2 + y_off) * PXSTRIDE(p0_stride) + (2 + x_off)],
                         p0_stride,
                         &p1[(2 - y_off) * PXSTRIDE(p1_stride) + (2 - x_off)],
-                        p1_stride, sadw, sadh);
+                        p1_stride, sadw, sadh, bd_min8);
             if (sad >= best_sad) continue;
             best_sad = sad;
             best_dx = x_off;
