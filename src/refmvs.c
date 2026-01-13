@@ -1173,10 +1173,9 @@ static void refmvs_bank_add(refmvs_tile *const rt,
                            rt->bank.hits[1],
                            rt->bank.hits[0]);
         if (from != to) {
-            refmvs_mvpair mv_bak;
-            refmvs_refpair ref_bak;
-            mv_bak.n = rt->bank.mv[c][from].n;
-            ref_bak.pair = rt->bank.ref[from].pair;
+            refmvs_mvpair mv_bak = rt->bank.mv[c][from];
+            refmvs_refpair ref_bak = rt->bank.ref[from];
+            const int cwp_idx = rt->bank.cwp_idx[imax(0, c - 6)][from];
             for (int n1 = from, n2 = (n1 + 1) & 3; n1 != to;
                  n1 = n2, n2 = (n2 + 1) & 3)
             {
@@ -1189,6 +1188,8 @@ static void refmvs_bank_add(refmvs_tile *const rt,
             rt->bank.mv[c][to].n = mv_bak.n;
             if (c == 8)
                 rt->bank.ref[to].pair = ref_bak.pair;
+            if (c >= 6)
+                rt->bank.cwp_idx[c - 6][to] = cwp_idx;
         }
         debug_refbank(rt, c, by4, bx4);
         return;
