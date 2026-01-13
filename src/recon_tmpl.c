@@ -1375,8 +1375,8 @@ static void warp_affine(Dav1dTaskContext *const t,
     const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
     assert(!((b_dim[0] * h_mul) & 7) && !((b_dim[1] * v_mul) & 7));
     const int32_t *const mat = wmp->matrix;
-    const int width = (refp->p.p.w + ss_hor) >> ss_hor;
-    const int height = (refp->p.p.h + ss_ver) >> ss_ver;
+    const int width = f->bw * 4 >> ss_hor;
+    const int height = f->bh * 4 >> ss_ver;
 
     for (int y = 0; y < b_dim[1] * v_mul; y += 8) {
         const int src_y = t->by * 4 + ((y + 4) << ss_ver);
