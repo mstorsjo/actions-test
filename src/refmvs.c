@@ -1571,11 +1571,11 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                         const mv mv2 =
                             scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref - 1][1]);
                         rp_traj[ref2idx][pos1] = mv2;
-                        const int y2 = (y1 + apply_sign(abs(mv2.y) >> 6,
-                                                        mv2.y)) & mask;
+                        const int y2 = (y + apply_sign(abs(b_mv.y) >> 6,
+                                                       b_mv.y)) & mask;
                         if (y2 < y_proj_start || y2 >= y_proj_end) break;
-                        const int x2 = (x1 + apply_sign(abs(mv2.x) >> 6,
-                                                        mv2.x)) & mask;
+                        const int x2 = (x + apply_sign(abs(b_mv.x) >> 6,
+                                                       b_mv.x)) & mask;
                         if (x2 < x_proj_start || x2 >= x_proj_end) break;
                         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
                         rp_map[k][ref2idx][pos2].y = y1 - y2;
