@@ -2669,11 +2669,11 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             for (int y = 0; y < h4; y += 2) {
                 for (int x = 0; x < w4; x += 2) {
                     const int d = wedge[x >> 1];
-                    rb[x].lmv.mv[0].n = d ==  b->wedge_sign ? INVALID_MV : rb[x].mv.mv[0].n;
-                    rb[x].lmv.mv[1].n = d == !b->wedge_sign ? INVALID_MV : rb[x].mv.mv[1].n;
-                    rb[x + 1].lmv = rb[x].lmv;
-                    rb[x + 128].lmv = rb[x].lmv;
-                    rb[x + 129].lmv = rb[x].lmv;
+                    rb[x].tmv.mv[0].n = d ==  b->wedge_sign ? INVALID_MV : rb[x].mv.mv[0].n;
+                    rb[x].tmv.mv[1].n = d == !b->wedge_sign ? INVALID_MV : rb[x].mv.mv[1].n;
+                    rb[x + 1].tmv = rb[x].tmv;
+                    rb[x + 128].tmv = rb[x].tmv;
+                    rb[x + 129].tmv = rb[x].tmv;
                 }
                 wedge += bw4 >> 1;
                 rb += 128 * 2;
@@ -2685,14 +2685,14 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             for (int y = 0; y < h4; y += 2) {
                 for (int x = 0; x < w4; x += 2) {
                     const union OpflMvDeltaBlock *const o = &opfl_dxy[x >> 1];
-                    rb[x].lmv.mv[0].x = rb[x].mv.mv[0].x  + o->d[0].x;
-                    rb[x].lmv.mv[0].y = rb[x].mv.mv[0].y  + o->d[0].y;
-                    rb[x].lmv.mv[1].x = rb[x].mv.mv[si].x + o->d[1].x;
-                    rb[x].lmv.mv[1].y = rb[x].mv.mv[si].y + o->d[1].y;
-                    if (x + 1 < w4) rb[x + 1].lmv = rb[x].lmv;
+                    rb[x].tmv.mv[0].x = rb[x].mv.mv[0].x  + o->d[0].x;
+                    rb[x].tmv.mv[0].y = rb[x].mv.mv[0].y  + o->d[0].y;
+                    rb[x].tmv.mv[1].x = rb[x].mv.mv[si].x + o->d[1].x;
+                    rb[x].tmv.mv[1].y = rb[x].mv.mv[si].y + o->d[1].y;
+                    if (x + 1 < w4) rb[x + 1].tmv = rb[x].tmv;
                     if (y + 1 < h4) {
-                        rb[x + 128].lmv = rb[x].lmv;
-                        if (x + 1 < w4) rb[x + 129].lmv = rb[x].lmv;
+                        rb[x + 128].tmv = rb[x].tmv;
+                        if (x + 1 < w4) rb[x + 129].tmv = rb[x].tmv;
                     }
                 }
                 opfl_dxy += opfl_stride;

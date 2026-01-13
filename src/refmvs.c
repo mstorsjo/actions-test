@@ -1641,7 +1641,7 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
         for (int x = col_start8; x < col_end8; x++) {
             const refmvs_block *const cand_b = &b[((x * 2) & 127) + 1];
             const union mv *const cand_mv =
-                cand_b->mf & 4 ? cand_b->lmv.mv : cand_b->mv.mv;
+                cand_b->mf & 4 ? cand_b->tmv.mv : cand_b->mv.mv;
 
             // FIXME opfl, refinemv
             if (cand_b->ref.ref[0] - 1 == TIP_FRAME) {
@@ -2071,9 +2071,11 @@ static void splat_warpmv_c(refmvs_block *r,
                                     -0xffff, 0xffff);
             rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
                                     -0xffff, 0xffff);
-            r[x] = r[x + 1] = *rmv;
+            memcpy(&r[x], rmv, offsetof(refmvs_block, tmv));
+            memcpy(&r[x + 1], rmv, offsetof(refmvs_block, tmv));
             if (bh4 > 1) {
-                r[x + 128] = r[x + 128 + 1] = *rmv;
+                memcpy(&r[x + 128], rmv, offsetof(refmvs_block, tmv));
+                memcpy(&r[x + 129], rmv, offsetof(refmvs_block, tmv));
             }
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
@@ -2107,9 +2109,11 @@ static void splat_comp_warpmv_c(refmvs_block *r,
                                     -0xffff, 0xffff);
             rmv->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
                                     -0xffff, 0xffff);
-            r[x] = r[x + 1] = *rmv;
+            memcpy(&r[x], rmv, offsetof(refmvs_block, tmv));
+            memcpy(&r[x + 1], rmv, offsetof(refmvs_block, tmv));
             if (bh4 > 1) {
-                r[x + 128] = r[x + 128 + 1] = *rmv;
+                memcpy(&r[x + 128], rmv, offsetof(refmvs_block, tmv));
+                memcpy(&r[x + 129], rmv, offsetof(refmvs_block, tmv));
             }
             mvxi1 += (mat[0].matrix[2] - 0x10000) * 8;
             mvyi1 += mat[0].matrix[4] * 8;
