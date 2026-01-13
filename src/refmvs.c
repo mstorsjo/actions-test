@@ -543,7 +543,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (warp) cnt[1] = 0;
     assert(ref.ref[0] >=  0 && ref.ref[0] <= 8 &&
            ref.ref[1] >= -1 && ref.ref[1] <= 7);
-    gmv[0] = ref.ref[0] <= 0 ? (mv) { .n = 0 } :
+    gmv[0] = (unsigned) (ref.ref[0] - 1) >= (unsigned) TIP_FRAME ? (mv) { .n = 0 } :
              get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[0] - 1],
                         bx4, by4, bw4, bh4, rf->frm_hdr);
     if (comp) {
