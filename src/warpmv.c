@@ -67,8 +67,9 @@ int dav1d_get_shear_params(Dav1dWarpedMotionParams *const wm) {
                           apply_sign64((int) ((llabs(v2) + rnd) >> shift), v2) -
                           0x10000);
 
-    return (4 * abs(wm->u.p.alpha) + 7 * abs(wm->u.p.beta) >= 0x30000) ||
-           (4 * abs(wm->u.p.gamma) + 4 * abs(wm->u.p.delta) >= 0x30000);
+    wm->affine = (4 * abs(wm->u.p.alpha) + 7 * abs(wm->u.p.beta) < 0x30000) &&
+                 (4 * abs(wm->u.p.gamma) + 4 * abs(wm->u.p.delta) < 0x30000);
+    return 0;
 }
 
 static int resolve_divisor_64(const uint64_t d, int *const shift) {

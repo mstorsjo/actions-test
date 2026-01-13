@@ -59,6 +59,12 @@ void (name)(int16_t *tmp, ptrdiff_t dst_stride, \
             int w, int h, int mx, int my HIGHBD_DECL_SUFFIX)
 typedef decl_mct_fn(*mct_fn);
 
+#define decl_ext_warp4x4_fn(name) \
+void (name)(pixel *dst, ptrdiff_t dst_stride, \
+            const pixel *src, ptrdiff_t src_stride, \
+            int mx, int my HIGHBD_DECL_SUFFIX)
+typedef decl_ext_warp4x4_fn(*ext_warp4x4_fn);
+
 #define decl_mct_scaled_fn(name) \
 void (name)(int16_t *tmp, ptrdiff_t dst_stride, \
             const pixel *src, ptrdiff_t src_stride, \
@@ -70,6 +76,12 @@ void (name)(int16_t *tmp, const ptrdiff_t tmp_stride, \
             const pixel *src, ptrdiff_t src_stride, \
             const int16_t *abcd, int mx, int my HIGHBD_DECL_SUFFIX)
 typedef decl_warp8x8t_fn(*warp8x8t_fn);
+
+#define decl_ext_warp4x4t_fn(name) \
+void (name)(int16_t *tmp, const ptrdiff_t tmp_stride, \
+            const pixel *src, ptrdiff_t src_stride, \
+            int mx, int my HIGHBD_DECL_SUFFIX)
+typedef decl_ext_warp4x4t_fn(*ext_warp4x4t_fn);
 
 #define decl_avg_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
@@ -166,6 +178,8 @@ typedef struct Dav1dMCDSPContext {
     blend_fn blend;
     warp8x8_fn warp8x8;
     warp8x8t_fn warp8x8t;
+    ext_warp4x4_fn ext_warp4x4;
+    ext_warp4x4t_fn ext_warp4x4t;
     emu_edge_fn emu_edge;
     resize_fn resize;
     morph_fn morph;

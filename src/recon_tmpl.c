@@ -1361,12 +1361,99 @@ static void mc_opfl(Dav1dTaskContext *const t,
                                             HIGHBD_CALL_SUFFIX);
 }
 
+static void ext_warp(Dav1dTaskContext *const t,
+                     pixel *dst8, int16_t *dst16, const ptrdiff_t dstride,
+                     const uint8_t *const b_dim, const int pl,
+                     const Dav1dThreadPicture *const refp,
+                     const Dav1dWarpedMotionParams *const wmp)
+{
+    assert((dst8 != NULL) ^ (dst16 != NULL));
+    const Dav1dFrameContext *const f = t->f;
+    const Dav1dDSPContext *const dsp = f->dsp;
+    const int ss_ver = !!pl && f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
+    const int ss_hor = !!pl && f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
+    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
+    assert(!((b_dim[0] * h_mul) & 7) && !((b_dim[1] * v_mul) & 7));
+    const int32_t *const mat = wmp->matrix;
+    const int w = f->bw * 4 >> ss_hor;
+    const int h = f->bh * 4 >> ss_ver;
+    const int sw = imin(b_dim[0] * 4, 8), hsw = sw >> 1;
+    const int sh = imin(b_dim[1] * 4, 8), hsh = sh >> 1;
+
+    for (int y = 0; y < b_dim[1] * v_mul; y += sh) {
+        const int src_y = t->by * 4 + ((y + hsh) << ss_ver);
+        const int64_t mat3_y = (int64_t) mat[3] * src_y + mat[0];
+        const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
+        for (int x = 0; x < b_dim[0] * h_mul; x += sw) {
+            // calculate transformation relative to center of 8x8 block in
+            // luma pixel units
+            const int src_x = t->bx * 4 + ((x + hsw) << ss_hor);
+            const int64_t mvx = ((int64_t) mat[2] * src_x + mat3_y) >> ss_hor;
+            const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
+            const int left_window = (int) (mvx >> 16) - hsw - 3;
+            const int top_window = (int) (mvy >> 16) - hsh - 3;
+            const int left = iclip(left_window, 0, w - 1);
+            const int right = iclip(left_window + sw + 7, 1, w);
+            const int top = iclip(top_window, 0, h - 1);
+            const int bottom = iclip(top_window + sh + 7, 1, h);
+
+            for (int yy = y; yy < y + sh; yy += 4) {
+                const int src_y = t->by * 4 + ((yy + 2) << ss_ver);
+                const int64_t mat3_y = (int64_t) mat[3] * src_y + mat[0];
+                const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
+                for (int xx = x; xx < x + sw; xx += 4) {
+                    const int src_x = t->bx * 4 + ((xx + 2) << ss_hor);
+                    const int64_t mvx = ((int64_t) mat[2] * src_x + mat3_y) >> ss_hor;
+                    const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
+
+                    const int dx = (int) (mvx >> 16) - 2;
+                    const int mx = (int) (((mvx + 0x200) >> 10) & 63);
+                    const int dy = (int) (mvy >> 16) - 2;
+                    const int my = (int) (((mvy + 0x200) >> 10) & 63);
+
+                    const pixel *ref_ptr = refp->p.data[pl];
+                    ptrdiff_t ref_stride = refp->p.stride[!!pl];
+
+                    if (dx - 3 < left || dx + 4 > right ||
+                        dy - 3 < top || dy + sh + 4 > bottom)
+                    {
+                        pixel *const emu_edge_buf = bitfn(t->scratch.emu_edge);
+                        f->dsp->mc.emu_edge(11, 11, right - left, bottom - top,
+                                            dx - 3 - left, dy - 3 - top,
+                                            emu_edge_buf, 16 * sizeof(pixel),
+                                            &ref_ptr[left + top * PXSTRIDE(ref_stride)],
+                                            ref_stride);
+                        ref_ptr = &emu_edge_buf[16 * 3 + 3];
+                        ref_stride = 16 * sizeof(pixel);
+                    } else {
+                        ref_ptr = &ref_ptr[PXSTRIDE(ref_stride) * dy + dx];
+                    }
+
+                    if (dst16 != NULL)
+                        dsp->mc.ext_warp4x4t(&dst16[yy * dstride + xx], dstride,
+                                             ref_ptr, ref_stride,
+                                             mx, my HIGHBD_CALL_SUFFIX);
+                    else
+                        dsp->mc.ext_warp4x4(&dst8[yy * PXSTRIDE(dstride) + xx],
+                                            dstride, ref_ptr, ref_stride,
+                                            mx, my HIGHBD_CALL_SUFFIX);
+                }
+            }
+        }
+    }
+}
+
 static void warp_affine(Dav1dTaskContext *const t,
                         pixel *dst8, int16_t *dst16, const ptrdiff_t dstride,
                         const uint8_t *const b_dim, const int pl,
                         const Dav1dThreadPicture *const refp,
                         const Dav1dWarpedMotionParams *const wmp)
 {
+    if (!wmp->affine) {
+        ext_warp(t, dst8, dst16, dstride, b_dim, pl, refp, wmp);
+        return;
+    }
+
     assert((dst8 != NULL) ^ (dst16 != NULL));
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;

@@ -113,6 +113,7 @@ typedef struct Dav1dWarpedMotionParams {
         } p;
         int16_t abcd[4];
     } u;
+    int affine;
 } Dav1dWarpedMotionParams;
 
 enum Dav1dPixelLayout {

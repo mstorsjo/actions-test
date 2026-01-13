@@ -114,12 +114,14 @@ prep_c(int16_t *tmp, const ptrdiff_t tmp_stride,
     iclip_pixel(DAV1D_FILTER_8TAP_RND3(src, x, F, sh))
 
 #define GET_H_FILTER(mx) \
-    const int8_t *const fh = !(mx) ? NULL : w > 4 ? \
+    const int8_t *const fh = !(mx) ? NULL : filter_type == -1 ? \
+        dav1d_ext_warp_filter[(mx) - 1] : w > 4 ? \
         dav1d_mc_subpel_filters[filter_type][(mx) - 1] : \
         dav1d_mc_subpel_filters[3 + (filter_type & 1)][(mx) - 1]
 
 #define GET_V_FILTER(my) \
-    const int8_t *const fv = !(my) ? NULL : h > 4 ? \
+    const int8_t *const fv = !(my) ? NULL : filter_type == -1 ? \
+        dav1d_ext_warp_filter[(my) - 1] : h > 4 ? \
         dav1d_mc_subpel_filters[filter_type][(my) - 1] : \
         dav1d_mc_subpel_filters[3 + (filter_type & 1)][(my) - 1]
 
@@ -134,7 +136,8 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
            const int filter_type HIGHBD_DECL_SUFFIX)
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
-    const int intermediate_rnd = 32 + ((1 << (6 - intermediate_bits)) >> 1);
+    const int bits = 6 + (filter_type < 0);
+    const int intermediate_rnd = 32 + ((1 << (bits - intermediate_bits)) >> 1);
 
     GET_FILTERS();
     dst_stride = PXSTRIDE(dst_stride);
@@ -152,7 +155,7 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
             do {
                 for (int x = 0; x < w; x++)
                     mid_ptr[x] = DAV1D_FILTER_8TAP_RND(src, x, fh, 1,
-                                                       6 - intermediate_bits);
+                                                       bits - intermediate_bits);
 
                 mid_ptr += 64;
                 src += src_stride;
@@ -162,7 +165,7 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
             do {
                 for (int x = 0; x < w; x++)
                     dst[x] = DAV1D_FILTER_8TAP_CLIP(mid_ptr, x, fv, 64,
-                                                    6 + intermediate_bits);
+                                                    bits + intermediate_bits);
 
                 mid_ptr += 64;
                 dst += dst_stride;
@@ -171,7 +174,7 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
             do {
                 for (int x = 0; x < w; x++) {
                     dst[x] = DAV1D_FILTER_8TAP_CLIP2(src, x, fh, 1,
-                                                     intermediate_rnd, 6);
+                                                     intermediate_rnd, bits);
                 }
 
                 dst += dst_stride;
@@ -181,13 +184,21 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
     } else if (fv) {
         do {
             for (int x = 0; x < w; x++)
-                dst[x] = DAV1D_FILTER_8TAP_CLIP(src, x, fv, src_stride, 6);
+                dst[x] = DAV1D_FILTER_8TAP_CLIP(src, x, fv, src_stride, bits);
 
             dst += dst_stride;
             src += src_stride;
         } while (--h);
     } else
         put_c(dst, dst_stride, src, src_stride, w, h);
+}
+
+static void
+ext_warp4x4_c(pixel *dst, const ptrdiff_t dst_stride,
+              const pixel *const src, const ptrdiff_t src_stride,
+              const int mx, const int my HIGHBD_DECL_SUFFIX)
+{
+    put_8tap_c(dst, dst_stride, src, src_stride, 4, 4, mx, my, -1 HIGHBD_TAIL_SUFFIX);
 }
 
 static NOINLINE void
@@ -256,6 +267,7 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
             const int w, int h, const int mx, const int my,
             const int filter_type HIGHBD_DECL_SUFFIX)
 {
+    const int bits = 6 + (filter_type < 0);
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     GET_FILTERS();
     src_stride = PXSTRIDE(src_stride);
@@ -272,7 +284,7 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
             do {
                 for (int x = 0; x < w; x++)
                     mid_ptr[x] = DAV1D_FILTER_8TAP_RND(src, x, fh, 1,
-                                                       6 - intermediate_bits);
+                                                       bits - intermediate_bits);
 
                 mid_ptr += 64;
                 src += src_stride;
@@ -281,7 +293,7 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
             mid_ptr = mid + 64 * 3;
             do {
                 for (int x = 0; x < w; x++) {
-                    int t = DAV1D_FILTER_8TAP_RND(mid_ptr, x, fv, 64, 6) -
+                    int t = DAV1D_FILTER_8TAP_RND(mid_ptr, x, fv, 64, bits) -
                                   PREP_BIAS;
                     assert(t >= INT16_MIN && t <= INT16_MAX);
                     tmp[x] = t;
@@ -294,7 +306,7 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
             do {
                 for (int x = 0; x < w; x++)
                     tmp[x] = DAV1D_FILTER_8TAP_RND(src, x, fh, 1,
-                                                   6 - intermediate_bits) -
+                                                   bits - intermediate_bits) -
                              PREP_BIAS;
 
                 tmp += tmp_stride;
@@ -305,7 +317,7 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
         do {
             for (int x = 0; x < w; x++)
                 tmp[x] = DAV1D_FILTER_8TAP_RND(src, x, fv, src_stride,
-                                               6 - intermediate_bits) -
+                                               bits - intermediate_bits) -
                          PREP_BIAS;
 
             tmp += tmp_stride;
@@ -313,6 +325,14 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
         } while (--h);
     } else
         prep_c(tmp, tmp_stride, src, src_stride, w, h HIGHBD_TAIL_SUFFIX);
+}
+
+static void
+ext_warp4x4t_c(int16_t *const tmp, const ptrdiff_t tmp_stride,
+               const pixel *const src, const ptrdiff_t src_stride,
+               const int mx, const int my HIGHBD_DECL_SUFFIX)
+{
+    prep_8tap_c(tmp, tmp_stride, src, src_stride, 4, 4, mx, my, -1 HIGHBD_TAIL_SUFFIX);
 }
 
 static NOINLINE void
@@ -1142,6 +1162,8 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->w_mask[2] = w_mask_420_c;
     c->warp8x8  = warp_affine_8x8_c;
     c->warp8x8t = warp_affine_8x8t_c;
+    c->ext_warp4x4 = ext_warp4x4_c;
+    c->ext_warp4x4t = ext_warp4x4t_c;
     c->emu_edge = emu_edge_c;
     c->resize   = resize_c;
     c->morph    = morph_c;
