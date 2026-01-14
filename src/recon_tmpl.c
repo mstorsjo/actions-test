@@ -1851,9 +1851,10 @@ static int opfl_pred(Dav1dTaskContext *const t,
                                       bw4 * 4, sh4 * 4, bs * 4, d
                                       HIGHBD_CALL_SUFFIX);
             union OpflMvDeltaBlock *delta_line = &t->opfl[(y >> 1) * opfl_stride];
-            const struct OpflRegressionData *r = res;
-            for (int by = 0; by < sh4; by += bs, delta_line += opfl_stride) {
+            const struct OpflRegressionData *r_line = res;
+            for (int by = 0; by < sh4; by += bs) {
                 union OpflMvDeltaBlock *dd = delta_line;
+                const struct OpflRegressionData *r = r_line;
                 for (int bx = 0; bx < w4; bx += bs, dd++, r++) {
                     opfl_mv_adj(r, dd, d);
                     const union mv mv[2] = {
@@ -1891,6 +1892,8 @@ static int opfl_pred(Dav1dTaskContext *const t,
                         }
                     }
                 }
+                delta_line += opfl_stride;
+                r_line += bw4 >> (bs == 2);
             }
             if (bs == 1) {
                 union OpflMvDeltaBlock *const dd = &t->opfl[0];
