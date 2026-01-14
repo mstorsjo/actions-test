@@ -502,6 +502,18 @@ static int model_from_corners(DB_ARGS(const int idx)
     return 1;
 }
 
+static inline mv get_warpmv_proj(const int32_t *const matrix,
+                                 const int x, const int y)
+{
+    if (matrix[6] <= 0) return (mv) { .n = 0 }; // see #834
+    const int xc = (matrix[2] - (1 << 16)) * x + matrix[3] * y + matrix[0];
+    const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
+    return (mv) {
+        .y = iclip((yc + 0x1000 - (yc < 0)) >> 13, -0xffff, +0xffff),
+        .x = iclip((xc + 0x1000 - (xc < 0)) >> 13, -0xffff, +0xffff),
+    };
+}
+
 /*
  * refmvs_frame allocates memory for one sbrow (32 blocks high, whole frame
  * wide) of 4x4-resolution refmvs_block entries for spatial MV referencing.
@@ -578,8 +590,10 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             if (have_left) tl = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 - 1) & 127)];
             if (bw4 > 1) lmt = &rt->r[((by4 - 1) & 63) * 128 + (bx4 & 127)];
             if (bw4 == w4) rmt = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4 - 1) & 127)];
-            if ((bx4 + bw4) & (rf->sbsz - 1) && bx4 + bw4 < rt->tile_col.end && bw4 <= 16)
+            if ((bx4 + bw4) & (rf->sbsz - 1) && bx4 + bw4 < rt->tile_col.end && bw4 <= 16) {
                 tr = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4) & 127)];
+                if (tr->mv.mv[0].n == INVALID_MV) tr = NULL;
+            }
         }
     }
     if (warp) {
@@ -608,7 +622,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 lmt && (!(tl_ref_idx = (lmt->ref.ref[0] != ref.ref[0])) ||
                         (lmt->ref.ref[1] == ref.ref[0] && !(lmt->mf & 2))) &&
                 tr && (!(tr_ref_idx = (tr->ref.ref[0] != ref.ref[0])) ||
-                        (tr->ref.ref[1] == ref.ref[0] && !(tr->mf & 2))))
+                       (tr->ref.ref[1] == ref.ref[0] && !(tr->mf & 2))))
             {
                 const mv tl_mv = !(lmt->mf & 2) ? lmt->mv.mv[tl_ref_idx] :
                     get_warpmv_proj(lmt->m, bx4 * 4, by4 * 4);

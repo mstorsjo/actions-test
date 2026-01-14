@@ -359,17 +359,6 @@ static inline void mv_reduce_prec(mv *const mv, const int mv_prec) {
     mv->y &= mask;
 }
 
-static inline mv get_warpmv_proj(const int32_t *const matrix,
-                                 const int x, const int y)
-{
-    const int xc = (matrix[2] - (1 << 16)) * x + matrix[3] * y + matrix[0];
-    const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
-    return (mv) {
-        .y = iclip((yc + 0x1000 - (yc < 0)) >> 13, -0xffff, +0xffff),
-        .x = iclip((xc + 0x1000 - (xc < 0)) >> 13, -0xffff, +0xffff),
-    };
-}
-
 static inline mv get_warpmv_2d(const int32_t *const matrix,
                                const int bx4, const int by4,
                                const int bw4, const int bh4,
