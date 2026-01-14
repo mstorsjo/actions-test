@@ -273,10 +273,12 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
             const refmvs_block *r2 = &ra[t->bx >> 1];
             off = r2->bx4 - t->bx;
             have_topleft = !off;
+            off++; // to round up (not down) in the right-shifts below
             do {
                 add_sample(r2[off >> 1].bx4 - t->bx, 0, 1, -1, &r2[off >> 1]);
                 off += imax(2, bs(&r2[off >> 1])[0]);
             } while (off < w4 && np < 8);
+            off--;
         }
         have_topright = bw4 <= 16 && off <= bw4 &&
             t->bx + bw4 < t->ts->tiling.col_end &&
