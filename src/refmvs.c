@@ -231,9 +231,11 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                        b->ref.ref[0] - 1 == rf->frm_hdr->tip.refs[0] &&
                        b->ref.ref[1] - 1 == rf->frm_hdr->tip.refs[1])
             {
+                // see #1014 (fixed in v13)
+                const union mv *const b_mv = b->mf & 2 ? b->lmv.mv : b->mv.mv;
                 const mv in_delta = (mv) {
-                    .y = b->mv.mv[0].y - b->mv.mv[1].y,
-                    .x = b->mv.mv[0].x - b->mv.mv[1].x,
+                    .y = b_mv[0].y - b_mv[1].y,
+                    .x = b_mv[0].x - b_mv[1].x,
                 };
                 const mv out_delta = scale_mv(in_delta, rf->tip_sf[0]);
                 const mv cand_mv = (mv) {
