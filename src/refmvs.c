@@ -443,8 +443,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         mv = rt->rp_proj[off_8x8].mv;
         if (mv.n == INVALID_MV) return 0;
         mv = mv_projection(mv, rf->pocdiff[ref.ref[0] - 1],
-                           rf->frm_hdr->tip.frame_mode ?
-                               rf->tip_delta : rt->rp_proj[off_8x8].ref);
+                           rt->rp_proj[off_8x8].ref);
     }
 
     if (ref.ref[1] == -1) {
@@ -458,8 +457,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         mv2 = rt->rp_proj[off_8x8].mv;
         if (mv2.n == INVALID_MV) return 0;
         mv2 = mv_projection(mv2, rf->pocdiff[ref.ref[1] - 1],
-                            rf->frm_hdr->tip.frame_mode ?
-                                rf->tip_delta : rt->rp_proj[off_8x8].ref);
+                            rt->rp_proj[off_8x8].ref);
     }
     const refmvs_mvpair mvp = { .mv = {
         [0] = mv,
@@ -1291,7 +1289,31 @@ static inline mv dequantize_mv(const union qmv mv) {
     };
 }
 
-static void fill_holes(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+static void tip_projection(const refmvs_frame *const rf,
+                           refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+                           const int col_start8, const int col_end8,
+                           const int row_start8, int row_end8,
+                           const int mfmv_sbsz8, const int sbsz8,
+                           const int tmvp_sample_step)
+{
+    for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
+        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        for (int y = row_start8; y < row_end8; y += tmvp_sample_step) {
+            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
+            for (int x = sx; x < xend; x += tmvp_sample_step) {
+                const ptrdiff_t pos = pos_base + x;
+                const union mv mv = rp_proj[pos].mv;
+                if (mv.n == INVALID_MV) continue;
+                rp_proj[pos].mv =
+                    mv_projection(mv, rf->tip_delta, rp_proj[pos].ref);
+                rp_proj[pos].ref = rf->tip_delta;
+            }
+        }
+    }
+}
+
+static void fill_holes(const refmvs_frame *const rf,
+                       refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
                        const int col_start8, const int col_end8,
                        const int row_start8, int row_end8,
                        const int mfmv_sbsz8, const int sbsz8,
@@ -1299,18 +1321,20 @@ static void fill_holes(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stri
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8, sx + mfmv_sbsz8);
-        for (int y = row_start8; y < row_end8; y++) {
+        for (int y = row_start8; y < row_end8; y += tmvp_sample_step) {
             const int ystart = y & ~(mfmv_sbsz8 - 1);
             const int yend = imin(ystart + mfmv_sbsz8, row_end8);
             const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x++) {
+            for (int x = sx; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = pos_base + x;
-                const union mv mv = rp_proj[pos].mv; \
+                const union mv mv = rp_proj[pos].mv;
                 if (mv.n == INVALID_MV) continue;
 #define copy(off) do { \
-                if (rp_proj[pos + off].mv.n == INVALID_MV) \
+                if (rp_proj[pos + off].mv.n == INVALID_MV) { \
                     rp_proj[pos + off].mv = mv; \
-} while (0)
+                    rp_proj[pos + off].ref = rf->tip_delta; \
+                } \
+            } while (0)
                 if (x - tmvp_sample_step >= sx)
                     copy(-tmvp_sample_step);
                 if (x + tmvp_sample_step < xend)
@@ -1338,29 +1362,29 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8, sx + mfmv_sbsz8);
         int first_line = 1, y;
-        for (y = row_start8; y < row_end8; y++, first_line = 0) {
+        for (y = row_start8; y < row_end8; y += tmvp_sample_step, first_line = 0) {
             const int ystart = y & ~(mfmv_sbsz8 - 1);
             const int yend = imin(ystart + mfmv_sbsz8, row_end8);
             const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x++) {
+            for (int x = sx; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = pos_base + x;
                 int sum_x = 0, sum_y = 0, sum_n = 0;
-#define add(p, s) do { \
+#define add(p) do { \
                 if (rp_proj[p].mv.n != INVALID_MV) { \
                     sum_x += rp_proj[p].mv.x; \
                     sum_y += rp_proj[p].mv.y; \
                     sum_n++; \
                 } \
             } while (0)
-                add(pos,"self");
+                add(pos);
                 if (x - tmvp_sample_step >= sx)
-                    add(pos - tmvp_sample_step,"left");
+                    add(pos - tmvp_sample_step);
                 if (x + tmvp_sample_step < xend)
-                    add(pos + tmvp_sample_step,"right");
+                    add(pos + tmvp_sample_step);
                 if (y - tmvp_sample_step >= ystart)
-                    add(pos - tmvp_sample_step * stride,"up");
+                    add(pos - tmvp_sample_step * stride);
                 if (y + tmvp_sample_step < yend)
-                    add(pos + tmvp_sample_step * stride,"bottom");
+                    add(pos + tmvp_sample_step * stride);
 #undef add
                 if (!first_line) {
                     rp_proj[pos - stride].mv.n = mv_line[x - sx].n;
@@ -1376,9 +1400,178 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
             }
         }
         if (!first_line) {
-            const ptrdiff_t pos_base = ((y - 1) & (sbsz8 - 1)) * stride;
+            const ptrdiff_t pos_base = ((y - tmvp_sample_step) & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
                 rp_proj[pos_base + x].mv.n = mv_line[x - sx].n;
+            }
+        }
+    }
+}
+
+static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+                          const int col_start8, const int col_end8,
+                          const int row_start8, int row_end8,
+                          const int mfmv_sbsz8, const int sbsz8)
+{
+    for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
+        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        for (int y = row_start8; y < row_end8; y += 2) {
+            const int ystart = y & ~(mfmv_sbsz8 - 1);
+            const int yend = imin(ystart + mfmv_sbsz8, row_end8);
+            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
+            for (int x = sx; x < xend; x += 2) {
+                const ptrdiff_t pos = pos_base + x;
+                const union mv mv = rp_proj[pos].mv;
+                if (mv.n == INVALID_MV) continue;
+                int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
+                int ref_off = rp_proj[pos].ref;
+
+                // right
+                const int have_right = x + 2 < xend;
+                if (have_right && rp_proj[pos + 2].mv.n != INVALID_MV) {
+                    union mv right_mv = rp_proj[pos + 2].mv;
+                    const int right_ref_off = rp_proj[pos + 2].ref;
+                    if (right_ref_off != ref_off)
+                        right_mv = mv_projection(right_mv, ref_off, right_ref_off);
+                    sum_x += right_mv.x;
+                    sum_y += right_mv.y;
+                    rp_proj[pos + 1].mv.y = (sum_y + (sum_y > 0)) >> 1;
+                    rp_proj[pos + 1].mv.x = (sum_x + (sum_x > 0)) >> 1;
+                    rp_proj[pos + 1].ref = ref_off;
+                    sum_n++;
+                } else {
+                    rp_proj[pos + 1] = rp_proj[pos];
+                }
+
+                // bottom
+                const int have_bottom = y + 2 < yend;
+                if (have_bottom && rp_proj[pos + 2 * stride].mv.n != INVALID_MV) {
+                    union mv bottom_mv = rp_proj[pos + 2 * stride].mv;
+                    const int bottom_ref_off = rp_proj[pos + 2 * stride].ref;
+                    if (bottom_ref_off != ref_off)
+                        bottom_mv = mv_projection(bottom_mv, ref_off, bottom_ref_off);
+                    sum_x += bottom_mv.x;
+                    const int mx = mvx + bottom_mv.x;
+                    sum_y += bottom_mv.y;
+                    const int my = mvy + bottom_mv.y;
+                    rp_proj[pos + stride].mv.y = (my + (my > 0)) >> 1;
+                    rp_proj[pos + stride].mv.x = (mx + (mx > 0)) >> 1;
+                    rp_proj[pos + stride].ref = ref_off;
+                    sum_n++;
+                } else {
+                    rp_proj[pos + stride] = rp_proj[pos];
+                }
+
+                // bottom/right
+                if (have_right && have_bottom) {
+                    union mv bottom_right_mv = rp_proj[pos + 2 * (1 + stride)].mv;
+                    if (bottom_right_mv.n != INVALID_MV) {
+                        const int bottom_right_ref_off =
+                            rp_proj[pos + 2 * (1 + stride)].ref;
+                        if (bottom_right_ref_off != ref_off)
+                            bottom_right_mv = mv_projection(bottom_right_mv, ref_off,
+                                                            bottom_right_ref_off);
+                        sum_x += bottom_right_mv.x;
+                        sum_y += bottom_right_mv.y;
+                        sum_n++;
+                    }
+                }
+                switch (sum_n) {
+                default: assert(0);
+                case 1:
+                    rp_proj[pos + 1 + stride].mv = mv;
+                    break;
+                case 2:
+                    rp_proj[pos + 1 + stride].mv.y = (sum_y + (sum_y > 0)) >> 1;
+                    rp_proj[pos + 1 + stride].mv.x = (sum_x + (sum_x > 0)) >> 1;
+                    break;
+                case 3:
+                    rp_proj[pos + 1 + stride].mv.y = (sum_y * 85 + 128 - (sum_y < 0)) >> 8;
+                    rp_proj[pos + 1 + stride].mv.x = (sum_x * 85 + 128 - (sum_x < 0)) >> 8;
+                    break;
+                case 4:
+                    rp_proj[pos + 1 + stride].mv.y = (sum_y + 1 + (sum_y > 0)) >> 2;
+                    rp_proj[pos + 1 + stride].mv.x = (sum_x + 1 + (sum_x > 0)) >> 2;
+                    break;
+                }
+                rp_proj[pos + 1 + stride].ref = ref_off;
+            }
+        }
+    }
+}
+
+static void fill_gap_traj(union mv *const rp_traj, const ptrdiff_t stride,
+                          const int col_start8, const int col_end8,
+                          const int row_start8, int row_end8,
+                          const int mfmv_sbsz8, const int sbsz8)
+{
+    for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
+        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        for (int y = row_start8; y < row_end8; y += 2) {
+            const int ystart = y & ~(mfmv_sbsz8 - 1);
+            const int yend = imin(ystart + mfmv_sbsz8, row_end8);
+            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
+            for (int x = sx; x < xend; x += 2) {
+                const ptrdiff_t pos = pos_base + x;
+                const union mv mv = rp_traj[pos];
+                if (mv.n == INVALID_MV) continue;
+                int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
+
+                // bottom
+                const int have_bottom = y + 2 < yend;
+                if (have_bottom && rp_traj[pos + 2 * stride].n != INVALID_MV) {
+                    const union mv bottom_mv = rp_traj[pos + 2 * stride];
+                    sum_x += bottom_mv.x;
+                    sum_y += bottom_mv.y;
+                    rp_traj[pos + stride].y = (sum_y + (sum_y > 0)) >> 1;
+                    rp_traj[pos + stride].x = (sum_x + (sum_x > 0)) >> 1;
+                    sum_n++;
+                } else {
+                    rp_traj[pos + stride] = mv;
+                }
+
+                // right
+                const int have_right = x + 2 < xend;
+                if (have_right && rp_traj[pos + 2].n != INVALID_MV) {
+                    const union mv right_mv = rp_traj[pos + 2];
+                    sum_x += right_mv.x;
+                    const int mx = mvx + right_mv.x;
+                    sum_y += right_mv.y;
+                    const int my = mvy + right_mv.y;
+                    rp_traj[pos + 1].y = (my + (my > 0)) >> 1;
+                    rp_traj[pos + 1].x = (mx + (mx > 0)) >> 1;
+                    sum_n++;
+                } else {
+                    rp_traj[pos + 1] = mv;
+                }
+
+                // bottom/right
+                if (have_right && have_bottom) {
+                    const union mv bottom_right_mv = rp_traj[pos + 2 * (1 + stride)];
+                    if (bottom_right_mv.n != INVALID_MV) {
+                        sum_x += bottom_right_mv.x;
+                        sum_y += bottom_right_mv.y;
+                        sum_n++;
+                    }
+                }
+                switch (sum_n) {
+                default: assert(0);
+                case 1:
+                    rp_traj[pos + 1 + stride] = mv;
+                    break;
+                case 2:
+                    rp_traj[pos + 1 + stride].y = (sum_y + (sum_y > 0)) >> 1;
+                    rp_traj[pos + 1 + stride].x = (sum_x + (sum_x > 0)) >> 1;
+                    break;
+                case 3:
+                    rp_traj[pos + 1 + stride].y = (sum_y * 85 + 128 - (sum_y < 0)) >> 8;
+                    rp_traj[pos + 1 + stride].x = (sum_x * 85 + 128 - (sum_x < 0)) >> 8;
+                    break;
+                case 4:
+                    rp_traj[pos + 1 + stride].y = (sum_y + 1 + (sum_y > 0)) >> 2;
+                    rp_traj[pos + 1 + stride].x = (sum_x + 1 + (sum_x > 0)) >> 2;
+                    break;
+                }
             }
         }
     }
@@ -1485,6 +1678,7 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     const int col_start8i = imax(col_start8 - mfmv_edge, 0);
     const int col_end8i = imin(col_end8 + mfmv_edge, rf->iw8);
 
+    const int sample_step = rf->frm_hdr->tmvp_sample_step;
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t offset = sbsz8 * stride * tile_row_idx;
     const ptrdiff_t poffset = (sbsz8 + 1) * stride * tile_row_idx + stride;
@@ -1519,7 +1713,7 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     }
 
     rp_proj = &rf->rp_proj[poffset];
-    const int shift = rf->mfmv_k_shift, mask = ~(rf->frm_hdr->tmvp_sample_step - 1);
+    const int shift = rf->mfmv_k_shift, mask = ~(sample_step - 1);
     for (int n = 0; n < rf->n_mfmvs; n++) {
         const int ref2cur = rf->mfmv_ref2cur[n];
         if (ref2cur == INVALID_REF2CUR) continue;
@@ -1528,8 +1722,8 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
         const int tgt = rf->mfmv[n].tgt;
         const int ref_sign = rf->mfmv[n].dir;
         const refmvs_temporal_block *r = &rf->rp_ref[ref][row_start8 * stride];
-        for (int y = row_start8; y < row_end8; y++) {
-            for (int x = col_start8i; x < col_end8i; x++) {
+        for (int y = row_start8; y < row_end8; y += sample_step) {
+            for (int x = col_start8i; x < col_end8i; x += sample_step) {
                 const ptrdiff_t pos = (y & (sbsz8 - 1)) * stride + x;
                 const refmvs_temporal_block *rb = &r[pos];
                 const int b_ref = rb->ref.ref[ref_sign];
@@ -1587,28 +1781,32 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     b_mv.y = -b_mv.y;
                     b_mv.x = -b_mv.x;
                 }
-                if (rf->frm_hdr->tip.frame_mode) {
-                    rp_proj[pos1].mv =
-                        mv_projection(b_mv, rf->tip_delta, abs(ref2ref));
-                } else {
-                    rp_proj[pos1].mv = b_mv;
-                }
+                rp_proj[pos1].mv = b_mv;
                 rp_proj[pos1].ref = abs(ref2ref);
             }
         }
     }
 
-    if (!rf->frm_hdr->tip.frame_mode) return;
-
-    if (rf->seq_hdr->tip_hole_fill) {
-        fill_holes(rp_proj, stride,
-                   col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                   rf->frm_hdr->tmvp_sample_step);
-        smoothen(rp_proj, stride,
-                 col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                 rf->frm_hdr->tmvp_sample_step);
+    if (rf->frm_hdr->tip.frame_mode) {
+        tip_projection(rf, rp_proj, stride,
+                       col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                       rf->frm_hdr->tmvp_sample_step);
+        if (rf->seq_hdr->tip_hole_fill) {
+            fill_holes(rf, rp_proj, stride,
+                       col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                       rf->frm_hdr->tmvp_sample_step);
+            smoothen(rp_proj, stride,
+                     col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                     rf->frm_hdr->tmvp_sample_step);
+        }
     }
-    // FIXME fill_gap()
+    if (sample_step > 1) {
+        for (int n = 0; n < rf->frm_hdr->n_ref_frames; n++)
+            fill_gap_traj(rp_traj[n], stride,
+                          col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8);
+        fill_gap_proj(rp_proj, stride,
+                      col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8);
+    }
 }
 
 static inline unsigned quantize_mv_comp(const unsigned absv) {
@@ -1857,6 +2055,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         const int d2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                     tip1poc, tip0poc);
         rf->tip_delta = d2;
+        assert(d2 > 0);
         const int d1 = rf->pocdiff[frm_hdr->tip.refs[0]];
         const int dv = div_mult[imin(abs(d2), 31)];
         rf->tip_sf[0] = imin(abs(d1), 31) * dv;
