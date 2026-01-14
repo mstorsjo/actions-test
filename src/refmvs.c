@@ -276,7 +276,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                            y_off, x_off, "mvtj-spc", n)
                                    st->dr, &st->drvd_cnt, 4, weight, cand_mv,
                                    0, 0, &st->drvd_iter_cntr, 2);
-            } else if (ref.ref[0] > 0 && b->ref.ref[0] > 0 &&
+            } else if (ref.ref[0] - 1U < (unsigned) TIP_FRAME && b->ref.ref[0] > 0 &&
                        rf->ref_sign[ref.ref[0] - 1] ==
                            rf->ref_sign[b->ref.ref[0] - 1U == TIP_FRAME ?
                                             rf->frm_hdr->tip.refs[n] :
