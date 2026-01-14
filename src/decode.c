@@ -2773,12 +2773,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                    mv_prec, ts->msac.rng);
             }
 
-            mv diff;
             if (b->inter_mode != GLOBALMV) {
-                b->mv[0] = mvstack[drl_idx].mv.mv[0];
+                b->mv[0] = b->inter_mode == WARPMV ?
+                    get_warpmv_2d(warp[warp_ref_idx], t->bx, t->by, bw4, bh4,
+                                  warpmv_with_mvd ? mv_prec : 6) :
+                    mvstack[drl_idx].mv.mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
                 {
+                    mv diff;
                     int nnzc, nnzc2 = 0, sum_mvd;
                     if (amvd) {
                         read_amvd(ts, &diff);
@@ -2871,17 +2874,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else if (b->motion_mode == MM_WARP_DELTA) {
                 memcpy(t->warpmv[0].matrix, warp[warp_ref_idx],
                        sizeof(int32_t) * 6);
-                if (b->inter_mode == WARPMV) {
-                    if (warpmv_with_mvd) {
-                        t->warpmv[0].matrix[0] += diff.x * (1 << 13);
-                        t->warpmv[0].matrix[1] += diff.y * (1 << 13);
-                    }
-                    b->mv[0] = get_warpmv_2d(t->warpmv[0].matrix, t->bx, t->by,
-                                             bw4, bh4, warpmv_with_mvd ? mv_prec : 6);
-                }
-                // yes this re-calculates the warpmatrix from mv after (for
-                // warpmv) we've just done the opposite. The round-trip error
-                // from this operation is required for conformance.
                 dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
                 t->warpmv[0].type = dav1d_get_shear_params(&t->warpmv[0]) ?
                     DAV1D_WM_TYPE_INVALID : warp[warp_ref_idx][6];
