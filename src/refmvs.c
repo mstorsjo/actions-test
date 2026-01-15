@@ -302,7 +302,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                     cand_mv = b->mv.mv[n];
                     den = rf->abspocdiff[b->ref.ref[n] - 1];
                 }
-                cand_mv = mv_projection(cand_mv, rf->pocdiff[ref.ref[0] - 1], den);
+                cand_mv = mv_projection(cand_mv, rf->abspocdiff[ref.ref[0] - 1], den);
                 add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "lnr-spc", n)
                                    st->dr, &st->drvd_cnt, 4, weight, cand_mv,
