@@ -2312,10 +2312,14 @@ static void splat_warpmv_c(refmvs_block *r,
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
-            rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
-                                    -0xffff, 0xffff);
-            rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
-                                    -0xffff, 0xffff);
+            if (mat->type == DAV1D_WM_TYPE_INVALID) {
+                rmv->mv.mv[0].n = 0;
+            } else {
+                rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
+                                        -0xffff, 0xffff);
+                rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
+                                        -0xffff, 0xffff);
+            }
             memcpy(&r[x], rmv, offsetof(refmvs_block, tmv));
             memcpy(&r[x + 1], rmv, offsetof(refmvs_block, tmv));
             if (bh4 > 1) {
@@ -2346,14 +2350,22 @@ static void splat_comp_warpmv_c(refmvs_block *r,
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         for (int x = 0; x < bw4; x += 2) {
-            rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
-                                    -0xffff, 0xffff);
-            rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
-                                    -0xffff, 0xffff);
-            rmv->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
-                                    -0xffff, 0xffff);
-            rmv->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
-                                    -0xffff, 0xffff);
+            if (mat[0].type == DAV1D_WM_TYPE_INVALID) {
+                rmv->mv.mv[0].n = 0;
+            } else {
+                rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
+                                        -0xffff, 0xffff);
+                rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
+                                        -0xffff, 0xffff);
+            }
+            if (mat[1].type == DAV1D_WM_TYPE_INVALID) {
+                rmv->mv.mv[1].n = 0;
+            } else {
+                rmv->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
+                                        -0xffff, 0xffff);
+                rmv->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
+                                        -0xffff, 0xffff);
+            }
             memcpy(&r[x], rmv, offsetof(refmvs_block, tmv));
             memcpy(&r[x + 1], rmv, offsetof(refmvs_block, tmv));
             if (bh4 > 1) {
