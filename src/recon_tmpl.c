@@ -1403,19 +1403,21 @@ static void ext_warp(Dav1dTaskContext *const t,
                 const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
                 for (int xx = x; xx < x + sw; xx += 4) {
                     const int src_x = t->bx * 4 + ((xx + 2) << ss_hor);
-                    const int64_t mvx = ((int64_t) mat[2] * src_x + mat3_y) >> ss_hor;
-                    const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
+                    const int64_t mvx =
+                        (((int64_t) mat[2] * src_x + mat3_y) >> ss_hor) + 0x200;
+                    const int64_t mvy =
+                        (((int64_t) mat[4] * src_x + mat5_y) >> ss_ver) + 0x200;
 
                     const int dx = (int) (mvx >> 16) - 2;
-                    const int mx = (int) (((mvx + 0x200) >> 10) & 63);
+                    const int mx = (int) ((mvx >> 10) & 63);
                     const int dy = (int) (mvy >> 16) - 2;
-                    const int my = (int) (((mvy + 0x200) >> 10) & 63);
+                    const int my = (int) ((mvy >> 10) & 63);
 
                     const pixel *ref_ptr = refp->p.data[pl];
                     ptrdiff_t ref_stride = refp->p.stride[!!pl];
 
-                    if (dx - 3 < left || dx + 4 > right ||
-                        dy - 3 < top || dy + sh + 4 > bottom)
+                    if (dx - 3 < left || dx + 4 + 4 > right ||
+                        dy - 3 < top || dy + 4 + 4 > bottom)
                     {
                         pixel *const emu_edge_buf = bitfn(t->scratch.emu_edge);
                         f->dsp->mc.emu_edge(11, 11, right - left, bottom - top,
