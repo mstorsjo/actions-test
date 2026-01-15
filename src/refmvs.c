@@ -218,7 +218,9 @@ static void add_spatial_candidate(const int y_off, const int x_off,
             } else if (b->ref.ref[0] - 1 == TIP_FRAME &&
                        rf->frm_hdr->tip.refs[n] == ref.ref[0] - 1)
             {
-                const mv tipmv = scale_mv(rt->rp_proj[off_8x8].mv, rf->tip_sf[n]);
+                union mv tmv = rt->rp_proj[off_8x8].mv;
+                if (tmv.n == INVALID_MV) tmv.n = 0;
+                const mv tipmv = scale_mv(tmv, rf->tip_sf[n]);
                 const mv cand_mv = (mv) {
                     .y = iclip(tipmv.y + b->mv.mv[0].y, -0xffff, 0xffff),
                     .x = iclip(tipmv.x + b->mv.mv[0].x, -0xffff, 0xffff),
@@ -259,8 +261,9 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 mv a_mv, b_mv;
                 if (b->ref.ref[0] - 1 == TIP_FRAME) {
                     a_mv = rt->rp_traj[rf->frm_hdr->tip.refs[n]][st->b8x8];
-                    const mv tipmv = scale_mv(rt->rp_proj[off_8x8].mv,
-                                              rf->tip_sf[n]);
+                    union mv tmv = rt->rp_proj[off_8x8].mv;
+                    if (tmv.n == INVALID_MV) tmv.n = 0;
+                    const mv tipmv = scale_mv(tmv, rf->tip_sf[n]);
                     b_mv = (mv) {
                         .y = iclip(tipmv.y + b->mv.mv[0].y, -0xffff, 0xffff),
                         .x = iclip(tipmv.x + b->mv.mv[0].x, -0xffff, 0xffff),
@@ -287,8 +290,9 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 mv cand_mv;
                 int den;
                 if (b->ref.ref[0] - 1U == TIP_FRAME) {
-                    const mv tipmv = scale_mv(rt->rp_proj[off_8x8].mv,
-                                              rf->tip_sf[n]);
+                    union mv tmv = rt->rp_proj[off_8x8].mv;
+                    if (tmv.n == INVALID_MV) tmv.n = 0;
+                    const mv tipmv = scale_mv(tmv, rf->tip_sf[n]);
                     cand_mv = (mv) {
                         .y = iclip(tipmv.y + b->mv.mv[0].y, -0xffff, 0xffff),
                         .x = iclip(tipmv.x + b->mv.mv[0].x, -0xffff, 0xffff),

@@ -1609,7 +1609,8 @@ static int tip_pred(Dav1dTaskContext *const t,
         const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * f->rf.rp_stride;
         for (int x = 0, xx = 0; x < w4; x += step, xx++) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
-            const mv tmv = t->rt.rp_proj[off_8x8].mv;
+            mv tmv = t->rt.rp_proj[off_8x8].mv;
+            if (tmv.n == INVALID_MV) tmv.n = 0;
             union mv cmv[2];
             int left[2], top[2];
             for (int i = 0; i < 2; i++) {
