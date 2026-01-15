@@ -1256,6 +1256,7 @@ void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     for (int y = by & 63; y < (by & 63) + rt->rf->sbsz; y++) {
         for (int x = bx & 127; x < (bx & 127) + rt->rf->sbsz; x++) {
             rt->r[y * 128 + x].mv.mv[0].n = INVALID_MV;
+            rt->r[y * 128 + x].ref.ref[0] = -1;
         }
     }
 
