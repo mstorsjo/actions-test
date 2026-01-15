@@ -1030,6 +1030,14 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         }
     }
 
+    for (int n = *cnt; n < 6; n++) {
+        mvstack[n].mv.n = 0;
+        mvstack[n].weight = 0;
+        mvstack[n].cwp_idx = 8;
+        mvstack[n].x_off = 0;
+        mvstack[n].y_off = 0;
+    }
+
     DEBUG_REFMV_printf("Final [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
 }
 
