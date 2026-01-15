@@ -2836,6 +2836,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                      ts->cdf.m.warp_delta_prec[bs]);
                 const int np = f->seq_hdr->six_param_warp_delta &&
                                warp_ref_idx == 1 ? 4 : 2;
+                int32_t *const m = t->warpmv[0].matrix;
                 for (int n = 0; n < np; n++) {
                     const int ctx = n - 1U > 1U;
                     b->matrix[n] =
@@ -2846,28 +2847,22 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             dav1d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.warp_delta_param[1][!ctx], 7);
                     if (b->matrix[n]) {
+                        const int base = ((n - 1U) >= 2U) * 0x10000;
                         const int step = 1 << (11 - prec);
                         const int sign = dav1d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.warp_delta_sign);
                         if (sign) b->matrix[n] = -b->matrix[n];
-                        t->warpmv[0].matrix[2 + n] = warp[warp_ref_idx][n + 2] +
-                                                     b->matrix[n] * step;
+                        m[2 + n] = iclip(warp[warp_ref_idx][n + 2] + b->matrix[n] * step,
+                                         base - 0x7fc0, base + 0x7fc0);
                     } else {
-                        t->warpmv[0].matrix[2 + n] = warp[warp_ref_idx][n + 2];
+                        m[2 + n] = warp[warp_ref_idx][n + 2];
                     }
                 }
                 if (np == 2) {
-                    t->warpmv[0].matrix[5] = t->warpmv[0].matrix[2];
-                    t->warpmv[0].matrix[4] = -t->warpmv[0].matrix[3];
+                    m[5] = m[2];
+                    m[4] = -m[3];
                 }
-                const int xpos = 4 * t->bx + 2 * bw4 - 1;
-                const int ypos = 4 * t->by + 2 * bh4 - 1;
-                t->warpmv[0].matrix[0] = b->mv[0].x * (1 << 13) -
-                    xpos * (t->warpmv[0].matrix[2] - 0x10000) -
-                    ypos * t->warpmv[0].matrix[3];
-                t->warpmv[0].matrix[1] = b->mv[0].y * (1 << 13) -
-                    xpos * t->warpmv[0].matrix[4] -
-                    ypos * (t->warpmv[0].matrix[5] - 0x10000);
+                dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
                 t->warpmv[0].type = dav1d_get_shear_params(&t->warpmv[0]) ?
                     DAV1D_WM_TYPE_INVALID : np == 4 ?
                     DAV1D_WM_TYPE_AFFINE : DAV1D_WM_TYPE_ROT_ZOOM;
