@@ -1864,7 +1864,8 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
 
             // FIXME opfl, refinemv
             if (cand_b->ref.ref[0] - 1 == TIP_FRAME) {
-                const union mv tmv = rp_proj[x].mv;
+                union mv tmv = rp_proj[x].mv;
+                if (tmv.n == INVALID_MV) tmv.n = 0;
                 const union mv tip0mv = scale_mv(tmv, tip_sf[0]);
                 const union mv tip1mv = scale_mv(tmv, tip_sf[1]);
                 rp[x].mv.mv[0] = quantize_mv((union mv) {
