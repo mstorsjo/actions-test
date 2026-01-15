@@ -894,6 +894,20 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (ref.ref[1] == -1 && *cnt < lim)
         add_derived(DB_ARGS(rf, "derived") &st, lim, 0);
 
+    const int minx = -(bx4 + bw4 + 4) * 32;
+    const int miny = -(by4 + bh4 + 4) * 32;
+    const int maxx = (rf->iw4 - bx4 + 4) * 32;
+    const int maxy = (rf->ih4 - by4 + 4) * 32;
+    for (int n = 0; n < cnt[0]; n++) {
+        union mv *const mv = mvstack[n].mv.mv;
+        mv[0].y = iclip(mv[0].y, miny, maxy);
+        mv[0].x = iclip(mv[0].x, minx, maxx);
+        if (ref.ref[1] > 0) {
+            mv[1].y = iclip(mv[1].y, miny, maxy);
+            mv[1].x = iclip(mv[1].x, minx, maxx);
+        }
+    }
+
     DEBUG_REFMV_printf("GMVs [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
     if (*cnt < 6 && ref.ref[0] > 0) {
         int last = *cnt;
