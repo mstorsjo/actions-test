@@ -1134,6 +1134,22 @@ static void opfl_derive_mv_c(struct OpflRegressionData *out,
     }
 }
 
+static unsigned sad8x8_c(const pixel *p0, const ptrdiff_t p0_stride,
+                         const pixel *p1, const ptrdiff_t p1_stride
+                         HIGHBD_DECL_SUFFIX)
+{
+    const int bd_min8 = bitdepth_from_max(bitdepth_max) - 8;
+
+    unsigned sad = 0;
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++)
+            sad += abs(p0[x] - p1[x]);
+        p0 += PXSTRIDE(p0_stride);
+        p1 += PXSTRIDE(p1_stride);
+    }
+    return sad >> bd_min8;
+}
+
 #if HAVE_ASM
 #if ARCH_X86
 #include "src/x86/mc.h"
@@ -1169,6 +1185,7 @@ COLD void bitfn(dav1d_mc_dsp_init)(Dav1dMCDSPContext *const c) {
     c->morph    = morph_c;
     c->opfl_derive_mv = opfl_derive_mv_c;
     c->sad_refine_mv = sad_refine_mv_c;
+    c->sad8x8 = sad8x8_c;
 
 #if HAVE_ASM
 #if ARCH_X86

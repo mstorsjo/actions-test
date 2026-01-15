@@ -1605,6 +1605,7 @@ static int tip_pred(Dav1dTaskContext *const t,
         d[1] = apply_sign(1 + (d1 > d0), -f->refdist[refs[1]]);
     }
 
+    const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == 1 /* reference */ ? 6 : 15;
     for (int y = 0, yy = 0; y < h4; y += step, yy++) {
         const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * f->rf.rp_stride;
         for (int x = 0, xx = 0; x < w4; x += step, xx++) {
@@ -1638,19 +1639,28 @@ static int tip_pred(Dav1dTaskContext *const t,
                                          HIGHBD_CALL_SUFFIX);
                 const int dy = o.y, dx = o.x;
                 union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
-                // FIXME for 256x256 blocks, sad-refinement is done at 16x16,
-                // but opfl-refinement is done at 8x8, so the code below may
-                // need a loop to reconstruct that correctly. Alternatively,
-                // opfl refinement might need to be done at 16x16.
-                struct OpflRegressionData res[4];
-                f->dsp->mc.opfl_derive_mv(res,
-                                          &p0[(4 + dy) * PXSTRIDE(p0_stride) +
-                                              (4 + dx)], p0_stride,
-                                          &p1[(4 - dy) * PXSTRIDE(p1_stride) +
-                                              (4 - dx)], p1_stride,
-                                          step * 4, step * 4, 8, d
-                                          HIGHBD_CALL_SUFFIX);
-                opfl_mv_adj(res, dd, d);
+                const unsigned sad = f->dsp->mc.sad8x8(&p0[(4 + dy) * PXSTRIDE(p0_stride) +
+                                                           (4 + dx)], p0_stride,
+                                                       &p1[(4 - dy) * PXSTRIDE(p1_stride) +
+                                                           (4 - dx)], p1_stride
+                                                       HIGHBD_CALL_SUFFIX);
+                if (sad >= sad8x8_thr) {
+                    // FIXME for 256x256 blocks, sad-refinement is done at 16x16,
+                    // but opfl-refinement is done at 8x8, so the code below may
+                    // need a loop to reconstruct that correctly. Alternatively,
+                    // opfl refinement might need to be done at 16x16.
+                    struct OpflRegressionData res[4];
+                    f->dsp->mc.opfl_derive_mv(res,
+                                              &p0[(4 + dy) * PXSTRIDE(p0_stride) +
+                                                  (4 + dx)], p0_stride,
+                                              &p1[(4 - dy) * PXSTRIDE(p1_stride) +
+                                                  (4 - dx)], p1_stride,
+                                              step * 4, step * 4, 8, d
+                                              HIGHBD_CALL_SUFFIX);
+                    opfl_mv_adj(res, dd, d);
+                } else {
+                    dd->n = 0;
+                }
                 cmv[0].x = cmv[0].x * 2 + dx * 16 + dd->d[0].x;
                 cmv[0].y = cmv[0].y * 2 + dy * 16 + dd->d[0].y;
                 cmv[1].x = cmv[1].x * 2 - dx * 16 + dd->d[1].x;

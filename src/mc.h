@@ -148,6 +148,11 @@ void (name)(struct OpflRegressionData *out, \
             int w, int h, int bs, const int8_t d[2] HIGHBD_DECL_SUFFIX)
 typedef decl_opfl_derive_mv_fn(*opfl_derive_mv_fn);
 
+#define decl_sad8x8_fn(name) \
+unsigned (name)(const pixel *p0, ptrdiff_t p0_stride, \
+                const pixel *p1, ptrdiff_t p1_stride HIGHBD_DECL_SUFFIX)
+typedef decl_sad8x8_fn(*sad8x8_fn);
+
 #define decl_8tap_gen(decl_name, fn_name, opt) \
     decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular, opt)); \
     decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth,  opt)); \
@@ -185,6 +190,7 @@ typedef struct Dav1dMCDSPContext {
     morph_fn morph;
     opfl_derive_mv_fn opfl_derive_mv;
     sad_refine_mv_fn sad_refine_mv;
+    sad8x8_fn sad8x8;
 } Dav1dMCDSPContext;
 
 bitfn_decls(void dav1d_mc_dsp_init, Dav1dMCDSPContext *c);
