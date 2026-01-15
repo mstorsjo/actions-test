@@ -35,7 +35,7 @@
 #include "src/warpmv.h"
 
 static inline int iclip_wmp(const int v) {
-    return iclip((v + 0x20 - (v < 0)) & ~0x3f, -0x7fc0, 0x7fc0);
+    return iclip((v + 0x20 - (v < 0)) & ~0x3f, -0x8000, 0x7fc0);
 }
 
 int resolve_divisor_32(const unsigned d, int *const shift) {
