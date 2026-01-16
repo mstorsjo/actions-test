@@ -103,7 +103,7 @@ static int section5_open(Section5InputContext *const c, const char *const file,
         if (fread(&byte[0], 1, 1, c->f) < 1)
             return -1;
         const enum Dav1dObuType obu_type = (byte[0] >> 2) & 0x1f;
-        if (obu_type == DAV1D_OBU_TILE_GRP)
+        if (obu_type == DAV1D_OBU_TILE_GRP || obu_type == DAV1D_OBU_TIP)
             (*num_frames)++;
         const int has_extension = byte[0] >> 7;
         if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
