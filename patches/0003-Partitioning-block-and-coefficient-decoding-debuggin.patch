@@ -1,4 +1,4 @@
-From 2bfed568aec1d8fb70bf32b899b9e922db504e22 Mon Sep 17 00:00:00 2001
+From 3e2fb8e9fcd2d2321f06d4ecd193eed22ee0ae56 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -8,6 +8,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  aom/debug.h                 |  16 +
  av1/common/av1_common_int.h |   2 +
  av1/common/mvref_common.c   | 593 ++++++++++++++++++++++++++-
+ av1/common/tip.c            |   2 +
  av1/decoder/decodeframe.c   | 282 +++++++++----
  av1/decoder/decodemv.c      | 791 +++++++++++++++++++++++++++++-------
  av1/decoder/decodemv.h      |  18 +-
@@ -17,7 +18,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  av1/decoder/decodetxb.h     |  14 +-
  av1/decoder/detokenize.c    |   8 +-
  av1/decoder/detokenize.h    |   3 +-
- 12 files changed, 1682 insertions(+), 291 deletions(-)
+ 13 files changed, 1684 insertions(+), 291 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -1360,6 +1361,19 @@ index b50cd22ed5..d0b8e85244 100644
  #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
                             cand_from_sb_above,
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
+diff --git a/av1/common/tip.c b/av1/common/tip.c
+index 9b7f521736..da6f54df7a 100644
+--- a/av1/common/tip.c
++++ b/av1/common/tip.c
+@@ -762,6 +762,8 @@ static AOM_INLINE void tip_component_build_inter_predictors(
+     const AV1_COMMON *cm, MACROBLOCKD *xd, int plane, TIP_PLANE *tip_plane,
+     const MV mv[2], int bw, int bh, int mi_x, int mi_y, uint16_t **mc_buf,
+     CONV_BUF_TYPE *tmp_conv_dst, CalcSubpelParamsFunc calc_subpel_params_func) {
++  xd->mi_row = mi_y >> MI_SIZE_LOG2;
++  xd->mi_col = mi_x >> MI_SIZE_LOG2;
+   tip_build_inter_predictors_8x8_and_bigger(
+       cm, xd, plane, tip_plane, mv, bw, bh, mi_x, mi_y, mc_buf, tmp_conv_dst,
+       calc_subpel_params_func);
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
 index 70e22ec4ea..a9dff1b78d 100644
 --- a/av1/decoder/decodeframe.c

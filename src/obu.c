@@ -1277,6 +1277,14 @@ static int parse_frame_hdr(Dav1dContext *const c, GetBits *const gb,
                        hdr->tiling.t.cols, hdr->tiling.t.rows, hdr->tiling.n_bytes,
                        (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+            } else {
+                hdr->sb128 = IS_INTER_OR_SWITCH(hdr) ? seqhdr->sb128 : !!seqhdr->sb128;
+                hdr->tiling.t.rows = hdr->tiling.t.cols = 1;
+                const int shift = 6 + hdr->sb128;
+                hdr->tiling.t.col_start_sb[0] = 0;
+                hdr->tiling.t.col_start_sb[1] = (hdr->width + ((1 << shift) - 1)) >> shift;
+                hdr->tiling.t.row_start_sb[0] = 0;
+                hdr->tiling.t.row_start_sb[1] = (hdr->height + ((1 << shift) - 1)) >> shift;
             }
 
             hdr->disable_cdf_update = 1;

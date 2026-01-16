@@ -561,7 +561,10 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         f->c->refmvs_dsp.splat_warpmv(rb, &tmpl, mvy, mvx, &t->warpmv[0], bw4, bh4);
     } else {
-        if (b->ref[0] == TIP_FRAME && f->seq_hdr->tip_refine_mv) {
+        if (b->ref[0] == TIP_FRAME && f->seq_hdr->tip_refine_mv &&
+            (f->frame_hdr->tip.frame_mode == 1 ||
+             f->frame_hdr->tip.subpel_filter == DAV1D_FILTER_8TAP_SHARP))
+        {
             tmpl.mf = 4;
         } else {
             tmpl.mf = b->inter_mode == GLOBALMV;
@@ -4217,68 +4220,94 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
         if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
             dav1d_refmvs_reset_sb(&t->rt, t->by, t->bx);
         }
-        // Restoration filter
-        const int sbsz = f->sb_step * 4;
-        for (int p = 0, ss_ver = 0, ss_hor = 0; p < 3;
-             p++, ss_ver = f->ss_ver, ss_hor = f->ss_hor)
-        {
-            if (!((f->lf.restore_planes >> p) & 1U))
-                continue;
+        if (f->frame_hdr->tip.frame_mode == 2) {
+            Av1Block b = {
+                .bs = root_bs,
+                .intra = 0,
+                .intrabc = 0,
+                .seg_id = 0,
+                .skip_mode = 0,
+                .skip_txfm = 1,
+                .tx_part = TX_PARTITION_NONE,
+                .mv[0].y = f->frame_hdr->tip.gmv.y,
+                .mv[0].x = f->frame_hdr->tip.gmv.x,
+                .inter_mode = NEARMV,
+                .ref[0] = TIP_FRAME,
+                .ref[1] = -1,
+                .motion_mode = MM_TRANSLATION,
+                .filter = f->frame_hdr->tip.subpel_filter,
+                .cwp_idx = 8,
+            };
+            const uint8_t *const b_dim = dav1d_block_dimensions[root_bs];
+            splat_oneref_mv(DB_ONLY(0) f, t, root_bs, &b, t->by & 63,
+                            b_dim[0], b_dim[1]);
+            t->cbx = t->bx;
+            t->cby = t->by;
+            f->bd_fn.recon_b(t, DB_ONLY(0) root_bs, c_root_bs, &b);
+        } else {
+            // Restoration filter
+            const int sbsz = f->sb_step * 4;
+            for (int p = 0, ss_ver = 0, ss_hor = 0; p < 3;
+                 p++, ss_ver = f->ss_ver, ss_hor = f->ss_hor)
+            {
+                if (!((f->lf.restore_planes >> p) & 1U))
+                    continue;
 
-            const int tx = 4 * (t->bx - ts->tiling.col_start) >> ss_hor;
-            const int ty = 4 * (t->by - ts->tiling.row_start) >> ss_ver;
-            const int unit_sz_log2 = f->frame_hdr->restoration.unit_size[!!p];
-            const int unit_sz = 1 << unit_sz_log2;
-            const unsigned mask = unit_sz - 1;
-            if ((tx | ty) & mask) continue;
-            const int tw = ts->tiling.col_end * 4 >> ss_hor;
-            const int th = ts->tiling.row_end * 4 >> ss_ver;
-            const int half_unit = unit_sz >> 1;
-            // Round half up at frame boundaries, if there's more than one
-            // restoration unit
-            const int fx = 4 * t->bx >> ss_hor, fy = t->by * 4 >> ss_ver;
-            if ((ty && fy + half_unit > th) || (tx && fx + half_unit > tw))
-                continue;
+                const int tx = 4 * (t->bx - ts->tiling.col_start) >> ss_hor;
+                const int ty = 4 * (t->by - ts->tiling.row_start) >> ss_ver;
+                const int unit_sz_log2 = f->frame_hdr->restoration.unit_size[!!p];
+                const int unit_sz = 1 << unit_sz_log2;
+                const unsigned mask = unit_sz - 1;
+                if ((tx | ty) & mask) continue;
+                const int tw = ts->tiling.col_end * 4 >> ss_hor;
+                const int th = ts->tiling.row_end * 4 >> ss_ver;
+                const int half_unit = unit_sz >> 1;
+                // Round half up at frame boundaries, if there's more than one
+                // restoration unit
+                const int fx = 4 * t->bx >> ss_hor, fy = t->by * 4 >> ss_ver;
+                if ((ty && fy + half_unit > th) || (tx && fx + half_unit > tw))
+                    continue;
 
-            const enum Dav1dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
+                const enum Dav1dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
 
-            // FIXME many of these values can be pre-calculated at frame-level
-            const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
-            const int lruw = imax(1, imin(tw - fx + half_unit, sbw) >> unit_sz_log2);
-            const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
-            const int vsh = unit_sz_log2 - 7 + ss_ver;
-            const int hsh = unit_sz_log2 - 7 + ss_hor;
-            int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
-            // FIXME I think lruh is always 1, so this loop may be eliminated
-            for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
-                for (int x = 0; x < lruw; x++) {
-                    // FIXME [0] is probably not correct
-                    Av1RestorationUnit *const lr =
-                        &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][0];
-                    read_restoration_info(t, lr, p, frame_type);
-                    DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
-                                       p, lr->type, ts->msac.rng);
+                // FIXME many of these values can be pre-calculated at frame-level
+                const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
+                const int lruw = imax(1, imin(tw - fx + half_unit, sbw) >> unit_sz_log2);
+                const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
+                const int vsh = unit_sz_log2 - 7 + ss_ver;
+                const int hsh = unit_sz_log2 - 7 + ss_hor;
+                int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
+                // FIXME I think lruh is always 1, so this loop may be eliminated
+                for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
+                    for (int x = 0; x < lruw; x++) {
+                        // FIXME [0] is probably not correct
+                        Av1RestorationUnit *const lr =
+                            &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][0];
+                        read_restoration_info(t, lr, p, frame_type);
+                        DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
+                                           p, lr->type, ts->msac.rng);
+                    }
                 }
             }
+            int dir = 0;
+            t->sdp_cfl_disallowed = 0;
+            if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
+                // for some contexts related to warp-motion, AVM uses 8x8 (instead
+                // of 4x4) context resolution when we cross SB boundaries. However,
+                // the way this is implemented means we sometimes go outside the
+                // bounds of our own block into data that has already been written
+                // into by our neighbour blocks. For example, if we access "top" at
+                // 8x8 resolution for x=25, this may round to x=24 (which our left-
+                // neighbour just overwrote). To workaround this, we keep a copy of
+                // all affected context bits at SB boundaries. See AVM #1091.
+                memcpy(t->a_sb_cache.ref[0], t->a->ref[0], 64);
+                memcpy(t->a_sb_cache.ref[1], t->a->ref[1], 64);
+                if (t->by > ts->tiling.row_start)
+                    memcpy(t->a_sb_cache.motion_mode, t->a->motion_mode, 64);
+            }
+            if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
+                return 1;
         }
-        int dir = 0;
-        t->sdp_cfl_disallowed = 0;
-        if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
-            // for some contexts related to warp-motion, AVM uses 8x8 (instead
-            // of 4x4) context resolution when we cross SB boundaries. However,
-            // the way this is implemented means we sometimes go outside the
-            // bounds of our own block into data that has already been written
-            // into by our neighbour blocks. For example, if we access "top" at
-            // 8x8 resolution for x=25, this may round to x=24 (which our left-
-            // neighbour just overwrote). To workaround this, we keep a copy of
-            // all affected context bits at SB boundaries. See AVM #1091.
-            memcpy(t->a_sb_cache.ref[0], t->a->ref[0], 64);
-            memcpy(t->a_sb_cache.ref[1], t->a->ref[1], 64);
-            if (t->by > ts->tiling.row_start)
-                memcpy(t->a_sb_cache.motion_mode, t->a->motion_mode, 64);
-        }
-        if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
-            return 1;
         if ((IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)) {
             dav1d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
                                    t->bx >> 1, (t->bx + sb_step) >> 1,
@@ -4790,7 +4819,25 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
     // if n_tc > 1 (but n_fc == 1), we could run init/exit in the task
     // threads also. Not sure it makes a measurable difference.
     int res = dav1d_decode_frame_init(f);
-    if (!res) res = dav1d_decode_frame_init_cdf(f);
+    if (!res) {
+        if (f->frame_hdr->tip.frame_mode != 2) {
+            res = dav1d_decode_frame_init_cdf(f);
+        } else {
+            const int tile_col = 0, tile_row = 0;
+            const int col_sb_start = f->frame_hdr->tiling.t.col_start_sb[tile_col];
+            const int col_sb_end = f->frame_hdr->tiling.t.col_start_sb[tile_col + 1];
+            const int row_sb_start = f->frame_hdr->tiling.t.row_start_sb[tile_row];
+            const int row_sb_end = f->frame_hdr->tiling.t.row_start_sb[tile_row + 1];
+            const int sb_shift = f->sb_shift;
+            Dav1dTileState *const ts = f->ts;
+            ts->tiling.row = tile_row;
+            ts->tiling.col = tile_col;
+            ts->tiling.col_start = col_sb_start << sb_shift;
+            ts->tiling.col_end = imin(col_sb_end << sb_shift, f->bw);
+            ts->tiling.row_start = row_sb_start << sb_shift;
+            ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
+        }
+    }
     // wait until all threads have completed
     if (!res) {
         if (f->c->n_tc > 1) {
@@ -5217,24 +5264,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         }
     }
 
-    if (f->frame_hdr->tip.frame_mode == 2) {
-        // FIXME run actual reconstruction
-        // this will likely be like a pass=2-only reconstruction,
-        // once that is implemented
-        dav1d_cdf_thread_unref(&f->in_cdf);
-        assert(!f->use_pri_sec_cdf);
-        assert(!f->frame_hdr->refresh_context);
-        for (int i = 0; i < 7; i++) {
-            if (f->refp[i].p.frame_hdr)
-                dav1d_thread_picture_unref(&f->refp[i]);
-            dav1d_ref_dec(&f->ref_mvs_ref[i]);
-        }
-        dav1d_picture_unref_internal(&f->cur);
-        dav1d_thread_picture_unref(&f->sr_cur);
-        dav1d_ref_dec(&f->mvs_ref);
-        dav1d_ref_dec(&f->seq_hdr_ref);
-        dav1d_ref_dec(&f->frame_hdr_ref);
-    } else if (c->n_fc == 1) {
+    if (c->n_fc == 1) {
         if ((res = dav1d_decode_frame(f)) < 0) {
             for (int i = 0; i < 8; i++) {
                 if (refresh_frame_flags & (1 << i)) {

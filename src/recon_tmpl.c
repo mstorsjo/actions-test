@@ -1326,6 +1326,7 @@ static void mc_opfl(Dav1dTaskContext *const t,
                     int16_t *const dst16, const ptrdiff_t dst_stride,
                     const int bw4, const int bh4, const int bx4, const int by4,
                     const mv mv, const Dav1dThreadPicture *const refp,
+                    const enum Dav1dFilterMode filter,
                     const int left, const int right, const int top, const int bottom)
 {
     const Dav1dFrameContext *const f = t->f;
@@ -1357,9 +1358,9 @@ static void mc_opfl(Dav1dTaskContext *const t,
         ref = ((pixel *) refp->p.data[0]) + PXSTRIDE(ref_stride) * dy + dx;
     }
 
-    f->dsp->mc.mct[DAV1D_FILTER_8TAP_SHARP](dst16, dst_stride, ref, ref_stride,
-                                            bw4 * 4, bh4 * 4, mx, my
-                                            HIGHBD_CALL_SUFFIX);
+    f->dsp->mc.mct[filter](dst16, dst_stride, ref, ref_stride,
+                           bw4 * 4, bh4 * 4, mx, my
+                           HIGHBD_CALL_SUFFIX);
 }
 
 static void ext_warp(Dav1dTaskContext *const t,
@@ -1580,9 +1581,12 @@ static int tip_pred(Dav1dTaskContext *const t,
                     const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav1dFrameContext *const f = t->f;
-    const int refine = f->seq_hdr->tip_refine_mv;
-    const int step = 2 << (f->frame_hdr->tip.frame_mode == 1 /* reference */ &&
-                           ((!refine && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+    const int opfl = f->seq_hdr->tip_refine_mv &&
+        (f->frame_hdr->tip.frame_mode == 1 ||
+         f->frame_hdr->tip.subpel_filter == DAV1D_FILTER_8TAP_SHARP);
+    const int refine = opfl && f->frame_hdr->tip.frame_mode == 1;
+    const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? opfl :
+                           ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
     const uint8_t *const refs = f->frame_hdr->tip.refs;
     ptrdiff_t off_y = 0;
     uint8_t *const mask = t->scratch.seg_mask;
@@ -1597,7 +1601,7 @@ static int tip_pred(Dav1dTaskContext *const t,
     pixel *p1, *p[2];
     ptrdiff_t p1_stride, p_stride[2];
     int8_t d[2];
-    if (refine) {
+    if (opfl) {
         p1 = bitfn(t->scratch.interintra);
         p[0] = p0;
         p[1] = p1;
@@ -1627,7 +1631,7 @@ static int tip_pred(Dav1dTaskContext *const t,
                 top[i] = t->by * 4 + y * 4 + (cmv[i].y >> 3) - 3;
                 left[i] = t->bx * 4 + x * 4 + (cmv[i].x >> 3) - 3;
             }
-            if (refine) {
+            if (opfl) {
                 // refinement
                 for (int i = 0; i < 2; i++)
                     mc(t, p[i], NULL, p_stride[i],
@@ -1636,11 +1640,15 @@ static int tip_pred(Dav1dTaskContext *const t,
                        refp[i], refs[i], DAV1D_FILTER_BILINEAR,
                        iclip(left[i], 0, w - 1), iclip(left[i] + 7 + 8, 1, w),
                        iclip(top[i], 0, h - 1), iclip(top[i] + 7 + 8, 1, h));
-                struct OpflOffset o;
-                f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
-                                         step * 4, step * 4, 1, &o
-                                         HIGHBD_CALL_SUFFIX);
-                const int dy = o.y, dx = o.x;
+                int dy, dx;
+                if (refine) {
+                    struct OpflOffset o;
+                    f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
+                                             step * 4, step * 4, 1, &o
+                                             HIGHBD_CALL_SUFFIX);
+                    dy = o.y;
+                    dx = o.x;
+                } else dy = dx = 0;
                 union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
                 const unsigned sad = f->dsp->mc.sad8x8(&p0[(4 + dy) * PXSTRIDE(p0_stride) +
                                                            (4 + dx)], p0_stride,
@@ -1670,7 +1678,7 @@ static int tip_pred(Dav1dTaskContext *const t,
                 cmv[1].y = cmv[1].y * 2 - dy * 16 + dd->d[1].y;
                 for (int i = 0; i < 2; i++)
                     mc_opfl(t, &tmp[i][y * bw4 * 16 + x * 4], bw4 * 4, step, step,
-                            t->bx + x, t->by + y, cmv[i], refp[i],
+                            t->bx + x, t->by + y, cmv[i], refp[i], b->filter,
                             iclip(left[i], 0, w - 1),
                             iclip(left[i] + 7 + step * 4, 1, w),
                             iclip(top[i], 0, h - 1),
@@ -1687,10 +1695,10 @@ static int tip_pred(Dav1dTaskContext *const t,
                        0, f->bw * 4, 0, f->bh * 4);
             }
             if (bacp) {
-                const int x0 = (t->bx + x) * 4 + (cmv[0].x >> (3 + refine));
-                const int y0 = (t->by + y) * 4 + (cmv[0].y >> (3 + refine));
-                const int x1 = (t->bx + x) * 4 + (cmv[1].x >> (3 + refine));
-                const int y1 = (t->by + y) * 4 + (cmv[1].y >> (3 + refine));
+                const int x0 = (t->bx + x) * 4 + (cmv[0].x >> (3 + opfl));
+                const int y0 = (t->by + y) * 4 + (cmv[0].y >> (3 + opfl));
+                const int x1 = (t->bx + x) * 4 + (cmv[1].x >> (3 + opfl));
+                const int y1 = (t->by + y) * 4 + (cmv[1].y >> (3 + opfl));
                 if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
                     x0 + step * 4 >= w || x1 + step * 4 >= w ||
                     y0 + step * 4 >= h || y1 + step * 4 >= h)
@@ -1790,7 +1798,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
                             for (int i = 0; i < 2; i++)
                                 mc_opfl(t, &tmp[i][((y + by) * bw4 * 4 + x + bx) * 4],
                                         bw4 * 4, bs, bs, t->bx + x + bx, t->by + y + by,
-                                        mv[i], refp[i],
+                                        mv[i], refp[i], b->filter,
                                         iclip(left[i], 0, w - 1),
                                         iclip(left[i] + sw4 * 4 + 7, 1, w),
                                         iclip(top[i], 0, h - 1),
@@ -1880,7 +1888,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
                     for (int i = 0; i < 2; i++)
                         mc_opfl(t, &tmp[i][((y + by) * bw4 * 4 + bx) * 4],
                                 bw4 * 4, bs, bs, t->bx + bx, t->by + y + by,
-                                mv[i], refp[i],
+                                mv[i], refp[i], b->filter,
                                 iclip(left[i] + bx * 4, 0, w - 1),
                                 iclip(left[i] + bx * 4 + 7 + 8, 1, w),
                                 iclip(top[i] + by * 4, 0, h - 1),

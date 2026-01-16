@@ -1,4 +1,4 @@
-From 477a81a5ac8bdcfb912fe3d2cba9eafb234df94a Mon Sep 17 00:00:00 2001
+From 1c63c26743794afc9a0b30bbbc162ad3036c3c7e Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
@@ -8,9 +8,9 @@ Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
  aom/aomdx.h               | 11 +++++++++++
  apps/aomdec.c             | 34 ++++++++++++++++++++++++++++++++++
  av1/av1_dx_iface.c        | 16 ++++++++++++++++
- av1/decoder/decodeframe.c | 23 ++++++++++++++++-------
+ av1/decoder/decodeframe.c | 31 +++++++++++++++++++++----------
  av1/decoder/decoder.h     |  2 ++
- 6 files changed, 89 insertions(+), 7 deletions(-)
+ 6 files changed, 94 insertions(+), 10 deletions(-)
 
 diff --git a/aom/aom_codec.h b/aom/aom_codec.h
 index a338ed5614..5cda54d2d6 100644
@@ -191,10 +191,41 @@ index be11305845..7d0ae14c4e 100644
    { AV1D_ENABLE_SUBGOP_STATS, ctrl_enable_subgop_stats },
  
 diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index e6f4c89224..484503dfac 100644
+index e6f4c89224..e8f6cf3ab9 100644
 --- a/av1/decoder/decodeframe.c
 +++ b/av1/decoder/decodeframe.c
-@@ -10917,8 +10917,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -687,9 +687,10 @@ static void dec_calc_subpel_params_and_extend(
+                    inter_pred_params->is_intrabc, mc_buf[ref], pre, src_stride);
+ }
+ 
+-static void av1_dec_setup_tip_frame(AV1_COMMON *cm, MACROBLOCKD *xd,
++static void av1_dec_setup_tip_frame(AV1Decoder *pbi, MACROBLOCKD *xd,
+                                     uint16_t **mc_buf,
+                                     CONV_BUF_TYPE *tmp_conv_dst) {
++  AV1_COMMON *const cm = &pbi->common;
+   av1_setup_tip_motion_field(cm);
+   av1_setup_tip_frame(cm, xd, mc_buf, tmp_conv_dst,
+                       dec_calc_subpel_params_and_extend,
+@@ -714,7 +715,8 @@ static void av1_dec_setup_tip_frame(AV1_COMMON *cm, MACROBLOCKD *xd,
+     cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q =
+         avg_v_ac_delta_q;
+   }
+-  if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu) {
++  if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu &&
++      pbi->inloop_filters & INLOOPFILTER_DEBLOCK) {
+     init_tip_lf_parameter(cm, 0, av1_num_planes(cm));
+     loop_filter_tip_frame(cm, 0, av1_num_planes(cm));
+   }
+@@ -10281,7 +10283,7 @@ static AOM_INLINE void process_tip_mode(AV1Decoder *pbi) {
+ 
+   if (cm->features.tip_frame_mode == TIP_FRAME_AS_OUTPUT) {
+     xd->opfl_vxy_bufs = pbi->td.opfl_vxy_bufs;
+-    av1_dec_setup_tip_frame(cm, xd, pbi->td.mc_buf, pbi->td.tmp_conv_dst);
++    av1_dec_setup_tip_frame(pbi, xd, pbi->td.mc_buf, pbi->td.tmp_conv_dst);
+   } else if (cm->features.tip_frame_mode == TIP_FRAME_AS_REF) {
+     av1_setup_tip_motion_field(cm);
+   }
+@@ -10917,8 +10919,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
      }
    }
  
@@ -212,7 +243,7 @@ index e6f4c89224..484503dfac 100644
        if (pbi->num_workers > 1) {
          av1_loop_filter_frame_mt(&cm->cur_frame->buf, cm, &pbi->dcb.xd, 0,
                                   num_planes, 0, pbi->tile_workers,
-@@ -10929,7 +10937,7 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10929,7 +10939,7 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
        }
      }
  
@@ -221,7 +252,7 @@ index e6f4c89224..484503dfac 100644
          !pbi->skip_loop_filter && !cm->features.coded_lossless &&
          (cm->ccso_info.ccso_enable[0] || cm->ccso_info.ccso_enable[1] ||
           cm->ccso_info.ccso_enable[2]);
-@@ -10952,16 +10960,17 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10952,16 +10962,17 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
        extend_ccso_border(&cm->cur_frame->buf, ext_rec_y, CCSO_PADDING_SIZE);
      }
  
@@ -258,5 +289,5 @@ index 232423f86a..725b1f94ab 100644
    int inv_tile_order;
    int need_resync;  // wait for key/intra-only frame.
 -- 
-2.43.0
+2.48.1
 
