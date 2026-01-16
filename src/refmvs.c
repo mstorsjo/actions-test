@@ -241,8 +241,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 };
                 const mv out_delta = scale_mv(in_delta, rf->tip_sf[0]);
                 const mv cand_mv = (mv) {
-                    .y = iclip(b->mv.mv[0].y - out_delta.y, -0xffff, 0xffff),
-                    .x = iclip(b->mv.mv[0].x - out_delta.x, -0xffff, 0xffff),
+                    .y = iclip(b_mv[0].y - out_delta.y, -0xffff, 0xffff),
+                    .x = iclip(b_mv[0].x - out_delta.x, -0xffff, 0xffff),
                 };
                 add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "tip2-spc", n)
