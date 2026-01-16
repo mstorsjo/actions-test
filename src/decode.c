@@ -2885,15 +2885,29 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 derive_warpmv(t, have_top, have_left, bw4, bh4, w4, h4,
                               b->ref[0], b->mv[0], &t->warpmv[0]);
             } else if (b->motion_mode == MM_WARP_EXTEND) {
-                int y_off, x_off;
+                int y_off = 0, x_off = 0; // invalid
                 if (mvstack[drl_idx].x_off == -1 ||
                     mvstack[drl_idx].y_off == -1)
                 {
                     y_off = mvstack[drl_idx].y_off;
                     x_off = mvstack[drl_idx].x_off;
+                    const refmvs_block *r;
+                    const int sb_mask = f->sb_step - 1;
+                    if (is_sb_boundary && y_off == -1) {
+                        r = (t->bx + x_off) & sb_mask ?
+                            &t->rt.ra[(t->bx + x_off) >> 1] : &t->rt.ra_tl;
+                    } else {
+                        r = &t->rt.r[((t->by + y_off) & sb_mask) * 128 +
+                                     (t->bx + x_off) & 127];
+                    }
+                    if (r->ref.ref[0] - 1 == TIP_FRAME)
+                        x_off = y_off = 0;
+                }
+                if (x_off || y_off) {
+                    /* do nothing */
                 } else if (have_bottom_left &&
-                    (t->l.ref[0][by4 + bh4 - 1] == b->ref[0] ||
-                     t->l.ref[1][by4 + bh4 - 1] == b->ref[0]))
+                           (t->l.ref[0][by4 + bh4 - 1] == b->ref[0] ||
+                            t->l.ref[1][by4 + bh4 - 1] == b->ref[0]))
                 {
                     y_off = bh4 - 1;
                     x_off = -1;
@@ -2915,8 +2929,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 {
                     y_off = -1;
                     x_off = 0;
-                } else {
-                    y_off = x_off = 0; // invalid
                 }
                 if (y_off || x_off)
                     extend_warpmv(t, x_off, y_off, b_dim, b, &t->warpmv[0]);
