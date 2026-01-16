@@ -28,6 +28,7 @@
 #include "config.h"
 
 #include <inttypes.h>
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -385,7 +386,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         eob = dav1d_msac_decode_symbol_adapt8(&ts->msac, eob_bin_cdf, bits); \
         if (eb && eob == 7) { \
             eob += dav1d_msac_decode_bools_bypass(&ts->msac, eb); \
-            if (bin == 512 && eob == 10) return -1; /* FIXME set error bit */ \
+            if (bin == 512 && eob == 10) return INT_MIN; \
         } \
         break; \
     }
@@ -1958,8 +1959,8 @@ static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
     return mode;
 }
 
-static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
-                            const enum RectTxfmSize tx, Av1Block *const b)
+static int recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+                           const enum RectTxfmSize tx, Av1Block *const b)
 {
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
@@ -1989,6 +1990,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         eob = decode_coefs(t, DB_ONLY(depth + 1)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
                            tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
+        if (eob == INT_MIN) return -1;
         stx = txtp >> 8;
         txtp = txtp & 0xff;
         DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
@@ -2176,6 +2178,7 @@ static void recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     b->y_mode = orig_y_mode;
+    return 0;
 }
 
 static inline int derive_alpha(const int num, const int den, int alpha) {
@@ -2324,11 +2327,11 @@ static void bawp(Dav1dTaskContext *const t,
                   bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
 }
 
-void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
-                           DB_ONLY(const int depth)
-                           const enum BlockSize lbs,
-                           const enum BlockSize cbs,
-                           Av1Block *const b)
+int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
+                          DB_ONLY(const int depth)
+                          const enum BlockSize lbs,
+                          const enum BlockSize cbs,
+                          Av1Block *const b)
 {
 #if 1
     Dav1dTileState *const ts = t->ts;
@@ -2371,7 +2374,12 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                 // (at least if not lossless)
                 const enum BlockSize cbs2 = step == 32 ||
                     !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
-                bytefn(dav1d_recon_b)(t, DB_ONLY(depth) lbs2, cbs2, b);
+                const int res = bytefn(dav1d_recon_b)(t, DB_ONLY(depth) lbs2, cbs2, b);
+                if (res < 0) {
+                    t->cbx = t->bx = x_start;
+                    t->cby = t->by = y_start;
+                    return res;
+                }
                 // FIXME this may be correct only for luma, whereas chroma may
                 // have to be dealt with at 64x64 *subsampled* pixels (i.e.
                 // 128x128 luma pixels for 4:2:0), b/c of chroma-large-tx
@@ -2379,7 +2387,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             t->cbx = t->bx = x_start;
         }
         t->cby = t->by = y_start;
-        return;
+        return 0;
     }
     // FIXME lossless handling (i.e. where one prediction block contains
     // multiple transform blocks
@@ -2387,8 +2395,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     if (lbs == BS_INVALID) goto chroma;
 
     const int8_t *const tp = dav1d_tx_part_tbl[bs];
-    // FIXME do error reporting, to shortcut further decoding
-    if (tp[b->tx_part] == -1) return;
+    if (tp[b->tx_part] == -1) return -1;
 
     pixel *const dst = ((pixel *) f->cur.data[0]) +
                            4 * (t->by * PXSTRIDE(f->cur.stride[0]) + t->bx);
@@ -2517,12 +2524,10 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
 
             if (b->ref[0] == TIP_FRAME) {
                 bacp = tip_pred(t, dst, f->cur.stride[0], tmp, b, bw4, bh4, w4, h4);
-                if (bacp < 0) return;
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
             {
                 bacp = opfl_pred(t, dst, f->cur.stride[0], tmp, b, bw4, bh4, w4, h4);
-                if (bacp < 0) return;
             } else {
                 bacp = 2 * (f->seq_hdr->imp_msk_bld &&
                             b->motion_mode != MM_WARP_CAUSAL &&
@@ -2632,80 +2637,105 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
     t->pb.col_start = t->bx;
     t->pb.row_start = t->by;
     switch (b->tx_part) {
-    case TX_PARTITION_NONE:
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+    case TX_PARTITION_NONE: {
+        const int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         break;
+    }
     case TX_PARTITION_SPLIT: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int tw4 = t_dim->w, th4 = t_dim->h;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         const int have_v_split = t->bx + tw4 < f->bw;
         if (have_v_split) {
             t->bx += tw4;
-            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4;
+            if (res < 0) return res;
         }
         if (t->by + th4 >= f->bh) break;
         t->by += th4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (have_v_split) {
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (!res && have_v_split) {
             t->bx += tw4;
-            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4;
         }
         t->by -= th4;
+        if (res < 0) return res;
         break;
     }
     case TX_PARTITION_H: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int th4 = t_dim->h;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         if (t->by + th4 >= f->bh) break;
         t->by += th4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         t->by -= th4;
+        if (res < 0) return res;
         break;
     }
     case TX_PARTITION_V: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int tw4 = t_dim->w;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         if (t->bx + tw4 >= f->bw) break;
         t->bx += tw4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         t->bx -= tw4;
+        if (res < 0) return res;
         break;
     }
     case TX_PARTITION_H4: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int th4 = t_dim->h;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         if (t->by + th4 >= f->bh) break;
         t->by += th4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (t->by + th4 >= f->bh) { t->by -= th4; break; }
-        t->by += th4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (t->by + th4 >= f->bh) { t->by -= 2 * th4; break; }
-        t->by += th4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        t->by -= 3 * th4;
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0 || t->by + th4 >= f->bh) {
+            t->by -= th4;
+        } else {
+            t->by += th4;
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            if (res < 0 || t->by + th4 >= f->bh) {
+                t->by -= 2 * th4;
+            } else {
+                t->by += th4;
+                res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+                t->by -= 3 * th4;
+            }
+        }
+        if (res < 0) return res;
         break;
     }
     case TX_PARTITION_V4: {
         const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
         const int tw4 = t_dim->w;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         if (t->bx + tw4 >= f->bw) break;
         t->bx += tw4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (t->bx + tw4 >= f->bw) { t->bx -= tw4; break; }
-        t->bx += tw4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (t->bx + tw4 >= f->bw) { t->bx -= 2 * tw4; break; }
-        t->bx += tw4;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        t->bx -= 3 * tw4;
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0 || t->bx + tw4 >= f->bw) {
+            t->bx -= tw4;
+        } else {
+            t->bx += tw4;
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            if (res < 0 || t->bx + tw4 >= f->bw) {
+                t->bx -= 2 * tw4;
+            } else {
+                t->bx += tw4;
+                res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+                t->bx -= 3 * tw4;
+            }
+        }
+        if (res < 0) return res;
         break;
     }
     case TX_PARTITION_H5: {
@@ -2714,25 +2744,31 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                        *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
         const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
         const int th4_big = t_dim_big->h;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         const int have_v_split = t->bx + tw4_small < f->bw;
         if (have_v_split) {
             t->bx += tw4_small;
-            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->bx -= tw4_small;
+            if (res < 0) return res;
         }
         if (t->by + th4_small >= f->bh) break;
         t->by += th4_small;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx_big, b);
-        if (t->by + th4_big >= f->bh) { t->by -= th4_small; break; }
-        t->by += th4_big;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (have_v_split) {
-            t->bx += tw4_small;
-            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-            t->bx -= tw4_small;
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx_big, b);
+        if (res < 0 || t->by + th4_big >= f->bh) {
+            t->by -= th4_small;
+        } else {
+            t->by += th4_big;
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            if (!res && have_v_split) {
+                t->bx += tw4_small;
+                res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+                t->bx -= tw4_small;
+            }
+            t->by -= th4_small + th4_big;
         }
-        t->by -= th4_small + th4_big;
+        if (res < 0) return res;
         break;
     }
     case TX_PARTITION_V5: {
@@ -2741,25 +2777,31 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                        *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
         const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
         const int tw4_big = t_dim_big->w;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
         const int have_h_split = t->by + th4_small < f->bh;
         if (have_h_split) {
             t->by += th4_small;
-            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
             t->by -= th4_small;
+            if (res < 0) return res;
         }
         if (t->bx + tw4_small >= f->bw) break;
         t->bx += tw4_small;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx_big, b);
-        if (t->bx + tw4_big >= f->bw) { t->bx -= tw4_small; break; }
-        t->bx += tw4_big;
-        recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-        if (have_h_split) {
-            t->by += th4_small;
-            recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
-            t->by -= th4_small;
+        res = recon_b_luma_tx(t, DB_ONLY(depth) tx_big, b);
+        if (res < 0 || t->bx + tw4_big >= f->bw) {
+            t->bx -= tw4_small;
+        } else {
+            t->bx += tw4_big;
+            res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+            if (!res && have_h_split) {
+                t->by += th4_small;
+                res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
+                t->by -= th4_small;
+            }
+            t->bx -= tw4_small + tw4_big;
         }
-        t->bx -= tw4_small + tw4_big;
+        if (res < 0) return res;
         break;
     }
     default: assert(0);
@@ -2806,7 +2848,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         }
     }
 
-    if (cbs == BS_INVALID) return;
+    if (cbs == BS_INVALID) return 0;
 
     // chroma
 chroma: {}
@@ -2873,6 +2915,7 @@ chroma: {}
                                          &t->a->ccoef[pl][cbx4],
                                          &t->l.ccoef[pl][cby4], uvtx, b->bs,
                                          b, 1 + pl, cf, &txtp, &cf_ctx);
+            if (eob == INT_MIN) return -1;
             DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
                                depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
                                uv_t_dim->h * 4,
@@ -3068,6 +3111,7 @@ chroma: {}
         t->is_coded[1][cby4 + y] |= mask;
 
     b->uv_mode = orig_uv_mode;
+    return 0;
 #else
     Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;

@@ -377,8 +377,8 @@ static void extend_warpmv(Dav1dTaskContext *const t,
                                               DAV1D_WM_TYPE_AFFINE;
 }
 
-static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
-                             const int pal_sz, const int sz[4])
+static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
+                            const int pal_sz, const int sz[4])
 {
     Dav1dTileState *const ts = t->ts;
     uint16_t (*const pal_cdf)[8] = ts->cdf.m.pal_idx[pal_sz - 2];
@@ -391,7 +391,7 @@ static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
     const int lim1 = sz[!dir], lim2 = sz[dir];
     int copy = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                    ts->cdf.m.pal_idx_identity[3], 2);
-    if (copy == 2) return; // FIXME set error bit to abort decoding
+    if (copy == 2) return -1;
     int prev_v = pal_idx[0] = dav1d_msac_decode_uniform(&ts->msac, pal_sz);
     if (copy == 1) {
         // FIXME if dir=0, maybe use memset()?
@@ -490,6 +490,7 @@ static void read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
     }
 
     t->c->pal_dsp.pal_idx_finish(pal_out, pal_idx, sz[2], sz[3], sz[0], sz[1]);
+    return 0;
 }
 
 static inline unsigned get_prev_frame_segid(const Dav1dFrameContext *const f,
@@ -909,7 +910,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     if (t->frame_thread.pass == 2) {
         if (b->intra) {
-            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
 
 #define set_ctx(rep_macro) \
             rep_macro(edge->mode, off, b->y_mode); \
@@ -957,7 +959,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     debug_warp_matrix(depth, f, t, b, 0);
                 }
             }
-            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
 
             BlockContext *edge = t->a;
             for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
@@ -1599,7 +1602,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                   ts->cdf.m.intra_uv_mode[uv_mode_ctx], 7);
                 if (uv_mode_idx == 7)
                     uv_mode_idx += dav1d_msac_decode_bools_bypass(&ts->msac, 3);
-                // FIXME set error bit to shortcut decoding
                 if (uv_mode_idx > 12) return -1;
                 if (uv_mode_idx < uv_mode_ctx) {
                     b->uv_mode = reordered_dir_y_mode[midx / 7];
@@ -1732,7 +1734,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         } else {
             t->pb.a_is_sm = sm_flag(t->a, bx4);
             t->pb.l_is_sm = sm_flag(&t->l, by4);
-            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
         }
 
         if (has_luma) {
@@ -1911,7 +1914,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.read_coef_blocks(t, bs, b);
             b->filter = DAV1D_FILTER_BILINEAR;
         } else {
-            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
         }
 
         if (has_luma) {
@@ -3007,7 +3011,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
         }
 
 #if 0

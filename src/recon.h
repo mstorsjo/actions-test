@@ -33,8 +33,8 @@
 #include "src/levels.h"
 
 #define decl_recon_b_fn(name) \
-void (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
-            enum BlockSize bs, enum BlockSize cbs, Av1Block *b)
+int (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
+           enum BlockSize bs, enum BlockSize cbs, Av1Block *b)
 typedef decl_recon_b_fn(*recon_b_fn);
 
 #define decl_filter_sbrow_fn(name) \
