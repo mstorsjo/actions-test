@@ -724,7 +724,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     // top-right
     if (tr && tr->mv.mv[0].n != INVALID_MV) {
         add_spatial_candidate(-1, abw4 - x_off,
-                              rt, &st, 1, tr, top_8x8y + ((bx4 + bw4) >> 1),
+                              rt, &st, 1, tr, top_8x8y + ((bx4 + abw4) >> 1),
                               ref, gmv);
         if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0]) {
             memcpy(warp[cnt[1]++], tr->m, sizeof(int32_t) * 7);
