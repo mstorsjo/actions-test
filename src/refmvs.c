@@ -561,10 +561,10 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
            ref.ref[1] >= -1 && ref.ref[1] <= 7);
     gmv[0] = (unsigned) (ref.ref[0] - 1) >= (unsigned) TIP_FRAME ? (mv) { .n = 0 } :
              get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[0] - 1],
-                        bx4, by4, bw4, bh4, rf->frm_hdr);
+                        bx4, by4, bw4, bh4, rf->iw4, rf->ih4, rf->frm_hdr);
     if (comp) {
         gmv[1] = get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[1] - 1],
-                            bx4, by4, bw4, bh4, rf->frm_hdr);
+                            bx4, by4, bw4, bh4, rf->iw4, rf->ih4, rf->frm_hdr);
         DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d, y2=%d,x2=%d\n",
                            gmv[0].y, gmv[0].x, gmv[1].y, gmv[1].x);
     } else {

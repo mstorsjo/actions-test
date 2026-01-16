@@ -362,6 +362,7 @@ static inline void mv_reduce_prec(mv *const mv, const int mv_prec) {
 static inline mv get_warpmv_2d(const int32_t *const matrix,
                                const int bx4, const int by4,
                                const int bw4, const int bh4,
+                               const int iw4, const int ih4,
                                const int mv_precision)
 {
     const int x = bx4 * 4 + bw4 * 2 - 1;
@@ -370,17 +371,21 @@ static inline mv get_warpmv_2d(const int32_t *const matrix,
     const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
     const int not_epel = mv_precision < 6, shift = 13 + not_epel;
     const int rnd = (1 << shift) >> 1, max = 0xffff - not_epel;
-    return (mv) {
+    union mv res = (mv) {
         .y = iclip(apply_sign(((abs(yc) + rnd) >> shift) << not_epel, yc),
                    -max, +max),
         .x = iclip(apply_sign(((abs(xc) + rnd) >> shift) << not_epel, xc),
                    -max, +max),
     };
+    res.y = iclip(res.y, -(by4 + bh4 + 4) * 32, (ih4 - by4 + 4) * 32);
+    res.x = iclip(res.x, -(bx4 + bw4 + 4) * 32, (iw4 - bx4 + 4) * 32);
+    return res;
 }
 
 static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
                             const int bx4, const int by4,
                             const int bw4, const int bh4,
+                            const int iw4, const int ih4,
                             const Dav1dFrameHeader *const hdr)
 {
     switch (gmv->type) {
@@ -391,8 +396,7 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
     default:
     case DAV1D_WM_TYPE_AFFINE: {
         mv res = get_warpmv_2d(gmv->matrix, bx4, by4, bw4, bh4,
-                               hdr->mv_precision + 3);
-        // FIXME clamp to image edges
+                               iw4, ih4, hdr->mv_precision + 3);
         if (hdr->force_integer_mv) fix_int_mv_precision(&res);
         return res;
     }
@@ -401,7 +405,8 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
             .y = gmv->matrix[0] >> 13,
             .x = gmv->matrix[1] >> 13,
         };
-        // FIXME clamp to image edges
+        res.y = iclip(res.y, -(by4 + bh4 + 4) * 32, (ih4 - by4 + 4) * 32);
+        res.x = iclip(res.x, -(bx4 + bw4 + 4) * 32, (iw4 - bx4 + 4) * 32);
         if (hdr->force_integer_mv) fix_int_mv_precision(&res);
         return res;
     }

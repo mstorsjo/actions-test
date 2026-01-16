@@ -2388,10 +2388,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     }
                 }
             } else {
-                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]],
-                                      t->bx, t->by, bw4, bh4, f->frame_hdr);
-                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[1]],
-                                      t->bx, t->by, bw4, bh4, f->frame_hdr);
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]], t->bx, t->by,
+                                      bw4, bh4, f->bw, f->bh, f->frame_hdr);
+                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[1]], t->bx, t->by,
+                                      bw4, bh4, f->bw, f->bh, f->frame_hdr);
             }
 
             if (f->seq_hdr->refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
@@ -2780,7 +2780,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (b->inter_mode != GLOBALMV) {
                 b->mv[0] = b->inter_mode == WARPMV ?
                     get_warpmv_2d(warp[warp_ref_idx], t->bx, t->by, bw4, bh4,
-                                  warpmv_with_mvd ? mv_prec : 6) :
+                                  f->bw, f->bh, warpmv_with_mvd ? mv_prec : 6) :
                     mvstack[drl_idx].mv.mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
@@ -2824,8 +2824,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                        ts->msac.rng);
                 }
             } else {
-                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]],
-                                      t->bx, t->by, bw4, bh4, f->frame_hdr);
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]], t->bx, t->by,
+                                      bw4, bh4, f->bw, f->bh, f->frame_hdr);
             }
 
             if (b->inter_mode == WARPNEWMV && b->motion_mode == MM_WARP_DELTA &&
