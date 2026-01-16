@@ -2772,8 +2772,10 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             for (int y = 0; y < h4; y += 2) {
                 for (int x = 0; x < w4; x += 2) {
                     const int d = wedge[x >> 1];
-                    rb[x].tmv.mv[0].n = d ==  b->wedge_sign ? INVALID_MV : rb[x].mv.mv[0].n;
-                    rb[x].tmv.mv[1].n = d == !b->wedge_sign ? INVALID_MV : rb[x].mv.mv[1].n;
+                    rb[x].tmv.mv[0].n = d ==  b->wedge_sign ?
+                                        INVALID_MV : rb[x].tmv.mv[0].n;
+                    rb[x].tmv.mv[1].n = d == !b->wedge_sign ?
+                                        INVALID_MV : rb[x].tmv.mv[1].n;
                     rb[x + 1].tmv = rb[x].tmv;
                     rb[x + 128].tmv = rb[x].tmv;
                     rb[x + 129].tmv = rb[x].tmv;

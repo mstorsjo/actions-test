@@ -87,13 +87,13 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 // the block (see how it's used in decode.c:derive_warpmv()
 PACKED(typedef struct refmvs_block {
     refmvs_mvpair mv;
+    refmvs_mvpair tmv; // temporal MV for refined/opfl & wedge blocks (mf & 4)
     refmvs_refpair ref;
     uint8_t bs;
     uint8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2: opfl, 3-7: cwp_idx+4
     uint16_t bx4, by4; // top/left coordinates (in 4px units) of this block
     refmvs_mvpair lmv; // 2dmv for warp blocks (see #1146; mf & 2)
     int32_t m[7]; // warp matrix
-    refmvs_mvpair tmv; // temporal MV for refined/opfl & wedge blocks (mf & 4)
 }) ALIGN(refmvs_block, 4);
 CHECK_SIZE(refmvs_block, 60);
 

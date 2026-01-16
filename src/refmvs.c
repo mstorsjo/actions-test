@@ -1883,10 +1883,8 @@ static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
         const refmvs_block *const b = &rr[((y & 31) * 2 + 1) * 128];
         for (int x = col_start8; x < col_end8; x++) {
             const refmvs_block *const cand_b = &b[((x * 2) & 127) + 1];
-            const union mv *const cand_mv =
-                cand_b->mf & 4 ? cand_b->tmv.mv : cand_b->mv.mv;
+            const union mv *const cand_mv = cand_b->tmv.mv;
 
-            // FIXME opfl, refinemv
             if (cand_b->ref.ref[0] - 1 == TIP_FRAME) {
                 union mv tmv = rp_proj[x].mv;
                 if (tmv.n == INVALID_MV) tmv.n = 0;
@@ -2292,6 +2290,7 @@ end:
 static void splat_mv_c(refmvs_block *r, refmvs_block *const rmv,
                        const int bw4, int bh4)
 {
+    rmv->tmv = rmv->mv;
     do {
         for (int x = 0; x < bw4; x++) {
             memcpy(&r[x], rmv, offsetof(refmvs_block, lmv));
@@ -2305,27 +2304,25 @@ static void splat_warpmv_c(refmvs_block *r,
                            const Dav1dWarpedMotionParams *const mat,
                            const int bw4, int bh4)
 {
-    assert(bw4 > 1);
+    assert(bw4 > 1 && bh4 > 1);
     rmv->lmv = rmv->mv;
     memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
     rmv->m[6] = mat->type;
+    if (mat->type == DAV1D_WM_TYPE_INVALID) {
+        rmv->mv.mv[0].n = 0;
+        rmv->tmv = rmv->lmv;
+    }
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
-            if (mat->type == DAV1D_WM_TYPE_INVALID) {
-                rmv->mv.mv[0].n = 0;
-            } else {
+            if (mat->type != DAV1D_WM_TYPE_INVALID) {
                 rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
                                         -0xffff, 0xffff);
                 rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
                                         -0xffff, 0xffff);
+                rmv->tmv = rmv->mv;
             }
-            memcpy(&r[x], rmv, offsetof(refmvs_block, tmv));
-            memcpy(&r[x + 1], rmv, offsetof(refmvs_block, tmv));
-            if (bh4 > 1) {
-                memcpy(&r[x + 128], rmv, offsetof(refmvs_block, tmv));
-                memcpy(&r[x + 129], rmv, offsetof(refmvs_block, tmv));
-            }
+            r[x] = r[x + 1] = r[x + 128] = r[x + 129] = *rmv;
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
         }
@@ -2342,36 +2339,37 @@ static void splat_comp_warpmv_c(refmvs_block *r,
                                 const Dav1dWarpedMotionParams *const mat,
                                 const int bw4, int bh4)
 {
-    assert(bw4 > 1);
+    assert(bw4 > 1 && bh4 > 1);
     rmv->lmv = rmv->mv;
     // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
     memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
     rmv->m[6] = mat->type;
+    if (mat[0].type == DAV1D_WM_TYPE_INVALID) {
+        rmv->mv.mv[0].n = 0;
+        rmv->tmv.mv[0] = rmv->lmv.mv[0];
+    }
+    if (mat[1].type == DAV1D_WM_TYPE_INVALID) {
+        rmv->mv.mv[1].n = 0;
+        rmv->tmv.mv[1] = rmv->lmv.mv[1];
+    }
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         for (int x = 0; x < bw4; x += 2) {
-            if (mat[0].type == DAV1D_WM_TYPE_INVALID) {
-                rmv->mv.mv[0].n = 0;
-            } else {
+            if (mat[0].type != DAV1D_WM_TYPE_INVALID) {
                 rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
                                         -0xffff, 0xffff);
                 rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
                                         -0xffff, 0xffff);
+                rmv->tmv.mv[0] = rmv->mv.mv[0];
             }
-            if (mat[1].type == DAV1D_WM_TYPE_INVALID) {
-                rmv->mv.mv[1].n = 0;
-            } else {
+            if (mat[1].type != DAV1D_WM_TYPE_INVALID) {
                 rmv->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
                                         -0xffff, 0xffff);
                 rmv->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
                                         -0xffff, 0xffff);
+                rmv->tmv.mv[1] = rmv->mv.mv[1];
             }
-            memcpy(&r[x], rmv, offsetof(refmvs_block, tmv));
-            memcpy(&r[x + 1], rmv, offsetof(refmvs_block, tmv));
-            if (bh4 > 1) {
-                memcpy(&r[x + 128], rmv, offsetof(refmvs_block, tmv));
-                memcpy(&r[x + 129], rmv, offsetof(refmvs_block, tmv));
-            }
+            r[x] = r[x + 1] = r[x + 128] = r[x + 129] = *rmv;
             mvxi1 += (mat[0].matrix[2] - 0x10000) * 8;
             mvyi1 += mat[0].matrix[4] * 8;
             mvxi2 += (mat[1].matrix[2] - 0x10000) * 8;
