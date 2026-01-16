@@ -304,9 +304,13 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
         if (np < 8 && have_topright) // top/right
             add_sample(bw4, 0, 1, -1, &ra[((t->bx + bw4) & 127)]);
     } else {
-        if (np < 8 && have_topleft) // top/left
-            add_sample(0, 0, -1, -1, (t->bx & ~1) & (f->sb_step - 1) ?
-                       &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl);
+        if (np < 8 && have_topleft) { // top/left
+            const refmvs_block *const r2 = (t->bx & ~1) & (f->sb_step - 1) ?
+                                           &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl;
+            assert(r2->bx4 + dav1d_block_dimensions[r2->bs][0] <= t->bx);
+            if (r2->bx4 + dav1d_block_dimensions[r2->bs][0] == t->bx)
+                add_sample(0, 0, -1, -1, r2);
+        }
         if (np < 8 && have_topright) { // top/right
             const refmvs_block *const r2 = &ra[(t->bx >> 1) + ((bw4 + 1) >> 1)];
             add_sample(r2->bx4 - t->bx, 0, 1, -1, r2);
