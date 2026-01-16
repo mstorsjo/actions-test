@@ -137,7 +137,8 @@ put_8tap_c(pixel *dst, ptrdiff_t dst_stride,
 {
     const int intermediate_bits = get_intermediate_bits(bitdepth_max);
     const int bits = 6 + (filter_type < 0);
-    const int intermediate_rnd = 32 + ((1 << (bits - intermediate_bits)) >> 1);
+    const int intermediate_rnd =
+        ((1 << bits) >> 1) + ((1 << (bits - intermediate_bits)) >> 1);
 
     GET_FILTERS();
     dst_stride = PXSTRIDE(dst_stride);
