@@ -2502,7 +2502,7 @@ void bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                                  bw4 * 4, bh4 * 4, "orip");
                 }
                 const uint8_t *const mask = b->wedge_idx == -1 ?
-                    II_MASK(bs, bw4, bh4, b->interintra_mode) : \
+                    II_MASK(bs, bw4, bh4, b->interintra_mode) :
                     WEDGE_MASK(bs, bw4, bh4, b->wedge_idx);
                 if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                     hex_dump(dst, f->cur.stride[0],
