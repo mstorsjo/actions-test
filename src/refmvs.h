@@ -87,15 +87,14 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 // the block (see how it's used in decode.c:derive_warpmv()
 PACKED(typedef struct refmvs_block {
     refmvs_mvpair mv;
-    refmvs_mvpair tmv; // temporal MV for refined/opfl & wedge blocks (mf & 4)
     refmvs_refpair ref;
     uint8_t bs;
-    uint8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2: opfl, 3-7: cwp_idx+4
+    int8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2-7: cwp_idx
     uint16_t bx4, by4; // top/left coordinates (in 4px units) of this block
     refmvs_mvpair lmv; // 2dmv for warp blocks (see #1146; mf & 2)
     int32_t m[7]; // warp matrix
 }) ALIGN(refmvs_block, 4);
-CHECK_SIZE(refmvs_block, 60);
+CHECK_SIZE(refmvs_block, 52);
 
 typedef struct refmvs_frame {
     const Dav1dSequenceHeader *seq_hdr;
@@ -165,33 +164,29 @@ typedef struct refmvs_candidate {
     int8_t y_off, x_off;
 } refmvs_candidate;
 
-#define decl_save_tmvs_fn(name) \
-void (name)(refmvs_temporal_block *rp, const ptrdiff_t stride, \
-            const refmvs_block *rr, const refmvs_sngl_mv_block *rp_proj, \
-            const int32_t tip_sf[2], const uint8_t tip_ref[2], \
-            int col_end8, int row_end8, int col_start8, int row_start8, \
-            uint64_t flipmask)
-typedef decl_save_tmvs_fn(*save_tmvs_fn);
-
 #define decl_splat_mv_fn(name) \
-void (name)(refmvs_block *r, refmvs_block *rmv, int bw4, int bh4)
+void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
+            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
+            refmvs_temporal_block *t_src, int bw4, int bh4)
 typedef decl_splat_mv_fn(*splat_mv_fn);
 
 #define decl_splat_warpmv_fn(name) \
-void (name)(refmvs_block *r, refmvs_block *rmv, \
-            int64_t mvy, int64_t mvx, const Dav1dWarpedMotionParams *const matrix, \
-            int bw4, int bh4)
+void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
+            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
+            refmvs_temporal_block *t_src, int64_t mvy, int64_t mvx, \
+            const Dav1dWarpedMotionParams *const matrix, int bw4, int bh4)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
 
 #define decl_splat_comp_warpmv_fn(name) \
-void (name)(refmvs_block *r, refmvs_block *rmv, \
+void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
+            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
+            refmvs_temporal_block *t_src, \
             int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
             const Dav1dWarpedMotionParams *const matrix, \
-            int bw4, int bh4)
+            int bw4, int bh4, int t_swap)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
 
 typedef struct Dav1dRefmvsDSPContext {
-    save_tmvs_fn save_tmvs;
     splat_mv_fn splat_mv;
     splat_warpmv_fn splat_warpmv;
     splat_comp_warpmv_fn splat_comp_warpmv;
@@ -207,8 +202,8 @@ int dav1d_refmvs_init_frame(refmvs_frame *rf,
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
                             int n_tile_threads, int n_frame_threads);
 
-// cache the current superblock's projectable motion vectors
-// into buffers for use in future frame's temporal MV prediction
+// cache the current superblock's bottom spatial values into into a "top"
+// buffer to act as "top" across superblock boundaries for the next sbrow
 void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *dsp,
                             refmvs_tile *rt,
                             int col_start8, int col_end8,
@@ -220,7 +215,31 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             const int row_start8, int row_end8);
 
 mv mv_projection(mv in, int num, int den);
-mv scale_mv(mv in, int sf);
+static ALWAYS_INLINE mv scale_mv(const mv in, const int sf) {
+    const int64_t y = in.y * (int64_t) sf, x = in.x * (int64_t) sf;
+    return (mv) {
+        .y = iclip((int)((y + 0x2000 - (y < 0)) >> 14), -0xffff, 0xffff),
+        .x = iclip((int)((x + 0x2000 - (x < 0)) >> 14), -0xffff, 0xffff),
+    };
+}
+
+static ALWAYS_INLINE unsigned quantize_mv_comp(const unsigned absv) {
+    assert(absv < 2048);
+    if (!absv) return 0;
+    const int nbits = iclip(ulog2(absv) - 4, 0, 6);
+    int res = (absv - (16 * !!nbits << nbits)) >> nbits;
+    res += (nbits + !!nbits) * 16;
+    return res;
+}
+
+static ALWAYS_INLINE union qmv quantize_mv(const union mv mv) {
+    const int absy = abs(mv.y), absx = abs(mv.x);
+    if (imax(absx, absy) >= 2048) return (union qmv) { .n = INVALID_TRAJ };
+    return (union qmv) {
+        .y = apply_sign(quantize_mv_comp(absy), mv.y),
+        .x = apply_sign(quantize_mv_comp(absx), mv.x),
+    };
+}
 
 // initialize tile boundaries and refmvs_block pointers for one tile/sbrow
 void dav1d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,

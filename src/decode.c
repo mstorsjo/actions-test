@@ -49,6 +49,7 @@
 #include "src/tables.h"
 #include "src/thread_task.h"
 #include "src/warpmv.h"
+#include "src/wedge.h"
 
 static inline int dq_lookup(const int hbd, int qidx) {
     if (!qidx) return 64;
@@ -545,34 +546,37 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                                    const Av1Block *const b,
                                    const int by4, const int bw4, const int bh4)
 {
-    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(tmpl, 16);
-    tmpl.ref.ref[0] = b->ref[0] + 1;
-    tmpl.ref.ref[1] = -1;
-    tmpl.bs = bs;
-    tmpl.mv.mv[0] = b->mv[0];
-    tmpl.mv.mv[1].n = INVALID_MV;
-    tmpl.bx4 = t->bx;
-    tmpl.by4 = t->by;
+    refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(s_src, 16);
+    const ptrdiff_t t_stride = f->rf.rp_stride;
+    refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
+    refmvs_temporal_block t_src;
+    t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref[0] + 1;
+    s_src.ref.ref[1] = -1;
+    s_src.mv.mv[1].n = INVALID_MV;
+    s_src.bs = bs;
+    s_src.bx4 = t->bx;
+    s_src.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
-        tmpl.mf = 2;
+        s_src.mf = 2;
         const int32_t *const mat = t->warpmv[0].matrix;
         const int64_t mvx = (int64_t) (mat[2] - 0x10000) * (t->bx + 1) * 4 +
                             (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
-        f->c->refmvs_dsp.splat_warpmv(rb, &tmpl, mvy, mvx, &t->warpmv[0], bw4, bh4);
+        memcpy(s_src.m, mat, sizeof(int32_t) * 6);
+        s_src.m[6] = t->warpmv[0].type;
+        s_src.lmv.mv[0] = b->mv[0];
+        s_src.lmv.mv[1].n = INVALID_MV;
+        f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
+                                      mvy, mvx, &t->warpmv[0], bw4, bh4);
     } else {
-        if (b->ref[0] == TIP_FRAME && f->seq_hdr->tip_refine_mv &&
-            (f->frame_hdr->tip.frame_mode == 1 ||
-             f->frame_hdr->tip.subpel_filter == DAV1D_FILTER_8TAP_SHARP))
-        {
-            tmpl.mf = 4;
-        } else {
-            tmpl.mf = b->inter_mode == GLOBALMV;
-        }
-        f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+        s_src.mv.mv[0] = b->mv[0];
+        s_src.mf = b->inter_mode == GLOBALMV;
+        // this is invalid for TIP, but that will be overwritten in tip_pred()
+        t_src.mv.mv[0] = t_src.mv.mv[1] = quantize_mv(b->mv[0]);
+        f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
     }
 }
 
@@ -583,8 +587,8 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
                                     const Av1Block *const b,
                                     const int by4, const int bw4, const int bh4)
 {
-    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
+    refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
         .ref.ref = { 0, -1 },
         .mv.mv[0] = b->mv[0],
         .mv.mv[1].n = INVALID_MV,
@@ -593,7 +597,13 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
         .bx4 = t->bx,
         .by4 = t->by,
     };
-    f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+    const ptrdiff_t t_stride = f->rf.rp_stride;
+    refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
+    refmvs_temporal_block t_src = {
+        .ref.pair = 0,
+        .mv.n = INVALID_TRAJ * 0x10001U,
+    };
+    f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
 
     if (t->f->seq_hdr->refmv_bank)
         dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
@@ -606,52 +616,69 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                                    const Av1Block *const b,
                                    const int by4, const int bw4, const int bh4)
 {
-    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(tmpl, 16);
-    tmpl.ref.ref[0] = b->ref[0] + 1;
-    tmpl.ref.ref[1] = b->ref[1] + 1;
-    tmpl.bs = bs;
-    tmpl.mf = (b->cwp_idx + 4) << 3;
-    tmpl.mv.mv[0] = b->mv[0];
-    tmpl.mv.mv[1] = b->mv[1];
-    tmpl.bx4 = t->bx;
-    tmpl.by4 = t->by;
+    refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(s_src, 16);
+    const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref[0] * 8 + b->ref[1])));
+    const ptrdiff_t t_stride = f->rf.rp_stride;
+    refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
+    refmvs_temporal_block t_src;
+    s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref[0] + 1;
+    s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref[1] + 1;
+    s_src.bs = bs;
+    s_src.mf = b->cwp_idx << 2;
+    s_src.bx4 = t->bx;
+    s_src.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
-        tmpl.mf |= 2;
-        if (b->comp_type == COMP_INTER_WEDGE)
-            tmpl.mf |= 4;
+        s_src.mf |= 2;
         const int32_t *const mat1 = t->warpmv[0].matrix;
         const int32_t *const mat2 = t->warpmv[1].matrix;
         const int64_t mvx1 = (int64_t) (mat1[2] - 0x10000) * (t->bx + 1) * 4 +
-                            (int64_t) mat1[3] * (t->by + 1) * 4 + mat1[0];
+                             (int64_t) mat1[3] * (t->by + 1) * 4 + mat1[0];
         const int64_t mvy1 = (int64_t) mat1[4] * (t->bx + 1) * 4 + mat1[1] +
-                            (int64_t) (mat1[5] - 0x10000) * (t->by + 1) * 4;
+                             (int64_t) (mat1[5] - 0x10000) * (t->by + 1) * 4;
         const int64_t mvx2 = (int64_t) (mat2[2] - 0x10000) * (t->bx + 1) * 4 +
-                            (int64_t) mat2[3] * (t->by + 1) * 4 + mat2[0];
+                             (int64_t) mat2[3] * (t->by + 1) * 4 + mat2[0];
         const int64_t mvy2 = (int64_t) mat2[4] * (t->bx + 1) * 4 + mat2[1] +
-                            (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
-        f->c->refmvs_dsp.splat_comp_warpmv(rb, &tmpl, mvy1, mvx1, mvy2, mvx2,
-                                           t->warpmv, bw4, bh4);
+                             (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
+        // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
+        memcpy(s_src.m, mat1, sizeof(int32_t) * 6);
+        s_src.m[6] = t->warpmv[0].type;
+        memcpy(s_src.lmv.mv, b->mv, sizeof(union mv) * 2);
+        f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
+                                           mvy1, mvx1, mvy2, mvx2,
+                                           t->warpmv, bw4, bh4, t_swap);
     } else {
-        tmpl.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
-        if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
-            (b->refine_mv && b->comp_type == COMP_INTER_AVG) ||
-            b->comp_type == COMP_INTER_WEDGE)
-        {
-            tmpl.mf |= 4;
+        memcpy(s_src.mv.mv, b->mv, sizeof(union mv) * 2);
+        s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
+        t_src.mv.mv[0] = quantize_mv(b->mv[t_swap]);
+        t_src.mv.mv[1] = quantize_mv(b->mv[!t_swap]);
+        f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
+    }
+    if (b->comp_type == COMP_INTER_WEDGE) {
+        const uint8_t *mask = WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx);
+        for (int y = 0; y < bh4 >> 1; y++) {
+            for (int x = 0; x < bw4 >> 1; x++) {
+                const int d = mask[x];
+                if (d == 2) continue;
+                const int idx = d ^ b->wedge_sign ^ t_swap;
+                t_dst[x].ref.ref[idx] = t_dst[x].ref.ref[!idx];
+                t_dst[x].mv.mv[idx] = t_dst[x].mv.mv[!idx];
+            }
+            t_dst += t_stride;
+            mask += bw4 >> 1;
         }
-        f->c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
     }
 }
 
 static inline void splat_intraref(const Dav1dContext *const c,
+                                  const Dav1dFrameContext *const f,
                                   Dav1dTaskContext *const t,
                                   const enum BlockSize bs,
                                   const int by4, const int bw4, const int bh4)
 {
-    refmvs_block *const rb = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(tmpl, 16) = (refmvs_block) {
+    refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
+    refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
         .ref.ref = { -1, -1 },
         .mv.mv[0].n = INVALID_MV,
         .mv.mv[1].n = INVALID_MV,
@@ -660,7 +687,13 @@ static inline void splat_intraref(const Dav1dContext *const c,
         .bx4 = t->bx,
         .by4 = t->by,
     };
-    c->refmvs_dsp.splat_mv(rb, &tmpl, bw4, bh4);
+    const ptrdiff_t t_stride = f->rf.rp_stride;
+    refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
+    refmvs_temporal_block t_src = {
+        .ref.pair = 0,
+        .mv.n = INVALID_TRAJ * 0x10001U,
+    };
+    c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
 
     if (t->f->seq_hdr->refmv_bank)
         dav1d_refmvs_bank_update(&t->rt, bs, t->by, t->bx);
@@ -1715,7 +1748,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)
-                splat_intraref(f->c, t, bs, by4, bw4, bh4);
+                splat_intraref(f->c, f, t, bs, by4, bw4, bh4);
 
             if (b->pal_sz) {
                 uint8_t *pal_idx;

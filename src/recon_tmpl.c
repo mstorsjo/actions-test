@@ -1550,6 +1550,22 @@ static ALWAYS_INLINE int get_mask(uint8_t *const mask, const ptrdiff_t stride,
     return 0;
 }
 
+static void update_temporal(refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
+                            const int w8, const int h8, const int8_t refs[2],
+                            const union mv mv[2], const int swap)
+{
+    refmvs_temporal_block t_src;
+    t_src.ref.ref[0] = refs[swap] + 1;
+    t_src.ref.ref[1] = refs[!swap] + 1;
+    t_src.mv.mv[0] = quantize_mv(mv[swap]);
+    t_src.mv.mv[1] = quantize_mv(mv[!swap]);
+    for (int y = 0; y < h8; y++) {
+        for (int x = 0; x < w8; x++)
+            t_dst[x] = t_src;
+        t_dst += t_stride;
+    }
+}
+
 static void opfl_mv_adj(const struct OpflRegressionData *const r,
                         union OpflMvDeltaBlock *const dd, const int8_t d[2])
 {
@@ -1630,8 +1646,11 @@ static int tip_pred(Dav1dTaskContext *const t,
     }
 
     const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == 1 /* reference */ ? 6 : 15;
+    const ptrdiff_t t_stride = f->rf.rp_stride;
+    refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
+    const int t_swap = !!(f->rf.ref_flip & (1ULL << (refs[0] * 8 + refs[1])));
     for (int y = 0, yy = 0; y < h4; y += step, yy++) {
-        const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * f->rf.rp_stride;
+        const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
         for (int x = 0, xx = 0; x < w4; x += step, xx++) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
             mv tmv = t->rt.rp_proj[off_8x8].mv;
@@ -1640,11 +1659,8 @@ static int tip_pred(Dav1dTaskContext *const t,
             int left[2], top[2];
             for (int i = 0; i < 2; i++) {
                 const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
-                const union mv mv = (union mv) {
-                    .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
-                    .x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff),
-                };
-                cmv[i] = mv;
+                cmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
+                cmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                 top[i] = t->by * 4 + y * 4 + (cmv[i].y >> 3) - 3;
                 left[i] = t->bx * 4 + x * 4 + (cmv[i].x >> 3) - 3;
             }
@@ -1664,7 +1680,11 @@ static int tip_pred(Dav1dTaskContext *const t,
                                              step * 4, step * 4, 1, &o
                                              HIGHBD_CALL_SUFFIX);
                     dy = o.y;
+                    cmv[0].y += 8 * dy;
+                    cmv[1].y -= 8 * dy;
                     dx = o.x;
+                    cmv[0].x += 8 * dx;
+                    cmv[1].x -= 8 * dx;
                 } else dy = dx = 0;
                 union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
                 const unsigned sad = f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
@@ -1689,10 +1709,10 @@ static int tip_pred(Dav1dTaskContext *const t,
                 } else {
                     dd->n = 0;
                 }
-                cmv[0].x = cmv[0].x * 2 + dx * 16 + dd->d[0].x;
-                cmv[0].y = cmv[0].y * 2 + dy * 16 + dd->d[0].y;
-                cmv[1].x = cmv[1].x * 2 - dx * 16 + dd->d[1].x;
-                cmv[1].y = cmv[1].y * 2 - dy * 16 + dd->d[1].y;
+                cmv[0].x = cmv[0].x * 2 + dd->d[0].x;
+                cmv[0].y = cmv[0].y * 2 + dd->d[0].y;
+                cmv[1].x = cmv[1].x * 2 + dd->d[1].x;
+                cmv[1].y = cmv[1].y * 2 + dd->d[1].y;
                 for (int i = 0; i < 2; i++)
                     mc_opfl(t, &tmp[i][y * bw4 * 16 + x * 4], bw4 * 4, step, step,
                             t->bx + x, t->by + y, cmv[i], refp[i], b->filter,
@@ -1700,22 +1720,48 @@ static int tip_pred(Dav1dTaskContext *const t,
                             iclip(left[i] + 7 + step * 4, 1, w),
                             iclip(top[i], 0, h - 1),
                             iclip(top[i] + 7 + step * 4, 1, h));
-                dd->d[0].x = ((dd->d[0].x + (dd->d[0].x > 0)) >> 1) + dx * 8;
-                dd->d[0].y = ((dd->d[0].y + (dd->d[0].y > 0)) >> 1) + dy * 8;
-                dd->d[1].x = ((dd->d[1].x + (dd->d[1].x > 0)) >> 1) - dx * 8;
-                dd->d[1].y = ((dd->d[1].y + (dd->d[1].y > 0)) >> 1) - dy * 8;
+                const union mv dmv[2] = {
+                    [0] = { .y = (cmv[0].y + (dd->d[0].y > 0)) >> 1,
+                            .x = (cmv[0].x + (dd->d[0].x > 0)) >> 1 },
+                    [1] = { .y = (cmv[1].y + (dd->d[1].y > 0)) >> 1,
+                            .x = (cmv[1].x + (dd->d[1].x > 0)) >> 1 },
+                };
+                update_temporal(&t_dst[x >> 1], t_stride, step >> 1, step >> 1,
+                                (const int8_t *) refs, dmv, t_swap);
             } else {
                 for (int i = 0; i < 2; i++)
                     mc(t, NULL, &tmp[i][off_y + x * 4], bw4 * 4,
                        step, step, t->bx + x, t->by + y, 0,
                        cmv[i], refp[i], refs[i], b->filter,
                        0, f->bw * 4, 0, f->bh * 4);
+                // when refinement is disabled, each sub-block in the temporal
+                // MV buffer gets its own 8x8 tip MV even if the tip blocksize
+                // is 16x16 (see #945)
+                update_temporal(&t_dst[x >> 1], t_stride, step >> 1,
+                                step >> 1, (const int8_t *) refs, cmv, t_swap);
+                if (step == 4 && f->frame_hdr->tip.frame_mode == 1 /* reference */) {
+                    union mv dmv[2];
+                    for (int p = 1; p < 4; p++) {
+                        mv tmv = t->rt.rp_proj[off_8x8 + (p & 1) +
+                                               ((p & 2) >> 1) * t_stride].mv;
+                        if (tmv.n == INVALID_MV) tmv.n = 0;
+                        for (int i = 0; i < 2; i++) {
+                            const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
+                            dmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
+                            dmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
+                        }
+                        update_temporal(&t_dst[((p & 2) >> 1) * t_stride +
+                                               (x >> 1) + (p & 1)], t_stride, 1,
+                                        1, (const int8_t *) refs, dmv, t_swap);
+                    }
+                }
             }
             if (bacp)
                 have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
                                       cmv, 3 + opfl, step, step, w, h);
         }
         off_y += bw4 * 4 * 4 * step;
+        t_dst += (step >> 1) * t_stride;
     }
     return bacp && have_bacp;
 }
@@ -1755,6 +1801,9 @@ static int opfl_pred(Dav1dTaskContext *const t,
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
     const ptrdiff_t opfl_stride = bw4 >> (bs == 2);
 
+    const ptrdiff_t t_stride = f->rf.rp_stride;
+    refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
+    const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref[0] * 8 + b->ref[1])));
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4);
     for (int y = 0; y < h4; y += sh4) {
         int left[2] = { t->bx * 4 + (b->mv[0].x >> 3) - 3,
@@ -1804,22 +1853,21 @@ static int opfl_pred(Dav1dTaskContext *const t,
                                         iclip(left[i] + sw4 * 4 + 7, 1, w),
                                         iclip(top[i], 0, h - 1),
                                         iclip(top[i] + sh4 * 4 + 7, 1, h));
-                            dd->d[0].x = ((dd->d[0].x + (dd->d[0].x > 0)) >> 1) + dx * 8;
-                            dd->d[0].y = ((dd->d[0].y + (dd->d[0].y > 0)) >> 1) + dy * 8;
-                            dd->d[1].x = ((dd->d[1].x + (dd->d[1].x > 0)) >> 1) - dx * 8;
-                            dd->d[1].y = ((dd->d[1].y + (dd->d[1].y > 0)) >> 1) - dy * 8;
+                            const union mv dmv[2] = {
+                                [0] = { .y = (mv[0].y + (dd->d[0].y > 0)) >> 1,
+                                        .x = (mv[0].x + (dd->d[0].x > 0)) >> 1 },
+                                [1] = { .y = (mv[1].y + (dd->d[1].y > 0)) >> 1,
+                                        .x = (mv[1].x + (dd->d[1].x > 0)) >> 1 },
+                            };
+                            update_temporal(&t_dst[((x + bx) >> 1) + !!by * t_stride],
+                                            t_stride, 1, 1,
+                                            (const int8_t *) b->ref, dmv, t_swap);
                             if (bacp)
                                 have_bacp |= get_mask(mask, bw4 * 4, t->bx, x + bx,
                                                       t->by, y + by, mv, 4, 2, 2, w, h);
                         }
                     }
                 } else {
-                    union OpflMvDeltaBlock *const dd = delta_line;
-                    dd->d[0].x = +dx * 8;
-                    dd->d[0].y = +dy * 8;
-                    dd->d[1].x = -dx * 8;
-                    dd->d[1].y = -dy * 8;
-                    dd[1] = dd[opfl_stride] = dd[opfl_stride + 1] = *dd;
                     const union mv mv[2] = {
                         [0] = { .y = b->mv[0].y + dy * 8,
                                 .x = b->mv[0].x + dx * 8 },
@@ -1834,6 +1882,8 @@ static int opfl_pred(Dav1dTaskContext *const t,
                            iclip(left[i] + sw4 * 4 + 7, 1, w),
                            iclip(top[i], 0, h - 1),
                            iclip(top[i] + sh4 * 4 + 7, 1, h));
+                    update_temporal(&t_dst[x >> 1], t_stride, sw4 >> 1, sh4 >> 1,
+                                    (const int8_t *) b->ref, mv, t_swap);
                     if (bacp)
                         have_bacp |= get_mask(mask, bw4 * 4, t->bx, x,
                                               t->by, y, mv, 3, sw4, sh4, w, h);
@@ -1873,10 +1923,15 @@ static int opfl_pred(Dav1dTaskContext *const t,
                                 iclip(top[i] + by * 4, 0, h - 1),
                                 iclip(top[i] + by * 4 + 7 + 8, 1, h));
                     if (bs > 1) {
-                        dd->d[0].x = (dd->d[0].x + (dd->d[0].x > 0)) >> 1;
-                        dd->d[0].y = (dd->d[0].y + (dd->d[0].y > 0)) >> 1;
-                        dd->d[1].x = (dd->d[1].x + (dd->d[1].x > 0)) >> 1;
-                        dd->d[1].y = (dd->d[1].y + (dd->d[1].y > 0)) >> 1;
+                        const union mv dmv[2] = {
+                            [0] = { .y = (mv[0].y + (dd->d[0].y > 0)) >> 1,
+                                    .x = (mv[0].x + (dd->d[0].x > 0)) >> 1 },
+                            [1] = { .y = (mv[1].y + (dd->d[1].y > 0)) >> 1,
+                                    .x = (mv[1].x + (dd->d[1].x > 0)) >> 1 },
+                        };
+                        update_temporal(&t_dst[(bx >> 1) + !!by * t_stride],
+                                        t_stride, sw4 >> 1, sh4 >> 1,
+                                        (const int8_t *) b->ref, dmv, t_swap);
                     }
                     if (bacp)
                         have_bacp |= get_mask(mask, bw4 * 4, t->bx, bx,
@@ -1887,18 +1942,22 @@ static int opfl_pred(Dav1dTaskContext *const t,
             }
             if (bs == 1) {
                 union OpflMvDeltaBlock *const dd = &t->opfl[0];
+                union mv dmv[2];
                 dd->d[0].x = dd[0].d[0].x + dd[1].d[0].x + dd[2].d[0].x + dd[3].d[0].x;
-                dd->d[0].x = (dd->d[0].x + 3 + (dd->d[0].x > 0)) >> 3;
+                dmv[0].x = (b->mv[0].x * 8 + dd->d[0].x + 3 + (dd->d[0].x > 0)) >> 3;
                 dd->d[0].y = dd[0].d[0].y + dd[1].d[0].y + dd[2].d[0].y + dd[3].d[0].y;
-                dd->d[0].y = (dd->d[0].y + 3 + (dd->d[0].y > 0)) >> 3;
+                dmv[0].y = (b->mv[0].y * 8 + dd->d[0].y + 3 + (dd->d[0].y > 0)) >> 3;
                 dd->d[1].x = dd[0].d[1].x + dd[1].d[1].x + dd[2].d[1].x + dd[3].d[1].x;
-                dd->d[1].x = (dd->d[1].x + 3 + (dd->d[1].x > 0)) >> 3;
+                dmv[1].x = (b->mv[1].x * 8 + dd->d[1].x + 3 + (dd->d[1].x > 0)) >> 3;
                 dd->d[1].y = dd[0].d[1].y + dd[1].d[1].y + dd[2].d[1].y + dd[3].d[1].y;
-                dd->d[1].y = (dd->d[1].y + 3 + (dd->d[1].y > 0)) >> 3;
+                dmv[1].y = (b->mv[1].y * 8 + dd->d[1].y + 3 + (dd->d[1].y > 0)) >> 3;
+                update_temporal(t_dst, t_stride, 1, 1,
+                                (const int8_t *) b->ref, dmv, t_swap);
             }
         }
         for (int n = 0; n < 2; n++)
             top[n] += 4 * sh4;
+        t_dst += t_stride * (sh4 >> 1);
     }
 
     return bacp && have_bacp;
@@ -2780,47 +2839,6 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
         break;
     }
     default: assert(0);
-    }
-
-    refmvs_block *rb = &t->rt.r[(t->by & 63) * 128 + (t->bx & 127)];
-    if (rb->mf & 4) {
-        if (b->comp_type == COMP_INTER_WEDGE) {
-            const uint8_t *wedge = WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx);
-            for (int y = 0; y < h4; y += 2) {
-                for (int x = 0; x < w4; x += 2) {
-                    const int d = wedge[x >> 1];
-                    rb[x].tmv.mv[0].n = d ==  b->wedge_sign ?
-                                        INVALID_MV : rb[x].tmv.mv[0].n;
-                    rb[x].tmv.mv[1].n = d == !b->wedge_sign ?
-                                        INVALID_MV : rb[x].tmv.mv[1].n;
-                    rb[x + 1].tmv = rb[x].tmv;
-                    rb[x + 128].tmv = rb[x].tmv;
-                    rb[x + 129].tmv = rb[x].tmv;
-                }
-                wedge += bw4 >> 1;
-                rb += 128 * 2;
-            }
-        } else {
-            const ptrdiff_t opfl_stride = (bw4 + 1) >> 1;
-            const union OpflMvDeltaBlock *opfl_dxy = t->opfl;
-            const int si = b->ref[0] != TIP_FRAME;
-            for (int y = 0; y < h4; y += 2) {
-                for (int x = 0; x < w4; x += 2) {
-                    const union OpflMvDeltaBlock *const o = &opfl_dxy[x >> 1];
-                    rb[x].tmv.mv[0].x = rb[x].mv.mv[0].x  + o->d[0].x;
-                    rb[x].tmv.mv[0].y = rb[x].mv.mv[0].y  + o->d[0].y;
-                    rb[x].tmv.mv[1].x = rb[x].mv.mv[si].x + o->d[1].x;
-                    rb[x].tmv.mv[1].y = rb[x].mv.mv[si].y + o->d[1].y;
-                    if (x + 1 < w4) rb[x + 1].tmv = rb[x].tmv;
-                    if (y + 1 < h4) {
-                        rb[x + 128].tmv = rb[x].tmv;
-                        if (x + 1 < w4) rb[x + 129].tmv = rb[x].tmv;
-                    }
-                }
-                opfl_dxy += opfl_stride;
-                rb += 128 * 2;
-            }
-        }
     }
 
     if (cbs == BS_INVALID) return 0;

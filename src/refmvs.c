@@ -176,14 +176,6 @@ static int add_candidate_comp(DB_ARGS(const refmvs_frame *const rf,
     return 1;
 }
 
-mv scale_mv(const mv in, const int sf) {
-    const int64_t y = in.y * (int64_t) sf, x = in.x * (int64_t) sf;
-    return (mv) {
-        .y = iclip((int)((y + 0x2000 - (y < 0)) >> 14), -0xffff, 0xffff),
-        .x = iclip((int)((x + 0x2000 - (x < 0)) >> 14), -0xffff, 0xffff),
-    };
-}
-
 struct refmvs_state {
     refmvs_candidate dr[6], *mv;
     refmvs_sngl_mv_block sngl[4];
@@ -337,7 +329,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         }};
         add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                    y_off, x_off, "spc")
-                           st->mv, st->cnt, 6, weight, (b->mf >> 3) - 4,
+                           st->mv, st->cnt, 6, weight, b->mf >> 2,
                            cand_mv, &st->iter_cntr, 16);
     } else {
         if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
@@ -1304,7 +1296,7 @@ void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
             ref[0] = r->ref.ref[0] - 1;
             ref[1] = r->ref.ref[1] - (r->ref.ref[1] > 0);
             refmvs_bank_add(rt, DB_ONLY(by, x) ref,
-                            r->mf & 2 ? r->lmv.mv : r->mv.mv, (r->mf >> 3) - 4);
+                            r->mf & 2 ? r->lmv.mv : r->mv.mv, r->mf >> 2);
         }
         if (r->mf & 2) {
             Dav1dWarpedMotionParams wmp;
@@ -1856,85 +1848,6 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     }
 }
 
-static inline unsigned quantize_mv_comp(const unsigned absv) {
-    assert(absv < 2048);
-    if (!absv) return 0;
-    const int nbits = iclip(ulog2(absv) - 4, 0, 6);
-    int res = (absv - (16 * !!nbits << nbits)) >> nbits;
-    res += (nbits + !!nbits) * 16;
-    return res;
-}
-
-static inline union qmv quantize_mv(const union mv mv) {
-    const int absy = abs(mv.y), absx = abs(mv.x);
-    if (imax(absx, absy) >= 2048) return (union qmv) { .n = INVALID_TRAJ };
-    return (union qmv) {
-        .y = apply_sign(quantize_mv_comp(absy), mv.y),
-        .x = apply_sign(quantize_mv_comp(absx), mv.x),
-    };
-}
-
-static void save_tmvs_c(refmvs_temporal_block *rp, const ptrdiff_t stride,
-                        const refmvs_block *const rr,
-                        const refmvs_sngl_mv_block *rp_proj,
-                        const int32_t tip_sf[2], const uint8_t tip_ref[2],
-                        const int col_end8, const int row_end8,
-                        const int col_start8, const int row_start8,
-                        const uint64_t flipmask)
-{
-    for (int y = row_start8; y < row_end8; y++) {
-        const refmvs_block *const b = &rr[((y & 31) * 2 + 1) * 128];
-        for (int x = col_start8; x < col_end8; x++) {
-            const refmvs_block *const cand_b = &b[((x * 2) & 127) + 1];
-            const union mv *const cand_mv = cand_b->tmv.mv;
-
-            if (cand_b->ref.ref[0] - 1 == TIP_FRAME) {
-                union mv tmv = rp_proj[x].mv;
-                if (tmv.n == INVALID_MV) tmv.n = 0;
-                const union mv tip0mv = scale_mv(tmv, tip_sf[0]);
-                const union mv tip1mv = scale_mv(tmv, tip_sf[1]);
-                rp[x].mv.mv[0] = quantize_mv((union mv) {
-                    .y = iclip(tip0mv.y + cand_mv[0].y, -0xffff, 0xffff),
-                    .x = iclip(tip0mv.x + cand_mv[0].x, -0xffff, 0xffff),
-                });
-                const int i = (cand_b->mf & 4) >> 2;
-                rp[x].mv.mv[1] = quantize_mv((union mv) {
-                    .y = iclip(tip1mv.y + cand_mv[i].y, -0xffff, 0xffff),
-                    .x = iclip(tip1mv.x + cand_mv[i].x, -0xffff, 0xffff),
-                });
-                rp[x].ref.ref[0] = tip_ref[0] + 1;
-                rp[x].ref.ref[1] = tip_ref[1] + 1;
-            } else {
-                if (cand_mv[0].n == INVALID_MV) {
-                    if (cand_mv[1].n == INVALID_MV) {
-                        rp[x].mv.n = INVALID_TRAJ * 0x10001U;
-                        rp[x].ref.pair = 0;
-                    } else {
-                        rp[x].mv.n = quantize_mv(cand_mv[1]).n * 0x10001U;
-                        rp[x].ref.pair = cand_b->ref.ref[1] * 0x101U;
-                    }
-                } else {
-                    if (cand_mv[1].n == INVALID_MV) {
-                        rp[x].mv.n = quantize_mv(cand_mv[0]).n * 0x10001U;
-                        rp[x].ref.pair = cand_b->ref.ref[0] * 0x101U;
-                    } else {
-                        const int r0 = cand_b->ref.ref[0] - 1;
-                        const int r1 = cand_b->ref.ref[1] - 1;
-                        const int ridx = r0 * 8 + r1;
-                        const int f = !!(flipmask & (1ULL << ridx));
-                        rp[x].mv.mv[0] = quantize_mv(cand_mv[ f]);
-                        rp[x].mv.mv[1] = quantize_mv(cand_mv[!f]);
-                        rp[x].ref.ref[0] = cand_b->ref.ref[ f];
-                        rp[x].ref.ref[1] = cand_b->ref.ref[!f];
-                    }
-                }
-            }
-        }
-        rp += stride;
-        rp_proj += stride;
-    }
-}
-
 // cache the current tile/sbrow (or frame/sbrow)'s projectable motion vectors
 // into buffers for use in future frame's temporal MV prediction
 void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *const dsp,
@@ -1949,17 +1862,6 @@ void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *const dsp,
            (unsigned) (col_end8 - col_start8) <= 32U);
     row_end8 = imin(row_end8, rf->ih8);
     col_end8 = imin(col_end8, rf->iw8);
-
-    const ptrdiff_t stride = rf->rp_stride;
-    refmvs_temporal_block *rp =
-        (rf->seq_hdr->ref_frame_mvs && IS_INTER_OR_SWITCH(rf->frm_hdr)) ?
-        &rf->rp[row_start8 * stride] : NULL;
-
-    if (rp)
-        dsp->save_tmvs(rp, stride, rt->r, rt->rp_proj,
-                       rf->tip_sf, rf->frm_hdr->tip.refs,
-                       col_end8, row_end8, col_start8, row_start8,
-                       rf->ref_flip);
 
     // keep a backup of top (at 8x8 resolution) for next sbrow
     const refmvs_block *const b = &rt->r[(((row_end8 - 1) & 31) * 2 + 1) * 128];
@@ -2290,89 +2192,101 @@ end:
     return 0;
 }
 
-static void splat_mv_c(refmvs_block *r, refmvs_block *const rmv,
-                       const int bw4, int bh4)
+static void splat_mv_c(refmvs_block *s_dst, refmvs_block *const s_src,
+                       refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
+                       refmvs_temporal_block *const t_src, const int bw4, int bh4)
 {
-    rmv->tmv = rmv->mv;
     do {
-        for (int x = 0; x < bw4; x++) {
-            memcpy(&r[x], rmv, offsetof(refmvs_block, lmv));
+        for (int x = 0; x < bw4; x += 2) {
+            memcpy(&s_dst[x], s_src, offsetof(refmvs_block, lmv));
+            if (bw4 > 1)
+                memcpy(&s_dst[x + 1], s_src, offsetof(refmvs_block, lmv));
+            if (bh4 > 1) {
+                memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
+                if (bw4 > 1)
+                    memcpy(&s_dst[x + 129], s_src, offsetof(refmvs_block, lmv));
+            }
+            t_dst[x >> 1] = *t_src;
         }
-        r += 128;
-    } while (--bh4);
+        s_dst += 128 * 2;
+        t_dst += t_stride;
+        bh4 -= 2;
+    } while (bh4 > 0);
 }
 
-static void splat_warpmv_c(refmvs_block *r,
-                           refmvs_block *const rmv, int64_t mvy, int64_t mvx,
+static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
+                           refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
+                           refmvs_temporal_block *const t_src,
+                           int64_t mvy, int64_t mvx,
                            const Dav1dWarpedMotionParams *const mat,
                            const int bw4, int bh4)
 {
     assert(bw4 > 1 && bh4 > 1);
-    rmv->lmv = rmv->mv;
-    memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
-    rmv->m[6] = mat->type;
     if (mat->type == DAV1D_WM_TYPE_INVALID) {
-        rmv->mv.mv[0].n = 0;
-        rmv->tmv = rmv->lmv;
+        // FIXME this condition is probably incomplete, AVM's code suggests
+        // we should only use this behaviour for MM_WARP_{CAUSAL/EXTEND},
+        // not for MM_WARP_DELTA
+        s_src->mv.mv[0].n = 0;
+        t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->lmv.mv[0]);
     }
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
             if (mat->type != DAV1D_WM_TYPE_INVALID) {
-                rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
-                                        -0xffff, 0xffff);
-                rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
-                                        -0xffff, 0xffff);
-                rmv->tmv = rmv->mv;
+                s_src->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
+                                          -0xffff, 0xffff);
+                s_src->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
+                                          -0xffff, 0xffff);
+                t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->mv.mv[0]);
             }
-            r[x] = r[x + 1] = r[x + 128] = r[x + 129] = *rmv;
+            s_dst[x] = s_dst[x + 1] = s_dst[x + 128] = s_dst[x + 129] = *s_src;
+            t_dst[x >> 1] = *t_src;
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
         }
         mvx += mat->matrix[3] * 8;
         mvy += (mat->matrix[5] - 0x10000) * 8;
-        r += 2 * 128;
+        s_dst += 2 * 128;
+        t_dst += t_stride;
         bh4 -= 2;
     } while (bh4);
 }
 
-static void splat_comp_warpmv_c(refmvs_block *r,
-                                refmvs_block *const rmv, int64_t mvy1, int64_t mvx1,
+static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
+                                refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
+                                refmvs_temporal_block *t_src, int64_t mvy1, int64_t mvx1,
                                 int64_t mvy2, int64_t mvx2,
                                 const Dav1dWarpedMotionParams *const mat,
-                                const int bw4, int bh4)
+                                const int bw4, int bh4, const int t_swap)
 {
     assert(bw4 > 1 && bh4 > 1);
-    rmv->lmv = rmv->mv;
-    // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
-    memcpy(rmv->m, mat->matrix, sizeof(int32_t) * 6);
-    rmv->m[6] = mat->type;
     if (mat[0].type == DAV1D_WM_TYPE_INVALID) {
-        rmv->mv.mv[0].n = 0;
-        rmv->tmv.mv[0] = rmv->lmv.mv[0];
+        s_src->mv.mv[0].n = 0;
+        t_src->mv.mv[t_swap] = quantize_mv(s_src->lmv.mv[0]);
     }
     if (mat[1].type == DAV1D_WM_TYPE_INVALID) {
-        rmv->mv.mv[1].n = 0;
-        rmv->tmv.mv[1] = rmv->lmv.mv[1];
+        s_src->mv.mv[1].n = 0;
+        t_src->mv.mv[!t_swap] = quantize_mv(s_src->lmv.mv[1]);
     }
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         for (int x = 0; x < bw4; x += 2) {
             if (mat[0].type != DAV1D_WM_TYPE_INVALID) {
-                rmv->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
-                                        -0xffff, 0xffff);
-                rmv->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
-                                        -0xffff, 0xffff);
-                rmv->tmv.mv[0] = rmv->mv.mv[0];
+                s_src->mv.mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
+                                          -0xffff, 0xffff);
+                s_src->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
+                                          -0xffff, 0xffff);
+                t_src->mv.mv[t_swap] = quantize_mv(s_src->mv.mv[0]);
             }
             if (mat[1].type != DAV1D_WM_TYPE_INVALID) {
-                rmv->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
-                                        -0xffff, 0xffff);
-                rmv->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
-                                        -0xffff, 0xffff);
-                rmv->tmv.mv[1] = rmv->mv.mv[1];
+                s_src->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
+                                          -0xffff, 0xffff);
+                s_src->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
+                                          -0xffff, 0xffff);
+                t_src->mv.mv[!t_swap] = quantize_mv(s_src->mv.mv[1]);
             }
-            r[x] = r[x + 1] = r[x + 128] = r[x + 129] = *rmv;
+            s_dst[x] = s_dst[x + 1] = s_dst[x + 128] = s_dst[x + 129] = *s_src;
+            t_dst[x >> 1] = *t_src;
             mvxi1 += (mat[0].matrix[2] - 0x10000) * 8;
             mvyi1 += mat[0].matrix[4] * 8;
             mvxi2 += (mat[1].matrix[2] - 0x10000) * 8;
@@ -2382,12 +2296,13 @@ static void splat_comp_warpmv_c(refmvs_block *r,
         mvy1 += (mat[0].matrix[5] - 0x10000) * 8;
         mvx2 += mat[1].matrix[3] * 8;
         mvy2 += (mat[1].matrix[5] - 0x10000) * 8;
-        r += 2 * 128;
+        s_dst += 2 * 128;
+        t_dst += t_stride;
         bh4 -= 2;
     } while (bh4);
 }
 
-#if HAVE_ASM
+#if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/refmvs.h"
 #elif ARCH_LOONGARCH64
@@ -2399,7 +2314,6 @@ static void splat_comp_warpmv_c(refmvs_block *r,
 
 COLD void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *const c)
 {
-    c->save_tmvs = save_tmvs_c;
     c->splat_mv = splat_mv_c;
     c->splat_warpmv = splat_warpmv_c;
     c->splat_comp_warpmv = splat_comp_warpmv_c;
