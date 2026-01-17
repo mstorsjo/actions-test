@@ -1528,6 +1528,28 @@ static void gen_mask(uint8_t *mask, const ptrdiff_t stride,
     }
 }
 
+static ALWAYS_INLINE int get_mask(uint8_t *const mask, const ptrdiff_t stride,
+                                  const int bx4, const int x4,
+                                  const int by4, const int y4,
+                                  const union mv mv[2], const int subpel_bits,
+                                  const int bw4, const int bh4,
+                                  const int iw, const int ih)
+{
+    const int x0 = (bx4 + x4) * 4 + (mv[0].x >> subpel_bits);
+    const int y0 = (by4 + y4) * 4 + (mv[0].y >> subpel_bits);
+    const int x1 = (bx4 + x4) * 4 + (mv[1].x >> subpel_bits);
+    const int y1 = (by4 + y4) * 4 + (mv[1].y >> subpel_bits);
+    if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
+        x0 + bw4 * 4 >= iw || x1 + bw4 * 4 >= iw ||
+        y0 + bh4 * 4 >= ih || y1 + bh4 * 4 >= ih)
+    {
+        gen_mask(&mask[(y4 * stride + x4) * 4], stride,
+                 bw4 * 4, bh4 * 4, x0, y0, x1, y1, iw, ih);
+        return 1;
+    }
+    return 0;
+}
+
 static void opfl_mv_adj(const struct OpflRegressionData *const r,
                         union OpflMvDeltaBlock *const dd, const int8_t d[2])
 {
@@ -1694,20 +1716,9 @@ static int tip_pred(Dav1dTaskContext *const t,
                        cmv[i], refp[i], refs[i], b->filter,
                        0, f->bw * 4, 0, f->bh * 4);
             }
-            if (bacp) {
-                const int x0 = (t->bx + x) * 4 + (cmv[0].x >> (3 + opfl));
-                const int y0 = (t->by + y) * 4 + (cmv[0].y >> (3 + opfl));
-                const int x1 = (t->bx + x) * 4 + (cmv[1].x >> (3 + opfl));
-                const int y1 = (t->by + y) * 4 + (cmv[1].y >> (3 + opfl));
-                if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
-                    x0 + step * 4 >= w || x1 + step * 4 >= w ||
-                    y0 + step * 4 >= h || y1 + step * 4 >= h)
-                {
-                    gen_mask(&mask[(y * bw4 * 4 + x) * 4], bw4 * 4,
-                             step * 4, step * 4, x0, y0, x1, y1, w, h);
-                    have_bacp = 1;
-                }
-            }
+            if (bacp)
+                have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
+                                      cmv, 3 + opfl, step, step, w, h);
         }
         off_y += bw4 * 4 * 4 * step;
     }
@@ -1807,20 +1818,9 @@ static int opfl_pred(Dav1dTaskContext *const t,
                             dd->d[0].y = ((dd->d[0].y + (dd->d[0].y > 0)) >> 1) + dy * 8;
                             dd->d[1].x = ((dd->d[1].x + (dd->d[1].x > 0)) >> 1) - dx * 8;
                             dd->d[1].y = ((dd->d[1].y + (dd->d[1].y > 0)) >> 1) - dy * 8;
-                            if (bacp) {
-                                const int x0 = (t->bx + x + bx) * 4 + (mv[0].x >> 4);
-                                const int x1 = (t->bx + x + bx) * 4 + (mv[1].x >> 4);
-                                const int y0 = (t->by + y + by) * 4 + (mv[0].y >> 4);
-                                const int y1 = (t->by + y + by) * 4 + (mv[1].y >> 4);
-                                if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
-                                    x0 + 8 >= w || x1 + 8 >= w ||
-                                    y0 + 8 >= h || y1 + 8 >= h)
-                                {
-                                    gen_mask(&mask[((y + by) * bw4 * 4 + x + bx) * 4],
-                                             bw4 * 4, 8, 8, x0, y0, x1, y1, w, h);
-                                    have_bacp = 1;
-                                }
-                            }
+                            if (bacp)
+                                have_bacp |= get_mask(mask, bw4 * 4, t->bx, x + bx,
+                                                      t->by, y + by, mv, 4, 2, 2, w, h);
                         }
                     }
                 } else {
@@ -1844,20 +1844,9 @@ static int opfl_pred(Dav1dTaskContext *const t,
                            iclip(left[i] + sw4 * 4 + 7, 1, w),
                            iclip(top[i], 0, h - 1),
                            iclip(top[i] + sh4 * 4 + 7, 1, h));
-                    if (bacp) {
-                        const int x0 = (t->bx + x) * 4 + (mv[0].x >> 3);
-                        const int y0 = (t->by + y) * 4 + (mv[0].y >> 3);
-                        const int x1 = (t->bx + x) * 4 + (mv[1].x >> 3);
-                        const int y1 = (t->by + y) * 4 + (mv[1].y >> 3);
-                        if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
-                            x0 + sw4 * 4 >= w || x1 + sw4 * 4 >= w ||
-                            y0 + sh4 * 4 >= h || y1 + sh4 * 4 >= h)
-                        {
-                            gen_mask(&mask[(y * 4 * bw4 + x) * 4], bw4 * 4,
-                                     sw4 * 4, sh4 * 4, x0, y0, x1, y1, w, h);
-                            have_bacp = 1;
-                        }
-                    }
+                    if (bacp)
+                        have_bacp |= get_mask(mask, bw4 * 4, t->bx, x,
+                                              t->by, y, mv, 3, sw4, sh4, w, h);
                 }
                 for (int n = 0; n < 2; n++)
                     left[n] += 16;
@@ -1899,20 +1888,9 @@ static int opfl_pred(Dav1dTaskContext *const t,
                         dd->d[1].x = (dd->d[1].x + (dd->d[1].x > 0)) >> 1;
                         dd->d[1].y = (dd->d[1].y + (dd->d[1].y > 0)) >> 1;
                     }
-                    if (bacp) {
-                        const int x0 = (t->bx + bx) * 4 + (mv[0].x >> 4);
-                        const int x1 = (t->bx + bx) * 4 + (mv[1].x >> 4);
-                        const int y0 = (t->by + y + by) * 4 + (mv[0].y >> 4);
-                        const int y1 = (t->by + y + by) * 4 + (mv[1].y >> 4);
-                        if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
-                            x0 + bs * 4 >= w || x1 + bs * 4 >= w ||
-                            y0 + bs * 4 >= h || y1 + bs * 4 >= h)
-                        {
-                            gen_mask(&mask[((y + by) * bw4 * 4 + bx) * 4],
-                                     bw4 * 4, bs * 4, bs * 4, x0, y0, x1, y1, w, h);
-                            have_bacp = 1;
-                        }
-                    }
+                    if (bacp)
+                        have_bacp |= get_mask(mask, bw4 * 4, t->bx, bx,
+                                              t->by, y + by, mv, 4, bs, bs, w, h);
                 }
                 delta_line += opfl_stride;
                 r_line += bw4 >> (bs == 2);
@@ -2588,21 +2566,10 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             case COMP_INTER_AVG: {
                 const int wt = b->cwp_idx;
                 if (wt == 8) {
-                    int y0, y1, x0, x1, w, h;
-                    if (bacp == 2) {
-                        w = f->bw * 4;
-                        h = f->bh * 4;
-                        x0 = t->bx * 4 + (b->mv[0].x >> 3);
-                        y0 = t->by * 4 + (b->mv[0].y >> 3);
-                        x1 = t->bx * 4 + (b->mv[1].x >> 3);
-                        y1 = t->by * 4 + (b->mv[1].y >> 3);
-                        bacp = x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
-                               x0 + bw4 * 4 >= w || x1 + bw4 * 4 >= w ||
-                               y0 + bh4 * 4 >= h || y1 + bh4 * 4 >= h;
-                        if (bacp)
-                            gen_mask(t->scratch.seg_mask, bw4 * 4, bw4 * 4, bh4 * 4,
-                                     x0, y0, x1, y1, w, h);
-                    }
+                    if (bacp == 2)
+                        bacp = get_mask(t->scratch.seg_mask, bw4 * 4, t->bx, 0,
+                                        t->by, 0, b->mv, 3, bw4, bh4,
+                                        f->bw * 4, f->bh * 4);
                     if (bacp) {
                         dsp->mc.mask(dst, f->cur.stride[0], tmp[0], tmp[1],
                                      bw4 * 4, bh4 * 4, t->scratch.seg_mask
