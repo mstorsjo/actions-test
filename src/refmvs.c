@@ -682,7 +682,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         const int xpos = abw4 - (1 << is_sb_boundary) - x_off;
         add_spatial_candidate(-1, xpos,
                               rt, &st, xpos >= 0, rmt,
-                              top_8x8y + ((bx4 + bw4 - 1) >> 1), ref, gmv);
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0]) {
             memcpy(warp[cnt[1]++], rmt->m, sizeof(int32_t) * 7);
         }
@@ -700,9 +700,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
 
     // left-most top
     if (lmt) {
-        add_spatial_candidate(-1, -x_off,
-                              rt, &st, !x_off, lmt, top_8x8y + lms_8x8x,
-                              ref, gmv);
+        const int xpos = -x_off;
+        add_spatial_candidate(-1, xpos, rt, &st, !x_off, lmt,
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0]) {
             memcpy(warp[cnt[1]++], lmt->m, sizeof(int32_t) * 7);
         }
@@ -723,9 +723,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
 
     // top-right
     if (tr && tr->mv.mv[0].n != INVALID_MV) {
-        add_spatial_candidate(-1, abw4 - x_off,
-                              rt, &st, 1, tr, top_8x8y + ((bx4 + abw4) >> 1),
-                              ref, gmv);
+        const int xpos = abw4 - x_off;
+        add_spatial_candidate(-1, xpos, rt, &st, 1, tr,
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0]) {
             memcpy(warp[cnt[1]++], tr->m, sizeof(int32_t) * 7);
         }
@@ -757,8 +757,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     // top-left
     DEBUG_REFMV_printf("Extra Spatial MVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
     if (tl) {
-        add_spatial_candidate(-1, -(1 << is_sb_boundary) - x_off,
-                              rt, &st, 0, tl, top_8x8y + left_8x8x, ref, gmv);
+        const int xpos = -(1 << is_sb_boundary) - x_off;
+        add_spatial_candidate(-1, xpos, rt, &st, 0, tl,
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0]) {
             memcpy(warp[cnt[1]++], tl->m, sizeof(int32_t) * 7);
         }
