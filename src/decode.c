@@ -2897,8 +2897,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         r = (t->bx + x_off) & sb_mask ?
                             &t->rt.ra[(t->bx + x_off) >> 1] : &t->rt.ra_tl;
                     } else {
-                        r = &t->rt.r[((t->by + y_off) & sb_mask) * 128 +
-                                     (t->bx + x_off) & 127];
+                        r = &t->rt.r[((t->by + y_off) & 63) * 128 +
+                                     ((t->bx + x_off) & 127)];
                     }
                     if (r->ref.ref[0] - 1 == TIP_FRAME)
                         x_off = y_off = 0;
