@@ -192,7 +192,7 @@ HV_JMP_TABLE prep, bilin, avx2, 7,    4, 8, 16, 32, 64
 SCALED_JMP_TABLE put_8tap_scaled, avx2, 2, 4, 8, 16, 32, 64
 SCALED_JMP_TABLE prep_8tap_scaled, avx2,   4, 8, 16, 32, 64
 
-%define table_offset(type, fn) type %+ fn %+ SUFFIX %+ _table - type %+ SUFFIX
+%define table_offset(type, fn) type %+ fn %+ _avx2_table - type %+ _avx2
 
 cextern mc_subpel_filters
 %define subpel_filters (mangle(private_prefix %+ _mc_subpel_filters)-8)
@@ -700,97 +700,89 @@ INIT_YMM avx2
     jg .hv_w16_loop0
     RET
 
-cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
-    movifnidn          mxyd, r5m ; mx
-    lea                  r6, [prep_avx2]
-%if UNIX64
-    DECLARE_REG_TMP 7
-    %define org_w r7d
-%else
-    DECLARE_REG_TMP 6
-    %define org_w r5m
-%endif
-    mov               org_w, wd
+cglobal prep_bilin_16bpc, 4, 8, 0, dst, ds, src, ss, w, h, mxy
+    mov                mxyd, r6m ; mx
+    lea                  r7, [prep_avx2]
     tzcnt                wd, wm
     movifnidn            hd, hm
     test               mxyd, mxyd
     jnz .h
-    mov                mxyd, r6m ; my
+    mov                mxyd, r7m ; my
     test               mxyd, mxyd
     jnz .v
 .prep:
-    movzx                wd, word [r6+wq*2+table_offset(prep,)]
-    mov                 r5d, r7m ; bitdepth_max
-    vpbroadcastd         m5, [r6-prep_avx2+pw_8192]
-    add                  wq, r6
-    shr                 r5d, 11
-    vpbroadcastd         m4, [r6-prep_avx2+prep_mul+r5*4]
-    lea            stride3q, [strideq*3]
+    movzx                wd, word [r7+wq*2+table_offset(prep,)]
+    mov                 r6d, r8m ; bitdepth_max
+    vpbroadcastd         m5, [pw_8192]
+    add                  wq, r7
+    shr                 r6d, 11
+    vpbroadcastd         m4, [r7-prep_avx2+prep_mul+r6*4]
+    lea                  r6, [ssq*3]
+    lea                  r7, [dsq*3]
     jmp                  wq
 .prep_w4:
-    movq                xm0, [srcq+strideq*0]
-    movhps              xm0, [srcq+strideq*1]
-    vpbroadcastq         m1, [srcq+strideq*2]
-    vpbroadcastq         m2, [srcq+stride3q ]
-    lea                srcq, [srcq+strideq*4]
-    vpblendd             m0, m1, 0x30
-    vpblendd             m0, m2, 0xc0
-    pmullw               m0, m4
-    psubw                m0, m5
-    mova             [tmpq], m0
-    add                tmpq, 32
+    movq                xm0, [srcq+ssq*0]
+    movhps              xm0, [srcq+ssq*1]
+    movq                xm1, [srcq+ssq*2]
+    movhps              xm1, [srcq+r6   ]
+    lea                srcq, [srcq+ssq*4]
+    pmullw              xm0, xm4
+    pmullw              xm1, xm4
+    psubw               xm0, xm5
+    psubw               xm1, xm5
+    movq       [dstq+dsq*0], xm0
+    movhps     [dstq+dsq*2], xm0
+    movq       [dstq+dsq*4], xm1
+    movhps     [dstq+r7 *2], xm1
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .prep_w4
     RET
 .prep_w8:
-    movu                xm0, [srcq+strideq*0]
-    vinserti128          m0, [srcq+strideq*1], 1
-    movu                xm1, [srcq+strideq*2]
-    vinserti128          m1, [srcq+stride3q ], 1
-    lea                srcq, [srcq+strideq*4]
+    movu                xm0, [srcq+ssq*0]
+    vinserti128          m0, [srcq+ssq*1], 1
+    movu                xm1, [srcq+ssq*2]
+    vinserti128          m1, [srcq+r6   ], 1
+    lea                srcq, [srcq+ssq*4]
     pmullw               m0, m4
     pmullw               m1, m4
     psubw                m0, m5
     psubw                m1, m5
-    mova        [tmpq+32*0], m0
-    mova        [tmpq+32*1], m1
-    add                tmpq, 32*2
+    mova         [dstq+dsq*0], xm0
+    vextracti128 [dstq+dsq*2], m0, 1
+    mova         [dstq+dsq*4], xm1
+    vextracti128 [dstq+r7 *2], m1, 1
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .prep_w8
     RET
 .prep_w16:
-    pmullw               m0, m4, [srcq+strideq*0]
-    pmullw               m1, m4, [srcq+strideq*1]
-    pmullw               m2, m4, [srcq+strideq*2]
-    pmullw               m3, m4, [srcq+stride3q ]
-    lea                srcq, [srcq+strideq*4]
-    psubw                m0, m5
-    psubw                m1, m5
-    psubw                m2, m5
-    psubw                m3, m5
-    mova        [tmpq+32*0], m0
-    mova        [tmpq+32*1], m1
-    mova        [tmpq+32*2], m2
-    mova        [tmpq+32*3], m3
-    add                tmpq, 32*4
+    pmullw               m0, m4, [srcq+ssq*0]
+    pmullw               m1, m4, [srcq+ssq*1]
+    pmullw               m2, m4, [srcq+ssq*2]
+    pmullw               m3, m4, [srcq+r6   ]
+    lea                srcq, [srcq+ssq*4]
+    REPX      {psubw x, m5}, m0, m1, m2, m3
+    mova       [dstq+dsq*0], m0
+    mova       [dstq+dsq*2], m1
+    mova       [dstq+dsq*4], m2
+    mova       [dstq+r7 *2], m3
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .prep_w16
     RET
 .prep_w32:
-    pmullw               m0, m4, [srcq+strideq*0+32*0]
-    pmullw               m1, m4, [srcq+strideq*0+32*1]
-    pmullw               m2, m4, [srcq+strideq*1+32*0]
-    pmullw               m3, m4, [srcq+strideq*1+32*1]
-    lea                srcq, [srcq+strideq*2]
-    psubw                m0, m5
-    psubw                m1, m5
-    psubw                m2, m5
-    psubw                m3, m5
-    mova        [tmpq+32*0], m0
-    mova        [tmpq+32*1], m1
-    mova        [tmpq+32*2], m2
-    mova        [tmpq+32*3], m3
-    add                tmpq, 32*4
+    pmullw               m0, m4, [srcq+ssq*0+32*0]
+    pmullw               m1, m4, [srcq+ssq*0+32*1]
+    pmullw               m2, m4, [srcq+ssq*1+32*0]
+    pmullw               m3, m4, [srcq+ssq*1+32*1]
+    lea                srcq, [srcq+ssq*2]
+    REPX      {psubw x, m5}, m0, m1, m2, m3
+    mova  [dstq+dsq*0+32*0], m0
+    mova  [dstq+dsq*0+32*1], m1
+    mova  [dstq+dsq*2+32*0], m2
+    mova  [dstq+dsq*2+32*1], m3
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .prep_w32
     RET
@@ -799,73 +791,42 @@ cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
     pmullw               m1, m4, [srcq+32*1]
     pmullw               m2, m4, [srcq+32*2]
     pmullw               m3, m4, [srcq+32*3]
-    add                srcq, strideq
-    psubw                m0, m5
-    psubw                m1, m5
-    psubw                m2, m5
-    psubw                m3, m5
-    mova        [tmpq+32*0], m0
-    mova        [tmpq+32*1], m1
-    mova        [tmpq+32*2], m2
-    mova        [tmpq+32*3], m3
-    add                tmpq, 32*4
+    add                srcq, ssq
+    REPX      {psubw x, m5}, m0, m1, m2, m3
+    mova        [dstq+32*0], m0
+    mova        [dstq+32*1], m1
+    mova        [dstq+32*2], m2
+    mova        [dstq+32*3], m3
+    lea                dstq, [dstq+dsq*2]
     dec                  hd
     jg .prep_w64
     RET
-.prep_w128:
-    pmullw               m0, m4, [srcq+32*0]
-    pmullw               m1, m4, [srcq+32*1]
-    pmullw               m2, m4, [srcq+32*2]
-    pmullw               m3, m4, [srcq+32*3]
-    psubw                m0, m5
-    psubw                m1, m5
-    psubw                m2, m5
-    psubw                m3, m5
-    mova        [tmpq+32*0], m0
-    mova        [tmpq+32*1], m1
-    mova        [tmpq+32*2], m2
-    mova        [tmpq+32*3], m3
-    pmullw               m0, m4, [srcq+32*4]
-    pmullw               m1, m4, [srcq+32*5]
-    pmullw               m2, m4, [srcq+32*6]
-    pmullw               m3, m4, [srcq+32*7]
-    add                tmpq, 32*8
-    add                srcq, strideq
-    psubw                m0, m5
-    psubw                m1, m5
-    psubw                m2, m5
-    psubw                m3, m5
-    mova        [tmpq-32*4], m0
-    mova        [tmpq-32*3], m1
-    mova        [tmpq-32*2], m2
-    mova        [tmpq-32*1], m3
-    dec                  hd
-    jg .prep_w128
-    RET
 .h:
     movd                xm5, mxyd
-    mov                mxyd, r6m ; my
+    mov                mxyd, r7m ; my
     vpbroadcastd         m4, [pw_16]
     vpbroadcastw         m5, xm5
     vpbroadcastd         m3, [pw_32766]
     psubw                m4, m5
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .h_12bpc
     psllw                m4, 2
     psllw                m5, 2
 .h_12bpc:
     test               mxyd, mxyd
     jnz .hv
-    movzx                wd, word [r6+wq*2+table_offset(prep, _bilin_h)]
-    add                  wq, r6
-    lea            stride3q, [strideq*3]
+    movzx                wd, word [r7+wq*2+table_offset(prep, _bilin_h)]
+    add                  wq, r7
     jmp                  wq
 .h_w4:
-    movu                xm1, [srcq+strideq*0]
-    vinserti128          m1, [srcq+strideq*2], 1
-    movu                xm2, [srcq+strideq*1]
-    vinserti128          m2, [srcq+stride3q ], 1
-    lea                srcq, [srcq+strideq*4]
+    lea                  r6, [ssq*3]
+    lea                  r7, [dsq*3]
+.h_w4_loop:
+    movu                xm1, [srcq+ssq*0]
+    vinserti128          m1, [srcq+ssq*2], 1
+    movu                xm2, [srcq+ssq*1]
+    vinserti128          m2, [srcq+r6   ], 1
+    lea                srcq, [srcq+ssq*4]
     punpcklqdq           m0, m1, m2
     psrldq               m1, 2
     pslldq               m2, 6
@@ -875,96 +836,105 @@ cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
     psubw                m0, m3
     paddw                m0, m1
     psraw                m0, 2
-    mova             [tmpq], m0
-    add                tmpq, 32
+    vextracti128        xm1, m0, 1
+    movq       [dstq+dsq*0], xm0
+    movhps     [dstq+dsq*2], xm0
+    movq       [dstq+dsq*4], xm1
+    movhps     [dstq+r7 *2], xm1
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
-    jg .h_w4
+    jg .h_w4_loop
     RET
 .h_w8:
-    movu                xm0, [srcq+strideq*0]
-    vinserti128          m0, [srcq+strideq*1], 1
-    movu                xm1, [srcq+strideq*0+2]
-    vinserti128          m1, [srcq+strideq*1+2], 1
-    lea                srcq, [srcq+strideq*2]
+    movu                xm0, [srcq+ssq*0]
+    vinserti128          m0, [srcq+ssq*1], 1
+    movu                xm1, [srcq+ssq*0+2]
+    vinserti128          m1, [srcq+ssq*1+2], 1
+    lea                srcq, [srcq+ssq*2]
     pmullw               m0, m4
     pmullw               m1, m5
     psubw                m0, m3
     paddw                m0, m1
     psraw                m0, 2
-    mova             [tmpq], m0
-    add                tmpq, 32
+    mova         [dstq+dsq*0], xm0
+    vextracti128 [dstq+dsq*2], m0, 1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .h_w8
     RET
 .h_w16:
-    pmullw               m0, m4, [srcq+strideq*0]
-    pmullw               m1, m5, [srcq+strideq*0+2]
+    pmullw               m0, m4, [srcq+ssq*0]
+    pmullw               m1, m5, [srcq+ssq*0+2]
     psubw                m0, m3
     paddw                m0, m1
-    pmullw               m1, m4, [srcq+strideq*1]
-    pmullw               m2, m5, [srcq+strideq*1+2]
-    lea                srcq, [srcq+strideq*2]
+    pmullw               m1, m4, [srcq+ssq*1]
+    pmullw               m2, m5, [srcq+ssq*1+2]
+    lea                srcq, [srcq+ssq*2]
     psubw                m1, m3
     paddw                m1, m2
     psraw                m0, 2
     psraw                m1, 2
-    mova        [tmpq+32*0], m0
-    mova        [tmpq+32*1], m1
-    add                tmpq, 32*2
+    mova       [dstq+dsq*0], m0
+    mova       [dstq+dsq*2], m1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .h_w16
     RET
 .h_w32:
+    xor                 r7d, r7d
+    jmp .h_w32_loop0
 .h_w64:
-.h_w128:
-    movifnidn           t0d, org_w
+    mov                  r7, -32*2
+    sub                srcq, r7
+    sub                dstq, r7
 .h_w32_loop0:
-    mov                 r3d, t0d
+    mov                  r6, r7
 .h_w32_loop:
-    pmullw               m0, m4, [srcq+r3*2-32*1]
-    pmullw               m1, m5, [srcq+r3*2-32*1+2]
+    pmullw               m0, m4, [srcq+r6+32*0]
+    pmullw               m1, m5, [srcq+r6+32*0+2]
     psubw                m0, m3
     paddw                m0, m1
-    pmullw               m1, m4, [srcq+r3*2-32*2]
-    pmullw               m2, m5, [srcq+r3*2-32*2+2]
+    pmullw               m1, m4, [srcq+r6+32*1]
+    pmullw               m2, m5, [srcq+r6+32*1+2]
     psubw                m1, m3
     paddw                m1, m2
     psraw                m0, 2
     psraw                m1, 2
-    mova   [tmpq+r3*2-32*1], m0
-    mova   [tmpq+r3*2-32*2], m1
-    sub                 r3d, 32
-    jg .h_w32_loop
-    add                srcq, strideq
-    lea                tmpq, [tmpq+t0*2]
+    mova     [dstq+r6+32*0], m0
+    mova     [dstq+r6+32*1], m1
+    add                  r6, 32*2
+    jle .h_w32_loop
+    add                srcq, ssq
+    lea                dstq, [dstq+dsq*2]
     dec                  hd
     jg .h_w32_loop0
     RET
 .v:
-    movzx                wd, word [r6+wq*2+table_offset(prep, _bilin_v)]
+    movzx                wd, word [r7+wq*2+table_offset(prep, _bilin_v)]
     movd                xm5, mxyd
     vpbroadcastd         m4, [pw_16]
     vpbroadcastw         m5, xm5
     vpbroadcastd         m3, [pw_32766]
-    add                  wq, r6
-    lea            stride3q, [strideq*3]
+    add                  wq, r7
+    lea                  r6, [ssq*3]
     psubw                m4, m5
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .v_12bpc
     psllw                m4, 2
     psllw                m5, 2
 .v_12bpc:
+    lea                  r7, [dsq*3]
     jmp                  wq
 .v_w4:
-    movq                xm0, [srcq+strideq*0]
+    movq                xm0, [srcq+ssq*0]
 .v_w4_loop:
-    vpbroadcastq         m2, [srcq+strideq*2]
-    vpbroadcastq        xm1, [srcq+strideq*1]
+    vpbroadcastq         m2, [srcq+ssq*2]
+    vpbroadcastq        xm1, [srcq+ssq*1]
     vpblendd             m2, m0, 0x03 ; 0 2 2 2
-    vpbroadcastq         m0, [srcq+stride3q ]
-    lea                srcq, [srcq+strideq*4]
+    vpbroadcastq         m0, [srcq+r6   ]
+    lea                srcq, [srcq+ssq*4]
     vpblendd             m1, m0, 0xf0 ; 1 1 3 3
-    vpbroadcastq         m0, [srcq+strideq*0]
+    vpbroadcastq         m0, [srcq+ssq*0]
     vpblendd             m1, m2, 0x33 ; 0 1 2 3
     vpblendd             m0, m2, 0x0c ; 4 2 4 4
     punpckhqdq           m2, m1, m0   ; 1 2 3 4
@@ -973,121 +943,118 @@ cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
     psubw                m1, m3
     paddw                m1, m2
     psraw                m1, 2
-    mova             [tmpq], m1
-    add                tmpq, 32
+    vextracti128        xm2, m1, 1
+    movq       [dstq+dsq*0], xm1
+    movhps     [dstq+dsq*2], xm1
+    movq       [dstq+dsq*4], xm2
+    movhps     [dstq+r7 *2], xm2
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .v_w4_loop
     RET
 .v_w8:
-    movu                xm0, [srcq+strideq*0]
+    movu                xm0, [srcq+ssq*0]
 .v_w8_loop:
-    vbroadcasti128       m2, [srcq+strideq*1]
-    lea                srcq, [srcq+strideq*2]
+    vbroadcasti128       m2, [srcq+ssq*1]
+    lea                srcq, [srcq+ssq*2]
     vpblendd             m1, m0, m2, 0xf0 ; 0 1
-    vbroadcasti128       m0, [srcq+strideq*0]
+    vbroadcasti128       m0, [srcq+ssq*0]
     vpblendd             m2, m0, 0xf0     ; 1 2
     pmullw               m1, m4
     pmullw               m2, m5
     psubw                m1, m3
     paddw                m1, m2
     psraw                m1, 2
-    mova             [tmpq], m1
-    add                tmpq, 32
+    mova         [dstq+dsq*0], xm1
+    vextracti128 [dstq+dsq*2], m1, 1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .v_w8_loop
     RET
 .v_w16:
-    movu                 m0, [srcq+strideq*0]
+    movu                 m0, [srcq+ssq*0]
 .v_w16_loop:
-    movu                 m2, [srcq+strideq*1]
-    lea                srcq, [srcq+strideq*2]
+    movu                 m2, [srcq+ssq*1]
+    lea                srcq, [srcq+ssq*2]
     pmullw               m0, m4
     pmullw               m1, m5, m2
     psubw                m0, m3
     paddw                m1, m0
-    movu                 m0, [srcq+strideq*0]
+    movu                 m0, [srcq+ssq*0]
     psraw                m1, 2
     pmullw               m2, m4
-    mova        [tmpq+32*0], m1
+    mova       [dstq+dsq*0], m1
     pmullw               m1, m5, m0
     psubw                m2, m3
     paddw                m1, m2
     psraw                m1, 2
-    mova        [tmpq+32*1], m1
-    add                tmpq, 32*2
+    mova       [dstq+dsq*2], m1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .v_w16_loop
     RET
-.v_w32:
 .v_w64:
-.v_w128:
-%if WIN64
-    PUSH                 r7
-%endif
-    movifnidn           r7d, org_w
-    add                 r7d, r7d
-    mov                  r3, srcq
-    lea                 r6d, [hq+r7*8-256]
-    mov                  r5, tmpq
+    lea                 r6d, [hq+256*3]
+    jmp .v_w32_loop0
+.v_w32:
+    lea                 r6d, [hq+256*1]
 .v_w32_loop0:
-    movu                 m0, [srcq+strideq*0]
+    movu                 m0, [srcq+ssq*0]
+    mov                  r4, srcq
+    mov                  r7, dstq
 .v_w32_loop:
-    movu                 m2, [srcq+strideq*1]
-    lea                srcq, [srcq+strideq*2]
+    movu                 m2, [r4+ssq*1]
+    lea                  r4, [r4+ssq*2]
     pmullw               m0, m4
     pmullw               m1, m5, m2
     psubw                m0, m3
     paddw                m1, m0
-    movu                 m0, [srcq+strideq*0]
+    movu                 m0, [r4+ssq*0]
     psraw                m1, 2
     pmullw               m2, m4
-    mova        [tmpq+r7*0], m1
+    mova         [r7+dsq*0], m1
     pmullw               m1, m5, m0
     psubw                m2, m3
     paddw                m1, m2
     psraw                m1, 2
-    mova        [tmpq+r7*1], m1
-    lea                tmpq, [tmpq+r7*2]
+    mova         [r7+dsq*2], m1
+    lea                  r7, [r7+dsq*4]
     sub                  hd, 2
     jg .v_w32_loop
-    add                  r3, 32
-    add                  r5, 32
+    add                srcq, 32
+    add                dstq, 32
     movzx                hd, r6b
-    mov                srcq, r3
-    mov                tmpq, r5
     sub                 r6d, 1<<8
     jg .v_w32_loop0
-%if WIN64
-    POP                  r7
-%endif
     RET
 .hv:
     WIN64_SPILL_XMM       7
-    movzx                wd, word [r6+wq*2+table_offset(prep, _bilin_hv)]
+    movzx                wd, word [r7+wq*2+table_offset(prep, _bilin_hv)]
     shl                mxyd, 11
     movd                xm6, mxyd
-    add                  wq, r6
-    lea            stride3q, [strideq*3]
+    add                  wq, r7
     vpbroadcastw         m6, xm6
     jmp                  wq
 .hv_w4:
-    movu                xm1, [srcq+strideq*0]
+    movu                xm1, [srcq+ssq*0]
 %if WIN64
-    movaps         [rsp+24], xmm7
+    movaps         [rsp+32], xmm7
 %endif
     pmullw              xm0, xm4, xm1
     psrldq              xm1, 2
     pmullw              xm1, xm5
     psubw               xm0, xm3
+    lea                  r6, [ssq*3]
     paddw               xm0, xm1
+    lea                  r7, [dsq*3]
     psraw               xm0, 2
     vpbroadcastq         m0, xm0
 .hv_w4_loop:
-    movu                xm1, [srcq+strideq*1]
-    vinserti128          m1, [srcq+stride3q ], 1
-    movu                xm2, [srcq+strideq*2]
-    lea                srcq, [srcq+strideq*4]
-    vinserti128          m2, [srcq+strideq*0], 1
+    movu                xm1, [srcq+ssq*1]
+    vinserti128          m1, [srcq+r6   ], 1
+    movu                xm2, [srcq+ssq*2]
+    lea                srcq, [srcq+ssq*4]
+    vinserti128          m2, [srcq+ssq*0], 1
     punpcklqdq           m7, m1, m2
     psrldq               m1, 2
     pslldq               m2, 6
@@ -1103,27 +1070,31 @@ cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
     psubw                m1, m2
     pmulhrsw             m1, m6
     paddw                m1, m2
-    mova             [tmpq], m1
-    add                tmpq, 32
+    vextracti128        xm2, m1, 1
+    movq       [dstq+dsq*0], xm1
+    movhps     [dstq+dsq*2], xm1
+    movq       [dstq+dsq*4], xm2
+    movhps     [dstq+r7 *2], xm2
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .hv_w4_loop
 %if WIN64
-    movaps             xmm7, [rsp+24]
+    movaps             xmm7, [rsp+32]
 %endif
     RET
 .hv_w8:
-    pmullw              xm0, xm4, [srcq+strideq*0]
-    pmullw              xm1, xm5, [srcq+strideq*0+2]
+    pmullw              xm0, xm4, [srcq+ssq*0]
+    pmullw              xm1, xm5, [srcq+ssq*0+2]
     psubw               xm0, xm3
     paddw               xm0, xm1
     psraw               xm0, 2
     vinserti128          m0, xm0, 1
 .hv_w8_loop:
-    movu                xm1, [srcq+strideq*1]
-    movu                xm2, [srcq+strideq*1+2]
-    lea                srcq, [srcq+strideq*2]
-    vinserti128          m1, [srcq+strideq*0], 1
-    vinserti128          m2, [srcq+strideq*0+2], 1
+    movu                xm1, [srcq+ssq*1]
+    movu                xm2, [srcq+ssq*1+2]
+    lea                srcq, [srcq+ssq*2]
+    vinserti128          m1, [srcq+ssq*0], 1
+    vinserti128          m2, [srcq+ssq*0+2], 1
     pmullw               m1, m4
     pmullw               m2, m5
     psubw                m1, m3
@@ -1134,62 +1105,56 @@ cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
     psubw                m1, m2
     pmulhrsw             m1, m6
     paddw                m1, m2
-    mova             [tmpq], m1
-    add                tmpq, 32
+    mova         [dstq+dsq*0], xm1
+    vextracti128 [dstq+dsq*2], m1, 1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .hv_w8_loop
     RET
-.hv_w16:
-.hv_w32:
 .hv_w64:
-.hv_w128:
-%if WIN64
-    PUSH                 r7
-%endif
-    movifnidn           r7d, org_w
-    add                 r7d, r7d
-    mov                  r3, srcq
-    lea                 r6d, [hq+r7*8-256]
-    mov                  r5, tmpq
+    lea                 r6d, [hq+256*3]
+    jmp .hv_w16_loop0
+.hv_w32:
+    lea                 r6d, [hq+256*1]
+    jmp .hv_w16_loop0
+.hv_w16:
+    xor                 r6d, r6d
 .hv_w16_loop0:
     pmullw               m0, m4, [srcq]
     pmullw               m1, m5, [srcq+2]
+    mov                  r4, srcq
     psubw                m0, m3
+    mov                  r7, dstq
     paddw                m0, m1
     psraw                m0, 2
 .hv_w16_loop:
-    pmullw               m1, m4, [srcq+strideq*1]
-    pmullw               m2, m5, [srcq+strideq*1+2]
-    lea                srcq, [srcq+strideq*2]
+    pmullw               m1, m4, [r4+ssq*1]
+    pmullw               m2, m5, [r4+ssq*1+2]
+    lea                  r4, [r4+ssq*2]
     psubw                m1, m3
     paddw                m1, m2
     psraw                m1, 2
     psubw                m2, m1, m0
     pmulhrsw             m2, m6
     paddw                m2, m0
-    mova        [tmpq+r7*0], m2
-    pmullw               m0, m4, [srcq+strideq*0]
-    pmullw               m2, m5, [srcq+strideq*0+2]
+    mova         [r7+dsq*0], m2
+    pmullw               m0, m4, [r4+ssq*0]
+    pmullw               m2, m5, [r4+ssq*0+2]
     psubw                m0, m3
     paddw                m0, m2
     psraw                m0, 2
     psubw                m2, m0, m1
     pmulhrsw             m2, m6
     paddw                m2, m1
-    mova        [tmpq+r7*1], m2
-    lea                tmpq, [tmpq+r7*2]
+    mova         [r7+dsq*2], m2
+    lea                  r7, [r7+dsq*4]
     sub                  hd, 2
     jg .hv_w16_loop
-    add                  r3, 32
-    add                  r5, 32
+    add                srcq, 32
+    add                dstq, 32
     movzx                hd, r6b
-    mov                srcq, r3
-    mov                tmpq, r5
     sub                 r6d, 1<<8
     jg .hv_w16_loop0
-%if WIN64
-    POP                  r7
-%endif
     RET
 
 ; int8_t subpel_filters[5][15][8]
@@ -1201,12 +1166,12 @@ cglobal prep_bilin_16bpc, 3, 7, 0, tmp, src, stride, w, h, mxy, stride3
 cglobal %1_%2_16bpc
     mov                 t0d, FILTER_%3
 %if %0 == 4 ; skip the jump in the last filter
-    jmp mangle(private_prefix %+ _%4 %+ SUFFIX)
+    jmp mangle(private_prefix %+ _%4_avx2)
 %endif
 %endmacro
 
 %if WIN64
-DECLARE_REG_TMP 4
+DECLARE_REG_TMP 5
 %else
 DECLARE_REG_TMP 8
 %endif
@@ -1220,9 +1185,9 @@ cglobal put_6tap_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     imul                mxd, mxm, 0x010101
     imul                myd, mym, 0x010101
     mov                  wd, wm
-    movifnidn            hd, hm
     add                 mxd, t0d ; 6tap_h, mx, 4tap_h
     add                 myd, t0d ; 6tap_v, my, 4tap_v
+    movifnidn            hd, hm
     lea                  r8, [put_avx2]
     test                mxd, 0xf00
     jnz .h
@@ -2414,40 +2379,36 @@ cglobal put_8tap_sharp_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     jg .hv_w8_loop0
     RET
 
-%if WIN64
-DECLARE_REG_TMP 6, 4
-%else
-DECLARE_REG_TMP 6, 7
-%endif
-
 %define PREP_8TAP_FN FN prep_8tap,
 PREP_8TAP_FN smooth,  SMOOTH,  prep_6tap_16bpc
 PREP_8TAP_FN regular, REGULAR
 
-cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
-%define base r7-prep_avx2
+cglobal prep_6tap_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
+%define base r8-prep_avx2
     imul                mxd, mxm, 0x010101
-    add                 mxd, t0d ; 6tap_h, mx, 4tap_h
     imul                myd, mym, 0x010101
+    mov                  wd, wm
+    add                 mxd, t0d ; 6tap_h, mx, 4tap_h
     add                 myd, t0d ; 6tap_v, my, 4tap_v
-    lea                  r7, [prep_avx2]
     movifnidn            hd, hm
+    lea                  r8, [prep_avx2]
     test                mxd, 0xf00
     jnz .h
     test                myd, 0xf00
     jnz .v
 .prep:
     tzcnt                wd, wd
-    mov                 r6d, r7m ; bitdepth_max
-    movzx                wd, word [r7+wq*2+table_offset(prep,)]
-    vpbroadcastd         m5, [r7-prep_avx2+pw_8192]
+    mov                 r6d, r8m ; bitdepth_max
+    movzx                wd, word [r8+wq*2+table_offset(prep,)]
+    vpbroadcastd         m5, [pw_8192]
     shr                 r6d, 11
-    add                  wq, r7
+    add                  wq, r8
     vpbroadcastd         m4, [base+prep_mul+r6*4]
     lea                  r6, [ssq*3]
 %if WIN64
-    pop                  r7
+    pop                  r8
 %endif
+    lea                  r7, [dsq*3]
     jmp                  wq
 .h_w4:
     movzx               mxd, mxb
@@ -2456,9 +2417,10 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     vbroadcasti128       m3, [subpel_h_shufA]
     lea                  r6, [ssq*3]
     vbroadcasti128       m4, [subpel_h_shufB]
+    lea                  r7, [dsq*3]
     WIN64_SPILL_XMM       8
     pshufd              xm0, xm0, q2211
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .h_w4_12bpc
     psllw               xm0, 2
 .h_w4_12bpc:
@@ -2485,8 +2447,12 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     psrad                m0, 4
     psrad                m1, 4
     packssdw             m0, m1
-    mova             [tmpq], m0
-    add                tmpq, 32
+    vextracti128        xm1, m0, 1
+    movq       [dstq+dsq*0], xm0
+    movhps     [dstq+dsq*2], xm0
+    movq       [dstq+dsq*4], xm1
+    movhps     [dstq+r7 *2], xm1
+    lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .h_w4_loop
     RET
@@ -2503,7 +2469,7 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     vbroadcasti128       m6, [subpel_h_shufA]
     punpcklbw            m0, m0
     psraw                m0, 8 ; sign-extend
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .h_12bpc
     psllw                m0, 2
 .h_12bpc:
@@ -2542,8 +2508,9 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     packssdw            m%1, m%2
 %endmacro
     PREP_6TAP_H           0, 1, 2, 3, 4
-    mova             [tmpq], m0
-    add                tmpq, 32
+    mova         [dstq+dsq*0], xm0
+    vextracti128 [dstq+dsq*2], m0, 1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .h_w8
     RET
@@ -2556,11 +2523,11 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     movu                 m1, [srcq+r6-24]
     movu                 m2, [srcq+r6-16]
     PREP_6TAP_H           0, 1, 2, 3, 4
-    mova       [tmpq+r6-32], m0
+    mova       [dstq+r6-32], m0
     sub                 r6d, 32
     jg .h_w16_loop
     add                srcq, ssq
-    add                tmpq, wq
+    lea                dstq, [dstq+dsq*2]
     dec                  hd
     jg .h_w16_loop0
     RET
@@ -2576,7 +2543,7 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     punpcklbw            m0, m0
     neg                  r6
     psraw                m0, 8 ; sign-extend
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .v_12bpc
     psllw                m0, 2
 .v_12bpc:
@@ -2615,27 +2582,24 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     psrad                m4, 4
     vextracti128        xm3, m4, 1
     packssdw            xm4, xm3
-    mova             [tmpq], xm4
-    add                tmpq, 16
+    movq       [dstq+dsq*0], xm4
+    movhps     [dstq+dsq*2], xm4
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .v_w4_loop
     RET
 .v_w8:
     WIN64_PUSH_XMM       12
-%if WIN64
-    push                 r8
-%endif
-    mov                 r8d, wd
     shl                  wd, 5
     lea                  wd, [hq+wq-256]
 .v_w8_loop0:
     vbroadcasti128       m3, [srcq+r6 *2]
     vbroadcasti128       m4, [srcq+r6 *1]
-    lea                  r5, [srcq+ssq*2]
+    lea                  r8, [srcq+ssq*2]
     vbroadcasti128       m0, [srcq+ssq*0]
     vbroadcasti128       m1, [srcq+ssq*1]
-    mov                  r7, tmpq
-    vbroadcasti128       m2, [r5+ssq*0]
+    mov                  r7, dstq
+    vbroadcasti128       m2, [r8+ssq*0]
     shufpd               m3, m0, 0x0c
     shufpd               m4, m1, 0x0c
     punpcklwd            m1, m3, m4 ; 01
@@ -2644,9 +2608,9 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     punpcklwd            m2, m4, m0 ; 12
     punpckhwd            m4, m0     ; 34
 .v_w8_loop:
-    vbroadcasti128       m9, [r5+ssq*1]
+    vbroadcasti128       m9, [r8+ssq*1]
     pmaddwd             m10, m6, m1 ; a0
-    lea                  r5, [r5+ssq*2]
+    lea                  r8, [r8+ssq*2]
     pmaddwd             m11, m6, m2 ; b0
     mova                 m1, m3
     pmaddwd              m3, m7     ; a1
@@ -2655,7 +2619,7 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     paddd               m10, m5
     paddd               m11, m5
     paddd               m10, m3
-    vbroadcasti128       m3, [r5+ssq*0]
+    vbroadcasti128       m3, [r8+ssq*0]
     paddd               m11, m4
     shufpd               m4, m0, m9, 0x0d
     shufpd               m0, m9, m3, 0x0c
@@ -2669,19 +2633,16 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     psrad               m11, 4
     packssdw            m10, m11
     vpermq              m10, m10, q3120
-    mova          [r7+r8*0], xm10
-    vextracti128  [r7+r8*2], m10, 1
-    lea                  r7, [r7+r8*4]
+    mova         [r7+dsq*0], xm10
+    vextracti128 [r7+dsq*2], m10, 1
+    lea                  r7, [r7+dsq*4]
     sub                  hd, 2
     jg .v_w8_loop
     add                srcq, 16
-    add                tmpq, 16
+    add                dstq, 16
     movzx                hd, wb
     sub                  wd, 1<<8
     jg .v_w8_loop0
-%if WIN64
-    pop                  r8
-%endif
     RET
 .hv:
     WIN64_SPILL_XMM      13, 15
@@ -2704,7 +2665,7 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     punpcklbw            m1, m1
     psraw                m6, 4
     psraw                m1, 8
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jz .hv_w4_10bit
     psraw                m6, 2
 .hv_w4_10bit:
@@ -2770,8 +2731,9 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     psrad                m4, 6
     vextracti128        xm3, m4, 1
     packssdw            xm4, xm3
-    mova             [tmpq], xm4
-    add                tmpq, 16
+    movq       [dstq+dsq*0], xm4
+    movhps     [dstq+dsq*2], xm4
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .hv_w4_loop
     RET
@@ -2784,10 +2746,6 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     cmove               myd, mxd
     pmovsxbw            xm1, [base+subpel_filters+1+myq*8]
     WIN64_PUSH_XMM       15
-%if WIN64
-    PUSH                 r8
-%endif
-    mov                 r8d, wd
     shl                  wd, 5
     mov                  r6, ssq
     sub                srcq, 4
@@ -2796,7 +2754,7 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     pxor                 m0, m0
     punpcklbw            m0, m2
     psraw                m0, 4
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jz .hv_w8_10bit
     psraw                m0, 2
 .hv_w8_10bit:
@@ -2807,12 +2765,12 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
 .hv_w8_loop0:
     vbroadcasti128       m0, [srcq+ssq*0+ 0]
     vinserti128          m3, m0, [srcq+r6*2+ 0], 0
-    lea                  r5, [srcq+ssq*2]
+    lea                  r8, [srcq+ssq*2]
     vbroadcasti128       m2, [srcq+ssq*0+16]
     vinserti128          m1, m2, [srcq+r6*2+16], 0
-    mov                  r7, tmpq
-    vinserti128          m0, [r5  +ssq*0+ 0], 1
-    vinserti128          m2, [r5  +ssq*0+16], 1
+    mov                  r7, dstq
+    vinserti128          m0, [r8  +ssq*0+ 0], 1
+    vinserti128          m2, [r8  +ssq*0+16], 1
     shufpd               m4, m3, m1, 0x05
 %macro PREP_6TAP_HV_H 5 ; dst/src+0, src+8, src+16, tmp[1-2]
     pshufb              m%1, m8        ; 01 12 23 34
@@ -2855,13 +2813,13 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
 .hv_w8_loop:
     vpbroadcastd        m14, [v_mul+4*0]
     vpbroadcastd         m9, [v_mul+4*1]
-    movu                xm5, [r5+ssq*1+ 0]
-    movu                xm6, [r5+ssq*1+16]
-    lea                  r5, [r5+ssq*2]
+    movu                xm5, [r8+ssq*1+ 0]
+    movu                xm6, [r8+ssq*1+16]
+    lea                  r8, [r8+ssq*2]
     pmaddwd             m13, m14, m1    ; a0
     pmaddwd             m14, m2         ; b0
-    vinserti128          m5, [r5+ssq*0+ 0], 1
-    vinserti128          m6, [r5+ssq*0+16], 1
+    vinserti128          m5, [r8+ssq*0+ 0], 1
+    vinserti128          m6, [r8+ssq*0+16], 1
     mova                 m1, m3
     pmaddwd              m3, m9         ; a1
     mova                 m2, m4
@@ -2886,31 +2844,27 @@ cglobal prep_6tap_16bpc, 4, 8, 0, tmp, src, ss, w, h, mx, my
     psrad                m6, 6
     packssdw             m5, m6
     vpermq               m5, m5, q3120
-    mova          [r7+r8*0], xm5
-    vextracti128  [r7+r8*2], m5, 1
-    lea                  r7, [r7+r8*4]
+    mova         [r7+dsq*0], xm5
+    vextracti128 [r7+dsq*2], m5, 1
+    lea                  r7, [r7+dsq*4]
     sub                  hd, 2
     jg .hv_w8_loop
     add                srcq, 16
-    add                tmpq, 16
+    add                dstq, 16
     movzx                hd, wb
     sub                  wd, 1<<8
     jg .hv_w8_loop0
-%if WIN64
-    POP                  r8
-%endif
     RET
 
-PREP_8TAP_FN sharp, SHARP
-
-cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
-%define base r7-prep_avx2
+cglobal prep_8tap_sharp_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
+%define base r8-prep_avx2
     imul                mxd, mxm, 0x010101
-    add                 mxd, t0d ; 8tap_h, mx, 4tap_h
     imul                myd, mym, 0x010101
-    add                 myd, t0d ; 8tap_v, my, 4tap_v
-    lea                  r7, [prep_avx2]
+    mov                  wd, wm
     movifnidn            hd, hm
+    add                 mxd, FILTER_SHARP ; 8tap_h, mx, 4tap_h
+    add                 myd, FILTER_SHARP ; 8tap_v, my, 4tap_v
+    lea                  r8, [prep_avx2]
     test                mxd, 0xf00
     jnz .h
     test                myd, 0xf00
@@ -2923,11 +2877,11 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     vpbroadcastq         m0, [base+subpel_filters+myq*8]
     WIN64_SPILL_XMM      12, 15
     vpbroadcastd         m7, [prep_8tap_1d_rnd]
-    lea                  r6, [strideq*3]
+    lea                  r6, [ssq*3]
     punpcklbw            m0, m0
     sub                srcq, r6
     psraw                m0, 8 ; sign-extend
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .v_12bpc
     psllw                m0, 2
 .v_12bpc:
@@ -2938,17 +2892,17 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     cmp                  wd, 4
     jg .v_w8
 .v_w4:
-    movq                xm1, [srcq+strideq*0]
-    vpbroadcastq         m0, [srcq+strideq*1]
-    vpbroadcastq         m2, [srcq+strideq*2]
-    vpbroadcastq         m4, [srcq+r6       ]
-    lea                srcq, [srcq+strideq*4]
-    vpbroadcastq         m3, [srcq+strideq*0]
-    vpbroadcastq         m5, [srcq+strideq*1]
+    movq                xm1, [srcq+ssq*0]
+    vpbroadcastq         m0, [srcq+ssq*1]
+    vpbroadcastq         m2, [srcq+ssq*2]
+    vpbroadcastq         m4, [srcq+r6   ]
+    lea                srcq, [srcq+ssq*4]
+    vpbroadcastq         m3, [srcq+ssq*0]
+    vpbroadcastq         m5, [srcq+ssq*1]
     vpblendd             m1, m0, 0x30
     vpblendd             m0, m2, 0x30
     punpcklwd            m1, m0      ; 01 12
-    vpbroadcastq         m0, [srcq+strideq*2]
+    vpbroadcastq         m0, [srcq+ssq*2]
     add                srcq, r6
     vpblendd             m2, m4, 0x30
     vpblendd             m4, m3, 0x30
@@ -2957,7 +2911,7 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     vpblendd             m5, m0, 0x30
     punpcklwd            m3, m5      ; 45 56
 .v_w4_loop:
-    vpbroadcastq         m4, [srcq+strideq*0]
+    vpbroadcastq         m4, [srcq+ssq*0]
     pmaddwd              m5, m8, m1  ; a0 b0
     mova                 m1, m2
     pmaddwd              m2, m9      ; a1 b1
@@ -2967,8 +2921,8 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     pmaddwd              m3, m10     ; a2 b2
     paddd                m5, m3
     vpblendd             m3, m0, m4, 0x30
-    vpbroadcastq         m0, [srcq+strideq*1]
-    lea                srcq, [srcq+strideq*2]
+    vpbroadcastq         m0, [srcq+ssq*1]
+    lea                srcq, [srcq+ssq*2]
     vpblendd             m4, m0, 0x30
     punpcklwd            m3, m4      ; 67 78
     pmaddwd              m4, m11, m3 ; a3 b3
@@ -2976,30 +2930,27 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     psrad                m5, 4
     vextracti128        xm4, m5, 1
     packssdw            xm5, xm4
-    mova             [tmpq], xm5
-    add                tmpq, 16
+    movq       [dstq+dsq*0], xm5
+    movhps     [dstq+dsq*2], xm5
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .v_w4_loop
     RET
 .v_w8:
-%if WIN64
     WIN64_PUSH_XMM       15
-    push                 r8
-%endif
-    mov                 r8d, wd
     shl                  wd, 5
     lea                  wd, [hq+wq-256]
 .v_w8_loop0:
-    vbroadcasti128       m4, [srcq+strideq*0]
-    vbroadcasti128       m5, [srcq+strideq*1]
-    lea                  r5, [srcq+strideq*4]
-    vbroadcasti128       m0, [srcq+r6       ]
-    vbroadcasti128       m6, [srcq+strideq*2]
-    mov                  r7, tmpq
-    vbroadcasti128       m1, [r5+strideq*0]
-    vbroadcasti128       m2, [r5+strideq*1]
-    vbroadcasti128       m3, [r5+strideq*2]
-    add                  r5, r6
+    vbroadcasti128       m4, [srcq+ssq*0]
+    vbroadcasti128       m5, [srcq+ssq*1]
+    lea                  r8, [srcq+ssq*4]
+    vbroadcasti128       m0, [srcq+r6   ]
+    vbroadcasti128       m6, [srcq+ssq*2]
+    mov                  r7, dstq
+    vbroadcasti128       m1, [r8+ssq*0]
+    vbroadcasti128       m2, [r8+ssq*1]
+    vbroadcasti128       m3, [r8+ssq*2]
+    add                  r8, r6
     shufpd               m4, m0, 0x0c
     shufpd               m5, m1, 0x0c
     punpcklwd            m1, m4, m5 ; 01
@@ -3011,7 +2962,7 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     punpcklwd            m3, m6, m0 ; 23
     punpckhwd            m6, m0     ; 56
 .v_w8_loop:
-    vbroadcasti128      m14, [r5+strideq*0]
+    vbroadcasti128      m14, [r8+ssq*0]
     pmaddwd             m12, m8, m1  ; a0
     pmaddwd             m13, m8, m2  ; b0
     mova                 m1, m3
@@ -3027,8 +2978,8 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     pmaddwd              m5, m10     ; a2
     pmaddwd              m6, m10     ; b2
     paddd               m12, m5
-    vbroadcasti128       m5, [r5+strideq*1]
-    lea                  r5, [r5+strideq*2]
+    vbroadcasti128       m5, [r8+ssq*1]
+    lea                  r8, [r8+ssq*2]
     paddd               m13, m6
     shufpd               m6, m0, m14, 0x0d
     shufpd               m0, m14, m5, 0x0c
@@ -3042,19 +2993,16 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     psrad               m13, 4
     packssdw            m12, m13
     vpermq              m12, m12, q3120
-    mova          [r7+r8*0], xm12
-    vextracti128  [r7+r8*2], m12, 1
-    lea                  r7, [r7+r8*4]
+    mova         [r7+dsq*0], xm12
+    vextracti128 [r7+dsq*2], m12, 1
+    lea                  r7, [r7+dsq*4]
     sub                  hd, 2
     jg .v_w8_loop
     add                srcq, 16
-    add                tmpq, 16
+    add                dstq, 16
     movzx                hd, wb
     sub                  wd, 1<<8
     jg .v_w8_loop0
-%if WIN64
-    pop                  r8
-%endif
     RET
 .h:
     test                myd, 0xf00
@@ -3070,7 +3018,7 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     vbroadcasti128       m7, [subpel_h_shufB]
     punpcklbw            m0, m0
     psraw                m0, 8 ; sign-extend
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jnz .h_12bpc
     psllw                m0, 2
 .h_12bpc:
@@ -3108,15 +3056,16 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     psrad               m%2, 4
     packssdw            m%1, m%2
 %endmacro
-    movu                xm0, [srcq+strideq*0+ 0]
-    vinserti128          m0, [srcq+strideq*1+ 0], 1
-    movu                xm2, [srcq+strideq*0+16]
-    vinserti128          m2, [srcq+strideq*1+16], 1
-    lea                srcq, [srcq+strideq*2]
+    movu                xm0, [srcq+ssq*0+ 0]
+    vinserti128          m0, [srcq+ssq*1+ 0], 1
+    movu                xm2, [srcq+ssq*0+16]
+    vinserti128          m2, [srcq+ssq*1+16], 1
+    lea                srcq, [srcq+ssq*2]
     shufpd               m1, m0, m2, 0x05
     PREP_8TAP_H           0, 1, 2, 3, 4
-    mova             [tmpq], m0
-    add                tmpq, 32
+    mova         [dstq+dsq*0], xm0
+    vextracti128 [dstq+dsq*2], m0, 1
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .h_w8
     RET
@@ -3129,11 +3078,11 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     movu                 m1, [srcq+r6-24]
     movu                 m2, [srcq+r6-16]
     PREP_8TAP_H           0, 1, 2, 3, 4
-    mova       [tmpq+r6-32], m0
+    mova       [dstq+r6-32], m0
     sub                 r6d, 32
     jg .h_w16_loop
-    add                srcq, strideq
-    add                tmpq, wq
+    add                srcq, ssq
+    lea                dstq, [dstq+dsq*2]
     dec                  hd
     jg .h_w16_loop0
     RET
@@ -3149,7 +3098,7 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     cmp                  hd, 4
     cmove               myd, mxd
     vpbroadcastq         m1, [base+subpel_filters+myq*8]
-    lea                  r6, [strideq*3]
+    lea                  r6, [ssq*3]
     sub                srcq, 2
     pxor                 m7, m7
     sub                srcq, r6
@@ -3157,7 +3106,7 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     punpcklbw            m1, m1
     psraw                m7, 4
     psraw                m1, 8
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jz .hv_w4_10bit
     psraw                m7, 2
 .hv_w4_10bit:
@@ -3170,14 +3119,14 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     vbroadcasti128      m10, [subpel_h_shufB]
     pshufd               m8, m7, q1111
     pshufd               m7, m7, q0000
-    movu                xm1, [srcq+strideq*0]
-    vinserti128          m1, [srcq+strideq*1], 1     ; 0 1
-    vbroadcasti128       m0, [srcq+r6       ]
-    vinserti128          m2, m0, [srcq+strideq*2], 0 ; 2 3
-    lea                srcq, [srcq+strideq*4]
-    vinserti128          m0, [srcq+strideq*0], 1     ; 3 4
-    movu                xm3, [srcq+strideq*1]
-    vinserti128          m3, [srcq+strideq*2], 1     ; 5 6
+    movu                xm1, [srcq+ssq*0]
+    vinserti128          m1, [srcq+ssq*1], 1     ; 0 1
+    vbroadcasti128       m0, [srcq+r6   ]
+    vinserti128          m2, m0, [srcq+ssq*2], 0 ; 2 3
+    lea                srcq, [srcq+ssq*4]
+    vinserti128          m0, [srcq+ssq*0], 1     ; 3 4
+    movu                xm3, [srcq+ssq*1]
+    vinserti128          m3, [srcq+ssq*2], 1     ; 5 6
     add                srcq, r6
     pshufb               m4, m1, m9
     pshufb               m1, m10
@@ -3216,9 +3165,9 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     pblendw              m3, m5, 0xaa ; 45 56
     psrad                m0, m5, 16
 .hv_w4_loop:
-    movu                xm4, [srcq+strideq*0]
-    vinserti128          m4, [srcq+strideq*1], 1
-    lea                srcq, [srcq+strideq*2]
+    movu                xm4, [srcq+ssq*0]
+    vinserti128          m4, [srcq+ssq*1], 1
+    lea                srcq, [srcq+ssq*2]
     pmaddwd              m5, m11, m1   ; a0 b0
     mova                 m1, m2
     pmaddwd              m2, m12       ; a1 b1
@@ -3243,8 +3192,9 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     psrad                m4, 6
     vextracti128        xm5, m4, 1
     packssdw            xm4, xm5
-    mova             [tmpq], xm4
-    add                tmpq, 16
+    movq       [dstq+dsq*0], xm4
+    movhps     [dstq+dsq*2], xm4
+    lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .hv_w4_loop
     RET
@@ -3256,19 +3206,15 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     cmp                  hd, 4
     cmove               myd, mxd
     pmovsxbw            xm1, [base+subpel_filters+myq*8]
-%if WIN64
-    PUSH                 r8
-%endif
-    mov                 r8d, wd
     shl                  wd, 5
-    lea                  r6, [strideq*3]
+    lea                  r6, [ssq*3]
     sub                srcq, 6
     sub                srcq, r6
     lea                  wd, [hq+wq-256]
     pxor                 m0, m0
     punpcklbw            m0, m2
     psraw                m0, 4
-    test          dword r7m, 0x800
+    test          dword r8m, 0x800
     jz .hv_w8_10bit
     psraw                m0, 2
 .hv_w8_10bit:
@@ -3305,33 +3251,33 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     psrad                m2, 6
     packssdw            m%1, m2
 %endmacro
-    movu                xm4, [srcq+r6       + 0]
+    movu                xm4, [srcq+r6   + 0]
     vbroadcasti128       m8, [subpel_h_shufA]
-    lea                  r5, [srcq+strideq*4]
-    movu                xm6, [srcq+r6       + 8]
+    lea                  r8, [srcq+ssq*4]
+    movu                xm6, [srcq+r6   + 8]
     vbroadcasti128       m9, [subpel_h_shufB]
-    mov                  r7, tmpq
-    movu                xm0, [srcq+r6       +16]
-    movu                xm5, [srcq+strideq*0+ 0]
-    vinserti128          m5, [r5  +strideq*0+ 0], 1
-    movu                xm1, [srcq+strideq*0+16]
-    vinserti128          m1, [r5  +strideq*0+16], 1
+    mov                  r7, dstq
+    movu                xm0, [srcq+r6   +16]
+    movu                xm5, [srcq+ssq*0+ 0]
+    vinserti128          m5, [r8  +ssq*0+ 0], 1
+    movu                xm1, [srcq+ssq*0+16]
+    vinserti128          m1, [r8  +ssq*0+16], 1
     shufpd               m7, m5, m1, 0x05
     INIT_XMM avx2
     PREP_8TAP_HV_H        4, 6, 0    ; 3
     INIT_YMM avx2
     PREP_8TAP_HV_H        5, 7, 1    ; 0 4
-    movu                xm0, [srcq+strideq*2+ 0]
-    vinserti128          m0, [srcq+r6     *2+ 0], 1
-    movu                xm1, [srcq+strideq*2+16]
-    vinserti128          m1, [srcq+r6     *2+16], 1
+    movu                xm0, [srcq+ssq*2+ 0]
+    vinserti128          m0, [srcq+r6 *2+ 0], 1
+    movu                xm1, [srcq+ssq*2+16]
+    vinserti128          m1, [srcq+r6 *2+16], 1
     shufpd               m7, m0, m1, 0x05
     PREP_8TAP_HV_H        0, 7, 1    ; 2 6
-    movu                xm6, [srcq+strideq*1+ 0]
-    movu                xm1, [srcq+strideq*1+16]
-    vinserti128          m6, [r5  +strideq*1+ 0], 1
-    vinserti128          m1, [r5  +strideq*1+16], 1
-    add                  r5, r6
+    movu                xm6, [srcq+ssq*1+ 0]
+    movu                xm1, [srcq+ssq*1+16]
+    vinserti128          m6, [r8  +ssq*1+ 0], 1
+    vinserti128          m1, [r8  +ssq*1+16], 1
+    add                  r8, r6
     shufpd               m7, m6, m1, 0x05
     PREP_8TAP_HV_H        6, 7, 1    ; 1 5
     vpermq               m4, m4, q1100
@@ -3364,12 +3310,12 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     pmaddwd              m6, m10     ; b2
     paddd                m8, m5
     paddd                m9, m6
-    movu                xm5, [r5+strideq*0]
-    vinserti128          m5, [r5+strideq*1], 1
+    movu                xm5, [r8+ssq*0]
+    vinserti128          m5, [r8+ssq*1], 1
     vbroadcasti128       m7, [subpel_h_shufA]
     vbroadcasti128      m10, [subpel_h_shufB]
-    movu                xm6, [r5+strideq*0+16]
-    vinserti128          m6, [r5+strideq*1+16], 1
+    movu                xm6, [r8+ssq*0+16]
+    vinserti128          m6, [r8+ssq*1+16], 1
     vextracti128       [r7], m0, 1
     pshufb               m0, m5, m7  ; 01
     pshufb               m5, m10     ; 23
@@ -3383,9 +3329,9 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     pmaddwd              m6, m14
     paddd                m5, m15
     paddd                m6, m5
-    movu                xm5, [r5+strideq*0+8]
-    vinserti128          m5, [r5+strideq*1+8], 1
-    lea                  r5, [r5+strideq*2]
+    movu                xm5, [r8+ssq*0+8]
+    vinserti128          m5, [r8+ssq*1+8], 1
+    lea                  r8, [r8+ssq*2]
     pshufb               m7, m5, m7
     pshufb               m5, m10
     pmaddwd             m10, m13, m7
@@ -3413,19 +3359,16 @@ cglobal prep_8tap_16bpc, 4, 8, 0, tmp, src, stride, w, h, mx, my
     psrad                m9, 6
     packssdw             m7, m9
     vpermq               m7, m7, q3120
-    mova          [r7+r8*0], xm7
-    vextracti128  [r7+r8*2], m7, 1
-    lea                  r7, [r7+r8*4]
+    mova         [r7+dsq*0], xm7
+    vextracti128 [r7+dsq*2], m7, 1
+    lea                  r7, [r7+dsq*4]
     sub                  hd, 2
     jg .hv_w8_loop
     add                srcq, 16
-    add                tmpq, 16
+    add                dstq, 16
     movzx                hd, wb
     sub                  wd, 1<<8
     jg .hv_w8_loop0
-%if WIN64
-    POP                  r8
-%endif
     RET
 
 %macro movifprep 2

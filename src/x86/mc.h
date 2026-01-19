@@ -54,7 +54,8 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
     if (!(flags & DAV1D_X86_CPU_FLAG_AVX2))
         return;
 
-    init_8tap_gen(mc, avx2);
+    init_8tap_fns(avx2);
 
     init_mc_fn(DAV1D_FILTER_BILINEAR,  bilin, avx2);
+    init_mct_fn(DAV1D_FILTER_BILINEAR, bilin, avx2);
 }
