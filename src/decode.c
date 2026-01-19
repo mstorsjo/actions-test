@@ -2926,8 +2926,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     y_off = 0;
                     x_off = -1;
                 } else if (have_top &&
-                           (t->a->ref[0][bx4 + bw4 - 1] == b->ref[0] ||
-                            t->a->ref[1][bx4 + bw4 - 1] == b->ref[0]))
+                           (t->a->ref[0][bx4] == b->ref[0] ||
+                            t->a->ref[1][bx4] == b->ref[0]))
                 {
                     y_off = -1;
                     x_off = 0;
