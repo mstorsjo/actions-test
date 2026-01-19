@@ -1559,6 +1559,17 @@ static void update_temporal(refmvs_temporal_block *t_dst, const ptrdiff_t t_stri
     t_src.ref.ref[1] = refs[!swap] + 1;
     t_src.mv.mv[0] = quantize_mv(mv[swap]);
     t_src.mv.mv[1] = quantize_mv(mv[!swap]);
+    if (t_src.mv.mv[0].n == INVALID_TRAJ) {
+        if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+            t_src.ref.pair = 0;
+        } else {
+            t_src.mv.mv[0] = t_src.mv.mv[1];
+            t_src.ref.ref[0] = t_src.ref.ref[1];
+        }
+    } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+        t_src.mv.mv[1] = t_src.mv.mv[0];
+        t_src.ref.ref[1] = t_src.ref.ref[0];
+    }
     for (int y = 0; y < h8; y++) {
         for (int x = 0; x < w8; x++)
             t_dst[x] = t_src;

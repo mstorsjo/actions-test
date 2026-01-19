@@ -576,6 +576,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
         s_src.mf = b->inter_mode == GLOBALMV;
         // this is invalid for TIP, but that will be overwritten in tip_pred()
         t_src.mv.mv[0] = t_src.mv.mv[1] = quantize_mv(b->mv[0]);
+        if (t_src.mv.mv[0].n == INVALID_TRAJ) t_src.ref.pair = 0;
         f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
     }
 }
@@ -653,6 +654,17 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         t_src.mv.mv[0] = quantize_mv(b->mv[t_swap]);
         t_src.mv.mv[1] = quantize_mv(b->mv[!t_swap]);
+        if (t_src.mv.mv[0].n == INVALID_TRAJ) {
+            if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+                t_src.ref.pair = 0;
+            } else {
+                t_src.mv.mv[0] = t_src.mv.mv[1];
+                t_src.ref.ref[0] = t_src.ref.ref[1];
+            }
+        } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+            t_src.mv.mv[1] = t_src.mv.mv[0];
+            t_src.ref.ref[1] = t_src.ref.ref[0];
+        }
         f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
     }
     if (b->comp_type == COMP_INTER_WEDGE) {

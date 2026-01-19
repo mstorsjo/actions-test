@@ -2240,7 +2240,9 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->mv.mv[0]);
             }
             s_dst[x] = s_dst[x + 1] = s_dst[x + 128] = s_dst[x + 129] = *s_src;
-            t_dst[x >> 1] = *t_src;
+            t_dst[x >> 1].mv.n = t_src->mv.n;
+            t_dst[x >> 1].ref.pair = t_src->mv.n == INVALID_TRAJ * 0x10001U ?
+                                     0 : t_src->ref.pair;
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
         }
@@ -2286,7 +2288,21 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 t_src->mv.mv[!t_swap] = quantize_mv(s_src->mv.mv[1]);
             }
             s_dst[x] = s_dst[x + 1] = s_dst[x + 128] = s_dst[x + 129] = *s_src;
-            t_dst[x >> 1] = *t_src;
+            if (t_src->mv.mv[0].n == INVALID_TRAJ) {
+                if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                    t_dst[x >> 1].ref.pair = 0;
+                } else {
+                    t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
+                    t_dst[x >> 1].ref.pair = t_src->ref.ref[1] * 0x101U;
+                }
+            } else {
+                if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                    t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
+                    t_dst[x >> 1].ref.pair = t_src->ref.ref[0] * 0x101U;
+                } else {
+                    t_dst[x >> 1] = *t_src;
+                }
+            }
             mvxi1 += (mat[0].matrix[2] - 0x10000) * 8;
             mvyi1 += mat[0].matrix[4] * 8;
             mvxi2 += (mat[1].matrix[2] - 0x10000) * 8;
