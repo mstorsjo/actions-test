@@ -1116,6 +1116,345 @@ cfl_ac_fn(420, 1, 1)
 cfl_ac_fn(422, 1, 0)
 cfl_ac_fn(444, 0, 0)
 
+static NOINLINE void
+cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
+                const pixel *src, const pixel *const top_sb_edge,
+                const ptrdiff_t src_stride, const int refw, const int refh,
+                const int tw, const int th, const int flags, const int filter_type)
+{
+    const int has_t = flags & CFL_HAS_TOP;
+    const int has_l = flags & CFL_HAS_LEFT;
+    const int dir = flags & CFL_DIR_ALL;
+    const int dir_l = dir == CFL_DIR_LEFT;
+    const int n_left = has_l ? 1 + dir_l : 0;
+    const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
+    src -= n_left << 1;
+
+// ::
+#define FILTER_CENTER(src) \
+    (src[c] + src[r] + src[b + c] + src[b + r]) >> 2
+// :::
+#define FILTER_RECT(src) \
+    (src[l] + 2 * src[c] + src[r] + src[b + l] + 2 * src[b + c] + src[b + r]) >> 3
+// -|-
+#define FILTER_CROSS(src, top) \
+    (src[l] + 4 * src[c] + src[r] + top[c] + src[b + c]) >> 3
+
+    // tl+t+tr
+    if (has_t) {
+        const pixel *top = top_sb_edge ?
+            top_sb_edge - n_left * 2 : src - n_top * 2 * src_stride;
+        if (!has_l && !dir_l) top += 2;
+        const ptrdiff_t a = !top_sb_edge ? -src_stride : 0;
+        const ptrdiff_t b = !top_sb_edge ? src_stride : 0;
+        for (int y = 0; y < n_top; y++) {
+            for (int x = 0; x < refw; x++) {
+                const int c = x * 2, l = imax(c - 1, 0), r = c + 1;
+                dst[x] = filter_type & 2 ? FILTER_CROSS(top, (&top[a])) :
+                         filter_type & 1 ? FILTER_RECT(top) : FILTER_CENTER(top);
+            }
+            if (!top_sb_edge)
+                top += 2 * src_stride;
+            dst += dst_stride;
+        }
+    }
+
+    // l+blk
+    const int b = src_stride;
+    const pixel *top = top_sb_edge ? top_sb_edge - n_left * 2 : src - src_stride;
+    for (int y = 0; y < th; y++) {
+        for (int x = 0; x < n_left + tw; x++) {
+            const int c = x * 2, l = imax(c - 1, 0), r = c + 1;
+            dst[x] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
+                     filter_type & 1 ? FILTER_RECT(src) : FILTER_CENTER(src);
+        }
+        src += src_stride << 1;
+        dst += dst_stride;
+        top = src - src_stride;
+    }
+
+    // bl
+    if (refh > th) {
+        const int n_bl = refh - th;
+        for (int y = 0; y < n_bl; y++) {
+            for (int x = 0; x < n_left; x++) {
+                const int c = x * 2, l = imax(c - 1, 0), r = c + 1;
+                dst[x] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
+                         filter_type & 1 ? FILTER_RECT(src) : FILTER_CENTER(src);
+            }
+            src += src_stride << 1;
+            dst += dst_stride;
+        }
+    }
+}
+
+#define cfl_gen_y_420_fn(filter_type, name) \
+static void \
+cfl_gen_y_420_##name##_c(uint16_t *const dst, const int dst_stride, \
+                         const pixel *const src, const pixel *const top_sb_edge, \
+                         ptrdiff_t const src_stride, const int refw, const int refh, \
+                         int const tw, int const th, int flags) \
+{ \
+    cfl_gen_y_420_c(dst, dst_stride >> 1, src, top_sb_edge, PXSTRIDE(src_stride), \
+                    refw, refh, tw, th, flags, filter_type); \
+}
+
+#define cfl_gen_y_fn(fmt) \
+cfl_gen_y_##fmt##_fn(0, center) \
+cfl_gen_y_##fmt##_fn(1, rect) \
+cfl_gen_y_##fmt##_fn(2, cross)
+
+cfl_gen_y_fn(420)
+
+#define SQRND(v) (((v) * (v) + mid) >> bd)
+#define GEN_MATRIX() \
+    do { \
+        mat[0][0] += v0 * v0; \
+        mat[0][1] += v0 * v1; \
+        mat[0][2] += v0 << (bd - 1); \
+        mat[1][1] += v1 * v1; \
+        mat[1][2] += v1 << (bd - 1); \
+    } while (0);
+
+static void
+cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES],
+              const uint16_t *const y, const int ystride,
+              const int refw, const int refh, const int edge_flags,
+              const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+{
+    const int bd = bitdepth_from_max(bitdepth_max);
+    const int mid = 1 << (bd - 1);
+    const int has_t = !!(edge_flags & CFL_HAS_TOP);
+    const int has_l = !!(edge_flags & CFL_HAS_LEFT);
+    const int dir_t = dir == CFL_DIR_TOP;
+    const int dir_l = dir == CFL_DIR_LEFT;
+
+    int n = 0;
+    if (has_t) {
+        for (int i = 0; i < refw - 1 - !has_l; i++, n++) {
+            const int v0 = y[i];
+            const int v1 = SQRND(y[dir_t * ystride + i + dir_l]);
+            imat[0][n] = v0;
+            imat[1][n] = v1;
+            GEN_MATRIX();
+        }
+    }
+    // XXX it will probably be faster to fill an additional left edge buffer
+    // for SIMD, so that we can do a single load of all left, vs h - n_top
+    // loads of 1 or 2 px...
+    // Must be additional tho, as mhccp_pred(dir=left) will tap into the edge
+    // => don't need extra arg, can just offset luma buffer and store left then
+    // everything (including left again then)
+    // One more thing, if dir=left the left edge tap (in mhccp_pred) is of 1px,
+    // but the system of linear equations uses 2px, so there will be a
+    // difference in what *needs* to be stored in the left part and in the
+    // general part, altho it will probably be faster to not care and just
+    // store 2px in the general part anyways.
+    if (has_l) {
+        for (int i = has_t; i < refh - 1; i++, n++) {
+            const int v0 = y[i * ystride];
+            const int v1 = SQRND(y[(i + dir_t) * ystride + dir_l]);
+            imat[0][n] = v0;
+            imat[1][n] = v1;
+            GEN_MATRIX();
+        }
+    }
+    mat[2][2] = n << ((bd - 1) << 1);
+
+    const int nl2 = 31 - clz(n);
+    const int mat_sh = 22 - 2 * bd - nl2 - !!(n & ((1 << nl2) - 1));
+    if (mat_sh > 0)
+        for (int i = 0; i < 3; i++)
+            for (int j = i; j < 3; j++)
+                mat[i][j] <<= mat_sh;
+    else if (mat_sh < 0)
+        for (int i = 0; i < 3; i++)
+            for (int j = i; j < 3; j++)
+                mat[i][j] >>= -mat_sh;
+    mat[0][0] += 2 << (bd - 8);
+    mat[1][1] += 2 << (bd - 8);
+    mat[2][2] += 2 << (bd - 8);
+    mat[1][0] = mat[0][1];
+    mat[2][0] = mat[0][2];
+    mat[2][1] = mat[1][2];
+}
+
+#define cfl_gen_mat_fn(name, dir) \
+static void \
+cfl_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES], \
+                       const uint16_t *const y, const int ystride, \
+                       const int refw, const int refh, const int edge_flags \
+                       HIGHBD_DECL_SUFFIX) \
+{ \
+    cfl_gen_mat_c(mat, imat, y, ystride >> 1, refw, refh, edge_flags, dir \
+                  HIGHBD_TAIL_SUFFIX); \
+}
+
+cfl_gen_mat_fn(c, CFL_DIR_CENTER)
+cfl_gen_mat_fn(t, CFL_DIR_TOP)
+cfl_gen_mat_fn(l, CFL_DIR_LEFT)
+
+static void get_div_scale_sh(int d, int *scale, int *sh) {
+    *sh = ulog2(d);
+    // 1. Normalize D into fixed-point format with 14 fractional bits.
+    const int nsh = *sh - 14;
+    if (nsh >= 0) {
+        const int rnd = (nsh > 0) ? 1 << (nsh - 1) : 0;
+        d = (d + rnd) >> nsh;
+    } else {
+        d <<= -nsh;
+    }
+    // 2. Clip the scaled value to make sure it's within the valid range
+    // [1, 2), represented as： [1 << 14, (1 << 15) - 1].
+    // The rounding in 1. may push the value out of range, so clipping is needed.
+    // XXX looks like this could just be an imin
+    d = iclip(d, 1, 0x7fff);
+    // 3. Extract the fractional part of the normalized denominator d.
+    d &= (1 << 14) - 1;
+
+    const int idx = d >> 11;
+    const uint8_t coefw = dav1d_div_scale_sh_coefw[idx];
+    const uint8_t coefq = dav1d_div_scale_sh_coefq[idx];
+    const uint16_t bias = dav1d_div_scale_sh_bias[idx];
+    d -= dav1d_div_scale_sh_offset[idx];
+    *scale = (((coefw * ((d * d) >> 14)) >> 8) - ((coefq * d) >> 8) + bias) << 2;
+}
+
+/*
+ * Approximate ((a * b) + round) >> shift using only 32-bit intermediates.
+ * Strategy:
+ *   1. Right-shift a and/or b by sh1/sh2 so that (bits(a)-sh1)+(bits(b)-sh2) <= 31.
+ *   2. Compensate in the final right shift: adj = sh - (ash + bsh).
+ *   3. Perform symmetric round-to-nearest (round half away from zero).
+ * This keeps all intermediates in 32-bit while keeping the mean error low.
+ */
+static int mul32(int a, int b, int sh) {
+    const int a2 = ulog2(abs(a)) + 1;
+    const int b2 = ulog2(abs(b)) + 1;
+    // 1. Decide how many bits to drop in total to avoid mul overflow
+    const int drop = a2 + b2 > 29 ? a2 + b2 - 29 : 0;
+    // 2. Split the drop across a and b to minimize error
+    const int ash = drop >> 1;
+    const int bsh = drop - ash;
+    const int adj = sh - (ash + bsh);
+    const int mul = (a >> ash) * (b >> bsh);
+    if (adj <= 0) return mul;
+    assert(adj <= 29);
+    // 3. Final right shift with symmetric rounding to nearest
+    const unsigned bias = 1U << (adj - 1);
+    return mul >= 0 ?
+        (int) (((unsigned) mul + bias) >> adj) :
+        -(int) (((unsigned) -mul + bias) >> adj);
+}
+
+static void
+cfl_calc_alphas_c(int alpha[3], const pixel *const c,
+                  const pixel *const top_sb_edge, ptrdiff_t stride,
+                  const int refw, const int refh,
+                  int32_t mat[3][3], const uint16_t imat[2][CFL_MAX_EDGE_SAMPLES],
+                  const int edge_flags HIGHBD_DECL_SUFFIX)
+{
+    const int bd = bitdepth_from_max(bitdepth_max);
+    const int has_t = !!(edge_flags & CFL_HAS_TOP);
+    const int has_l = !!(edge_flags & CFL_HAS_LEFT);
+
+    int n = 0;
+    if (has_t) {
+        const pixel *const top = top_sb_edge ?
+            top_sb_edge - has_l : c - PXSTRIDE(stride) - has_l;
+        for (int i = !has_l; i < refw - 1; i++, n++) {
+            alpha[0] += imat[0][n] * top[i];
+            alpha[1] += imat[1][n] * top[i];
+            alpha[2] += top[i] << (bd - 1);
+        }
+    }
+    if (has_l) {
+        for (int i = 0; i < refh - 2; i++, n++) {
+            const int v = c[i * PXSTRIDE(stride) - 1];
+            alpha[0] += imat[0][n] * v;
+            alpha[1] += imat[1][n] * v;
+            alpha[2] += v << (bd - 1);
+        }
+    }
+    const int nl2 = 31 - clz(n);
+    const int mat_sh = 22 - 2 * bd - nl2 - !!(n & ((1 << nl2) - 1));
+    if (mat_sh > 0) {
+        alpha[0] <<= mat_sh;
+        alpha[1] <<= mat_sh;
+        alpha[2] <<= mat_sh;
+    } else if (mat_sh < 0) {
+        alpha[0] >>= -mat_sh;
+        alpha[1] >>= -mat_sh;
+        alpha[2] >>= -mat_sh;
+    }
+    // alpha holds the results of the system of linear equations
+
+    // Gaussian elimination
+    int tmp[3][2], scale, sh;
+    // row0
+    get_div_scale_sh(mat[0][0], &scale, &sh);
+    tmp[0][0] = mul32(mat[0][1], scale, sh);
+    tmp[0][1] = mul32(mat[0][2], scale, sh);
+    alpha[0]  = mul32(alpha[0],  scale, sh);
+    tmp[1][0] = mat[1][1] - mul32(mat[1][0], tmp[0][0], 16);
+    tmp[1][1] = mat[1][2] - mul32(mat[1][0], tmp[0][1], 16);
+    alpha[1]  -= mul32(mat[1][0], alpha[0],  16);
+    tmp[2][0] = mat[2][1] - mul32(mat[2][0], tmp[0][0], 16);
+    tmp[2][1] = mat[2][2] - mul32(mat[2][0], tmp[0][1], 16);
+    alpha[2]  -= mul32(mat[2][0], alpha[0],  16);
+    // row1
+    get_div_scale_sh(tmp[1][0], &scale, &sh);
+    tmp[1][1] = mul32(tmp[1][1], scale, sh);
+    alpha[1]  = mul32(alpha[1],  scale, sh);
+    tmp[2][1] -= mul32(tmp[2][0], tmp[1][1], 16);
+    alpha[2]  -= mul32(tmp[2][0], alpha[1],  16);
+    // row2
+    get_div_scale_sh(tmp[2][1], &scale, &sh);
+    alpha[2] = mul32(alpha[2], scale, sh);
+    alpha[1] -= mul32(tmp[1][1], alpha[2], 16);
+    alpha[0] -= mul32(tmp[0][0], alpha[1], 16) + mul32(tmp[0][1], alpha[2], 16);
+}
+
+static void
+cfl_mhccp_pred_c(pixel *dst, const ptrdiff_t dst_stride,
+                 const uint16_t *src, const int src_stride,
+                 const int w, const int h, const int alpha[3],
+                 const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+{
+    const int bd = bitdepth_from_max(bitdepth_max);
+    const int mid = 1 << (bd - 1);
+    const int has_t = !!(edge_flags & CFL_HAS_TOP);
+    const int has_l = !!(edge_flags & CFL_HAS_LEFT);
+
+    const int a2v2 = mul32(alpha[2], mid, 16);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const int v0 = src[dir == CFL_DIR_TOP ? x - ((!!y) | has_t) * src_stride :
+                               dir == CFL_DIR_LEFT ? x - ((!!x) | has_l) : x];
+            const int v1 = SQRND(src[x]);
+            dst[x] = iclip_pixel(mul32(alpha[0], v0, 16) +
+                                 mul32(alpha[1], v1, 16) + a2v2);
+        }
+        src += src_stride;
+        dst += dst_stride;
+    }
+}
+
+#define cfl_mhccp_pred_fn(name, dir) \
+static void \
+cfl_mhccp_pred_##name##_c(pixel *dst, ptrdiff_t dst_stride, \
+                          const uint16_t *src, const int src_stride, \
+                          int w, int h, const int alpha[3], int edge_flags \
+                          HIGHBD_DECL_SUFFIX) \
+{ \
+    cfl_mhccp_pred_c(dst, dst_stride, src, src_stride >> 1, w, h, alpha, \
+                     edge_flags, dir HIGHBD_TAIL_SUFFIX); \
+}
+
+cfl_mhccp_pred_fn(c, CFL_DIR_CENTER)
+cfl_mhccp_pred_fn(t, CFL_DIR_TOP)
+cfl_mhccp_pred_fn(l, CFL_DIR_LEFT)
+
 static void pal_pred_c(pixel *dst, const ptrdiff_t stride,
                        const pixel *const pal, const uint8_t *idx,
                        const int w, const int h)
@@ -1384,17 +1723,30 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
     c->intra_pred[Z3_PRED      ] = ipred_z3_c;
     c->intra_pred[DIP_PRED     ] = ipred_dip_c;
 
+    /* CFL EXPLICIT / IMPLICIT */
     c->cfl_dc[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_dc_420_c;
     c->cfl_dc[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_dc_422_c;
     c->cfl_dc[DAV1D_PIXEL_LAYOUT_I444 - 1] = cfl_dc_444_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_ac_420_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_ac_422_c;
     c->cfl_ac[DAV1D_PIXEL_LAYOUT_I444 - 1] = cfl_ac_444_c;
-
     c->cfl_pred[DC_PRED     ] = ipred_cfl_c;
     c->cfl_pred[DC_128_PRED ] = ipred_cfl_128_c;
     c->cfl_pred[TOP_DC_PRED ] = ipred_cfl_top_c;
     c->cfl_pred[LEFT_DC_PRED] = ipred_cfl_left_c;
+
+    /* CFL_MHCCP */
+#define assign_cfl_mhccp(dir, name) \
+    c->cfl_gen_y[DAV1D_PIXEL_LAYOUT_I420 - 1][0] = cfl_gen_y_420_center_c; \
+    c->cfl_gen_y[DAV1D_PIXEL_LAYOUT_I420 - 1][1] = cfl_gen_y_420_rect_c; \
+    c->cfl_gen_y[DAV1D_PIXEL_LAYOUT_I420 - 1][2] = cfl_gen_y_420_cross_c; \
+    c->cfl_gen_mat[dir] = cfl_gen_mat_##name##_c; \
+    c->cfl_calc_alphas = cfl_calc_alphas_c; \
+    c->cfl_mhccp_pred[dir] = cfl_mhccp_pred_##name##_c;
+
+    assign_cfl_mhccp(CFL_DIR_CENTER, c);
+    assign_cfl_mhccp(CFL_DIR_TOP   , t);
+    assign_cfl_mhccp(CFL_DIR_LEFT  , l);
 
     c->pal_pred = pal_pred_c;
     c->orip = orip_c;

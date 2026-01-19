@@ -1689,7 +1689,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 {
                     const int sz_ctx = size_group_lookup[bs];
                     b->cfl_type = CFL_MHCCP;
-                    b->mh_dir =
+                    b->cfl_mh_dir =
                         dav1d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mhccp_filter_dir[sz_ctx], 2);
                 } else {
@@ -1718,7 +1718,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 DEBUG_BLOCK_printf("%*sPost-cfl[type=%d,%s=%d|%d]: r=%d\n",
                                    depth, "", b->cfl_type,
                                    b->cfl_type == CFL_MHCCP ? "mhdir" : "alpha",
-                                   b->cfl_type == CFL_MHCCP ? b->mh_dir :
+                                   b->cfl_type == CFL_MHCCP ? b->cfl_mh_dir :
                                                               b->cfl_alpha[0],
                                    b->cfl_alpha[1], ts->msac.rng);
             }

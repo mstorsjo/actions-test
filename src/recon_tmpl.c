@@ -2392,6 +2392,7 @@ cfl(Dav1dTaskContext *const t, const Av1Block *const b,
     const Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
+    const enum Dav1dPixelLayout layout = f->cur.p.layout - 1;
     const ptrdiff_t ystride = f->cur.stride[0];
     const ptrdiff_t cstride = f->cur.stride[1];
     const pixel *const y_src = ((pixel *) f->cur.data[0]) +
@@ -2400,20 +2401,23 @@ cfl(Dav1dTaskContext *const t, const Av1Block *const b,
     const int sbsz = f->sb_step;
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
+    const int is_top_sb_edge = !(t->cby & (sbsz - 1));
+    const int has_top = t->cby > ts->tiling.row_start;
+    const int has_left = t->cbx > ts->tiling.col_start;
     const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     const int cth4 = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
     const int ctw = uv_t_dim->w * 4, cth = uv_t_dim->h * 4;
+    const int filter_type = f->c->seq_hdr->cfl_ds_filter_index;
+    const pixel *const ytop_sb_edge = !is_top_sb_edge ? NULL :
+        f->ipred_edge[0] + f->sb256w * 256 * (sby - 1);
 
     if (b->cfl_type < CFL_MHCCP) { // CFL EXPLICIT / IMPLICIT
         // calc AC / gen Y edge
         uint16_t y_edge_mem[256], *const y_edge = &y_edge_mem[128];
         int16_t *const ac = t->scratch.ac;
-        const int is_top_sb_edge = !(t->cby & (sbsz - 1));
-        const pixel *const top = t->cby == ts->tiling.row_start ? NULL :
-            !is_top_sb_edge ? y_src - (1 + ss_ver) * PXSTRIDE(ystride) :
-            f->ipred_edge[0] + f->sb256w * 256 * (sby - 1);
-        const pixel *const left = t->cbx > ts->tiling.col_start ?
-            y_src - (1 + ss_hor) : NULL;
+        const pixel *const top = has_top ? is_top_sb_edge ? ytop_sb_edge :
+            y_src - (1 + ss_ver) * PXSTRIDE(ystride) : NULL;
+        const pixel *const left = has_left ? y_src - (1 + ss_hor) : NULL;
         const int filter_type = f->c->seq_hdr->cfl_ds_filter_index |
             (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
 
@@ -2421,27 +2425,21 @@ cfl(Dav1dTaskContext *const t, const Av1Block *const b,
         const int cbh4 = (dav1d_block_dimensions[bs][1] + ss_ver) >> ss_ver;
         const int wpad = uv_t_dim->w > cbw4 ? uv_t_dim->w - cbw4 : cbw4 - ctw4;
         const int hpad = uv_t_dim->h > cbh4 ? uv_t_dim->h - cbh4 : cbh4 - cth4;
-        const int dc = (!top && !left) ? 4 << f->cur.p.bpc :
-            dsp->ipred.cfl_dc[f->cur.p.layout - 1](y_edge, top, left, ystride,
-                                                   wpad << ss_hor, hpad << ss_ver,
-                                                   top ? uv_t_dim->w * 4 << ss_hor : 0,
-                                                   left ? uv_t_dim->h * 4 << ss_ver : 0,
-                                                   filter_type);
-        dsp->ipred.cfl_ac[f->cur.p.layout - 1](ac, dc, y_src, ystride, wpad, hpad,
-                                               uv_t_dim->w * 4, uv_t_dim->h * 4,
-                                               filter_type);
+        const int dc = (!has_top && !left) ? 4 << f->cur.p.bpc :
+            dsp->ipred.cfl_dc[layout](y_edge, top, left, ystride,
+                                      wpad << ss_hor, hpad << ss_ver,
+                                      top ? ctw << ss_hor : 0,
+                                      left ? cth << ss_ver : 0, filter_type);
+        dsp->ipred.cfl_ac[layout](ac, dc, y_src, ystride, wpad, hpad, ctw, cth,
+                                  filter_type);
         for (int pl = 1; pl <= 2; pl++) {
             if (!(can_cfl & pl)) continue;
 
             pixel *dst = ((pixel *) f->cur.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
             pixel *const edge = bitfn(t->scratch.edge) + 128;
-            const pixel *top_sb_edge = NULL;
-            if (is_top_sb_edge) {
-                top_sb_edge = f->ipred_edge[pl];
-                const int sby = t->cby >> f->sb_shift;
-                top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
-            }
+            const pixel *const ctop_sb_edge = is_top_sb_edge ?
+                f->ipred_edge[pl] + ((sby - 1) * f->sb256w * 256 >> ss_hor) : NULL;
             const pixel *const src = ((pixel *) f->cur.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
 
@@ -2449,10 +2447,8 @@ cfl(Dav1dTaskContext *const t, const Av1Block *const b,
             if (b->cfl_type == CFL_EXPLICIT) {
                 alpha = b->cfl_alpha[pl - 1] * 32;
             } else {
-                const int have_top = t->cby > ts->tiling.row_start;
-                const int have_left = t->cbx > ts->tiling.col_start;
                 int n_top = 0, n_left = 0;
-                if (have_top && have_left) {
+                if (has_top && has_left) {
                     if (ctw > 2 * cth) {
                         n_top = 8;
                         n_left = 0;
@@ -2464,14 +2460,14 @@ cfl(Dav1dTaskContext *const t, const Av1Block *const b,
                         n_left = 4;
                     }
                 } else {
-                    n_top = have_top ? 4 : 0;
-                    n_left = have_left ? 4 : 0;
+                    n_top = has_top ? 4 : 0;
+                    n_left = has_left ? 4 : 0;
                 }
 
                 int sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
                 if (n_top) {
                     const pixel *const top = is_top_sb_edge ?
-                        top_sb_edge : src - PXSTRIDE(cstride);
+                        ctop_sb_edge : src - PXSTRIDE(cstride);
                     const int step = ctw >> ctz(n_top);
                     const int start = step >> 1;
                     for (int i = start; i < ctw; i += step) {
@@ -2499,23 +2495,94 @@ cfl(Dav1dTaskContext *const t, const Av1Block *const b,
                 const int den = sum_xx - (int)(((int64_t)sum_x * sum_x) >> count_l2);
                 alpha = derive_alpha(num, den, 0);
             }
-            const int intra_flags =
-                ((t->cbx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
-                ((t->cby > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+            const int intra_flags = (has_left ? ANGLE_HAS_LEFT_FLAG : 0) |
+                                    (has_top ? ANGLE_HAS_TOP_FLAG  : 0);
             const enum IntraPredMode m = bytefn(dav1d_prepare_intra_edges)(
                 DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
                 ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-                0, 0, src, cstride, top_sb_edge, DC_PRED, NULL,
+                0, 0, src, cstride, ctop_sb_edge, DC_PRED, NULL,
                 uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
-            dsp->ipred.cfl_pred[m](dst, cstride, edge,
-                                   uv_t_dim->w * 4, uv_t_dim->h * 4,
-                                   ac, alpha HIGHBD_CALL_SUFFIX);
+            dsp->ipred.cfl_pred[m](dst, cstride, edge, ctw, cth, ac, alpha HIGHBD_CALL_SUFFIX);
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 hex_dump(dst, cstride, ctw, cth, pl == 1 ? "u-intra-pred" : "v-intra-pred");
             }
         }
-    } else {
-        // FIXME implem mhccp
+    } else { // CFL MHCCP
+        const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
+        uint16_t luma[CFL_MAX_EDGE_SAMPLES + 64 * 64];
+        int refw = ctw, refh = cth, luma_stride;
+        uint16_t imat[2][CFL_MAX_EDGE_SAMPLES];
+        int32_t mat[3][3] = { 0 };
+        int n_tr = 0, n_bl = 0;
+        if (has_top) {
+            const int csbsz = sbsz >> ss_hor;
+            const int end = imin((ssbx + csbsz) & ~(csbsz - 1),
+                                 ts->tiling.col_end >> ss_hor);
+            const int w = imin(ctw4, end - ssbx - ctw4);
+            if (is_top_sb_edge || !w) { // top or right sb boundary
+                n_tr = w;
+            } else {
+                const unsigned bits = (unsigned)
+                    (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
+                n_tr = imin(ctz(~bits), w);
+            }
+            refw += n_tr * 4;
+        }
+        if (has_left) {
+            const int csbsz = sbsz >> ss_ver;
+            const int end = imin((ssby + csbsz) & ~(csbsz - 1),
+                                 ts->tiling.row_end >> ss_ver);
+            const int h = imin(cth4, end - ssby - cth4);
+            if (!(t->cbx & (sbsz - 1)) || !h) { // left or bottom sb boundary
+                n_bl = h;
+            } else {
+                const uint64_t mask = 1ULL << (cbx4 - 1);
+                for (; n_bl < h; n_bl++)
+                    if (!(t->is_coded[1][cby4 + n_bl + cth4] & mask))
+                        break;
+            }
+            refh += n_bl * 4;
+            refw++;
+        }
+
+        const int wl2 = 31 - clz(refw);
+        luma_stride = 1 << (wl2 + !!(refw & ((1 << wl2) - 1)) + 1);
+        const int edge_flags = (has_top ? CFL_HAS_TOP : 0) |
+                               (has_left ? CFL_HAS_LEFT : 0) |
+                               (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
+        dsp->ipred.cfl_gen_y[layout][filter_type](luma, luma_stride,
+                                                  y_src, ytop_sb_edge, ystride,
+                                                  refw, refh, ctw, cth,
+                                                  edge_flags | b->cfl_mh_dir);
+        refh += has_top;
+        if (has_top || has_left)
+            dsp->ipred.cfl_gen_mat[b->cfl_mh_dir](mat, imat, luma, luma_stride,
+                                              refw, refh, edge_flags HIGHBD_CALL_SUFFIX);
+
+        for (int pl = 1; pl <= 2; pl++) {
+            int alpha[3] = { 0 };
+            pixel *chroma = ((pixel *) f->cur.data[pl]) +
+                4 * (ssby * PXSTRIDE(cstride) + ssbx);
+            const pixel *const ctop_sb_edge = is_top_sb_edge ?
+                f->ipred_edge[pl] + ((sby - 1) * f->sb256w * 256 >> ss_hor) : NULL;
+
+            if (has_top || has_left) {
+                dsp->ipred.cfl_calc_alphas(alpha, chroma, ctop_sb_edge, cstride,
+                                           refw, refh, mat, imat, edge_flags
+                                           HIGHBD_CALL_SUFFIX);
+            } else { // XXX optimize for no edge case? (single const alpha)
+                alpha[2] = 0x10000;
+            }
+            const int n_top = has_top ? has_top + (b->cfl_mh_dir == CFL_DIR_TOP) : 0;
+            const int n_left = has_left ? has_left + (b->cfl_mh_dir == CFL_DIR_LEFT) : 0;
+            const uint16_t *const src = luma + n_top * (luma_stride >> 1) + n_left;
+            dsp->ipred.cfl_mhccp_pred[b->cfl_mh_dir](chroma, cstride, src, luma_stride,
+                                                     ctw, cth, alpha, edge_flags
+                                                     HIGHBD_CALL_SUFFIX);
+            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                hex_dump(chroma, cstride, ctw, cth, pl == 1 ? "u-intra-pred" : "v-intra-pred");
+            }
+        }
     }
 }
 

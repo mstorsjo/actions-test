@@ -976,6 +976,23 @@ const uint16_t dav1d_div_recip[128 + 1] = {
     264, 263, 262, 261, 260, 259, 258, 257, 256
 };
 
+// Offset values used to adjust the normalized denominator.
+const uint16_t dav1d_div_scale_sh_offset[8] = {
+    1024, 3072,  5120,  7168, 9216, 11264, 13312, 15360
+};
+// Bias for each region's polynomial.
+const uint16_t dav1d_div_scale_sh_bias[8] = {
+    15420, 13797, 12483, 11397, 10485, 9709,  9039,  8456
+};
+// Coefficients for the quadratic (squared) term in the polynomial.
+const uint8_t dav1d_div_scale_sh_coefw[8] = {
+    214, 153, 113,  86,  67, 53, 43, 35
+};
+// Coefficients for the other term in the polynomial.
+const uint8_t dav1d_div_scale_sh_coefq[8] = {
+    227, 181, 148, 124, 104, 89, 77, 68
+};
+
 #if ARCH_X86
 #define F(idx, f0, f1, f2, f3, f4, f5, f6) \
     [2*idx+0]  = f0, [2*idx+1]  = f1,      \

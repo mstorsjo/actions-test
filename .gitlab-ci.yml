@@ -183,7 +183,7 @@ build-debian:
               fi
           done
           files=(
-              "./media/avm-v12.0.0-sdp0-cctx0-cfl1.ivf"
+              "./media/avm-v12.0.0-sdp0-cctx0-cfl1-mhccp1.ivf"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"

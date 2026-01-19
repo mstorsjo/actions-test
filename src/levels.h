@@ -288,6 +288,13 @@ enum CflType {
     CFL_MHCCP,
 };
 
+enum CflMhDir {
+    CFL_DIR_CENTER,
+    CFL_DIR_TOP,
+    CFL_DIR_LEFT,
+    CFL_DIR_ALL,
+};
+
 #define TIP_FRAME 7
 
 typedef struct Av1Block {
@@ -299,7 +306,8 @@ typedef struct Av1Block {
             uint8_t uv_mode, pal_sz;
             int8_t y_angle, uv_angle, cfl_type;
             union {
-                int8_t cfl_alpha[2], mh_dir;
+                int8_t cfl_alpha[2];
+                uint8_t cfl_mh_dir; // enum CflMhDir
             };
         }; // intra
         struct {

@@ -61,6 +61,8 @@
 #define ANGLE_SMOOTH_TOP_EDGE_FLAG  (1 << 10)
 #define ANGLE_SMOOTH_LEFT_EDGE_FLAG (1 << 9)
 
+#define CFL_HAS_TOP        (1 << 2)
+#define CFL_HAS_LEFT       (1 << 3)
 #define CFL_IS_TOP_SB_EDGE (1 << 4)
 
 /*
@@ -105,6 +107,48 @@ void (name)(pixel *dst, ptrdiff_t stride, const pixel *topleft, \
             HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
+/* CFL MHCCP */
+
+#define decl_cfl_gen_y_fn(name) \
+void (name)(uint16_t *dst, int dst_stride, \
+            const pixel *src, const pixel *top_sb_edge, ptrdiff_t src_stride, \
+            int refw, int refh, int tw, int th, int flags)
+typedef decl_cfl_gen_y_fn(*cfl_gen_y_fn);
+
+/*
+ * max edge samples
+ *  = 2*(1tl+64a+64tr)+64l+64bl = 2tl+64a+64tr+2*(64l+64bl)
+ *  = 2tl+128a+128tr+64l+64bl   = 2tl+64a+64tr+128l+128bl
+ *  = 386
+ */
+#define CFL_MAX_EDGE_SAMPLES 386
+
+#define decl_cfl_gen_mat_fn(name) \
+void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES], \
+            const uint16_t *y, int ystride, int refw, int refh, int edge_flags \
+            HIGHBD_DECL_SUFFIX)
+typedef decl_cfl_gen_mat_fn(*cfl_gen_mat_fn);
+
+/*
+ * alpha[3] = gauss elimination(mat <- imat)
+ */
+#define decl_cfl_calc_alphas_fn(name) \
+void (name)(int alpha[3], const pixel *c, const pixel *top_sb_edge, \
+            ptrdiff_t stride, int w, int h, int32_t mat[3][3], \
+            const uint16_t imat[2][CFL_MAX_EDGE_SAMPLES], int edge_flags \
+            HIGHBD_DECL_SUFFIX)
+typedef decl_cfl_calc_alphas_fn(*cfl_calc_alphas_fn);
+
+/*
+ * dst[x,y] = alpha[0] * (luma[center/above/left] >> 3) +
+ *            alpha[1] * ((luma[center]/8)^2 + (1 << (bd/2)) >> 3) +
+ *            alpha[2] << (bd/2)
+ */
+#define decl_cfl_mhccp_pred_fn(name) \
+void (name)(pixel *dst, ptrdiff_t dst_stride, const uint16_t *src, int src_stride, \
+            int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX)
+typedef decl_cfl_mhccp_pred_fn(*cfl_mhccp_pred_fn);
+
 /*
  * dst[x,y] = pal[idx[x,y]]
  * - palette indices are [0-7]
@@ -129,10 +173,16 @@ typedef decl_orip_fn(*orip_fn);
 typedef struct Dav1dIntraPredDSPContext {
     angular_ipred_fn intra_pred[N_IMPL_INTRA_PRED_MODES];
 
-    // chroma-from-luma
+    // chroma-from-luma (implicit and explicit alpha)
     cfl_dc_fn cfl_dc[3 /* 420, 422, 444 */];
     cfl_ac_fn cfl_ac[3 /* 420, 422, 444 */];
     cfl_pred_fn cfl_pred[DC_128_PRED + 1];
+
+    // cfl mhccp
+    cfl_gen_y_fn        cfl_gen_y[3 /* 420, 422, 444 */][3 /* cfl_ds_filter_type */];
+    cfl_gen_mat_fn      cfl_gen_mat[3 /* CflMhDir */];
+    cfl_calc_alphas_fn  cfl_calc_alphas;
+    cfl_mhccp_pred_fn   cfl_mhccp_pred[3 /* CflMhDir */];
 
     // palette
     pal_pred_fn pal_pred;
