@@ -2043,8 +2043,8 @@ static int recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 && !mrl_idx;
         const int dip = b->dip - 1;
-        const int sm_top = t->pb.a_is_sm;
-        const int sm_left = t->pb.l_is_sm;
+        const int sm_top = t->pb.is_sm.a;
+        const int sm_left = t->pb.is_sm.l;
         const int is_sm_flag = apply_ibp ?
             ((sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
              (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG)) :
@@ -2191,12 +2191,20 @@ static void bawp(Dav1dTaskContext *const t,
                  const int bawp_idx, const union mv mv,
                  pixel *const dst, const ptrdiff_t stride,
                  const Dav1dThreadPicture *const refp, const int refidx,
-                 const int bw4, const int bh4, const int w4, const int h4)
+                 const int bw4, const int bh4, const int w4, const int h4,
+                 const enum BlockSize sb_bs)
 {
-    Dav1dTileState *const ts = t->ts;
     const Dav1dFrameContext *const f = t->f;
     const Dav1dDSPContext *const dsp = f->dsp;
-
+    const uint8_t *const sb_dim = dav1d_block_dimensions[sb_bs];
+    if ((sb_dim[0] > 16 && t->bx & (sb_dim[0] - 1)) ||
+        (sb_dim[1] > 16 && t->by & (sb_dim[1] - 1)))
+    {
+        dsp->mc.morph(dst, f->cur.stride[0], t->pb.bawp.alpha, t->pb.bawp.beta,
+                      bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+        return;
+    }
+    Dav1dTileState *const ts = t->ts;
     const int tile_top_edge = ts->tiling.row_start * 4;
     const int tile_left_edge = ts->tiling.col_start * 4;
     const int mvx = (mv.x + 3 + (mv.x >= 0)) >> 3;
@@ -2297,6 +2305,8 @@ static void bawp(Dav1dTaskContext *const t,
     const int diff = (sum_y << 8) - sum_x * alpha;
     const int abs_diff = abs(diff);
     beta = apply_sign(abs_diff >> count_l2, diff);
+    t->pb.bawp.alpha = alpha;
+    t->pb.bawp.beta = beta;
 
     dsp->mc.morph(dst, f->cur.stride[0], alpha, beta,
                   bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
@@ -2380,7 +2390,7 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
            0, f->bw * 4, 0, f->bh * 4);
         if (b->morph_pred)
             bawp(t, 1, b->mv[0], dst, f->cur.stride[0],
-                 &f->sr_cur, 0 /* unused */, bw4, bh4, w4, h4);
+                 &f->sr_cur, 0 /* unused */, bw4, bh4, w4, h4, b->bs);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(dst, f->cur.stride[0], bw4 * 4, bh4 * 4, "y-pred");
         }
@@ -2401,7 +2411,7 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
             }
             if (b->bawp[0]) {
                 bawp(t, b->bawp[0], b->mv[0], dst, f->cur.stride[0],
-                     refp, b->ref[0], bw4, bh4, w4, h4);
+                     refp, b->ref[0], bw4, bh4, w4, h4, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 pixel *const tl_edge = bitfn(t->scratch.edge) + 32;
                 enum IntraPredMode m = b->interintra_mode == II_SMOOTH_PRED ?

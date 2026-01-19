@@ -416,7 +416,14 @@ struct Dav1dTaskContext {
     struct {
         int col_start;
         int row_start;
-        uint8_t a_is_sm, l_is_sm;
+        union {
+            struct {
+                int a, l;
+            } is_sm;
+            struct {
+                int alpha, beta;
+            } bawp;
+        };
     } pb;
     refmvs_tile rt;
     ALIGN(union, 64) {
