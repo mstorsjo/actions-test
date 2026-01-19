@@ -1604,7 +1604,7 @@ static int tip_pred(Dav1dTaskContext *const t,
         (f->frame_hdr->tip.frame_mode == 1 ||
          f->frame_hdr->tip.subpel_filter == DAV1D_FILTER_8TAP_SHARP);
     const int refine = opfl && f->frame_hdr->tip.frame_mode == 1;
-    const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? opfl :
+    const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                            ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
     const uint8_t *const refs = f->frame_hdr->tip.refs;
     ptrdiff_t off_y = 0;
