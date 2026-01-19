@@ -333,8 +333,11 @@ static void extend_warpmv(Dav1dTaskContext *const t,
                           const Av1Block *const b,
                           Dav1dWarpedMotionParams *const wmp)
 {
-    const ptrdiff_t off = ((t->by + y_off) & 63) * 128 + ((t->bx + x_off) & 127);
-    const refmvs_block *const r = &t->rt.r[off];
+    const Dav1dFrameContext *const f = t->f;
+    const refmvs_block *const r = y_off == -1 && !(t->by & (f->sb_step - 1)) ?
+        x_off == -1 && !(t->bx & (f->sb_step - 1)) ?
+        &t->rt.ra_tl : &t->rt.ra[(t->bx + x_off) >> 1] :
+        &t->rt.r[((t->by + y_off) & 63) * 128 + ((t->bx + x_off) & 127)];
     int32_t *const m = wmp->matrix;
 
     if (r->mf & 2) {
