@@ -1393,7 +1393,8 @@ static void fill_holes(const refmvs_frame *const rf,
     }
 }
 
-static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+static void smoothen(const refmvs_frame *const rf,
+                     refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
                      const int col_start8, const int col_end8,
                      const int row_start8, int row_end8,
                      const int mfmv_sbsz8, const int sbsz8,
@@ -1431,7 +1432,8 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
                     add(pos + tmvp_sample_step * stride);
 #undef add
                 if (!first_line) {
-                    rp_proj[pos - stride].mv.n = mv_line[x - sx].n;
+                    rp_proj[pos - tmvp_sample_step * stride].mv.n = mv_line[x - sx].n;
+                    rp_proj[pos - tmvp_sample_step * stride].ref = rf->tip_delta;
                 }
                 if (sum_n) {
                     mv_line[x - sx].y = (sum_y * idiv[sum_n - 1] + 0x8000 -
@@ -1447,6 +1449,7 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride
             const ptrdiff_t pos_base = ((y - tmvp_sample_step) & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x++) {
                 rp_proj[pos_base + x].mv.n = mv_line[x - sx].n;
+                rp_proj[pos_base + x].ref = rf->tip_delta;
             }
         }
     }
@@ -1839,7 +1842,7 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
             fill_holes(rf, rp_proj, stride,
                        col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
                        rf->frm_hdr->tmvp_sample_step);
-            smoothen(rp_proj, stride,
+            smoothen(rf, rp_proj, stride,
                      col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
                      rf->frm_hdr->tmvp_sample_step);
         }
