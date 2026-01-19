@@ -1596,10 +1596,7 @@ static void opfl_mv_adj(const struct OpflRegressionData *const r,
 }
 
 static int tip_pred(Dav1dTaskContext *const t,
-                    // we don't actually fill dst with any useful data, but
-                    // need it as one of our scratch buffers
-                    pixel *const p0, const ptrdiff_t p0_stride,
-                    int16_t (*const tmp)[128 * 128], const Av1Block *const b,
+                    int16_t (*const tmp)[64 * 64], const Av1Block *const b,
                     const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav1dFrameContext *const f = t->f;
@@ -1618,17 +1615,14 @@ static int tip_pred(Dav1dTaskContext *const t,
     if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
     int have_bacp = 0;
 
-    const Dav1dThreadPicture *const refp[2] = { &f->refp[refs[0]],
-                                                &f->refp[refs[1]] };
-    pixel *p1, *p[2];
-    ptrdiff_t p1_stride, p_stride[2];
+    const Dav1dThreadPicture *const refp[2] = { &f->refp[refs[0]], &f->refp[refs[1]] };
+    pixel *p[2];
+    ptrdiff_t p_stride;
     int8_t d[2];
     if (opfl) {
-        p1 = bitfn(t->scratch.interintra);
-        p[0] = p0;
-        p[1] = p1;
-        p_stride[0] = p0_stride;
-        p1_stride = p_stride[1] = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
+        p[0] = bitfn(t->scratch.p)[0];
+        p[1] = bitfn(t->scratch.p)[1];
+        p_stride = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
         const int d0 = f->absrefdist[refs[0]], d1 = f->absrefdist[refs[1]];
         d[0] = apply_sign(1 + (d0 > d1), -f->refdist[refs[0]]);
         d[1] = apply_sign(1 + (d1 > d0), -f->refdist[refs[1]]);
@@ -1656,7 +1650,7 @@ static int tip_pred(Dav1dTaskContext *const t,
             if (opfl) {
                 // refinement
                 for (int i = 0; i < 2; i++)
-                    mc(t, p[i], NULL, p_stride[i],
+                    mc(t, p[i], NULL, p_stride,
                        step + 2, step + 2, t->bx + x, t->by + y, 0,
                        (union mv) { .y = cmv[i].y - 32, .x = cmv[i].x - 32 },
                        refp[i], refs[i], DAV1D_FILTER_BILINEAR,
@@ -1665,17 +1659,17 @@ static int tip_pred(Dav1dTaskContext *const t,
                 int dy, dx;
                 if (refine) {
                     struct OpflOffset o;
-                    f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
+                    f->dsp->mc.sad_refine_mv(p[0], p_stride, p[1], p_stride,
                                              step * 4, step * 4, 1, &o
                                              HIGHBD_CALL_SUFFIX);
                     dy = o.y;
                     dx = o.x;
                 } else dy = dx = 0;
                 union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
-                const unsigned sad = f->dsp->mc.sad8x8(&p0[(4 + dy) * PXSTRIDE(p0_stride) +
-                                                           (4 + dx)], p0_stride,
-                                                       &p1[(4 - dy) * PXSTRIDE(p1_stride) +
-                                                           (4 - dx)], p1_stride
+                const unsigned sad = f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
+                                                             (4 + dx)], p_stride,
+                                                       &p[1][(4 - dy) * PXSTRIDE(p_stride) +
+                                                             (4 - dx)], p_stride
                                                        HIGHBD_CALL_SUFFIX);
                 if (sad >= sad8x8_thr) {
                     // FIXME for 256x256 blocks, sad-refinement is done at 16x16,
@@ -1684,10 +1678,10 @@ static int tip_pred(Dav1dTaskContext *const t,
                     // opfl refinement might need to be done at 16x16.
                     struct OpflRegressionData res[4];
                     f->dsp->mc.opfl_derive_mv(res,
-                                              &p0[(4 + dy) * PXSTRIDE(p0_stride) +
-                                                  (4 + dx)], p0_stride,
-                                              &p1[(4 - dy) * PXSTRIDE(p1_stride) +
-                                                  (4 - dx)], p1_stride,
+                                              &p[0][(4 + dy) * PXSTRIDE(p_stride) +
+                                                    (4 + dx)], p_stride,
+                                              &p[1][(4 - dy) * PXSTRIDE(p_stride) +
+                                                    (4 - dx)], p_stride,
                                               step * 4, step * 4, 8, d
                                               HIGHBD_CALL_SUFFIX);
                     opfl_mv_adj(res, dd, d);
@@ -1726,10 +1720,7 @@ static int tip_pred(Dav1dTaskContext *const t,
 }
 
 static int opfl_pred(Dav1dTaskContext *const t,
-                     // we don't actually fill dst with any useful data, but
-                     // need it as one of our scratch buffers
-                     pixel *const p0, const ptrdiff_t p0_stride,
-                     int16_t (*const tmp)[128 * 128], const Av1Block *const b,
+                     int16_t (*const tmp)[64 * 64], const Av1Block *const b,
                      const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav1dFrameContext *const f = t->f;
@@ -1739,13 +1730,11 @@ static int opfl_pred(Dav1dTaskContext *const t,
     assert(opfl || refine);
     assert(bw4 >= 2 && bh4 >= 2);
     const int w = f->bw * 4, h = f->bh * 4;
-    pixel *const p1 = bitfn(t->scratch.interintra);
-    const ptrdiff_t p1_stride = ((bw4 + refine * 2) * 4 * sizeof(pixel) + 63) & ~63;
+    pixel *p[2] = { bitfn(t->scratch.p)[0], bitfn(t->scratch.p)[1] };
+    const ptrdiff_t p_stride = ((bw4 + refine * 2) * 4 * sizeof(pixel) + 63) & ~63;
 
     const Dav1dThreadPicture *refp[2] = { &f->refp[b->ref[0]],
                                           &f->refp[b->ref[1]] };
-    pixel *p[2] = { p0, p1 };
-    const ptrdiff_t p_stride[2] = { p0_stride, p1_stride };
     int top[2] = { t->by * 4 + (b->mv[0].y >> 3) - 3,
                    t->by * 4 + (b->mv[1].y >> 3) - 3 };
 
@@ -1772,14 +1761,14 @@ static int opfl_pred(Dav1dTaskContext *const t,
         if (refine) {
             for (int x = 0; x < w4; x += sw4) {
                 for (int n = 0; n < 2; n++)
-                    mc(t, p[n], NULL, p_stride[n], sw4 + 2, sh4 + 2,
+                    mc(t, p[n], NULL, p_stride, sw4 + 2, sh4 + 2,
                        t->bx + x, t->by + y, 0,
                        (union mv) { .y = b->mv[n].y - 32, .x = b->mv[n].x - 32 },
                        refp[n], b->ref[n], DAV1D_FILTER_BILINEAR,
                        iclip(left[n], 0, w - 1), iclip(left[n] + 4 * sw4 + 7, 1, w),
                        iclip(top[n], 0, h - 1), iclip(top[n] + 4 * sh4 + 7, 1, h));
                 struct OpflOffset o;
-                f->dsp->mc.sad_refine_mv(p0, p0_stride, p1, p1_stride,
+                f->dsp->mc.sad_refine_mv(p[0], p_stride, p[1], p_stride,
                                          sw4 * 4, sh4 * 4, b->refine_mv == 2,
                                          &o HIGHBD_CALL_SUFFIX);
                 const int dy = o.y, dx = o.x;
@@ -1789,10 +1778,10 @@ static int opfl_pred(Dav1dTaskContext *const t,
                     struct OpflRegressionData res[2 * 2];
                     // subpel-gradient based mv refinement (optical flow = opfl)
                     f->dsp->mc.opfl_derive_mv(res,
-                                              &p0[(4 + dy) * PXSTRIDE(p0_stride) +
-                                                  (4 + dx)], p0_stride,
-                                              &p1[(4 - dy) * PXSTRIDE(p1_stride) +
-                                                  (4 - dx)], p1_stride,
+                                              &p[0][(4 + dy) * PXSTRIDE(p_stride) +
+                                                    (4 + dx)], p_stride,
+                                              &p[1][(4 - dy) * PXSTRIDE(p_stride) +
+                                                    (4 - dx)], p_stride,
                                               sw4 * 4, sh4 * 4, bs * 4, d
                                               HIGHBD_CALL_SUFFIX);
                     const struct OpflRegressionData *r = res;
@@ -1854,11 +1843,11 @@ static int opfl_pred(Dav1dTaskContext *const t,
         } else {
             assert(opfl);
             for (int n = 0; n < 2; n++)
-                mc(t, p[n], NULL, p_stride[n], bw4, sh4, t->bx, t->by + y,
+                mc(t, p[n], NULL, p_stride, bw4, sh4, t->bx, t->by + y,
                    0, b->mv[n], refp[n], b->ref[n], DAV1D_FILTER_BILINEAR,
                    0, w, 0, h);
             struct OpflRegressionData res[2 * 8];
-            f->dsp->mc.opfl_derive_mv(res, p0, p0_stride, p1, p1_stride,
+            f->dsp->mc.opfl_derive_mv(res, p[0], p_stride, p[1], p_stride,
                                       bw4 * 4, sh4 * 4, bs * 4, d
                                       HIGHBD_CALL_SUFFIX);
             union OpflMvDeltaBlock *delta_line = &t->opfl[(y >> 1) * opfl_stride];
@@ -2505,15 +2494,15 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t,
                               bw4 * 4, bh4 * 4, mask);
             }
         } else {
-            int16_t (*const tmp)[128 * 128] = t->scratch.compinter;
+            int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
             int bacp;
 
             if (b->ref[0] == TIP_FRAME) {
-                bacp = tip_pred(t, dst, f->cur.stride[0], tmp, b, bw4, bh4, w4, h4);
+                bacp = tip_pred(t, tmp, b, bw4, bh4, w4, h4);
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
             {
-                bacp = opfl_pred(t, dst, f->cur.stride[0], tmp, b, bw4, bh4, w4, h4);
+                bacp = opfl_pred(t, tmp, b, bw4, bh4, w4, h4);
             } else {
                 bacp = 2 * (f->seq_hdr->imp_msk_bld &&
                             b->motion_mode != MM_WARP_CAUSAL &&

@@ -430,13 +430,11 @@ struct Dav1dTaskContext {
     uint8_t luma_intra_dir_mode_map[16 * 16];
     ALIGN(union, 64) {
         struct {
+            int16_t compinter[2][64 * 64];
+            uint8_t seg_mask[64 * 64];
             union {
-                uint8_t  lap_8bpc [128 * 32];
-                uint16_t lap_16bpc[128 * 32];
-                struct {
-                    int16_t compinter[2][128 * 128];
-                    uint8_t seg_mask[128 * 128];
-                };
+                uint8_t p_8bpc[2][24 * 128];
+                uint16_t p_16bpc[2][24 * 96];
             };
             union {
                 // stride=192 for non-SVC, or 320 for SVC
