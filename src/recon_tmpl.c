@@ -2271,10 +2271,15 @@ static void bawp(Dav1dTaskContext *const t,
     if ((sb_dim[0] > 16 && t->bx & (sb_dim[0] - 1)) ||
         (sb_dim[1] > 16 && t->by & (sb_dim[1] - 1)))
     {
-        dsp->mc.morph(dst, f->cur.stride[0], t->pb.bawp.alpha, t->pb.bawp.beta,
-                      bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+        const int alpha = t->pb.bawp.alpha, beta = t->pb.bawp.beta;
+        if (alpha != 256 || beta)
+            dsp->mc.morph(dst, f->cur.stride[0], alpha, beta,
+                          bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
         return;
     }
+    // defaults
+    t->pb.bawp.alpha = 256;
+    t->pb.bawp.beta = 0;
     Dav1dTileState *const ts = t->ts;
     const int tile_top_edge = ts->tiling.row_start * 4;
     const int tile_left_edge = ts->tiling.col_start * 4;
@@ -2298,16 +2303,12 @@ static void bawp(Dav1dTaskContext *const t,
     // TODO (optimization): Consider moving this code (and associated
     // size lookup tables) to a DSP function. SIMD could specialize on
     // edge sizes (4/8/16/32/64) and step values.
-    static const uint8_t n_edge_samples[3 /* have edges */][3 /* h */]
+    static const uint8_t n_edge_samples[2 /* have edges */][3 /* h */]
                                        [3 /* w */][2 /* above, left */] = {
-        { // !have_above && have_left
-            { { 0, 2 }, { 0, 2 }, { 0, 2 } },
-            { { 0, 3 }, { 0, 3 }, { 0, 3 } },
-            { { 0, 4 }, { 0, 4 }, { 0, 4 } },
-        }, { // have_above && !have_left
-            { { 2, 0 }, { 3, 0 }, { 4, 0 } },
-            { { 2, 0 }, { 3, 0 }, { 4, 0 } },
-            { { 2, 0 }, { 3, 0 }, { 4, 0 } },
+        { // !have_above || !have_left
+            { { 2, 2 }, { 3, 2 }, { 4, 2 } },
+            { { 2, 3 }, { 3, 3 }, { 4, 3 } },
+            { { 2, 4 }, { 3, 4 }, { 4, 4 } },
         }, { // have_above && have_left
             { { 2, 2 }, { 2, 2 }, { 4, 0 } },
             { { 2, 2 }, { 3, 3 }, { 3, 3 } },
@@ -2316,11 +2317,11 @@ static void bawp(Dav1dTaskContext *const t,
     };
     const int have_left = t->bx > ts->tiling.col_start;
     const int have_above = t->by > ts->tiling.row_start;
-    if (!have_left && !have_above) return;
+    if (!have_left && !have_above && bawp_idx == 1) return;
     const int lw4 = imin(ulog2(w4), 2), lh4 = imin(ulog2(h4), 2);
-    const int idx = ((have_above << 1) | have_left) - 1;
-    const int n_above_l2 = n_edge_samples[idx][lh4][lw4][0];
-    const int n_left_l2 = n_edge_samples[idx][lh4][lw4][1];
+    const int idx = have_above && have_left;
+    const int n_above_l2 = have_above * n_edge_samples[idx][lh4][lw4][0];
+    const int n_left_l2 = have_left * n_edge_samples[idx][lh4][lw4][1];
 
     const pixel *const ref =
         &((const pixel *) refp->p.data[0])[ref_y * PXSTRIDE(refp->p.stride[0]) +
@@ -2328,7 +2329,7 @@ static void bawp(Dav1dTaskContext *const t,
 
     assert(n_above_l2 == 0 || n_left_l2 == 0 || n_above_l2 == n_left_l2);
     const int count_l2 =
-        n_above_l2 + (n_above_l2 == n_left_l2 ? 1 : n_left_l2);
+        n_above_l2 + (n_above_l2 == n_left_l2 ? !!n_above_l2 : n_left_l2);
     int sum_x = 0, sum_y = 0, sum_xy = 0, sum_x2 = 0;
     if (n_above_l2) {
         const int bw = 4 << lw4;
@@ -2359,10 +2360,10 @@ static void bawp(Dav1dTaskContext *const t,
             sum_x2 += x * x;
         }
     }
-    assert(count_l2);
 
     int alpha, beta;
     if (bawp_idx == 1) {
+        assert(count_l2);
         const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
         const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
         alpha = derive_alpha(num, den, 256);
@@ -2373,9 +2374,13 @@ static void bawp(Dav1dTaskContext *const t,
         alpha = 256 + 16 * idx;
     }
 
-    const int diff = (sum_y << 8) - sum_x * alpha;
-    const int abs_diff = abs(diff);
-    beta = apply_sign(abs_diff >> count_l2, diff);
+    if (count_l2) {
+        const int diff = (sum_y << 8) - sum_x * alpha;
+        const int abs_diff = abs(diff);
+        beta = apply_sign(abs_diff >> count_l2, diff);
+    } else {
+        beta = -256;
+    }
     t->pb.bawp.alpha = alpha;
     t->pb.bawp.beta = beta;
 
