@@ -1776,10 +1776,12 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 int ref2ref = rf->mfmv_ref2ref[n][b_ref - 1];
                 if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
                 const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref - 1][0]);
-                const int y1 = (y - apply_sign(abs(mv1.y) >> 6, mv1.y)) & mask;
+                int y1 = (y - apply_sign(abs(mv1.y) >> 6, mv1.y));
                 if (y1 < 0 || y1 >= rf->ih8) continue;
-                const int x1 = (x - apply_sign(abs(mv1.x) >> 6, mv1.x)) & mask;
+                y1 &= mask;
+                int x1 = (x - apply_sign(abs(mv1.x) >> 6, mv1.x));
                 if (x1 < 0 || x1 >= rf->iw8) continue;
+                x1 &= mask;
                 const int y_proj_start = y1 & ~(mfmv_sbsz8 - 1);
                 const int y_proj_end = imin(y_proj_start + mfmv_sbsz8, row_end8);
                 if (y < y_proj_start || y >= y_proj_end) continue;
