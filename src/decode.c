@@ -2438,7 +2438,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         b->inter_mode == OPFL_JOINT_NEWMV)
                     {
                         n &= 1; // "the one not handled above"
-                        diff[n] = mv_projection(diff[!n], refdist[1], refdist[0]);
+                        diff[n] = mv_projection(diff[!n], refdist[1], refdist[0],
+                                                -0xffff, 0xffff);
                         jmvd_scale(&diff[n], amvd, jmvd_scale_mode);
                         b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
                         b->mv[n].x += diff[n].x;

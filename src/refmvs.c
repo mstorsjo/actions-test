@@ -294,7 +294,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                     cand_mv = b->mv.mv[n];
                     den = rf->abspocdiff[b->ref.ref[n] - 1];
                 }
-                cand_mv = mv_projection(cand_mv, rf->abspocdiff[ref.ref[0] - 1], den);
+                cand_mv = mv_projection(cand_mv, rf->abspocdiff[ref.ref[0] - 1], den,
+                                        -0xffff, 0xffff);
                 add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "lnr-spc", n)
                                    st->dr, &st->drvd_cnt, 4, weight, cand_mv,
@@ -415,15 +416,16 @@ static const uint16_t div_mult[32] = {
      682,   655,  630,  606,  585,  564,  546,  528
 };
 
-mv mv_projection(const union mv mv, const int num, const int den) {
+mv mv_projection(const union mv mv, const int num, const int den,
+                 const int min, const int max)
+{
     assert(den > 0 && den < 32);
     assert(num > -32 && num < 32);
     const int frac = num * div_mult[den];
     const int y = mv.y * frac, x = mv.x * frac;
-    // Round and clip according to AV1 spec section 7.9.3
-    return (union mv) { // 0x3fff == (1 << 14) - 1
-        .y = iclip((y + 8192 + (y >> 31)) >> 14, -0x3fff, 0x3fff),
-        .x = iclip((x + 8192 + (x >> 31)) >> 14, -0x3fff, 0x3fff)
+    return (union mv) {
+        .y = iclip((y + 8192 + (y >> 31)) >> 14, min, max),
+        .x = iclip((x + 8192 + (x >> 31)) >> 14, min, max)
     };
 }
 
@@ -441,7 +443,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         mv = rt->rp_proj[off_8x8].mv;
         if (mv.n == INVALID_MV) return 0;
         mv = mv_projection(mv, rf->pocdiff[ref.ref[0] - 1],
-                           rt->rp_proj[off_8x8].ref);
+                           rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
     }
 
     if (ref.ref[1] == -1) {
@@ -455,7 +457,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         mv2 = rt->rp_proj[off_8x8].mv;
         if (mv2.n == INVALID_MV) return 0;
         mv2 = mv_projection(mv2, rf->pocdiff[ref.ref[1] - 1],
-                            rt->rp_proj[off_8x8].ref);
+                            rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
     }
     const refmvs_mvpair mvp = { .mv = {
         [0] = mv,
@@ -1350,8 +1352,8 @@ static void tip_projection(const refmvs_frame *const rf,
                 const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_proj[pos].mv;
                 if (mv.n == INVALID_MV) continue;
-                rp_proj[pos].mv =
-                    mv_projection(mv, rf->tip_delta, rp_proj[pos].ref);
+                rp_proj[pos].mv = mv_projection(mv, rf->tip_delta,
+                                                rp_proj[pos].ref, -2047, 2047);
                 rp_proj[pos].ref = rf->tip_delta;
             }
         }
@@ -1481,7 +1483,8 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                     union mv right_mv = rp_proj[pos + 2].mv;
                     const int right_ref_off = rp_proj[pos + 2].ref;
                     if (right_ref_off != ref_off)
-                        right_mv = mv_projection(right_mv, ref_off, right_ref_off);
+                        right_mv = mv_projection(right_mv, ref_off, right_ref_off,
+                                                 -2047, 2047);
                     sum_x += right_mv.x;
                     sum_y += right_mv.y;
                     rp_proj[pos + 1].mv.y = (sum_y + (sum_y > 0)) >> 1;
@@ -1498,7 +1501,8 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                     union mv bottom_mv = rp_proj[pos + 2 * stride].mv;
                     const int bottom_ref_off = rp_proj[pos + 2 * stride].ref;
                     if (bottom_ref_off != ref_off)
-                        bottom_mv = mv_projection(bottom_mv, ref_off, bottom_ref_off);
+                        bottom_mv = mv_projection(bottom_mv, ref_off, bottom_ref_off,
+                                                  -2047, 2047);
                     sum_x += bottom_mv.x;
                     const int mx = mvx + bottom_mv.x;
                     sum_y += bottom_mv.y;
@@ -1519,7 +1523,8 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                             rp_proj[pos + 2 * (1 + stride)].ref;
                         if (bottom_right_ref_off != ref_off)
                             bottom_right_mv = mv_projection(bottom_right_mv, ref_off,
-                                                            bottom_right_ref_off);
+                                                            bottom_right_ref_off,
+                                                            -2047, 2047);
                         sum_x += bottom_right_mv.x;
                         sum_y += bottom_right_mv.y;
                         sum_n++;
