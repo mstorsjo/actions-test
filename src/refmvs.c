@@ -307,7 +307,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                ref.ref[0] - 1 == rf->frm_hdr->tip.refs[0] &&
                ref.ref[1] - 1 == rf->frm_hdr->tip.refs[1])
     {
-        const mv tmv = rt->rp_proj[off_8x8].mv;
+        mv tmv = rt->rp_proj[off_8x8].mv;
+        if (tmv.n == INVALID_MV) tmv.n = 0;
         const mv tip0mv = scale_mv(tmv, rf->tip_sf[0]);
         const mv tip1mv = scale_mv(tmv, rf->tip_sf[1]);
         const refmvs_mvpair cand_mv = { .mv = {
