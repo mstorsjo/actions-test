@@ -2317,7 +2317,6 @@ static void bawp(Dav1dTaskContext *const t,
     };
     const int have_left = t->bx > ts->tiling.col_start;
     const int have_above = t->by > ts->tiling.row_start;
-    if (!have_left && !have_above && bawp_idx == 1) return;
     const int lw4 = imin(ulog2(w4), 2), lh4 = imin(ulog2(h4), 2);
     const int idx = have_above && have_left;
     const int n_above_l2 = have_above * n_edge_samples[idx][lh4][lw4][0];
@@ -2362,16 +2361,17 @@ static void bawp(Dav1dTaskContext *const t,
     }
 
     int alpha, beta;
-    if (bawp_idx == 1) {
-        assert(count_l2);
-        const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
-        const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
-        alpha = derive_alpha(num, den, 256);
-    } else {
+    if (bawp_idx != 1) {
         assert(bawp_idx & 2);
         const int idx = (1 + (bawp_idx >> 2) + (f->absrefdist[refidx] > 4)) *
                          (bawp_idx & 1 ? 1 : -1);
         alpha = 256 + 16 * idx;
+    } else if (count_l2) {
+        const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
+        const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
+        alpha = derive_alpha(num, den, 256);
+    } else {
+        alpha = 256;
     }
 
     if (count_l2) {
