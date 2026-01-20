@@ -336,13 +336,16 @@ static void extend_warpmv(Dav1dTaskContext *const t,
 {
     const Dav1dFrameContext *const f = t->f;
     const refmvs_block *const r = y_off == -1 && !(t->by & (f->sb_step - 1)) ?
-        x_off == -1 && !(t->bx & (f->sb_step - 1)) ?
+        x_off < 0 && !(t->bx & (f->sb_step - 1)) ?
         &t->rt.ra_tl : &t->rt.ra[(t->bx + x_off) >> 1] :
         &t->rt.r[((t->by + y_off) & 63) * 128 + ((t->bx + x_off) & 127)];
     int32_t *const m = wmp->matrix;
 
     if (r->mf & 2) {
-        memcpy(m, r->m, sizeof(*m) * 6);
+        if (r->m[6] == DAV1D_WM_TYPE_INVALID)
+            memcpy(m, &dav1d_default_wm_params.matrix, sizeof(*m) * 6);
+        else
+            memcpy(m, r->m, sizeof(*m) * 6);
     } else if (r->mf & 1) {
         memcpy(m, t->f->frame_hdr->gmv[b->ref[0]].matrix, sizeof(*m) * 6);
     } else {
