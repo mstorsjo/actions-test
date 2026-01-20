@@ -485,8 +485,10 @@ static int model_from_corners(DB_ARGS(const int idx)
     mat[4] = ((topright_mv.y - topleft_mv.y) * (1 << 11)) >> b_dim[2];
     mat[3] = ((bottomleft_mv.x - topleft_mv.x) * (1 << 11)) >> b_dim[3];
     mat[5] = ((bottomleft_mv.y - topleft_mv.y) * (1 << 11)) >> b_dim[3];
-    mat[0] = topleft_mv.x * (1 << 13) - xpos * mat[2] - ypos * mat[3];
-    mat[1] = topleft_mv.y * (1 << 13) - xpos * mat[4] - ypos * mat[5];
+    mat[0] = iclip(topleft_mv.x * (1 << 13) - xpos * mat[2] - ypos * mat[3],
+                   -0x7ffffc0, 0x7ffffc0);
+    mat[1] = iclip(topleft_mv.y * (1 << 13) - xpos * mat[4] - ypos * mat[5],
+                   -0x7ffffc0, 0x7ffffc0);
 #define reduce(i) \
     mat[i] = iclip(mat[i], -0x7fc0, 0x7fc0); \
     mat[i] += 0x20 - (mat[i] > 0); \
