@@ -1603,10 +1603,11 @@ static int tip_pred(Dav1dTaskContext *const t,
     const int opfl = f->seq_hdr->tip_refine_mv &&
         (f->frame_hdr->tip.frame_mode == 1 ||
          f->frame_hdr->tip.subpel_filter == DAV1D_FILTER_8TAP_SHARP);
-    const int refine = opfl && f->frame_hdr->tip.frame_mode == 1;
+    const uint8_t *const refs = f->frame_hdr->tip.refs;
+    const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
+                       f->refdist[refs[0]] == -f->refdist[refs[1]];
     const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                            ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
-    const uint8_t *const refs = f->frame_hdr->tip.refs;
     ptrdiff_t off_y = 0;
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8 &&
