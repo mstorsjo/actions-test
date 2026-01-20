@@ -500,16 +500,21 @@ static int model_from_corners(DB_ARGS(const int idx)
     return 1;
 }
 
-static inline mv get_warpmv_proj(const int32_t *const matrix,
-                                 const int x, const int y)
+static ALWAYS_INLINE mv get_warpmv_proj(const int32_t *const matrix,
+                                        const int x, const int y,
+                                        const int minx, const int maxx,
+                                        const int miny, const int maxy)
 {
     if (matrix[6] <= 0) return (mv) { .n = 0 }; // see #834
     const int xc = (matrix[2] - (1 << 16)) * x + matrix[3] * y + matrix[0];
     const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
-    return (mv) {
+    union mv res = (mv) {
         .y = iclip((yc + 0x1000 - (yc < 0)) >> 13, -0xffff, +0xffff),
         .x = iclip((xc + 0x1000 - (xc < 0)) >> 13, -0xffff, +0xffff),
     };
+    res.y = iclip(res.y, miny, maxy);
+    res.x = iclip(res.x, minx, maxx);
+    return res;
 }
 
 /*
@@ -565,6 +570,10 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d\n", gmv[0].y, gmv[0].x);
     }
 
+    const int minx = -(bx4 + bw4 + 4) * 32;
+    const int miny = -(by4 + bh4 + 4) * 32;
+    const int maxx = (rf->iw4 - bx4 + 4) * 32;
+    const int maxy = (rf->ih4 - by4 + 4) * 32;
     const int is_sb_boundary = !(by4 & (rf->sbsz - 1));
     const int have_left = bx4 > rt->tile_col.start;
     const refmvs_block *const bml = have_left && bh4 == h4 ?
@@ -602,16 +611,19 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         {
             int tl_ref_idx, tr_ref_idx;
             const mv bl_mv = !(bml->mf & 2) ? bml->mv.mv[bl_ref_idx] :
-                get_warpmv_proj(bml->m, bx4 * 4, (by4 + bh4) * 4);
+                get_warpmv_proj(bml->m, bx4 * 4, (by4 + bh4) * 4,
+                                minx, maxx, miny, maxy);
             if (tl && (!(tl_ref_idx = (tl->ref.ref[0] != ref.ref[0])) ||
                        (tl->ref.ref[1] == ref.ref[0] && !(tl->mf & 2))) &&
                 rmt && (!(tr_ref_idx = (rmt->ref.ref[0] != ref.ref[0])) ||
                         (rmt->ref.ref[1] == ref.ref[0] && !(rmt->mf & 2))))
             {
                 const mv tl_mv = !(tl->mf & 2) ? tl->mv.mv[tl_ref_idx] :
-                    get_warpmv_proj(tl->m, bx4 * 4, by4 * 4);
+                    get_warpmv_proj(tl->m, bx4 * 4, by4 * 4,
+                                    minx, maxx, miny, maxy);
                 const mv tr_mv = !(rmt->mf & 2) ? rmt->mv.mv[tr_ref_idx] :
-                    get_warpmv_proj(rmt->m, (bx4 + bw4) * 4, by4 * 4);
+                    get_warpmv_proj(rmt->m, (bx4 + bw4) * 4, by4 * 4,
+                                    minx, maxx, miny, maxy);
                 cnt[1] = model_from_corners(DB_ARGS(0)
                                             warp[0], tl_mv, tr_mv, bl_mv,
                                             bx4 * 4, by4 * 4, b_dim);
@@ -623,9 +635,11 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                        (tr->ref.ref[1] == ref.ref[0] && !(tr->mf & 2))))
             {
                 const mv tl_mv = !(lmt->mf & 2) ? lmt->mv.mv[tl_ref_idx] :
-                    get_warpmv_proj(lmt->m, bx4 * 4, by4 * 4);
+                    get_warpmv_proj(lmt->m, bx4 * 4, by4 * 4,
+                                    minx, maxx, miny, maxy);
                 const mv tr_mv = !(tr->mf & 2) ? tr->mv.mv[tr_ref_idx] :
-                    get_warpmv_proj(tr->m, (bx4 + bw4) * 4, by4 * 4);
+                    get_warpmv_proj(tr->m, (bx4 + bw4) * 4, by4 * 4,
+                                    minx, maxx, miny, maxy);
                 cnt[1] = model_from_corners(DB_ARGS(1)
                                             warp[0], tl_mv, tr_mv, bl_mv,
                                             bx4 * 4, by4 * 4, b_dim);
@@ -887,10 +901,6 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (ref.ref[1] == -1 && *cnt < lim)
         add_derived(DB_ARGS(rf, "derived") &st, lim, 0);
 
-    const int minx = -(bx4 + bw4 + 4) * 32;
-    const int miny = -(by4 + bh4 + 4) * 32;
-    const int maxx = (rf->iw4 - bx4 + 4) * 32;
-    const int maxy = (rf->ih4 - by4 + 4) * 32;
     for (int n = 0; n < cnt[0]; n++) {
         union mv *const mv = mvstack[n].mv.mv;
         mv[0].y = iclip(mv[0].y, miny, maxy);
