@@ -565,7 +565,7 @@ static void random_offset_for_edge(int *const x, int *const y,
                                    const enum EdgeFlags edge)
 {
 #define set_off(edge1, edge2, pos, dim) \
-    *i##dim = edge & (HAVE_##edge1 | HAVE_##edge2) ? 160 : 1 + (rnd() % (b##dim - 2)); \
+    *i##dim = edge & (HAVE_##edge1 | HAVE_##edge2) ? 96 : 1 + (rnd() % (b##dim - 2)); \
     switch (edge & (HAVE_##edge1 | HAVE_##edge2)) { \
     case HAVE_##edge1 | HAVE_##edge2: \
         assert(b##dim <= *i##dim); \
