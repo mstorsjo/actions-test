@@ -1698,16 +1698,13 @@ static int tip_pred(Dav1dTaskContext *const t,
                     cmv[1].x -= 8 * dx;
                 } else dy = dx = 0;
                 union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
-                const unsigned sad = f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
+                const unsigned sad = b->bs == BS_256x256 && f->frame_hdr->tip.frame_mode == 1 ? 0 :
+                                     f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
                                                              (4 + dx)], p_stride,
                                                        &p[1][(4 - dy) * PXSTRIDE(p_stride) +
                                                              (4 - dx)], p_stride
                                                        HIGHBD_CALL_SUFFIX);
                 if (sad >= sad8x8_thr) {
-                    // FIXME for 256x256 blocks, sad-refinement is done at 16x16,
-                    // but opfl-refinement is done at 8x8, so the code below may
-                    // need a loop to reconstruct that correctly. Alternatively,
-                    // opfl refinement might need to be done at 16x16.
                     struct OpflRegressionData res[4];
                     f->dsp->mc.opfl_derive_mv(res,
                                               &p[0][(4 + dy) * PXSTRIDE(p_stride) +
