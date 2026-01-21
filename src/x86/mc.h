@@ -54,6 +54,7 @@ decl_fn(w_mask, dav1d_w_mask_420);
 decl_fn(w_mask, dav1d_w_mask_422);
 decl_fn(w_mask, dav1d_w_mask_444);
 decl_fn(blend, dav1d_blend);
+decl_fn(emu_edge, dav1d_emu_edge);
 
 static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
     const unsigned flags = dav1d_get_cpu_flags();
@@ -73,4 +74,5 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
     c->w_mask[1] = BF(dav1d_w_mask_422, avx2);
     c->w_mask[2] = BF(dav1d_w_mask_420, avx2);
     c->blend = BF(dav1d_blend, avx2);
+    c->emu_edge = BF(dav1d_emu_edge, avx2);
 }
