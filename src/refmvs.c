@@ -1475,7 +1475,7 @@ static void smoothen(const refmvs_frame *const rf,
         }
         if (!first_line) {
             const ptrdiff_t pos_base = ((y - tmvp_sample_step) & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x++) {
+            for (int x = sx; x < xend; x += tmvp_sample_step) {
                 rp_proj[pos_base + x].mv.n = mv_line[x - sx].n;
                 rp_proj[pos_base + x].ref = rf->tip_delta;
             }
