@@ -1,5 +1,5 @@
-; Copyright © 2018-2021, VideoLAN and dav1d authors
-; Copyright © 2018-2021, Two Orioles, LLC
+; Copyright © 2018-2026, VideoLAN and dav1d authors
+; Copyright © 2018-2026, Two Orioles, LLC
 ; All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without
@@ -25,8 +25,6 @@
 
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
-
-%if ARCH_X86_64
 
 SECTION_RODATA 32
 
@@ -4918,33 +4916,24 @@ ALIGN function_align
     %1                    0
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    %1_INC_PTR            2
+    %1                    0
+    lea                dstq, [dstq+strideq*4]
 .w4:
     vextracti128        xm1, m0, 1
-    movd   [dstq          ], xm0
+    movd   [dstq+strideq*0], xm0
     pextrd [dstq+strideq*1], xm0, 1
     movd   [dstq+strideq*2], xm1
     pextrd [dstq+stride3q ], xm1, 1
-    cmp                  hd, 4
-    je .ret
+    sub                  hd, 8
+    jl .ret
     lea                dstq, [dstq+strideq*4]
-    pextrd [dstq          ], xm0, 2
+    pextrd [dstq+strideq*0], xm0, 2
     pextrd [dstq+strideq*1], xm0, 3
     pextrd [dstq+strideq*2], xm1, 2
     pextrd [dstq+stride3q ], xm1, 3
-    cmp                  hd, 8
-    je .ret
-    %1                    2
-    lea                dstq, [dstq+strideq*4]
-    vextracti128        xm1, m0, 1
-    movd   [dstq          ], xm0
-    pextrd [dstq+strideq*1], xm0, 1
-    movd   [dstq+strideq*2], xm1
-    pextrd [dstq+stride3q ], xm1, 1
-    lea                dstq, [dstq+strideq*4]
-    pextrd [dstq          ], xm0, 2
-    pextrd [dstq+strideq*1], xm0, 3
-    pextrd [dstq+strideq*2], xm1, 2
-    pextrd [dstq+stride3q ], xm1, 3
+    jg .w4_loop
 .ret:
     RET
 .w8_loop:
@@ -4953,7 +4942,7 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*4]
 .w8:
     vextracti128        xm1, m0, 1
-    movq   [dstq          ], xm0
+    movq   [dstq+strideq*0], xm0
     movq   [dstq+strideq*1], xm1
     movhps [dstq+strideq*2], xm0
     movhps [dstq+stride3q ], xm1
@@ -4966,11 +4955,11 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*4]
 .w16:
     vpermq               m0, m0, q3120
-    mova         [dstq          ], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
     %1                    2
     vpermq               m0, m0, q3120
-    mova         [dstq+strideq*2], xm0
+    movu         [dstq+strideq*2], xm0
     vextracti128 [dstq+stride3q ], m0, 1
     sub                  hd, 4
     jg .w16_loop
@@ -4981,10 +4970,10 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*2]
 .w32:
     vpermq               m0, m0, q3120
-    mova   [dstq+strideq*0], m0
+    movu   [dstq+strideq*0], m0
     %1                    2
     vpermq               m0, m0, q3120
-    mova   [dstq+strideq*1], m0
+    movu   [dstq+strideq*1], m0
     sub                  hd, 2
     jg .w32_loop
     RET
@@ -4994,31 +4983,12 @@ ALIGN function_align
     add                dstq, strideq
 .w64:
     vpermq               m0, m0, q3120
-    mova             [dstq], m0
+    mova        [dstq+32*0], m0
     %1                    2
     vpermq               m0, m0, q3120
-    mova          [dstq+32], m0
+    mova        [dstq+32*1], m0
     dec                  hd
     jg .w64_loop
-    RET
-.w128_loop:
-    %1                    0
-    add                dstq, strideq
-.w128:
-    vpermq               m0, m0, q3120
-    mova        [dstq+0*32], m0
-    %1                    2
-    vpermq               m0, m0, q3120
-    mova        [dstq+1*32], m0
-    %1_INC_PTR            8
-    %1                   -4
-    vpermq               m0, m0, q3120
-    mova        [dstq+2*32], m0
-    %1                   -2
-    vpermq               m0, m0, q3120
-    mova        [dstq+3*32], m0
-    dec                  hd
-    jg .w128_loop
     RET
 %endmacro
 
@@ -5038,8 +5008,8 @@ ALIGN function_align
 %endmacro
 
 cglobal avg_8bpc, 4, 7, 3, dst, stride, tmp1, tmp2, w, h, stride3
-%define base r6-avg %+ SUFFIX %+ _table
-    lea                  r6, [avg %+ SUFFIX %+ _table]
+%define base r6-avg_avx2_table
+    lea                  r6, [avg_avx2_table]
     tzcnt                wd, wm
     movifnidn            hd, hm
     movsxd               wq, dword [r6+wq*4]
@@ -5068,8 +5038,8 @@ cglobal avg_8bpc, 4, 7, 3, dst, stride, tmp1, tmp2, w, h, stride3
 %define W_AVG_INC_PTR AVG_INC_PTR
 
 cglobal w_avg_8bpc, 4, 7, 6, dst, stride, tmp1, tmp2, w, h, stride3
-%define base r6-w_avg %+ SUFFIX %+ _table
-    lea                  r6, [w_avg %+ SUFFIX %+ _table]
+%define base r6-w_avg_avx2_table
+    lea                  r6, [w_avg_avx2_table]
     tzcnt                wd, wm
     movifnidn            hd, hm
     vpbroadcastw         m4, r6m ; weight
@@ -5118,8 +5088,8 @@ cglobal w_avg_8bpc, 4, 7, 6, dst, stride, tmp1, tmp2, w, h, stride3
 %endmacro
 
 cglobal mask_8bpc, 4, 8, 6, dst, stride, tmp1, tmp2, w, h, mask, stride3
-%define base r7-mask %+ SUFFIX %+ _table
-    lea                  r7, [mask %+ SUFFIX %+ _table]
+%define base r7-mask_avx2_table
+    lea                  r7, [mask_avx2_table]
     tzcnt                wd, wm
     movifnidn            hd, hm
     mov               maskq, maskmp
@@ -6340,5 +6310,3 @@ cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
     dec                  hd
     jg .w128_loop
     RET
-
-%endif ; ARCH_X86_64

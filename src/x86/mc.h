@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
- * Copyright © 2018-2021, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,9 @@ decl_8tap_fns(avx512icl);
 
 decl_fn(mc, dav1d_put_bilin);
 decl_fn(mct, dav1d_prep_bilin);
+decl_fn(avg, dav1d_avg);
+decl_fn(w_avg, dav1d_w_avg);
+decl_fn(mask, dav1d_mask);
 
 static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
     const unsigned flags = dav1d_get_cpu_flags();
@@ -58,4 +61,8 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
 
     init_mc_fn(DAV1D_FILTER_BILINEAR,  bilin, avx2);
     init_mct_fn(DAV1D_FILTER_BILINEAR, bilin, avx2);
+
+    c->avg = BF(dav1d_avg, avx2);
+    c->w_avg = BF(dav1d_w_avg, avx2);
+    c->mask = BF(dav1d_mask, avx2);
 }

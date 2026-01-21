@@ -1,5 +1,5 @@
-; Copyright © 2021, VideoLAN and dav1d authors
-; Copyright © 2021, Two Orioles, LLC
+; Copyright © 2021-2026, VideoLAN and dav1d authors
+; Copyright © 2021-2026, Two Orioles, LLC
 ; All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without
@@ -25,8 +25,6 @@
 
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
-
-%if ARCH_X86_64
 
 SECTION_RODATA 64
 
@@ -5264,80 +5262,53 @@ ALIGN function_align
     call .main
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    call .main
+    lea                dstq, [dstq+strideq*4]
 .w4:
     movq   [dstq          ], xm0
     movhps [dstq+strideq*1], xm0
     vextracti128        xm0, m0, 1
     movq   [dstq+strideq*2], xm0
     movhps [dstq+stride3q ], xm0
-    cmp                  hd, 4
-    je .ret
+    sub                  hd, 8
+    jl .ret
     lea                dstq, [dstq+strideq*4]
     movq   [dstq          ], xm1
     movhps [dstq+strideq*1], xm1
     vextracti128        xm1, m1, 1
     movq   [dstq+strideq*2], xm1
     movhps [dstq+stride3q ], xm1
-    cmp                  hd, 8
-    je .ret
-    lea                dstq, [dstq+strideq*4]
-    movq   [dstq          ], xm2
-    movhps [dstq+strideq*1], xm2
-    vextracti128        xm2, m2, 1
-    movq   [dstq+strideq*2], xm2
-    movhps [dstq+stride3q ], xm2
-    lea                dstq, [dstq+strideq*4]
-    movq   [dstq          ], xm3
-    movhps [dstq+strideq*1], xm3
-    vextracti128        xm3, m3, 1
-    movq   [dstq+strideq*2], xm3
-    movhps [dstq+stride3q ], xm3
+    jg .w4_loop
 .ret:
-    RET
-.w8:
-    mova         [dstq+strideq*0], xm0
-    vextracti128 [dstq+strideq*1], m0, 1
-    mova         [dstq+strideq*2], xm1
-    vextracti128 [dstq+stride3q ], m1, 1
-    cmp                  hd, 4
-    jne .w8_loop_start
     RET
 .w8_loop:
     call .main
     lea                dstq, [dstq+strideq*4]
-    mova         [dstq+strideq*0], xm0
+.w8:
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
-    mova         [dstq+strideq*2], xm1
+    movu         [dstq+strideq*2], xm1
     vextracti128 [dstq+stride3q ], m1, 1
-.w8_loop_start:
-    lea                dstq, [dstq+strideq*4]
-    mova         [dstq+strideq*0], xm2
-    vextracti128 [dstq+strideq*1], m2, 1
-    mova         [dstq+strideq*2], xm3
-    vextracti128 [dstq+stride3q ], m3, 1
-    sub                  hd, 8
+    sub                  hd, 4
     jg .w8_loop
     RET
 .w16_loop:
     call .main
-    lea                dstq, [dstq+strideq*4]
+    lea                dstq, [dstq+strideq*2]
 .w16:
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
-    mova   [dstq+strideq*2], m2
-    mova   [dstq+stride3q ], m3
-    sub                  hd, 4
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
+    sub                  hd, 2
     jg .w16_loop
     RET
 .w32_loop:
     call .main
-    lea                dstq, [dstq+strideq*2]
+    add                dstq, strideq
 .w32:
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m1
-    mova [dstq+strideq*1+32*0], m2
-    mova [dstq+strideq*1+32*1], m3
-    sub                  hd, 2
+    movu        [dstq+32*0], m0
+    movu        [dstq+32*1], m1
+    dec                  hd
     jg .w32_loop
     RET
 .w64_loop:
@@ -5346,26 +5317,11 @@ ALIGN function_align
 .w64:
     mova        [dstq+32*0], m0
     mova        [dstq+32*1], m1
-    mova        [dstq+32*2], m2
-    mova        [dstq+32*3], m3
+    call .main
+    mova        [dstq+32*2], m0
+    mova        [dstq+32*3], m1
     dec                  hd
     jg .w64_loop
-    RET
-.w128_loop:
-    call .main
-    add                dstq, strideq
-.w128:
-    mova        [dstq+32*0], m0
-    mova        [dstq+32*1], m1
-    mova        [dstq+32*2], m2
-    mova        [dstq+32*3], m3
-    call .main
-    mova        [dstq+32*4], m0
-    mova        [dstq+32*5], m1
-    mova        [dstq+32*6], m2
-    mova        [dstq+32*7], m3
-    dec                  hd
-    jg .w128_loop
     RET
 %endmacro
 
@@ -5375,15 +5331,15 @@ DECLARE_REG_TMP 5
 DECLARE_REG_TMP 7
 %endif
 
-cglobal avg_16bpc, 4, 7, 6, dst, stride, tmp1, tmp2, w, h, stride3
+cglobal avg_16bpc, 4, 7, 4, dst, stride, tmp1, tmp2, w, h, stride3
 %define base r6-avg_avx2_table
     lea                  r6, [avg_avx2_table]
     tzcnt                wd, wm
     mov                 t0d, r6m ; pixel_max
     movsxd               wq, [r6+wq*4]
     shr                 t0d, 11
-    vpbroadcastd         m4, [base+bidir_rnd+t0*4]
-    vpbroadcastd         m5, [base+bidir_mul+t0*4]
+    vpbroadcastd         m2, [base+bidir_rnd+t0*4]
+    vpbroadcastd         m3, [base+bidir_mul+t0*4]
     movifnidn            hd, hm
     add                  wq, r6
     BIDIR_FN
@@ -5393,101 +5349,67 @@ ALIGN function_align
     paddsw               m0, [tmp2q+32*0]
     mova                 m1, [tmp1q+32*1]
     paddsw               m1, [tmp2q+32*1]
-    mova                 m2, [tmp1q+32*2]
-    paddsw               m2, [tmp2q+32*2]
-    mova                 m3, [tmp1q+32*3]
-    paddsw               m3, [tmp2q+32*3]
-    add               tmp1q, 32*4
-    add               tmp2q, 32*4
-    pmaxsw               m0, m4
-    pmaxsw               m1, m4
-    pmaxsw               m2, m4
-    pmaxsw               m3, m4
-    psubsw               m0, m4
-    psubsw               m1, m4
-    psubsw               m2, m4
-    psubsw               m3, m4
-    pmulhw               m0, m5
-    pmulhw               m1, m5
-    pmulhw               m2, m5
-    pmulhw               m3, m5
+    add               tmp1q, 32*2
+    add               tmp2q, 32*2
+    pmaxsw               m0, m2
+    pmaxsw               m1, m2
+    psubsw               m0, m2
+    psubsw               m1, m2
+    pmulhw               m0, m3
+    pmulhw               m1, m3
     ret
 
-cglobal w_avg_16bpc, 4, 7, 9, dst, stride, tmp1, tmp2, w, h, stride3
+cglobal w_avg_16bpc, 4, 7, 7, dst, stride, tmp1, tmp2, w, h, stride3
     lea                  r6, [w_avg_avx2_table]
     tzcnt                wd, wm
     mov                 t0d, r6m ; weight
-    vpbroadcastw         m8, r7m ; pixel_max
-    vpbroadcastd         m7, [r6-w_avg_avx2_table+pd_65538]
+    vpbroadcastw         m6, r7m ; pixel_max
+    vpbroadcastd         m5, [r6-w_avg_avx2_table+pd_65538]
     movsxd               wq, [r6+wq*4]
-    paddw                m7, m8
+    paddw                m5, m6
     add                  wq, r6
     lea                 r6d, [t0-16]
     shl                 t0d, 16
     sub                 t0d, r6d ; 16-weight, weight
-    pslld                m7, 7
+    pslld                m5, 7
     rorx                r6d, t0d, 30 ; << 2
     test          dword r7m, 0x800
     cmovz               r6d, t0d
     movifnidn            hd, hm
-    movd                xm6, r6d
-    vpbroadcastd         m6, xm6
+    movd                xm4, r6d
+    vpbroadcastd         m4, xm4
     BIDIR_FN
 ALIGN function_align
 .main:
-    mova                 m4, [tmp1q+32*0]
+    mova                 m2, [tmp1q+32*0]
     mova                 m0, [tmp2q+32*0]
-    punpckhwd            m5, m0, m4
-    punpcklwd            m0, m4
-    mova                 m4, [tmp1q+32*1]
+    punpckhwd            m3, m0, m2
+    punpcklwd            m0, m2
+    mova                 m2, [tmp1q+32*1]
     mova                 m1, [tmp2q+32*1]
-    pmaddwd              m5, m6
-    pmaddwd              m0, m6
-    paddd                m5, m7
-    paddd                m0, m7
-    psrad                m5, 8
-    psrad                m0, 8
-    packusdw             m0, m5
-    punpckhwd            m5, m1, m4
-    punpcklwd            m1, m4
-    mova                 m4, [tmp1q+32*2]
-    mova                 m2, [tmp2q+32*2]
-    pmaddwd              m5, m6
-    pmaddwd              m1, m6
-    paddd                m5, m7
-    paddd                m1, m7
-    psrad                m5, 8
-    psrad                m1, 8
-    packusdw             m1, m5
-    punpckhwd            m5, m2, m4
-    punpcklwd            m2, m4
-    mova                 m4, [tmp1q+32*3]
-    mova                 m3, [tmp2q+32*3]
-    add               tmp1q, 32*4
-    add               tmp2q, 32*4
-    pmaddwd              m5, m6
-    pmaddwd              m2, m6
-    paddd                m5, m7
-    paddd                m2, m7
-    psrad                m5, 8
-    psrad                m2, 8
-    packusdw             m2, m5
-    punpckhwd            m5, m3, m4
-    punpcklwd            m3, m4
-    pmaddwd              m5, m6
-    pmaddwd              m3, m6
-    paddd                m5, m7
-    paddd                m3, m7
-    psrad                m5, 8
+    add               tmp1q, 32*2
+    add               tmp2q, 32*2
+    pmaddwd              m3, m4
+    pmaddwd              m0, m4
+    paddd                m3, m5
+    paddd                m0, m5
     psrad                m3, 8
-    packusdw             m3, m5
-    pminsw               m0, m8
-    pminsw               m1, m8
-    pminsw               m2, m8
-    pminsw               m3, m8
+    psrad                m0, 8
+    packusdw             m0, m3
+    punpckhwd            m3, m1, m2
+    punpcklwd            m1, m2
+    pmaddwd              m3, m4
+    pmaddwd              m1, m4
+    paddd                m3, m5
+    paddd                m1, m5
+    psrad                m3, 8
+    psrad                m1, 8
+    packusdw             m1, m3
+    pminsw               m0, m6
+    pminsw               m1, m6
     ret
 
-cglobal mask_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
+cglobal mask_16bpc, 4, 8, 9, dst, stride, tmp1, tmp2, w, h, mask, stride3
 %define base r7-mask_avx2_table
     lea                  r7, [mask_avx2_table]
     tzcnt                wd, wm
@@ -5495,39 +5417,49 @@ cglobal mask_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     movifnidn            hd, hm
     shr                 r6d, 11
     movsxd               wq, [r7+wq*4]
-    vpbroadcastd         m8, [base+pw_64]
-    vpbroadcastd         m9, [base+bidir_rnd+r6*4]
-    vpbroadcastd        m10, [base+bidir_mul+r6*4]
+    vpbroadcastd         m6, [base+pw_64]
+    vpbroadcastd         m7, [base+bidir_rnd+r6*4]
+    vpbroadcastd         m8, [base+bidir_mul+r6*4]
     mov               maskq, maskmp
     add                  wq, r7
     BIDIR_FN
 ALIGN function_align
 .main:
-%macro MASK 1
-    pmovzxbw             m5, [maskq+16*%1]
-    mova                m%1, [tmp1q+32*%1]
-    mova                 m6, [tmp2q+32*%1]
-    punpckhwd            m4, m%1, m6
-    punpcklwd           m%1, m6
-    psubw                m7, m8, m5
-    punpckhwd            m6, m5, m7 ; m, 64-m
-    punpcklwd            m5, m7
-    pmaddwd              m4, m6     ; tmp1 * m + tmp2 * (64-m)
-    pmaddwd             m%1, m5
-    psrad                m4, 5
-    psrad               m%1, 5
-    packssdw            m%1, m4
-    pmaxsw              m%1, m9
-    psubsw              m%1, m9
-    pmulhw              m%1, m10
-%endmacro
-    MASK                  0
-    MASK                  1
-    MASK                  2
-    MASK                  3
-    add               maskq, 16*4
-    add               tmp1q, 32*4
-    add               tmp2q, 32*4
+    pmovzxbw             m4, [maskq+16*0]
+    mova                 m0, [tmp1q+32*0]
+    mova                 m1, [tmp2q+32*0]
+    punpckhwd            m5, m0, m1
+    punpcklwd            m0, m1
+    psubw                m3, m6, m4
+    punpckhwd            m1, m4, m3 ; m, 64-m
+    punpcklwd            m4, m3
+    pmovzxbw             m3, [maskq+16*1]
+    pmaddwd              m5, m1     ; tmp1 * m + tmp2 * (64-m)
+    mova                 m1, [tmp1q+32*1]
+    pmaddwd              m0, m4
+    mova                 m4, [tmp2q+32*1]
+    add               maskq, 16*2
+    punpckhwd            m2, m1, m4
+    add               tmp1q, 32*2
+    punpcklwd            m1, m4
+    add               tmp2q, 32*2
+    psrad                m5, 5
+    psrad                m0, 5
+    packssdw             m0, m5
+    psubw                m5, m6, m3
+    punpckhwd            m4, m3, m5
+    punpcklwd            m3, m5
+    pmaddwd              m2, m4
+    pmaddwd              m1, m3
+    psrad                m2, 5
+    psrad                m1, 5
+    packssdw             m1, m2
+    pmaxsw               m0, m7
+    pmaxsw               m1, m7
+    psubsw               m0, m7
+    psubsw               m1, m7
+    pmulhw               m0, m8
+    pmulhw               m1, m8
     ret
 
 cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
@@ -6676,5 +6608,3 @@ cglobal resize_16bpc, 6, 12, 16, dst, dst_stride, src, src_stride, \
     dec                  hd
     jg .loop_y
     RET
-
-%endif ; ARCH_X86_64
