@@ -84,7 +84,7 @@ static int resolve_divisor_64(const uint64_t d, int *const shift) {
 }
 
 static int get_mult_shift_ndiag(const int64_t px, const int idet,
-                                const int rnd, const int sh)
+                                const int64_t rnd, const int sh)
 {
     const int64_t v1 = px * idet;
     const int v2 = (int) ((v1 + rnd - (v1 < 0)) >> sh);
@@ -93,7 +93,7 @@ static int get_mult_shift_ndiag(const int64_t px, const int idet,
 }
 
 static int get_mult_shift_diag(const int64_t px, const int idet,
-                               const int rnd, const int sh)
+                               const int64_t rnd, const int sh)
 {
     const int64_t v1 = px * idet;
     const int v2 = (int) ((v1 + rnd - (v1 < 0)) >> sh);
@@ -162,7 +162,7 @@ int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
     }
 
     // solve the least-squares
-    const int r = (1 << shift) >> 1;
+    const int64_t r = (1LL << shift) >> 1;
     mat[2] = get_mult_shift_diag((int64_t) a[1][1] * bx[0] -
                                  (int64_t) a[0][1] * bx[1], idet, r, shift);
     mat[3] = get_mult_shift_ndiag((int64_t) a[0][0] * bx[1] -
