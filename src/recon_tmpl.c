@@ -2079,7 +2079,7 @@ static int recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 } else {
                     const int xpos = (bx4 + t_dim->w) & 63;
                     const unsigned bits = (unsigned) (t->is_coded[0][by4 - 1] >> xpos);
-                    n_tr = imin(ctz(~bits), w);
+                    n_tr = imin(ctz(0x10000 | ~bits), w);
                 }
             }
         }
@@ -2643,7 +2643,7 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         } else {
                             const int xpos = (bx4 + bw4) & 63;
                             const unsigned bits = (unsigned) (t->is_coded[0][by4 - 1] >> xpos);
-                            n_tr = imin(ctz(~bits), w);
+                            n_tr = imin(ctz(0x10000 | ~bits), w);
                         }
                     }
                 }
@@ -3064,7 +3064,7 @@ chroma: {}
                 } else {
                     const unsigned bits = (unsigned)
                         (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
-                    n_tr = imin(ctz(~bits), w);
+                    n_tr = imin(ctz(0x10000 | ~bits), w);
                 }
             }
             if (t->cbx > ts->tiling.col_start) {
