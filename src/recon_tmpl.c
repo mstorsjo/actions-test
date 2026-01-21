@@ -1682,8 +1682,8 @@ static int tip_pred(Dav1dTaskContext *const t,
                        step + 2, step + 2, t->bx + x, t->by + y, 0,
                        (union mv) { .y = cmv[i].y - 32, .x = cmv[i].x - 32 },
                        refp[i], refs[i], DAV1D_FILTER_BILINEAR,
-                       iclip(left[i], 0, w - 1), iclip(left[i] + 7 + 8, 1, w),
-                       iclip(top[i], 0, h - 1), iclip(top[i] + 7 + 8, 1, h));
+                       iclip(left[i], 0, w - 1), iclip(left[i] + 7 + step * 4, 1, w),
+                       iclip(top[i], 0, h - 1), iclip(top[i] + 7 + step * 4, 1, h));
                 int dy, dx;
                 if (refine) {
                     struct OpflOffset o;
