@@ -2302,16 +2302,15 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_src, int64_t mvy1, int64_t mvx1,
                                 int64_t mvy2, int64_t mvx2,
                                 const Dav1dWarpedMotionParams *const mat,
-                                const int bw4, int bh4, const int t_swap)
+                                const int bw4, int bh4, const int t_swap,
+                                const uint8_t *mask, const int w_swap)
 {
     assert(bw4 > 1 && bh4 > 1);
     if (mat[0].type == DAV1D_WM_TYPE_INVALID) {
         s_src->mv.mv[0].n = 0;
-        t_src->mv.mv[t_swap] = quantize_mv(s_src->lmv.mv[0]);
     }
     if (mat[1].type == DAV1D_WM_TYPE_INVALID) {
         s_src->mv.mv[1].n = 0;
-        t_src->mv.mv[!t_swap] = quantize_mv(s_src->lmv.mv[1]);
     }
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
@@ -2322,6 +2321,8 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 s_src->mv.mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
                                           -0xffff, 0xffff);
                 t_src->mv.mv[t_swap] = quantize_mv(s_src->mv.mv[0]);
+            } else {
+                t_src->mv.mv[t_swap] = quantize_mv(s_src->lmv.mv[0]);
             }
             if (mat[1].type != DAV1D_WM_TYPE_INVALID) {
                 s_src->mv.mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
@@ -2329,6 +2330,12 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 s_src->mv.mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
                                           -0xffff, 0xffff);
                 t_src->mv.mv[!t_swap] = quantize_mv(s_src->mv.mv[1]);
+            } else {
+                t_src->mv.mv[!t_swap] = quantize_mv(s_src->lmv.mv[1]);
+            }
+            if (mask) {
+                const int d = mask[x >> 1];
+                if (d != 2) t_src->mv.mv[d ^ w_swap].n = INVALID_TRAJ;
             }
             s_dst[x] = s_dst[x + 1] = s_dst[x + 128] = s_dst[x + 129] = *s_src;
             if (t_src->mv.mv[0].n == INVALID_TRAJ) {
@@ -2355,10 +2362,53 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
         mvy1 += (mat[0].matrix[5] - 0x10000) * 8;
         mvx2 += mat[1].matrix[3] * 8;
         mvy2 += (mat[1].matrix[5] - 0x10000) * 8;
+        if (mask) mask += bw4 >> 1;
         s_dst += 2 * 128;
         t_dst += t_stride;
         bh4 -= 2;
     } while (bh4);
+}
+
+static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
+                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
+                                 refmvs_temporal_block *const t_src,
+                                 const int bw4, int bh4, const uint8_t *mask,
+                                 const int w_swap)
+{
+    assert(bw4 > 1 && bh4 > 1 && mask);
+    do {
+        for (int x = 0; x < bw4; x += 2) {
+            memcpy(&s_dst[x], s_src, offsetof(refmvs_block, lmv));
+            memcpy(&s_dst[x + 1], s_src, offsetof(refmvs_block, lmv));
+            memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
+            memcpy(&s_dst[x + 129], s_src, offsetof(refmvs_block, lmv));
+            const int d = mask[x >> 1];
+            if (d != 2) {
+                const int idx = !(d ^ w_swap);
+                const int m = t_src->mv.mv[idx].n;
+                t_dst[x >> 1].mv.n = m * 0x10001U;
+                t_dst[x >> 1].ref.pair =
+                    (m != INVALID_TRAJ) * t_src->ref.ref[idx] * 0x101U;
+            } else if (t_src->mv.mv[0].n == INVALID_TRAJ) {
+                if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                    t_dst[x >> 1].mv.n = INVALID_TRAJ * 0x10001U;
+                    t_dst[x >> 1].ref.pair = 0;
+                } else {
+                    t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
+                    t_dst[x >> 1].ref.pair = t_src->ref.ref[1] * 0x101U;
+                }
+            } else if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
+                t_dst[x >> 1].ref.pair = t_src->ref.ref[0] * 0x101U;
+            } else {
+                t_dst[x >> 1] = *t_src;
+            }
+        }
+        s_dst += 128 * 2;
+        t_dst += t_stride;
+        mask += bw4 >> 1;
+        bh4 -= 2;
+    } while (bh4 > 0);
 }
 
 #if HAVE_ASM && 0
@@ -2376,6 +2426,7 @@ COLD void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *const c)
     c->splat_mv = splat_mv_c;
     c->splat_warpmv = splat_warpmv_c;
     c->splat_comp_warpmv = splat_comp_warpmv_c;
+    c->splat_comp_wedgemv = splat_comp_wedgemv_c;
 
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM

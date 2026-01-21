@@ -183,13 +183,21 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_src, \
             int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
             const Dav1dWarpedMotionParams *const matrix, \
-            int bw4, int bh4, int t_swap)
+            int bw4, int bh4, int t_swap, const uint8_t *wedge, int w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
+
+#define decl_splat_comp_wedgemv_fn(name) \
+void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
+            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
+            refmvs_temporal_block *t_src, int bw4, int bh4, \
+            const uint8_t *wedge, int w_mask)
+typedef decl_splat_comp_wedgemv_fn(*splat_comp_wedgemv_fn);
 
 typedef struct Dav1dRefmvsDSPContext {
     splat_mv_fn splat_mv;
     splat_warpmv_fn splat_warpmv;
     splat_comp_warpmv_fn splat_comp_warpmv;
+    splat_comp_wedgemv_fn splat_comp_wedgemv;
 } Dav1dRefmvsDSPContext;
 
 // call once per frame

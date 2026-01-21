@@ -632,6 +632,8 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     s_src.mf = b->cwp_idx << 2;
     s_src.bx4 = t->bx;
     s_src.by4 = t->by;
+    const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
+        WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
         s_src.mf |= 2;
@@ -651,37 +653,30 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         memcpy(s_src.lmv.mv, b->mv, sizeof(union mv) * 2);
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                            mvy1, mvx1, mvy2, mvx2,
-                                           t->warpmv, bw4, bh4, t_swap);
+                                           t->warpmv, bw4, bh4, t_swap,
+                                           mask, b->wedge_sign ^ t_swap);
     } else {
         memcpy(s_src.mv.mv, b->mv, sizeof(union mv) * 2);
         s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         t_src.mv.mv[0] = quantize_mv(b->mv[t_swap]);
         t_src.mv.mv[1] = quantize_mv(b->mv[!t_swap]);
-        if (t_src.mv.mv[0].n == INVALID_TRAJ) {
-            if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-                t_src.ref.pair = 0;
-            } else {
-                t_src.mv.mv[0] = t_src.mv.mv[1];
-                t_src.ref.ref[0] = t_src.ref.ref[1];
+        if (!mask) {
+            if (t_src.mv.mv[0].n == INVALID_TRAJ) {
+                if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+                    t_src.ref.pair = 0;
+                } else {
+                    t_src.mv.mv[0] = t_src.mv.mv[1];
+                    t_src.ref.ref[0] = t_src.ref.ref[1];
+                }
+            } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+                t_src.mv.mv[1] = t_src.mv.mv[0];
+                t_src.ref.ref[1] = t_src.ref.ref[0];
             }
-        } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-            t_src.mv.mv[1] = t_src.mv.mv[0];
-            t_src.ref.ref[1] = t_src.ref.ref[0];
-        }
-        f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
-    }
-    if (b->comp_type == COMP_INTER_WEDGE) {
-        const uint8_t *mask = WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx);
-        for (int y = 0; y < bh4 >> 1; y++) {
-            for (int x = 0; x < bw4 >> 1; x++) {
-                const int d = mask[x];
-                if (d == 2) continue;
-                const int idx = d ^ b->wedge_sign ^ t_swap;
-                t_dst[x].ref.ref[idx] = t_dst[x].ref.ref[!idx];
-                t_dst[x].mv.mv[idx] = t_dst[x].mv.mv[!idx];
-            }
-            t_dst += t_stride;
-            mask += bw4 >> 1;
+            f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
+        } else {
+            f->c->refmvs_dsp.splat_comp_wedgemv(s_dst, &s_src, t_dst, t_stride,
+                                                &t_src, bw4, bh4, mask,
+                                                b->wedge_sign ^ t_swap);
         }
     }
 }
