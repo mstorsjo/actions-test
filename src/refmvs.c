@@ -491,7 +491,7 @@ static int model_from_corners(DB_ARGS(const int idx)
                    -0x7ffffc0, 0x7ffffc0);
 #define reduce(i) \
     mat[i] = iclip(mat[i], -0x7fc0, 0x7fc0); \
-    mat[i] += 0x20 - (mat[i] > 0); \
+    mat[i] += 0x20 - (mat[i] < 0); \
     mat[i] &= ~0x3f
     reduce(2);
     reduce(3);
