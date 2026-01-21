@@ -5099,37 +5099,6 @@ cglobal mask_8bpc, 4, 8, 6, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add                  wq, r7
     BIDIR_FN           MASK
 
-%macro W_MASK 4-5 0 ; dst, mask, tmp_offset[1-2], 4:4:4
-    mova                m%1, [tmp1q+32*%3]
-    mova                 m1, [tmp2q+32*%3]
-    psubw                m1, m%1
-    pabsw               m%2, m1
-    psubusw             m%2, m6, m%2
-    psrlw               m%2, 8 ; 64 - m
-    psllw                m2, m%2, 10
-    pmulhw               m1, m2
-    paddw               m%1, m1
-    mova                 m1, [tmp1q+32*%4]
-    mova                 m2, [tmp2q+32*%4]
-    psubw                m2, m1
-    pabsw                m3, m2
-    psubusw              m3, m6, m3
-    psrlw                m3, 8
-%if %5
-    packuswb            m%2, m3
-    psubb               m%2, m5, m%2
-    vpermq              m%2, m%2, q3120
-%else
-    phaddw              m%2, m3
-%endif
-    psllw                m3, 10
-    pmulhw               m2, m3
-    paddw                m1, m2
-    pmulhrsw            m%1, m7
-    pmulhrsw             m1, m7
-    packuswb            m%1, m1
-%endmacro
-
 cglobal blend_8bpc, 3, 7, 7, dst, ds, tmp, w, h, mask
 %define base r6-blend_avx2_table
     lea                  r6, [blend_avx2_table]
@@ -5802,6 +5771,37 @@ cglobal resize_8bpc, 6, 12, 16, dst, dst_stride, src, src_stride, \
     jg .loop_y
     RET
 
+%macro W_MASK 4-5 0 ; dst, mask, tmp_offset[1-2], 4:4:4
+    mova                m%1, [tmp1q+32*%3]
+    mova                 m1, [tmp2q+32*%3]
+    psubw                m1, m%1
+    pabsw               m%2, m1
+    psubusw             m%2, m6, m%2
+    psrlw               m%2, 8 ; 64 - m
+    psllw                m2, m%2, 10
+    pmulhw               m1, m2
+    paddw               m%1, m1
+    mova                 m1, [tmp1q+32*%4]
+    mova                 m2, [tmp2q+32*%4]
+    psubw                m2, m1
+    pabsw                m3, m2
+    psubusw              m3, m6, m3
+    psrlw                m3, 8
+%if %5
+    packuswb            m%2, m3
+    psubb               m%2, m5, m%2
+    vpermq              m%2, m%2, q3120
+%else
+    phaddw              m%2, m3
+%endif
+    psllw                m3, 10
+    pmulhw               m2, m3
+    paddw                m1, m2
+    pmulhrsw            m%1, m7
+    pmulhrsw             m1, m7
+    packuswb            m%1, m1
+%endmacro
+
 cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
 %define base r7-w_mask_420_avx2_table
     lea                  r7, [w_mask_420_avx2_table]
@@ -5818,6 +5818,12 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     mov               maskq, maskmp
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    add               tmp1q, 4*32
+    add               tmp2q, 4*32
+    W_MASK                0, 4, 0, 1
+    lea                dstq, [dstq+strideq*4]
+    add               maskq, 16
 .w4:
     vextracti128        xm1, m0, 1
     movd   [dstq+strideq*0], xm0
@@ -5831,19 +5837,7 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     pextrd [dstq+strideq*1], xm0, 3
     pextrd [dstq+strideq*2], xm1, 2
     pextrd [dstq+stride3q ], xm1, 3
-    jg .w4_h16
-.w4_end:
-    vextracti128        xm0, m4, 1
-    vpblendd            xm1, xm4, xm0, 0x05
-    vpblendd            xm4, xm0, 0x0a
-    pshufd              xm1, xm1, q2301
-    psubw               xm4, xm8, xm4
-    psubw               xm4, xm1
-    psrlw               xm4, 2
-    packuswb            xm4, xm4
-    movq            [maskq], xm4
-    RET
-.w4_h16:
+    je .w4_end
     W_MASK                0, 5, 2, 3
     lea                dstq, [dstq+strideq*4]
     phaddd               m4, m5
@@ -5863,6 +5857,19 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     pextrd [dstq+strideq*2], xm1, 2
     pextrd [dstq+stride3q ], xm1, 3
     mova            [maskq], xm4
+    sub                  hd, 16
+    jg .w4_loop
+    RET
+.w4_end:
+    vextracti128        xm0, m4, 1
+    vpblendd            xm1, xm4, xm0, 0x05
+    vpblendd            xm4, xm0, 0x0a
+    pshufd              xm1, xm1, q2301
+    psubw               xm4, xm8, xm4
+    psubw               xm4, xm1
+    psrlw               xm4, 2
+    packuswb            xm4, xm4
+    movq            [maskq], xm4
     RET
 .w8_loop:
     add               tmp1q, 2*32
@@ -5893,7 +5900,7 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               maskq, 16
 .w16:
     vpermq               m0, m0, q3120
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
     W_MASK                0, 5, 2, 3
     punpckhqdq           m1, m4, m5
@@ -5904,7 +5911,7 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vpermq               m0, m0, q3120
     packuswb             m1, m1
     vpermd               m1, m9, m1
-    mova         [dstq+strideq*2], xm0
+    movu         [dstq+strideq*2], xm0
     vextracti128 [dstq+stride3q ], m0, 1
     mova            [maskq], xm1
     sub                  hd, 4
@@ -5918,7 +5925,7 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               maskq, 16
 .w32:
     vpermq               m0, m0, q3120
-    mova   [dstq+strideq*0], m0
+    movu   [dstq+strideq*0], m0
     W_MASK                0, 5, 2, 3
     psubw                m4, m8, m4
     psubw                m4, m5
@@ -5926,7 +5933,7 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vpermq               m0, m0, q3120
     packuswb             m4, m4
     vpermd               m4, m9, m4
-    mova   [dstq+strideq*1], m0
+    movu   [dstq+strideq*1], m0
     mova            [maskq], xm4
     sub                  hd, 2
     jg .w32_loop
@@ -5959,54 +5966,6 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     dec                  hd
     jg .w64_loop
     RET
-.w128_loop_even:
-    psubw               m12, m8, m4
-    psubw               m13, m8, m5
-    dec                  hd
-.w128_loop:
-    W_MASK                0, 4, 0, 1
-    add                dstq, strideq
-.w128:
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*0], m0
-    W_MASK                0, 5, 2, 3
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*1], m0
-    add               tmp1q, 8*32
-    add               tmp2q, 8*32
-    test                 hd, 1
-    jz .w128_even
-    psubw                m4, m10, m4
-    psubw                m5, m11, m5
-    psrlw                m4, 2
-    psrlw                m5, 2
-    packuswb             m4, m5
-    vpermd               m4, m9, m4
-    mova       [maskq+32*0], m4
-    jmp .w128_odd
-.w128_even:
-    psubw               m10, m8, m4
-    psubw               m11, m8, m5
-.w128_odd:
-    W_MASK                0, 4, -4, -3
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*2], m0
-    W_MASK                0, 5, -2, -1
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*3], m0
-    test                 hd, 1
-    jz .w128_loop_even
-    psubw                m4, m12, m4
-    psubw                m5, m13, m5
-    psrlw                m4, 2
-    psrlw                m5, 2
-    packuswb             m4, m5
-    vpermd               m4, m9, m4
-    mova       [maskq+32*1], m4
-    add               maskq, 64
-    dec                  hd
-    jg .w128_loop
-    RET
 
 cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
 %define base r7-w_mask_422_avx2_table
@@ -6025,6 +5984,12 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     W_MASK                0, 4, 0, 1
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    add               tmp1q, 32*4
+    add               tmp2q, 32*4
+    W_MASK                0, 4, 0, 1
+    lea                dstq, [dstq+strideq*4]
+    add               maskq, 32
 .w4:
     vextracti128        xm1, m0, 1
     movd   [dstq+strideq*0], xm0
@@ -6038,16 +6003,7 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     pextrd [dstq+strideq*1], xm0, 3
     pextrd [dstq+strideq*2], xm1, 2
     pextrd [dstq+stride3q ], xm1, 3
-    jg .w4_h16
-.w4_end:
-    vextracti128        xm5, m4, 1
-    packuswb            xm4, xm5
-    psubb               xm5, xm8, xm4
-    pavgb               xm5, xm9
-    pshufd              xm5, xm5, q3120
-    mova            [maskq], xm5
-    RET
-.w4_h16:
+    je .w4_end
     W_MASK                0, 5, 2, 3
     lea                dstq, [dstq+strideq*4]
     packuswb             m4, m5
@@ -6065,6 +6021,16 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     pextrd [dstq+strideq*2], xm1, 2
     pextrd [dstq+stride3q ], xm1, 3
     mova            [maskq], m5
+    sub                  hd, 16
+    jg .w4_loop
+    RET
+.w4_end:
+    vextracti128        xm5, m4, 1
+    packuswb            xm4, xm5
+    psubb               xm5, xm8, xm4
+    pavgb               xm5, xm9
+    pshufd              xm5, xm5, q3120
+    mova            [maskq], xm5
     RET
 .w8_loop:
     add               tmp1q, 32*2
@@ -6095,7 +6061,7 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               maskq, 32
 .w16:
     vpermq               m0, m0, q3120
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
     W_MASK                0, 5, 2, 3
     packuswb             m4, m5
@@ -6103,7 +6069,7 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     pavgb                m5, m9
     vpermq               m0, m0, q3120
     vpermd               m5, m10, m5
-    mova         [dstq+strideq*2], xm0
+    movu         [dstq+strideq*2], xm0
     vextracti128 [dstq+stride3q ], m0, 1
     mova            [maskq], m5
     sub                  hd, 4
@@ -6117,14 +6083,14 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               maskq, 32
 .w32:
     vpermq               m0, m0, q3120
-    mova   [dstq+strideq*0], m0
+    movu   [dstq+strideq*0], m0
     W_MASK                0, 5, 2, 3
     packuswb             m4, m5
     psubb                m5, m8, m4
     pavgb                m5, m9
     vpermq               m0, m0, q3120
     vpermd               m5, m10, m5
-    mova   [dstq+strideq*1], m0
+    movu   [dstq+strideq*1], m0
     mova            [maskq], m5
     sub                  hd, 2
     jg .w32_loop
@@ -6149,37 +6115,6 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     dec                  hd
     jg .w64_loop
     RET
-.w128_loop:
-    add               tmp1q, 32*8
-    add               tmp2q, 32*8
-    W_MASK                0, 4, 0, 1
-    add                dstq, strideq
-    add               maskq, 32*2
-.w128:
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*0], m0
-    W_MASK                0, 5, 2, 3
-    packuswb             m4, m5
-    psubb                m5, m8, m4
-    pavgb                m5, m9
-    vpermq               m0, m0, q3120
-    vpermd               m5, m10, m5
-    mova        [dstq+32*1], m0
-    mova       [maskq+32*0], m5
-    W_MASK                0, 4, 4, 5
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*2], m0
-    W_MASK                0, 5, 6, 7
-    packuswb             m4, m5
-    psubb                m5, m8, m4
-    pavgb                m5, m9
-    vpermq               m0, m0, q3120
-    vpermd               m5, m10, m5
-    mova        [dstq+32*3], m0
-    mova       [maskq+32*1], m5
-    dec                  hd
-    jg .w128_loop
-    RET
 
 cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
 %define base r7-w_mask_444_avx2_table
@@ -6195,34 +6130,27 @@ cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
     W_MASK                0, 4, 0, 1, 1
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    add               tmp1q, 32*2
+    add               tmp2q, 32*2
+    W_MASK                0, 4, 0, 1, 1
+    lea                dstq, [dstq+strideq*4]
+    add               maskq, 32
 .w4:
     vextracti128        xm1, m0, 1
     movd   [dstq+strideq*0], xm0
     pextrd [dstq+strideq*1], xm0, 1
     movd   [dstq+strideq*2], xm1
     pextrd [dstq+stride3q ], xm1, 1
-    mova       [maskq+32*0], m4
-    cmp                  hd, 8
+    mova            [maskq], m4
+    sub                  hd, 8
     jl .w4_end
     lea                dstq, [dstq+strideq*4]
     pextrd [dstq+strideq*0], xm0, 2
     pextrd [dstq+strideq*1], xm0, 3
     pextrd [dstq+strideq*2], xm1, 2
     pextrd [dstq+stride3q ], xm1, 3
-    je .w4_end
-    W_MASK                0, 4, 2, 3, 1
-    lea                dstq, [dstq+strideq*4]
-    vextracti128        xm1, m0, 1
-    movd   [dstq+strideq*0], xm0
-    pextrd [dstq+strideq*1], xm0, 1
-    movd   [dstq+strideq*2], xm1
-    pextrd [dstq+stride3q ], xm1, 1
-    lea                dstq, [dstq+strideq*4]
-    pextrd [dstq+strideq*0], xm0, 2
-    pextrd [dstq+strideq*1], xm0, 3
-    pextrd [dstq+strideq*2], xm1, 2
-    pextrd [dstq+stride3q ], xm1, 3
-    mova       [maskq+32*1], m4
+    jg .w4_loop
 .w4_end:
     RET
 .w8_loop:
@@ -6249,7 +6177,7 @@ cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               maskq, 32
 .w16:
     vpermq               m0, m0, q3120
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
     mova            [maskq], m4
     sub                  hd, 2
@@ -6263,7 +6191,7 @@ cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               maskq, 32
 .w32:
     vpermq               m0, m0, q3120
-    mova             [dstq], m0
+    movu             [dstq], m0
     mova            [maskq], m4
     dec                  hd
     jg .w32_loop
@@ -6284,29 +6212,4 @@ cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
     mova       [maskq+32*1], m4
     dec                  hd
     jg .w64_loop
-    RET
-.w128_loop:
-    add               tmp1q, 32*8
-    add               tmp2q, 32*8
-    W_MASK                0, 4, 0, 1, 1
-    add                dstq, strideq
-    add               maskq, 32*4
-.w128:
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*0], m0
-    mova       [maskq+32*0], m4
-    W_MASK                0, 4, 2, 3, 1
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*1], m0
-    mova       [maskq+32*1], m4
-    W_MASK                0, 4, 4, 5, 1
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*2], m0
-    mova       [maskq+32*2], m4
-    W_MASK                0, 4, 6, 7, 1
-    vpermq               m0, m0, q3120
-    mova        [dstq+32*3], m0
-    mova       [maskq+32*3], m4
-    dec                  hd
-    jg .w128_loop
     RET

@@ -5483,6 +5483,10 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    call .main
+    lea                dstq, [dstq+strideq*4]
+    add               maskq, 16
 .w4:
     phaddd               m4, m5
     paddw                m4, m14
@@ -5517,6 +5521,8 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vextracti128        xm3, m3, 1
     movq   [dstq+strideq*2], xm3
     movhps [dstq+stride3q ], xm3
+    sub                  hd, 16
+    jg .w4_loop
 .w4_end:
     RET
 .w8_loop:
@@ -5531,17 +5537,17 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     psrlw                m4, 2
     vextracti128        xm5, m4, 1
     packuswb            xm4, xm5
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
-    mova         [dstq+strideq*2], xm1
+    movu         [dstq+strideq*2], xm1
     vextracti128 [dstq+stride3q ], m1, 1
     mova            [maskq], xm4
     sub                  hd, 8
     jl .w8_end
     lea                dstq, [dstq+strideq*4]
-    mova         [dstq+strideq*0], xm2
+    movu         [dstq+strideq*0], xm2
     vextracti128 [dstq+strideq*1], m2, 1
-    mova         [dstq+strideq*2], xm3
+    movu         [dstq+strideq*2], xm3
     vextracti128 [dstq+stride3q ], m3, 1
     jg .w8_loop
 .w8_end:
@@ -5559,10 +5565,10 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vextracti128        xm5, m4, 1
     packuswb            xm4, xm5
     pshufd              xm4, xm4, q3120
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
-    mova   [dstq+strideq*2], m2
-    mova   [dstq+stride3q ], m3
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
+    movu   [dstq+strideq*2], m2
+    movu   [dstq+stride3q ], m3
     mova            [maskq], xm4
     sub                  hd, 4
     jg .w16_loop
@@ -5575,10 +5581,10 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     paddw                m4, m14
     paddw                m4, m5
     psrlw               m15, m4, 2
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m1
-    mova [dstq+strideq*1+32*0], m2
-    mova [dstq+strideq*1+32*1], m3
+    movu [dstq+strideq*0+32*0], m0
+    movu [dstq+strideq*0+32*1], m1
+    movu [dstq+strideq*1+32*0], m2
+    movu [dstq+strideq*1+32*1], m3
     call .main
     mova                 m6, [deint_shuf]
     paddw                m4, m14
@@ -5586,10 +5592,10 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     psrlw                m4, 2
     packuswb            m15, m4
     vpermd               m4, m6, m15
-    mova [dstq+strideq*2+32*0], m0
-    mova [dstq+strideq*2+32*1], m1
-    mova [dstq+stride3q +32*0], m2
-    mova [dstq+stride3q +32*1], m3
+    movu [dstq+strideq*2+32*0], m0
+    movu [dstq+strideq*2+32*1], m1
+    movu [dstq+stride3q +32*0], m2
+    movu [dstq+stride3q +32*1], m3
     mova            [maskq], m4
     sub                  hd, 4
     jg .w32_loop
@@ -5621,56 +5627,6 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     mova            [maskq], m4
     sub                  hd, 2
     jg .w64_loop
-    RET
-.w128_loop:
-    call .main
-    lea                dstq, [dstq+strideq*2]
-    add               maskq, 64
-.w128:
-    paddw                m4, m14
-    paddw                m5, m14
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m1
-    mova [dstq+strideq*0+32*2], m2
-    mova [dstq+strideq*0+32*3], m3
-    mova       [maskq+32*0], m4
-    mova     [dstq+strideq], m5
-    call .main
-    paddw                m4, m14
-    paddw               m15, m14, m5
-    mova [dstq+strideq*0+32*4], m0
-    mova [dstq+strideq*0+32*5], m1
-    mova [dstq+strideq*0+32*6], m2
-    mova [dstq+strideq*0+32*7], m3
-    mova       [maskq+32*1], m4
-    call .main
-    paddw                m4, [maskq+32*0]
-    paddw                m5, [dstq+strideq]
-    mova                 m6, [deint_shuf]
-    psrlw                m4, 2
-    psrlw                m5, 2
-    packuswb             m4, m5
-    vpermd               m4, m6, m4
-    mova [dstq+strideq*1+32*0], m0
-    mova [dstq+strideq*1+32*1], m1
-    mova [dstq+strideq*1+32*2], m2
-    mova [dstq+strideq*1+32*3], m3
-    mova       [maskq+32*0], m4
-    call .main
-    paddw                m4, [maskq+32*1]
-    mova                 m6, [deint_shuf]
-    paddw                m5, m15
-    psrlw                m4, 2
-    psrlw                m5, 2
-    packuswb             m4, m5
-    vpermd               m4, m6, m4
-    mova [dstq+strideq*1+32*4], m0
-    mova [dstq+strideq*1+32*5], m1
-    mova [dstq+strideq*1+32*6], m2
-    mova [dstq+strideq*1+32*7], m3
-    mova       [maskq+32*1], m4
-    sub                  hd, 2
-    jg .w128_loop
     RET
 ALIGN function_align
 .main:
@@ -5724,6 +5680,9 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     lea            stride3q, [strideq*3]
     jmp                  wq
+.w4_loop:
+    call .main
+    lea                dstq, [dstq+strideq*4]
 .w4:
     movq   [dstq+strideq*0], xm0
     movhps [dstq+strideq*1], xm0
@@ -5751,22 +5710,24 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vextracti128        xm3, m3, 1
     movq   [dstq+strideq*2], xm3
     movhps [dstq+stride3q ], xm3
+    sub                  hd, 16
+    jg .w4_loop
 .w4_end:
     RET
 .w8_loop:
     call .main
     lea                dstq, [dstq+strideq*4]
 .w8:
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
-    mova         [dstq+strideq*2], xm1
+    movu         [dstq+strideq*2], xm1
     vextracti128 [dstq+stride3q ], m1, 1
     sub                  hd, 8
     jl .w8_end
     lea                dstq, [dstq+strideq*4]
-    mova         [dstq+strideq*0], xm2
+    movu         [dstq+strideq*0], xm2
     vextracti128 [dstq+strideq*1], m2, 1
-    mova         [dstq+strideq*2], xm3
+    movu         [dstq+strideq*2], xm3
     vextracti128 [dstq+stride3q ], m3, 1
     jg .w8_loop
 .w8_end:
@@ -5775,10 +5736,10 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     lea                dstq, [dstq+strideq*4]
 .w16:
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
-    mova   [dstq+strideq*2], m2
-    mova   [dstq+stride3q ], m3
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
+    movu   [dstq+strideq*2], m2
+    movu   [dstq+stride3q ], m3
     sub                  hd, 4
     jg .w16_loop
     RET
@@ -5786,10 +5747,10 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     lea                dstq, [dstq+strideq*2]
 .w32:
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m1
-    mova [dstq+strideq*1+32*0], m2
-    mova [dstq+strideq*1+32*1], m3
+    movu [dstq+strideq*0+32*0], m0
+    movu [dstq+strideq*0+32*1], m1
+    movu [dstq+strideq*1+32*0], m2
+    movu [dstq+strideq*1+32*1], m3
     sub                  hd, 2
     jg .w32_loop
     RET
@@ -5803,22 +5764,6 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     mova        [dstq+32*3], m3
     dec                  hd
     jg .w64_loop
-    RET
-.w128_loop:
-    call .main
-    add                dstq, strideq
-.w128:
-    mova        [dstq+32*0], m0
-    mova        [dstq+32*1], m1
-    mova        [dstq+32*2], m2
-    mova        [dstq+32*3], m3
-    call .main
-    mova        [dstq+32*4], m0
-    mova        [dstq+32*5], m1
-    mova        [dstq+32*6], m2
-    mova        [dstq+32*7], m3
-    dec                  hd
-    jg .w128_loop
     RET
 ALIGN function_align
 .main:
@@ -5856,43 +5801,33 @@ cglobal w_mask_444_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     lea            stride3q, [strideq*3]
     jmp                  wq
-.w4:
-    movq   [dstq+strideq*0], xm0
-    movhps [dstq+strideq*1], xm0
-    vextracti128        xm0, m0, 1
-    movq   [dstq+strideq*2], xm0
-    movhps [dstq+stride3q ], xm0
-    cmp                  hd, 8
-    jl .w4_end
-    lea                dstq, [dstq+strideq*4]
-    movq   [dstq+strideq*0], xm1
-    movhps [dstq+strideq*1], xm1
-    vextracti128        xm1, m1, 1
-    movq   [dstq+strideq*2], xm1
-    movhps [dstq+stride3q ], xm1
-    je .w4_end
+.w4_loop:
     call .main
     lea                dstq, [dstq+strideq*4]
+.w4:
+    vextracti128        xm2, m0, 1
     movq   [dstq+strideq*0], xm0
     movhps [dstq+strideq*1], xm0
-    vextracti128        xm0, m0, 1
-    movq   [dstq+strideq*2], xm0
-    movhps [dstq+stride3q ], xm0
+    movq   [dstq+strideq*2], xm2
+    movhps [dstq+stride3q ], xm2
+    sub                  hd, 8
+    jl .w4_end
+    vextracti128        xm2, m1, 1
     lea                dstq, [dstq+strideq*4]
     movq   [dstq+strideq*0], xm1
     movhps [dstq+strideq*1], xm1
-    vextracti128        xm1, m1, 1
-    movq   [dstq+strideq*2], xm1
-    movhps [dstq+stride3q ], xm1
+    movq   [dstq+strideq*2], xm2
+    movhps [dstq+stride3q ], xm2
+    jg .w4_loop
 .w4_end:
     RET
 .w8_loop:
     call .main
     lea                dstq, [dstq+strideq*4]
 .w8:
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
-    mova         [dstq+strideq*2], xm1
+    movu         [dstq+strideq*2], xm1
     vextracti128 [dstq+stride3q ], m1, 1
     sub                  hd, 4
     jg .w8_loop
@@ -5902,8 +5837,8 @@ cglobal w_mask_444_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     lea                dstq, [dstq+strideq*2]
 .w16:
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     sub                  hd, 2
     jg .w16_loop
     RET
@@ -5911,8 +5846,8 @@ cglobal w_mask_444_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     call .main
     add                dstq, strideq
 .w32:
-    mova        [dstq+32*0], m0
-    mova        [dstq+32*1], m1
+    movu        [dstq+32*0], m0
+    movu        [dstq+32*1], m1
     dec                  hd
     jg .w32_loop
     RET
@@ -5927,24 +5862,6 @@ cglobal w_mask_444_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     mova        [dstq+32*3], m1
     dec                  hd
     jg .w64_loop
-    RET
-.w128_loop:
-    call .main
-    add                dstq, strideq
-.w128:
-    mova        [dstq+32*0], m0
-    mova        [dstq+32*1], m1
-    call .main
-    mova        [dstq+32*2], m0
-    mova        [dstq+32*3], m1
-    call .main
-    mova        [dstq+32*4], m0
-    mova        [dstq+32*5], m1
-    call .main
-    mova        [dstq+32*6], m0
-    mova        [dstq+32*7], m1
-    dec                  hd
-    jg .w128_loop
     RET
 ALIGN function_align
 .main:

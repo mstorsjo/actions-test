@@ -50,6 +50,9 @@ decl_fn(mct, dav1d_prep_bilin);
 decl_fn(avg, dav1d_avg);
 decl_fn(w_avg, dav1d_w_avg);
 decl_fn(mask, dav1d_mask);
+decl_fn(w_mask, dav1d_w_mask_420);
+decl_fn(w_mask, dav1d_w_mask_422);
+decl_fn(w_mask, dav1d_w_mask_444);
 
 static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
     const unsigned flags = dav1d_get_cpu_flags();
@@ -65,4 +68,7 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav1dMCDSPContext *const c) {
     c->avg = BF(dav1d_avg, avx2);
     c->w_avg = BF(dav1d_w_avg, avx2);
     c->mask = BF(dav1d_mask, avx2);
+    c->w_mask[0] = BF(dav1d_w_mask_444, avx2);
+    c->w_mask[1] = BF(dav1d_w_mask_422, avx2);
+    c->w_mask[2] = BF(dav1d_w_mask_420, avx2);
 }
