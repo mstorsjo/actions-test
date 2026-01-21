@@ -1688,8 +1688,8 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         mv *const mv_dst = &rp_traj[ref2][pos1];
         if (mv_dst->n != INVALID_MV) continue;
         const mv *const mv_src = &rp_traj[ref1][pos1];
-        const int py = mv_dst->y = iclip(mv_src->y + mv_in.y, -0xffff, 0xffff);
-        const int px = mv_dst->x = iclip(mv_src->x + mv_in.x, -0xffff, 0xffff);
+        const int py = mv_dst->y = iclip(mv_src->y + mv_in.y, -2047, 2047);
+        const int px = mv_dst->x = iclip(mv_src->x + mv_in.x, -2047, 2047);
         const int y2 = (y1 + apply_sign(abs(py) >> 6, py)) & mask;
         const int x2 = (x1 + apply_sign(abs(px) >> 6, px)) & mask;
         if (x2 < x_proj_start || x2 >= x_proj_end) continue;
@@ -1838,14 +1838,16 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 }
                 if (rf->seq_hdr->mv_traj) {
                     const int k = (x1 >> shift) % 3;
-                    rp_traj[ref][pos1] = mv1;
+                    rp_traj[ref][pos1].y = iclip(mv1.y, -2047, 2047);
+                    rp_traj[ref][pos1].x = iclip(mv1.x, -2047, 2047);
                     rp_map[k][ref][pos].y = y1 - y;
                     rp_map[k][ref][pos].x = x1 - x;
                     do /* so we can "break" out of it, saves indentation */ {
                         if (ref2idx < 0) break;
                         const mv mv2 =
                             scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref - 1][1]);
-                        rp_traj[ref2idx][pos1] = mv2;
+                        rp_traj[ref2idx][pos1].y = iclip(mv2.y, -2047, 2047);
+                        rp_traj[ref2idx][pos1].x = iclip(mv2.x, -2047, 2047);
                         const int y2 = (y + apply_sign(abs(b_mv.y) >> 6,
                                                        b_mv.y)) & mask;
                         if (y2 < y_proj_start || y2 >= y_proj_end) break;
