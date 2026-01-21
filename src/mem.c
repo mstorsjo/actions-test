@@ -109,7 +109,7 @@ void *dav2d_malloc(const enum AllocationType type, const size_t sz) {
 void *dav2d_alloc_aligned(const enum AllocationType type,
                           const size_t sz, const size_t align)
 {
-    void *const ptr = dav2d_alloc_aligned_internal(align, sz + align);
+    void *const ptr = dav2d_alloc_aligned_internal(sz + align, align);
     return track_alloc(type, ptr, sz, align);
 }
 
