@@ -4686,8 +4686,8 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
         const int ret =
             dav1d_refmvs_init_frame(&f->rf, f->seq_hdr, f->frame_hdr,
-                                    f->refpoc, f->mvs, f->refrefpoc, f->ref_mvs,
-                                    f->c->n_tc, f->c->n_fc);
+                                    f->refpoc, f->mvs, f->refrefpoc, f->refcnt,
+                                    f->ref_mvs, f->c->n_tc, f->c->n_fc);
         if (ret < 0) goto error;
     }
 
@@ -5215,6 +5215,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                 }
                 memcpy(f->refrefpoc[i], c->refs[refidx].refpoc,
                        sizeof(*f->refrefpoc));
+                f->refcnt[i] = f->refp[i].p.frame_hdr->n_ref_frames;
             }
         } else {
             memset(f->ref_mvs_ref, 0, sizeof(f->ref_mvs_ref));

@@ -238,7 +238,7 @@ struct Dav1dFrameContext {
     Dav1dRef *cur_segmap_ref, *prev_segmap_ref;
     uint8_t *cur_segmap;
     const uint8_t *prev_segmap;
-    uint8_t refpoc[7], refrefpoc[7][7];
+    uint8_t refpoc[7], refrefpoc[7][7], refcnt[7];
     union {
         int8_t refdir_with_intra[1 /* intra */ + 7 + 1 /* tip */];
         struct {

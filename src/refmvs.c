@@ -1925,14 +1925,15 @@ static unsigned abs_closest_ref(const int8_t *const ref2ref,
 }
 
 static int topo_insert(int cnt, const int idx, int8_t *const order,
-                       int8_t *const rev_order, const int8_t (*const cnv)[7])
+                       int8_t *const rev_order, const int8_t (*const cnv)[7],
+                       const uint8_t refcnt[7])
 {
     if (rev_order[idx] != -1) return cnt;
     rev_order[idx] = 0; // dummy
-    for (int n = 0; n < 7; n++) {
+    for (int n = 0; n < 7 * !!refcnt[idx]; n++) {
         const int r_idx = cnv[idx][n];
         if (r_idx == -1) continue;
-        cnt = topo_insert(cnt, r_idx, order, rev_order, cnv);
+        cnt = topo_insert(cnt, r_idx, order, rev_order, cnv, refcnt);
     }
     order[cnt] = idx;
     rev_order[idx] = cnt;
@@ -1945,6 +1946,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
                             const uint8_t ref_poc[7],
                             refmvs_temporal_block *const rp,
                             const uint8_t ref_ref_poc[7][7],
+                            const uint8_t refcnt[7],
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
                             const int n_tile_threads, const int n_frame_threads)
 {
@@ -2008,7 +2010,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         rf->pocdiff[i] = iclip(get_poc_diff(seq_hdr->order_hint_n_bits,
                                             poc, ref_poc[i]), -31, 31);
         rf->abspocdiff[i] = abs(rf->pocdiff[i]);
-        for (int n = 0; n < 7; n++) {
+        for (int n = 0; n < 7 * !!refcnt[i]; n++) {
             ref2ref[i][n] = get_poc_diff(seq_hdr->order_hint_n_bits,
                                          ref_poc[i], ref_ref_poc[i][n]);
             if (ref2ref[i][n] > 0) have_ref_sign[i][0] = 1;
@@ -2076,7 +2078,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         int topo_cnt = 0;
         for (int n = 0; n < frm_hdr->n_ref_frames; n++)
             topo_cnt = topo_insert(topo_cnt, n, topo_order, rev_topo_order,
-                                   refref2curref_idx);
+                                   refref2curref_idx, refcnt);
         if (topo_cnt <= 1) goto end;
 
         uint8_t ref_done[7][2] = {{ 0 }};

@@ -199,6 +199,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *rf,
                             const uint8_t ref_poc[7],
                             refmvs_temporal_block *rp,
                             const uint8_t ref_ref_poc[7][7],
+                            const uint8_t refcnt[7],
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
                             int n_tile_threads, int n_frame_threads);
 
