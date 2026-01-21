@@ -2833,8 +2833,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             if (b->inter_mode != GLOBALMV) {
                 b->mv[0] = b->inter_mode == WARPMV ?
-                    get_warpmv_2d(warp[warp_ref_idx], t->bx, t->by, bw4, bh4,
-                                  f->bw, f->bh, warpmv_with_mvd ? mv_prec : 6) :
+                    get_warpmv_2d(warp[warp_ref_idx], t->bx, t->by,
+                                  bw4, bh4, f->bw, f->bh,
+                                  // this works around a bug in v12 (see AVM #835)
+                                  warpmv_with_mvd && warp[warp_ref_idx][6] >=
+                                      DAV1D_WM_TYPE_ROT_ZOOM ? mv_prec : 6) :
                     mvstack[drl_idx].mv.mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
