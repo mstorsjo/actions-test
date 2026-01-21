@@ -5368,9 +5368,10 @@ cglobal w_avg_16bpc, 4, 7, 7, dst, stride, tmp1, tmp2, w, h, stride3
     add                  wq, r6
     lea                 r6d, [t0-16]
     shl                 t0d, 16
-    sub                 t0d, r6d ; 16-weight, weight
+    sub                 t0w, r6w ; 16-weight, weight
     pslld                m5, 7
     rorx                r6d, t0d, 30 ; << 2
+    and                 r6d, 0xfffcfffc
     test          dword r7m, 0x800
     cmovz               r6d, t0d
     movifnidn            hd, hm

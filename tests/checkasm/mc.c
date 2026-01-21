@@ -317,7 +317,7 @@ static void check_w_avg(Dav1dMCDSPContext *const c) {
             pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
             for (int h = 4; h <= 64; h <<= 1)
             {
-                int weight = rnd() % 15 + 1;
+                int weight = rnd() % 25 - 4; // -4..20
 #if BITDEPTH == 16
                 const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
