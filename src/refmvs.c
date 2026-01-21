@@ -481,14 +481,18 @@ static int model_from_corners(DB_ARGS(const int idx)
     if (imin(imin(topleft_mv.y, topright_mv.y), bottomleft_mv.y + b_dim[1] * 32) < -ypos * 8)
         return 0;
 
-    mat[2] = ((topright_mv.x - topleft_mv.x) * (1 << 11)) >> b_dim[2];
-    mat[4] = ((topright_mv.y - topleft_mv.y) * (1 << 11)) >> b_dim[2];
-    mat[3] = ((bottomleft_mv.x - topleft_mv.x) * (1 << 11)) >> b_dim[3];
-    mat[5] = ((bottomleft_mv.y - topleft_mv.y) * (1 << 11)) >> b_dim[3];
-    mat[0] = iclip(topleft_mv.x * (1 << 13) - xpos * mat[2] - ypos * mat[3],
-                   -0x7ffffc0, 0x7ffffc0);
-    mat[1] = iclip(topleft_mv.y * (1 << 13) - xpos * mat[4] - ypos * mat[5],
-                   -0x7ffffc0, 0x7ffffc0);
+    mat[2] = iclip64to32(((topright_mv.x - topleft_mv.x) * (1LL << 11)) >> b_dim[2],
+                         INT32_MIN, INT32_MAX);
+    mat[4] = iclip64to32(((topright_mv.y - topleft_mv.y) * (1LL << 11)) >> b_dim[2],
+                         INT32_MIN, INT32_MAX);
+    mat[3] = iclip64to32(((bottomleft_mv.x - topleft_mv.x) * (1LL << 11)) >> b_dim[3],
+                         INT32_MIN, INT32_MAX);
+    mat[5] = iclip64to32(((bottomleft_mv.y - topleft_mv.y) * (1LL << 11)) >> b_dim[3],
+                         INT32_MIN, INT32_MAX);
+    mat[0] = iclip64to32(topleft_mv.x * (1LL << 13) - (int64_t) xpos * mat[2] -
+                         (int64_t) ypos * mat[3], -0x7ffffc0, 0x7ffffc0);
+    mat[1] = iclip64to32(topleft_mv.y * (1LL << 13) - (int64_t) xpos * mat[4] -
+                         (int64_t) ypos * mat[5], -0x7ffffc0, 0x7ffffc0);
 #define reduce(i) \
     mat[i] = iclip(mat[i], -0x7fc0, 0x7fc0); \
     mat[i] += 0x20 - (mat[i] < 0); \

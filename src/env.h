@@ -367,14 +367,16 @@ static inline mv get_warpmv_2d(const int32_t *const matrix,
 {
     const int x = bx4 * 4 + bw4 * 2 - 1;
     const int y = by4 * 4 + bh4 * 2 - 1;
-    const int xc = (matrix[2] - (1 << 16)) * x + matrix[3] * y + matrix[0];
-    const int yc = (matrix[5] - (1 << 16)) * y + matrix[4] * x + matrix[1];
+    const int64_t xc = (matrix[2] - (1 << 16)) * (int64_t) x +
+                       matrix[3] * (int64_t) y + matrix[0];
+    const int64_t yc = (matrix[5] - (1 << 16)) * (int64_t) y +
+                       matrix[4] * (int64_t) x + matrix[1];
     const int not_epel = mv_precision < 6, shift = 13 + not_epel;
     const int rnd = (1 << shift) >> 1, max = 0xffff - not_epel;
     union mv res = (mv) {
-        .y = iclip(apply_sign(((abs(yc) + rnd) >> shift) << not_epel, yc),
+        .y = iclip(apply_sign64(((llabs(yc) + rnd) >> shift) << not_epel, yc),
                    -max, +max),
-        .x = iclip(apply_sign(((abs(xc) + rnd) >> shift) << not_epel, xc),
+        .x = iclip(apply_sign64(((llabs(xc) + rnd) >> shift) << not_epel, xc),
                    -max, +max),
     };
     res.y = iclip(res.y, -(by4 + bh4 + 4) * 32, (ih4 - by4 + 4) * 32);

@@ -48,6 +48,10 @@ static inline unsigned umin(const unsigned a, const unsigned b) {
     return a < b ? a : b;
 }
 
+static inline int iclip64to32(int64_t v, const int min, const int max) {
+    return v < min ? min : v > max ? max : (int) v;
+}
+
 static inline int iclip(const int v, const int min, const int max) {
     return v < min ? min : v > max ? max : v;
 }

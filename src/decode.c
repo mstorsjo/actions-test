@@ -358,8 +358,8 @@ static void extend_warpmv(Dav1dTaskContext *const t,
     // extend warpmv using (quasi-)matrix from neighbour
     const int bw4 = b_dim[0], bh4 = b_dim[1];
     const int sx = t->bx * 4 + 2 * bw4 - 1, sy = t->by * 4 + 2 * bh4 - 1;
-    const int px = (sx << 16) + b->mv[0].x * (1 << 13);
-    const int py = (sy << 16) + b->mv[0].y * (1 << 13);
+    const int64_t px = ((int64_t) sx << 16) + b->mv[0].x * (1 << 13);
+    const int64_t py = ((int64_t) sy << 16) + b->mv[0].y * (1 << 13);
     if (x_off >= 0) {
         assert(y_off == -1);
         const int ay = t->by * 4 - 1, sh = 1 + b_dim[3];
