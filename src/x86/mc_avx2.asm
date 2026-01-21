@@ -194,9 +194,7 @@ BIDIR_JMP_TABLE  mask,              avx2,       4, 8, 16, 32, 64
 BIDIR_JMP_TABLE  w_mask_420,        avx2,       4, 8, 16, 32, 64
 BIDIR_JMP_TABLE  w_mask_422,        avx2,       4, 8, 16, 32, 64
 BIDIR_JMP_TABLE  w_mask_444,        avx2,       4, 8, 16, 32, 64
-BIDIR_JMP_TABLE  blend,             avx2,       4, 8, 16, 32
-BIDIR_JMP_TABLE  blend_v,           avx2,    2, 4, 8, 16, 32
-BIDIR_JMP_TABLE  blend_h,           avx2,    2, 4, 8, 16, 32, 32
+BIDIR_JMP_TABLE  blend,             avx2,       4, 8, 16, 32, 64
 
 SECTION .text
 
@@ -5138,7 +5136,6 @@ cglobal blend_8bpc, 3, 7, 7, dst, ds, tmp, w, h, mask
     sub                  hd, 4
     jg .w4
     RET
-ALIGN function_align
 .w8:
     movq                xm1, [dstq+dsq*0]
     movhps              xm1, [dstq+dsq*1]
@@ -5168,10 +5165,9 @@ ALIGN function_align
     sub                  hd, 4
     jg .w8
     RET
-ALIGN function_align
 .w16:
     mova                 m0, [maskq]
-    mova                xm1, [dstq+dsq*0]
+    movu                xm1, [dstq+dsq*0]
     vinserti128          m1, [dstq+dsq*1], 1
     psubb                m3, m4, m0
     punpcklbw            m2, m3, m0
@@ -5185,16 +5181,15 @@ ALIGN function_align
     pmulhrsw             m0, m5
     pmulhrsw             m1, m5
     packuswb             m0, m1
-    mova         [dstq+dsq*0], xm0
+    movu         [dstq+dsq*0], xm0
     vextracti128 [dstq+dsq*1], m0, 1
     lea                dstq, [dstq+dsq*2]
     sub                  hd, 2
     jg .w16
     RET
-ALIGN function_align
 .w32:
     mova                 m0, [maskq]
-    mova                 m1, [dstq]
+    movu                 m1, [dstq]
     mova                 m6, [maskq+tmpq]
     add               maskq, 32
     psubb                m3, m4, m0
@@ -5207,247 +5202,44 @@ ALIGN function_align
     pmulhrsw             m0, m5
     pmulhrsw             m1, m5
     packuswb             m0, m1
-    mova             [dstq], m0
+    movu             [dstq], m0
     add                dstq, dsq
     dec                  hd
     jg .w32
     RET
-
-cglobal blend_v_8bpc, 3, 6, 6, dst, ds, tmp, w, h, mask
-%define base r5-blend_v_avx2_table
-    lea                  r5, [blend_v_avx2_table]
-    tzcnt                wd, wm
-    movifnidn            hd, hm
-    movsxd               wq, dword [r5+wq*4]
-    vpbroadcastd         m5, [base+pw_512]
-    add                  wq, r5
-    add               maskq, obmc_masks-blend_v_avx2_table
-    jmp                  wq
-.w2:
-    vpbroadcastd        xm2, [maskq+2*2]
-.w2_s0_loop:
-    movd                xm0, [dstq+dsq*0]
-    pinsrw              xm0, [dstq+dsq*1], 1
-    movd                xm1, [tmpq]
-    add                tmpq, 2*2
-    punpcklbw           xm0, xm1
-    pmaddubsw           xm0, xm2
-    pmulhrsw            xm0, xm5
-    packuswb            xm0, xm0
-    pextrw     [dstq+dsq*0], xm0, 0
-    pextrw     [dstq+dsq*1], xm0, 1
-    lea                dstq, [dstq+dsq*2]
-    sub                  hd, 2
-    jg .w2_s0_loop
-    RET
-ALIGN function_align
-.w4:
-    vpbroadcastq        xm2, [maskq+4*2]
-.w4_loop:
-    movd                xm0, [dstq+dsq*0]
-    pinsrd              xm0, [dstq+dsq*1], 1
-    movq                xm1, [tmpq]
-    add                tmpq, 4*2
-    punpcklbw           xm0, xm1
-    pmaddubsw           xm0, xm2
-    pmulhrsw            xm0, xm5
-    packuswb            xm0, xm0
-    movd       [dstq+dsq*0], xm0
-    pextrd     [dstq+dsq*1], xm0, 1
-    lea                dstq, [dstq+dsq*2]
-    sub                  hd, 2
-    jg .w4_loop
-    RET
-ALIGN function_align
-.w8:
-    mova                xm3, [maskq+8*2]
-.w8_loop:
-    movq                xm0, [dstq+dsq*0]
-    vpbroadcastq        xm1, [dstq+dsq*1]
-    mova                xm2, [tmpq]
-    add                tmpq, 8*2
-    punpcklbw           xm0, xm2
-    punpckhbw           xm1, xm2
-    pmaddubsw           xm0, xm3
-    pmaddubsw           xm1, xm3
-    pmulhrsw            xm0, xm5
-    pmulhrsw            xm1, xm5
-    packuswb            xm0, xm1
-    movq       [dstq+dsq*0], xm0
-    movhps     [dstq+dsq*1], xm0
-    lea                dstq, [dstq+dsq*2]
-    sub                  hd, 2
-    jg .w8_loop
-    RET
-ALIGN function_align
-.w16:
-    vbroadcasti128       m3, [maskq+16*2]
-    vbroadcasti128       m4, [maskq+16*3]
-.w16_loop:
-    mova                xm1, [dstq+dsq*0]
-    vinserti128          m1, [dstq+dsq*1], 1
-    mova                 m2, [tmpq]
-    add                tmpq, 16*2
+.w64:
+    mova                 m0, [maskq+32*0]
+    mova                 m1, [dstq+32*0]
+    mova                 m2, [maskq+tmpq+32*0]
+    psubb                m6, m4, m0
+    punpcklbw            m3, m6, m0
+    punpckhbw            m6, m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
+    mova                 m2, [maskq+32*1]
     pmaddubsw            m0, m3
-    pmaddubsw            m1, m4
+    mova                 m3, [dstq+32*1]
+    pmaddubsw            m1, m6
+    mova                 m6, [maskq+tmpq+32*1]
+    add               maskq, 64
     pmulhrsw             m0, m5
     pmulhrsw             m1, m5
     packuswb             m0, m1
-    mova         [dstq+dsq*0], xm0
-    vextracti128 [dstq+dsq*1], m0, 1
-    lea                dstq, [dstq+dsq*2]
-    sub                  hd, 2
-    jg .w16_loop
-    RET
-ALIGN function_align
-.w32:
-    mova                xm3, [maskq+16*4]
-    vinserti128          m3, [maskq+16*6], 1
-    mova                xm4, [maskq+16*5]
-    vinserti128          m4, [maskq+16*7], 1
-.w32_loop:
-    mova                 m1, [dstq]
-    mova                 m2, [tmpq]
-    add                tmpq, 32
+    psubb                m1, m4, m2
+    mova        [dstq+32*0], m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    pmaddubsw            m0, m3
-    pmaddubsw            m1, m4
-    pmulhrsw             m0, m5
-    pmulhrsw             m1, m5
-    packuswb             m0, m1
-    mova             [dstq], m0
+    punpcklbw            m2, m3, m6
+    punpckhbw            m3, m6
+    pmaddubsw            m2, m0
+    pmaddubsw            m3, m1
+    pmulhrsw             m2, m5
+    pmulhrsw             m3, m5
+    packuswb             m2, m3
+    mova        [dstq+32*1], m2
     add                dstq, dsq
     dec                  hd
-    jg .w32_loop
-    RET
-
-cglobal blend_h_8bpc, 4, 7, 6, dst, ds, tmp, w, h, mask
-%define base r5-blend_h_avx2_table
-    lea                  r5, [blend_h_avx2_table]
-    mov                 r6d, wd
-    tzcnt                wd, wd
-    mov                  hd, hm
-    movsxd               wq, dword [r5+wq*4]
-    vpbroadcastd         m5, [base+pw_512]
-    add                  wq, r5
-    lea               maskq, [base+obmc_masks+hq*2]
-    lea                  hd, [hq*3]
-    shr                  hd, 2 ; h * 3/4
-    lea               maskq, [maskq+hq*2]
-    neg                  hq
-    jmp                  wq
-.w2:
-    movd                xm0, [dstq+dsq*0]
-    pinsrw              xm0, [dstq+dsq*1], 1
-    movd                xm2, [maskq+hq*2]
-    movd                xm1, [tmpq]
-    add                tmpq, 2*2
-    punpcklwd           xm2, xm2
-    punpcklbw           xm0, xm1
-    pmaddubsw           xm0, xm2
-    pmulhrsw            xm0, xm5
-    packuswb            xm0, xm0
-    pextrw     [dstq+dsq*0], xm0, 0
-    pextrw     [dstq+dsq*1], xm0, 1
-    lea                dstq, [dstq+dsq*2]
-    add                  hq, 2
-    jl .w2
-    RET
-ALIGN function_align
-.w4:
-    mova                xm3, [blend_shuf]
-.w4_loop:
-    movd                xm0, [dstq+dsq*0]
-    pinsrd              xm0, [dstq+dsq*1], 1
-    movd                xm2, [maskq+hq*2]
-    movq                xm1, [tmpq]
-    add                tmpq, 4*2
-    pshufb              xm2, xm3
-    punpcklbw           xm0, xm1
-    pmaddubsw           xm0, xm2
-    pmulhrsw            xm0, xm5
-    packuswb            xm0, xm0
-    movd       [dstq+dsq*0], xm0
-    pextrd     [dstq+dsq*1], xm0, 1
-    lea                dstq, [dstq+dsq*2]
-    add                  hq, 2
-    jl .w4_loop
-    RET
-ALIGN function_align
-.w8:
-    vbroadcasti128       m4, [blend_shuf]
-    shufpd               m4, m4, 0x03
-.w8_loop:
-    vpbroadcastq         m1, [dstq+dsq*0]
-    movq                xm0, [dstq+dsq*1]
-    vpblendd             m0, m1, 0x30
-    vpbroadcastd         m3, [maskq+hq*2]
-    movq                xm1, [tmpq+8*1]
-    vinserti128          m1, [tmpq+8*0], 1
-    add                tmpq, 8*2
-    pshufb               m3, m4
-    punpcklbw            m0, m1
-    pmaddubsw            m0, m3
-    pmulhrsw             m0, m5
-    vextracti128        xm1, m0, 1
-    packuswb            xm0, xm1
-    movhps     [dstq+dsq*0], xm0
-    movq       [dstq+dsq*1], xm0
-    lea                dstq, [dstq+dsq*2]
-    add                  hq, 2
-    jl .w8_loop
-    RET
-ALIGN function_align
-.w16:
-    vbroadcasti128       m4, [blend_shuf]
-    shufpd               m4, m4, 0x0c
-.w16_loop:
-    mova                xm1, [dstq+dsq*0]
-    vinserti128          m1, [dstq+dsq*1], 1
-    vpbroadcastd         m3, [maskq+hq*2]
-    mova                 m2, [tmpq]
-    add                tmpq, 16*2
-    pshufb               m3, m4
-    punpcklbw            m0, m1, m2
-    punpckhbw            m1, m2
-    pmaddubsw            m0, m3
-    pmaddubsw            m1, m3
-    pmulhrsw             m0, m5
-    pmulhrsw             m1, m5
-    packuswb             m0, m1
-    mova         [dstq+dsq*0], xm0
-    vextracti128 [dstq+dsq*1], m0, 1
-    lea                dstq, [dstq+dsq*2]
-    add                  hq, 2
-    jl .w16_loop
-    RET
-ALIGN function_align
-.w32: ; w32/w64/w128
-    sub                 dsq, r6
-.w32_loop0:
-    vpbroadcastw         m3, [maskq+hq*2]
-    mov                  wd, r6d
-.w32_loop:
-    mova                 m1, [dstq]
-    mova                 m2, [tmpq]
-    add                tmpq, 32
-    punpcklbw            m0, m1, m2
-    punpckhbw            m1, m2
-    pmaddubsw            m0, m3
-    pmaddubsw            m1, m3
-    pmulhrsw             m0, m5
-    pmulhrsw             m1, m5
-    packuswb             m0, m1
-    mova             [dstq], m0
-    add                dstq, 32
-    sub                  wd, 32
-    jg .w32_loop
-    add                dstq, dsq
-    inc                  hq
-    jl .w32_loop0
+    jg .w64
     RET
 
 cglobal emu_edge_8bpc, 10, 13, 1, bw, bh, iw, ih, x, y, dst, dstride, src, sstride, \
