@@ -1424,11 +1424,11 @@ static void ext_warp(Dav1dTaskContext *const t,
                         pixel *const emu_edge_buf = bitfn(t->scratch.emu_edge);
                         f->dsp->mc.emu_edge(11, 11, right - left, bottom - top,
                                             dx - 3 - left, dy - 3 - top,
-                                            emu_edge_buf, 16 * sizeof(pixel),
+                                            emu_edge_buf, 32 * sizeof(pixel),
                                             &ref_ptr[left + top * PXSTRIDE(ref_stride)],
                                             ref_stride);
-                        ref_ptr = &emu_edge_buf[16 * 3 + 3];
-                        ref_stride = 16 * sizeof(pixel);
+                        ref_ptr = &emu_edge_buf[32 * 3 + 3];
+                        ref_stride = 32 * sizeof(pixel);
                     } else {
                         ref_ptr = &ref_ptr[PXSTRIDE(ref_stride) * dy + dx];
                     }
