@@ -682,8 +682,11 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         add_spatial_candidate(bh4 - 1, -1,
                               rt, &st, 1, bml, bms_8x8y + left_8x8x,
                               ref, gmv);
-        if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0])
+        if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0] &&
+            bml->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], bml->m, sizeof(int32_t) * 7);
+        }
     }
 
     // right-most top
@@ -694,7 +697,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         add_spatial_candidate(-1, xpos,
                               rt, &st, xpos >= 0, rmt,
                               top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
-        if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0]) {
+        if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0] &&
+            rmt->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], rmt->m, sizeof(int32_t) * 7);
         }
     }
@@ -705,8 +710,11 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         tml = &rt->r[(by4 & 63) * 128 + ((bx4 - 1) & 127)];
         add_spatial_candidate(0, -1,
                               rt, &st, 1, tml, tms_8x8y + left_8x8x, ref, gmv);
-        if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0])
+        if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0] &&
+            tml->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], tml->m, sizeof(int32_t) * 7);
+        }
     }
 
     // left-most top
@@ -714,7 +722,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         const int xpos = -x_off;
         add_spatial_candidate(-1, xpos, rt, &st, !x_off, lmt,
                               top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
-        if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0]) {
+        if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0] &&
+            lmt->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], lmt->m, sizeof(int32_t) * 7);
         }
     }
@@ -728,8 +738,11 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                               rt, &st, 1, bl, left_8x8x +
                               (((by4 + bh4) & (rf->sbsz - 1)) >> 1) * stride,
                               ref, gmv);
-        if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0])
+        if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0] &&
+            bl->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], bl->m, sizeof(int32_t) * 7);
+        }
     }
 
     // top-right
@@ -737,7 +750,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         const int xpos = abw4 - x_off;
         add_spatial_candidate(-1, xpos, rt, &st, 1, tr,
                               top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
-        if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0]) {
+        if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0] &&
+            tr->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], tr->m, sizeof(int32_t) * 7);
         }
     }
@@ -771,7 +786,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         const int xpos = -(1 << is_sb_boundary) - x_off;
         add_spatial_candidate(-1, xpos, rt, &st, 0, tl,
                               top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
-        if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0]) {
+        if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0] &&
+            tl->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
             memcpy(warp[cnt[1]++], tl->m, sizeof(int32_t) * 7);
         }
     }
