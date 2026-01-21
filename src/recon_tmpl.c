@@ -1941,7 +1941,7 @@ static int opfl_pred(Dav1dTaskContext *const t,
                                     .x = (mv[1].x + (dd->d[1].x > 0)) >> 1 },
                         };
                         update_temporal(&t_dst[(bx >> 1) + !!by * t_stride],
-                                        t_stride, sw4 >> 1, sh4 >> 1,
+                                        t_stride, bs >> 1, bs >> 1,
                                         (const int8_t *) b->ref, dmv, t_swap);
                     }
                     if (bacp)
