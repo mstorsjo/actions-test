@@ -730,7 +730,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     }
 
     // bottom-left
-    if (have_left && (by4 + bh4) & (rf->sbsz - 1) &&
+    if (have_left && bh4 <= 16 && (by4 + bh4) & (rf->sbsz - 1) &&
         by4 + bh4 < rt->tile_row.end)
     {
         const refmvs_block *const bl = &rt->r[((by4 + bh4) & 63) * 128 + ((bx4 - 1) & 127)];
