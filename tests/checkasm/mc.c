@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -449,7 +449,7 @@ static void check_blend(Dav1dMCDSPContext *const c) {
 #else
                 const int bitdepth_max = 0xff;
 #endif
-                for (int i = 0; i < 32 * 32; i++) {
+                for (int i = 0; i < w * h; i++) {
                     tmp[i] = rnd() & bitdepth_max;
                     mask[i] = rnd() % 65;
                 }
