@@ -4293,13 +4293,17 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                 const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
                 const int vsh = unit_sz_log2 - 7 + ss_ver;
                 const int hsh = unit_sz_log2 - 7 + ss_hor;
+                assert(vsh >= 0 && hsh >= 0); // FIXME: unit_sz_log2 can be 6
                 int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
+                // TODO: store restoration data sequentially instead
+                int start_unit_idx = ((t->by & 0x30) >> 2) + ((t->bx & 0x30) >> 4);
+
                 // FIXME I think lruh is always 1, so this loop may be eliminated
                 for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
                     for (int x = 0; x < lruw; x++) {
-                        // FIXME [0] is probably not correct
+                        int unit_idx = start_unit_idx; // TODO: + x * ... + y * ...;
                         Av1RestorationUnit *const lr =
-                            &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][0];
+                            &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][unit_idx];
                         read_restoration_info(t, lr, p, frame_type);
                         DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
                                            p, lr->type, ts->msac.rng);

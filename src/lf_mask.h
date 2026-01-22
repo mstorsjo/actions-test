@@ -53,9 +53,9 @@ typedef struct Av1Filter {
     uint16_t noskip_mask[32][4]; // for 8x8 blocks, but stored on a 4x8 basis
 } Av1Filter;
 
-// each struct describes one 256x256 area (1 or 4 SBs)
+// each struct describes one 256x256 area (1, 4, or 16 SBs)
 typedef struct Av1Restoration {
-    Av1RestorationUnit lr[3][4];
+    Av1RestorationUnit lr[3][16];
 } Av1Restoration;
 
 void dav2d_create_lf_mask_intra(Av1Filter *lflvl, const Av1Block *b, int bx, int by,

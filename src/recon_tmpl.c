@@ -4070,10 +4070,8 @@ void bytefn(dav2d_filter_sbrow)(Dav2dFrameContext *const f, const int sby) {
     bytefn(dav2d_filter_sbrow_deblock_rows)(f, sby);
     if (f->seq_hdr->cdef)
         bytefn(dav2d_filter_sbrow_cdef)(f->c->tc, sby);
-#if 0
     if (f->lf.restore_planes)
         bytefn(dav2d_filter_sbrow_lr)(f, sby);
-#endif
 }
 
 void bytefn(dav2d_backup_ipred_edge)(Dav2dTaskContext *const t) {

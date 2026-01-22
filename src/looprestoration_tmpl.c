@@ -38,8 +38,129 @@
 #include "src/looprestoration.h"
 #include "src/tables.h"
 
-// 256 * 1.5 + 3 + 3 = 390
-#define REST_UNIT_STRIDE (390)
+// 512 * 1.5 + 4 + 4
+#define REST_UNIT_STRIDE (776)
+
+static const int8_t wiener_ns_config_y[32][2] = {
+    { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
+    { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 },
+    { 1, 1 }, { -1, -1 }, { -1, 1 }, { 1, -1 },
+    { 2, 1 }, { -2, -1 }, { 2, -1 }, { -2, 1 },
+    { 1, 2 }, { -1, -2 }, { 1, -2 }, { -1, 2 },
+    { 3, 0 }, { -3, 0 }, { 0, 3 }, { 0, -3 },
+    { 4, 0 }, { -4, 0 }, { 0, 4 }, { 0, -4 },
+    { 3, 3 }, { -3, -3 }, { 3, -3 }, { -3, 3 }
+};
+
+static void backup_row(pixel *dst, const pixel *src, const pixel *left, const int w, const enum LrEdgeFlags edges) {
+    if (edges & LR_HAVE_LEFT)
+        for (int x = -4; x < 0; x++)
+            dst[x] = left[x + 4];
+    else
+        for (int x = -4; x < 0; x++)
+            dst[x] = src[0];
+
+    for (int x = 0; x < w; x++)
+        dst[x] = src[x];
+
+    if (edges & LR_HAVE_RIGHT)
+        for (int x = w; x < w + 4; x++)
+            dst[x] = src[x];
+    else
+        for (int x = w; x < w + 4; x++)
+            dst[x] = src[w - 1];
+}
+
+static void backup_row_lpf(pixel *dst, const pixel *src, const int w, const enum LrEdgeFlags edges) {
+    if (edges & LR_HAVE_LEFT) {
+        for (int x = -4; x < 0; x++)
+            dst[x] = src[x];
+    } else {
+        for (int x = -4; x < 0; x++)
+            dst[x] = src[0];
+    }
+
+    for (int x = 0; x < w; x++)
+        dst[x] = src[x];
+
+    if (edges & LR_HAVE_RIGHT) {
+        for (int x = w; x < w + 4; x++)
+            dst[x] = src[x];
+    } else {
+        for (int x = w; x < w + 4; x++)
+            dst[x] = src[w - 1];
+    }
+}
+
+static void ns_wiener_y_c(pixel *p, const ptrdiff_t stride,
+                          const pixel (*left)[4],
+                          const pixel *lpf, const int w, int h,
+                          const int8_t *coeffs,
+                          const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+{
+    pixel row_buffers[9][REST_UNIT_STRIDE];
+    pixel *bak_rows[9];
+    const pixel *ptrs[9];
+    const pixel *lpf_bottom = lpf + 6*PXSTRIDE(stride);
+
+    for (int i = 0; i < 9; i++)
+        bak_rows[i] = row_buffers[i] + 4;
+
+    backup_row(bak_rows[4], p, left[0], w, edges);
+    ptrs[4] = bak_rows[4];
+    if (edges & LR_HAVE_TOP) {
+        // y = -2,-1
+        backup_row_lpf(bak_rows[2], lpf, w, edges);
+        ptrs[2] = bak_rows[2];
+        backup_row_lpf(bak_rows[3], lpf + PXSTRIDE(stride), w, edges);
+        ptrs[3] = bak_rows[3];
+
+        // y = -3,-4
+        ptrs[0] = ptrs[1] = ptrs[2];
+    } else {
+        ptrs[0] = ptrs[1] = ptrs[2] = ptrs[3] = ptrs[4];
+    }
+
+    backup_row(bak_rows[5], p + PXSTRIDE(stride), left[1], w, edges);
+    ptrs[5] = bak_rows[5];
+    backup_row(bak_rows[6], p + 2*PXSTRIDE(stride), left[2], w, edges);
+    ptrs[6] = bak_rows[6];
+    backup_row(bak_rows[7], p + 3*PXSTRIDE(stride), left[3], w, edges);
+    ptrs[7] = bak_rows[7];
+    int bak_idx = 8;
+
+    for (int y = 0; y < h; y++) {
+        if (y + 4 < h) {
+            backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, edges);
+            ptrs[8] = bak_rows[bak_idx];
+        } else if (y + 2 < h && edges & LR_HAVE_BOTTOM) {
+            int offset_y = y + 4 - h;
+            assert(offset_y < 2);
+            backup_row_lpf(bak_rows[bak_idx], lpf_bottom + offset_y * PXSTRIDE(stride), w, edges);
+            ptrs[8] = bak_rows[bak_idx];
+        } else {
+            ptrs[8] = ptrs[7];
+        }
+        if (++bak_idx == 9) bak_idx = 0;
+
+        for (int x = 0; x < w; x++) {
+            const int m = ptrs[4][x];
+            int s = m << 7;
+            for (int i = 0; i < 32; i++) {
+                const int dy = wiener_ns_config_y[i][0];
+                const int dx = wiener_ns_config_y[i][1];
+                const int diff = ptrs[4 + dy][x + dx] - m;
+                s += diff * coeffs[i >> 1];
+            }
+            // TODO: chroma: if (plane > 0) {...}
+            const int v = (s + 64) >> 7;
+            p[x] = iclip_pixel(v);
+        }
+
+        for (int r = 0; r < 8; r++) ptrs[r] = ptrs[r+1];
+        p += PXSTRIDE(stride);
+    }
+}
 
 static void wiener_filter_h(uint16_t *dst, const pixel (*left)[4],
                             const pixel *src, const int16_t fh[8],
@@ -1365,6 +1486,8 @@ vert_1:
 COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext *const c,
                                                  const int bpc)
 {
+    c->ns_wiener = ns_wiener_y_c;
+
     c->wiener[0] = c->wiener[1] = wiener_c;
     c->sgr[0] = sgr_5x5_c;
     c->sgr[1] = sgr_3x3_c;

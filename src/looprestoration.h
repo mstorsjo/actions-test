@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav2d authors
+ * Copyright © 2018-2021, VideoLAN and dav1d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -69,7 +69,18 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_lr_filter_fn(*looprestorationfilter_fn);
 
+
+#define decl_wiener_filter_fn(name) \
+void (name)(pixel *dst, ptrdiff_t dst_stride, \
+            const_left_pixel_row left, \
+            const pixel *lpf, int w, int h, \
+            const int8_t *coeffs, \
+            enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+typedef decl_wiener_filter_fn(*wienerfilter_fn);
+
 typedef struct Dav2dLoopRestorationDSPContext {
+    wienerfilter_fn ns_wiener;
+
     looprestorationfilter_fn wiener[2]; /* 7-tap, 5-tap */
     looprestorationfilter_fn sgr[3]; /* 5x5, 3x3, mix */
 } Dav2dLoopRestorationDSPContext;
