@@ -1156,16 +1156,16 @@ static void debug_warpbank(const refmvs_tile *const rt, const int ref,
 #define debug_warpbank(...)
 #endif
 
-void dav1d_refmvs_warp_add(refmvs_tile *const rt,
-                           const Dav1dWarpedMotionParams *const mat,
-                           DB_ONLY(const int by4, const int bx4)
-                           const int ref)
+int dav1d_refmvs_warp_add(refmvs_tile *const rt,
+                          const Dav1dWarpedMotionParams *const mat,
+                          DB_ONLY(const int by4, const int bx4)
+                          const int ref)
 {
     RDB_ONLY(const refmvs_frame *const rf = rt->rf);
     if (rt->warp.hits >= 64) {
         DEBUG_REFMV_printf("warprefbank: ignoring further action, hits=%d\n",
                            rt->warp.hits);
-        return;
+        return -1;
     }
     rt->warp.hits++;
     const int sz = rt->warp.size[ref], idx = rt->warp.idx[ref];
@@ -1196,7 +1196,7 @@ void dav1d_refmvs_warp_add(refmvs_tile *const rt,
             memcpy(rt->warp.mat[ref][to], bak, sizeof(int32_t) * 7);
         }
         debug_warpbank(rt, ref, by4, bx4);
-        return;
+        return -1;
     }
     const int tgt = sz == 4 ? rt->warp.idx[ref]++ & 3 : rt->warp.size[ref]++;
     memcpy(rt->warp.mat[ref][tgt], mat->matrix, sizeof(int32_t) * 6);
@@ -1206,6 +1206,7 @@ void dav1d_refmvs_warp_add(refmvs_tile *const rt,
                        mat->matrix[0], mat->matrix[1], mat->matrix[2],
                        mat->matrix[3], mat->matrix[4], mat->matrix[5]);
     debug_warpbank(rt, ref, by4, bx4);
+    return 0;
 }
 
 #if DEBUG_BLOCK_INFO && DEBUG_REFMV

@@ -259,8 +259,8 @@ void dav1d_refmvs_reset_sb(refmvs_tile *rt, int by, int bx);
 void dav1d_refmvs_bank_update(refmvs_tile *rt, enum BlockSize bs, int by, int bx);
 void dav1d_refmvs_bank_add(refmvs_tile *rt, enum BlockSize bs, int by, int bx,
                            const Av1Block *b);
-void dav1d_refmvs_warp_add(refmvs_tile *rt, const Dav1dWarpedMotionParams *const m,
-                           DB_ONLY(int by4, int bx4) int ref);
+int dav1d_refmvs_warp_add(refmvs_tile *rt, const Dav1dWarpedMotionParams *const m,
+                          DB_ONLY(int by4, int bx4) int ref);
 
 // call for each block
 void dav1d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],

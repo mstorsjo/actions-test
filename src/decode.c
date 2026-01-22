@@ -3048,10 +3048,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (t->f->seq_hdr->refmv_bank)
             dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
         if (b->motion_mode > MM_INTERINTRA) {
+            int res = 0;
             if (t->warpmv[0].type != DAV1D_WM_TYPE_INVALID)
-                dav1d_refmvs_warp_add(&t->rt, &t->warpmv[0],
-                                      DB_ONLY(t->by, t->bx) b->ref[0]);
-            if (is_comp && t->warpmv[1].type != DAV1D_WM_TYPE_INVALID)
+                res = dav1d_refmvs_warp_add(&t->rt, t->warpmv,
+                                            DB_ONLY(t->by, t->bx) b->ref[0]);
+            if (!res && is_comp && t->warpmv[1].type != DAV1D_WM_TYPE_INVALID)
                 dav1d_refmvs_warp_add(&t->rt, &t->warpmv[1],
                                       DB_ONLY(t->by, t->bx) b->ref[1]);
         }
