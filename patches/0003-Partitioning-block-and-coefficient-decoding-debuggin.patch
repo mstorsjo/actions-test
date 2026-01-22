@@ -1,4 +1,4 @@
-From 3e2fb8e9fcd2d2321f06d4ecd193eed22ee0ae56 Mon Sep 17 00:00:00 2001
+From df8cf72944d38ae3d696960c3c5e6fab50ce4859 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -7,18 +7,18 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
 ---
  aom/debug.h                 |  16 +
  av1/common/av1_common_int.h |   2 +
- av1/common/mvref_common.c   | 593 ++++++++++++++++++++++++++-
+ av1/common/mvref_common.c   | 667 +++++++++++++++++++++++++++--
  av1/common/tip.c            |   2 +
  av1/decoder/decodeframe.c   | 282 +++++++++----
- av1/decoder/decodemv.c      | 791 +++++++++++++++++++++++++++++-------
+ av1/decoder/decodemv.c      | 807 ++++++++++++++++++++++++++++++------
  av1/decoder/decodemv.h      |  18 +-
  av1/decoder/decoder.c       |   5 +-
  av1/decoder/decoder.h       |  12 +-
- av1/decoder/decodetxb.c     | 229 +++++++++--
+ av1/decoder/decodetxb.c     | 229 ++++++++--
  av1/decoder/decodetxb.h     |  14 +-
  av1/decoder/detokenize.c    |   8 +-
  av1/decoder/detokenize.h    |   3 +-
- 13 files changed, 1684 insertions(+), 291 deletions(-)
+ 13 files changed, 1763 insertions(+), 302 deletions(-)
 
 diff --git a/aom/debug.h b/aom/debug.h
 index 8c8847f1eb..b203c56cfa 100644
@@ -61,7 +61,7 @@ index bcc274e046..5a8313a386 100644
        const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
        const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av1/common/mvref_common.c b/av1/common/mvref_common.c
-index b50cd22ed5..d0b8e85244 100644
+index b50cd22ed5..6ca2a1af9a 100644
 --- a/av1/common/mvref_common.c
 +++ b/av1/common/mvref_common.c
 @@ -12,6 +12,8 @@
@@ -609,7 +609,52 @@ index b50cd22ed5..d0b8e85244 100644
                ++(*single_mv_count);
              }
            }
-@@ -1728,7 +1984,13 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1459,7 +1715,8 @@ static int is_this_param_already_in_list(
+   return 0;
+ }
+ 
+-void check_this_warp_candidate(
++void check_this_warp_candidate(DB_ARGS(const int have_warp, const char *const tag,
++                                       const int mi_row, const int mi_col)
+     const AV1_COMMON *cm, const MB_MODE_INFO *const neighbor_mbmi,
+     WARP_CANDIDATE warp_candidates[MAX_WARP_REF_CANDIDATES],
+     const int ref_frame, const int max_num_of_candidates,
+@@ -1472,6 +1729,15 @@ void check_this_warp_candidate(
+       is_valid_warp_parameters(cm, neighbor_mbmi, ref_frame, &neigh_params)) {
+     if (!is_this_param_already_in_list(*curr_num_of_candidates, warp_candidates,
+                                        neigh_params)) {
++#if DEBUG_REFMV
++        if (have_warp)
++        DEBUG_REFMV_printf("Spatial[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d from %s\n",
++                           *curr_num_of_candidates,
++                           neigh_params.wmmat[0], neigh_params.wmmat[1],
++                           neigh_params.wmmat[2], neigh_params.wmmat[3],
++                           neigh_params.wmmat[4], neigh_params.wmmat[5],
++                           neigh_params.wmtype, tag);
++#endif
+       insert_neighbor_warp_candidate(warp_candidates, &neigh_params,
+                                      *curr_num_of_candidates, proj_type);
+       ++(*curr_num_of_candidates);
+@@ -1519,7 +1785,7 @@ static AOM_INLINE void scan_blk_mbmi_ctx(
+   }
+ }
+ 
+-static AOM_INLINE void scan_blk_mbmi(
++static AOM_INLINE void scan_blk_mbmi(DB_ARGS(const int have_warp, const char *const tag)
+     const AV1_COMMON *cm, const MACROBLOCKD *xd, const int mi_row,
+     const int mi_col, const MV_REFERENCE_FRAME rf[2], int row_offset,
+     int col_offset, CANDIDATE_MV *ref_mv_stack, uint16_t *ref_mv_weight,
+@@ -1558,7 +1824,8 @@ static AOM_INLINE void scan_blk_mbmi(
+ 
+     if (warp_param_stack && valid_num_warp_candidates &&
+         max_num_of_warp_candidates) {
+-      check_this_warp_candidate(cm, candidate, warp_param_stack, ref_frame,
++      check_this_warp_candidate(DB_ARGS(have_warp, tag, mi_row, mi_col)
++                                cm, candidate, warp_param_stack, ref_frame,
+                                 max_num_of_warp_candidates,
+                                 valid_num_warp_candidates, PROJ_SPATIAL);
+     }
+@@ -1728,7 +1995,13 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
          if (this_refmv.as_int == ref_mv_stack[idx].this_mv.as_int) break;
        }
  
@@ -624,7 +669,7 @@ index b50cd22ed5..d0b8e85244 100644
  
        if (idx == *refmv_count && *refmv_count < MAX_REF_MV_STACK_SIZE) {
          ref_mv_stack[idx].this_mv.as_int = this_refmv.as_int;
-@@ -1738,6 +2000,11 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1738,6 +2011,11 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_weight[idx] = weight;
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
@@ -636,7 +681,7 @@ index b50cd22ed5..d0b8e85244 100644
        }
      } else {
        if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
-@@ -1746,6 +2013,11 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1746,6 +2024,11 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = weight;
@@ -648,7 +693,7 @@ index b50cd22ed5..d0b8e85244 100644
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
        }
-@@ -1773,7 +2045,15 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1773,7 +2056,15 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
            break;
        }
  
@@ -665,7 +710,7 @@ index b50cd22ed5..d0b8e85244 100644
  
        if (idx == *refmv_count && *refmv_count < MAX_REF_MV_STACK_SIZE) {
          ref_mv_stack[idx].this_mv.as_int = this_refmv.as_int;
-@@ -1784,6 +2064,12 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1784,6 +2075,12 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_weight[idx] = weight;
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
@@ -678,7 +723,7 @@ index b50cd22ed5..d0b8e85244 100644
        }
      } else {
        if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
-@@ -1793,6 +2079,12 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1793,6 +2090,12 @@ static int add_tpl_ref_mv(const AV1_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = weight;
@@ -691,7 +736,7 @@ index b50cd22ed5..d0b8e85244 100644
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
        }
-@@ -1835,16 +2127,24 @@ static AOM_INLINE int get_rmb_list_index(const MV_REFERENCE_FRAME ref_frame) {
+@@ -1835,16 +2138,25 @@ static AOM_INLINE int get_rmb_list_index(const MV_REFERENCE_FRAME ref_frame) {
  }
  
  static AOM_INLINE bool check_rmb_cand(
@@ -712,11 +757,12 @@ index b50cd22ed5..d0b8e85244 100644
 +                             "y=%d,x=%d,y2=%d,x2=%d\n",
 +                             bank_idx, bank_count, *drl_pr_count, i,
 +                             cand_mv.this_mv.as_mv.row, cand_mv.this_mv.as_mv.col,
-+                             cand_mv.comp_mv.as_mv.row, cand_mv.comp_mv.as_mv.col);
++                             is_comp ? cand_mv.comp_mv.as_mv.row : 0,
++                             is_comp ? cand_mv.comp_mv.as_mv.col : 0);
          return false;
        }
      }
-@@ -1869,6 +2169,12 @@ static AOM_INLINE bool check_rmb_cand(
+@@ -1869,6 +2181,12 @@ static AOM_INLINE bool check_rmb_cand(
    ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
    ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
    ref_mv_stack[*refmv_count].cwp_idx = cand_mv.cwp_idx;
@@ -724,12 +770,12 @@ index b50cd22ed5..d0b8e85244 100644
 +                       bank_idx, bank_count, *drl_pr_count,
 +                       did_check ? "adding" : "tailing",
 +                       *refmv_count, cand_mv.this_mv.as_mv.row,
-+                       cand_mv.this_mv.as_mv.col, cand_mv.comp_mv.as_mv.row,
-+                       cand_mv.comp_mv.as_mv.col, REF_CAT_LEVEL);
++                       cand_mv.this_mv.as_mv.col, is_comp ? cand_mv.comp_mv.as_mv.row : 0,
++                       is_comp ? cand_mv.comp_mv.as_mv.col : 0, REF_CAT_LEVEL);
    ++*refmv_count;
  
    return true;
-@@ -1962,7 +2268,8 @@ static AOM_INLINE void add_derived_smvp_candidates(
+@@ -1962,7 +2280,8 @@ static AOM_INLINE void add_derived_smvp_candidates(
            ? AOMMIN(cm->features.max_bvp_drl_bits + 1, MAX_REF_BV_STACK_SIZE)
            : AOMMIN(cm->features.max_drl_bits + 1, MAX_REF_MV_STACK_SIZE);
    if (*refmv_count < max_ref_mv_count && derived_mv_count > 0) {
@@ -739,7 +785,7 @@ index b50cd22ed5..d0b8e85244 100644
                                 derived_mv_stack, derived_mv_count,
                                 max_ref_mv_count, drl_pr_count);
    }
-@@ -1996,7 +2303,8 @@ static AOM_INLINE void add_ref_mv_bank_candidates(
+@@ -1996,7 +2315,8 @@ static AOM_INLINE void add_ref_mv_bank_candidates(
            rmb_ref_frame[idx] != ref_frame)
          continue;
  
@@ -749,7 +795,7 @@ index b50cd22ed5..d0b8e85244 100644
                       xd->mi_row, xd->mi_col, block_width, block_height,
                       xd->plane[0].dst.width, xd->plane[0].dst.height,
                       drl_pr_count);
-@@ -2221,7 +2529,6 @@ static AOM_INLINE int generate_points_from_corners(
+@@ -2221,7 +2541,6 @@ static AOM_INLINE int generate_points_from_corners(
        valid_points++;
      }
    }
@@ -757,7 +803,7 @@ index b50cd22ed5..d0b8e85244 100644
    assert(valid_points <= 3);
    return valid_points;
  }
-@@ -2291,6 +2598,8 @@ static AOM_INLINE int generate_points_from_corners(
+@@ -2291,6 +2610,8 @@ static AOM_INLINE int generate_points_from_corners(
  #endif  // CONFIG_WRL_CORNER_MVS
  
  static int insert_mvp_candidate(
@@ -766,7 +812,7 @@ index b50cd22ed5..d0b8e85244 100644
      MV_REFERENCE_FRAME rf[2], CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
      uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
      MV_COMP_DATA_TYPE this_mv_col, MV_COMP_DATA_TYPE this_mv_row,
-@@ -2310,6 +2619,20 @@ static int insert_mvp_candidate(
+@@ -2310,6 +2631,20 @@ static int insert_mvp_candidate(
            (rf[1] == NONE_FRAME ||
             (rf[1] > NONE_FRAME &&
              ref_mv_stack[idx].comp_mv.as_int == ext_mv.comp_mv.as_int))) {
@@ -787,7 +833,7 @@ index b50cd22ed5..d0b8e85244 100644
          break;
        }
      }
-@@ -2320,8 +2643,22 @@ static int insert_mvp_candidate(
+@@ -2320,8 +2655,22 @@ static int insert_mvp_candidate(
        ref_mv_stack[idx].row_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
@@ -811,7 +857,7 @@ index b50cd22ed5..d0b8e85244 100644
        return 1;
      }
      return 0;
-@@ -2332,7 +2669,21 @@ static int insert_mvp_candidate(
+@@ -2332,7 +2681,21 @@ static int insert_mvp_candidate(
        ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
@@ -834,7 +880,7 @@ index b50cd22ed5..d0b8e85244 100644
        ++(*refmv_count);
        return 1;
      }
-@@ -2342,8 +2693,8 @@ static int insert_mvp_candidate(
+@@ -2342,8 +2705,8 @@ static int insert_mvp_candidate(
  }
  
  static AOM_INLINE void setup_ref_mv_list(
@@ -845,7 +891,7 @@ index b50cd22ed5..d0b8e85244 100644
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
      uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
      int_mv mv_ref_list[MAX_MV_REF_CANDIDATES], int_mv *gm_mv_candidates,
-@@ -2360,6 +2711,21 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2360,6 +2723,21 @@ static AOM_INLINE void setup_ref_mv_list(
    av1_set_ref_frame(rf, ref_frame);
    *refmv_count = 0;
  
@@ -867,7 +913,7 @@ index b50cd22ed5..d0b8e85244 100644
    int drl_pr_count = 0;
    int drl_dr_pr_count = 0;
    int drl_dr_single_pr_count = 0;
-@@ -2387,9 +2753,14 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2387,9 +2765,14 @@ static AOM_INLINE void setup_ref_mv_list(
    MVP_UNIT_STATUS row_smvp_state[4] = { 0 };
    get_row_smvp_states(cm, xd, row_smvp_state);
  
@@ -882,7 +928,22 @@ index b50cd22ed5..d0b8e85244 100644
  #if CONFIG_WRL_CORNER_MVS
  // 0: top_left, top_right, bottom_left
  // 1: top, top_right_next, bottom_left
-@@ -2488,10 +2859,14 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2428,6 +2811,14 @@ static AOM_INLINE void setup_ref_mv_list(
+         if (valid_model && !cand_warp_param.invalid &&
+             !is_this_param_already_in_list(*valid_num_warp_candidates,
+                                            warp_param_stack, cand_warp_param)) {
++            if (have_warp)
++            DEBUG_REFMV_printf("MFC[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d "
++                               "from tl=y:%d,x:%d,bl=y:%d,x:%d,tr=y:%d,x:%d\n",
++                               iter, cand_warp_param.wmmat[0], cand_warp_param.wmmat[1],
++                               cand_warp_param.wmmat[2], cand_warp_param.wmmat[3],
++                               cand_warp_param.wmmat[4], cand_warp_param.wmmat[5],
++                               cand_warp_param.wmtype, mvs_32[1], mvs_32[0], mvs_32[5],
++                               mvs_32[4], mvs_32[3], mvs_32[2]);
+           insert_neighbor_warp_candidate(warp_param_stack, &cand_warp_param,
+                                          *valid_num_warp_candidates,
+                                          PROJ_SPATIAL);
+@@ -2488,12 +2879,17 @@ static AOM_INLINE void setup_ref_mv_list(
  
    const int is_tmvp_high_priority = assign_tmvp_high_priority(cm, rf);
    if (is_tmvp_high_priority) {
@@ -895,9 +956,63 @@ index b50cd22ed5..d0b8e85244 100644
 +    DEBUG_REFMV_printf("Spatial MVP [%d|%d]\n", *refmv_count,
 +                       have_warp ? *valid_num_warp_candidates : 0);
    if (xd->left_available) {
-     scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
++    scan_blk_mbmi(DB_ARGS(have_warp, "bml")
++                  cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
                    ref_mv_stack, ref_mv_weight, &col_match_count, &newmv_count,
-@@ -2555,10 +2930,14 @@ static AOM_INLINE void setup_ref_mv_list(
+                   gm_mv_candidates, 1, single_mv, &single_mv_count,
+                   derived_mv_stack, derived_mv_weight, &derived_mv_count,
+@@ -2503,7 +2899,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   }
+ 
+   if (row_smvp_state[0].is_available) {
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[0].row_offset,
++    scan_blk_mbmi(DB_ARGS(have_warp, "rmt")
++                  cm, xd, mi_row, mi_col, rf, row_smvp_state[0].row_offset,
+                   row_smvp_state[0].col_offset, ref_mv_stack, ref_mv_weight,
+                   &row_match_count, &newmv_count, gm_mv_candidates, 1,
+                   single_mv, &single_mv_count, derived_mv_stack,
+@@ -2514,7 +2911,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   }
+ 
+   if (height_at_least_two) {
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, 0, -1, ref_mv_stack,
++    scan_blk_mbmi(DB_ARGS(have_warp, "tml")
++                  cm, xd, mi_row, mi_col, rf, 0, -1, ref_mv_stack,
+                   ref_mv_weight, &col_match_count, &newmv_count,
+                   gm_mv_candidates, 1, single_mv, &single_mv_count,
+                   derived_mv_stack, derived_mv_weight, &derived_mv_count,
+@@ -2524,7 +2922,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   }
+ 
+   if (row_smvp_state[1].is_available) {
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[1].row_offset,
++    scan_blk_mbmi(DB_ARGS(have_warp, "lmt")
++                  cm, xd, mi_row, mi_col, rf, row_smvp_state[1].row_offset,
+                   row_smvp_state[1].col_offset, ref_mv_stack, ref_mv_weight,
+                   &row_match_count, &newmv_count, gm_mv_candidates, 1,
+                   single_mv, &single_mv_count, derived_mv_stack,
+@@ -2534,7 +2933,8 @@ static AOM_INLINE void setup_ref_mv_list(
+                   &drl_dr_single_pr_count);
+   }
+   if (has_bl) {
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, xd->height, -1, ref_mv_stack,
++    scan_blk_mbmi(DB_ARGS(have_warp, "bl")
++                  cm, xd, mi_row, mi_col, rf, xd->height, -1, ref_mv_stack,
+                   ref_mv_weight, &col_match_count, &newmv_count,
+                   gm_mv_candidates, 1, single_mv, &single_mv_count,
+                   derived_mv_stack, derived_mv_weight, &derived_mv_count,
+@@ -2544,7 +2944,8 @@ static AOM_INLINE void setup_ref_mv_list(
+   }
+ 
+   if (row_smvp_state[2].is_available) {
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[2].row_offset,
++    scan_blk_mbmi(DB_ARGS(have_warp, "tr")
++                  cm, xd, mi_row, mi_col, rf, row_smvp_state[2].row_offset,
+                   row_smvp_state[2].col_offset, ref_mv_stack, ref_mv_weight,
+                   &row_match_count, &newmv_count, gm_mv_candidates, 1,
+                   single_mv, &single_mv_count, derived_mv_stack,
+@@ -2555,14 +2956,19 @@ static AOM_INLINE void setup_ref_mv_list(
    }
  
    if (!is_tmvp_high_priority) {
@@ -912,7 +1027,13 @@ index b50cd22ed5..d0b8e85244 100644
    if (row_smvp_state[3].is_available) {
      uint8_t dummy_ref_match_count = 0;
      uint8_t dummy_new_mv_count = 0;
-@@ -2575,6 +2954,8 @@ static AOM_INLINE void setup_ref_mv_list(
+-    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[3].row_offset,
++    scan_blk_mbmi(DB_ARGS(have_warp, "tl")
++                  cm, xd, mi_row, mi_col, rf, row_smvp_state[3].row_offset,
+                   row_smvp_state[3].col_offset, ref_mv_stack, ref_mv_weight,
+                   &dummy_ref_match_count, &dummy_new_mv_count, gm_mv_candidates,
+                   1, single_mv, &single_mv_count, derived_mv_stack,
+@@ -2575,6 +2981,8 @@ static AOM_INLINE void setup_ref_mv_list(
    const uint8_t nearest_refmv_count = *refmv_count;
  
    if (xd->left_available) {
@@ -921,7 +1042,17 @@ index b50cd22ed5..d0b8e85244 100644
      for (int idx = 2; idx <= MVREF_COLS; ++idx) {
        const int col_offset = -(idx << 1) + 1 + col_adj;
        const MVP_UNIT_STATUS col_units_status[SMVP_COL_SEARCH_COUNT] = {
-@@ -2628,6 +3009,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2587,7 +2995,8 @@ static AOM_INLINE void setup_ref_mv_list(
+               is_valid_candidate(xd, mi_row, mi_col,
+                                  col_units_status[unit_idx].row_offset,
+                                  col_units_status[unit_idx].col_offset, -1)) {
+-            scan_blk_mbmi(cm, xd, mi_row, mi_col, rf,
++            scan_blk_mbmi(DB_ARGS(have_warp, unit_idx ? "ext_tml" : "ext_bml")
++                          cm, xd, mi_row, mi_col, rf,
+                           col_units_status[unit_idx].row_offset,
+                           col_units_status[unit_idx].col_offset, ref_mv_stack,
+                           ref_mv_weight, &col_match_count, &newmv_count,
+@@ -2628,6 +3037,8 @@ static AOM_INLINE void setup_ref_mv_list(
    }
  
    const int is_compound = is_inter_ref_frame(rf[1]);
@@ -930,7 +1061,7 @@ index b50cd22ed5..d0b8e85244 100644
    if (is_compound) {
      add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
                                  ref_mv_weight, derived_mv_stack,
-@@ -2653,6 +3036,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2653,6 +3064,8 @@ static AOM_INLINE void setup_ref_mv_list(
      }
    }
  
@@ -939,7 +1070,7 @@ index b50cd22ed5..d0b8e85244 100644
    if (rf[1] == NONE_FRAME && mv_ref_list != NULL) {
      for (int idx = *refmv_count; idx < MAX_MV_REF_CANDIDATES; ++idx) {
        mv_ref_list[idx].as_int = gm_mv_candidates[0].as_int;
-@@ -2676,6 +3061,13 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2676,6 +3089,13 @@ static AOM_INLINE void setup_ref_mv_list(
              (rf[1] == NONE_FRAME ||
               (rf[1] > NONE_FRAME && ref_mv_stack[idx].comp_mv.as_int ==
                                          gm_mv_candidates[1].as_int))) {
@@ -953,7 +1084,7 @@ index b50cd22ed5..d0b8e85244 100644
            break;
          }
        }
-@@ -2688,6 +3080,13 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2688,6 +3108,13 @@ static AOM_INLINE void setup_ref_mv_list(
          ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
          ref_mv_weight[idx] = REF_CAT_LEVEL;
@@ -967,7 +1098,7 @@ index b50cd22ed5..d0b8e85244 100644
          ++(*refmv_count);
        }
      } else {
-@@ -2698,6 +3097,13 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2698,6 +3125,13 @@ static AOM_INLINE void setup_ref_mv_list(
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = REF_CAT_LEVEL;
@@ -981,7 +1112,7 @@ index b50cd22ed5..d0b8e85244 100644
          ++(*refmv_count);
        }
      }
-@@ -2710,6 +3116,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2710,6 +3144,8 @@ static AOM_INLINE void setup_ref_mv_list(
        max_ext_stack_size = 6;
  
      if (max_ext_stack_size) {
@@ -990,7 +1121,7 @@ index b50cd22ed5..d0b8e85244 100644
        MV_COMP_DATA_TYPE row = 0;
        MV_COMP_DATA_TYPE col = 0;
        MV_COMP_DATA_TYPE comp_mv_row = 0;
-@@ -2724,6 +3132,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2724,6 +3160,7 @@ static AOM_INLINE void setup_ref_mv_list(
          comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
          curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
          added_ext_cnt += insert_mvp_candidate(
@@ -998,7 +1129,7 @@ index b50cd22ed5..d0b8e85244 100644
              rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
              curr_mv_weight, refmv_count, &drl_pr_count);
          if (*refmv_count < MAX_REF_MV_STACK_SIZE &&
-@@ -2735,6 +3144,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2735,6 +3172,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
@@ -1006,7 +1137,7 @@ index b50cd22ed5..d0b8e85244 100644
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2748,6 +3158,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2748,6 +3186,7 @@ static AOM_INLINE void setup_ref_mv_list(
          comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
          curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
          added_ext_cnt += insert_mvp_candidate(
@@ -1014,7 +1145,7 @@ index b50cd22ed5..d0b8e85244 100644
              rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
              curr_mv_weight, refmv_count, &drl_pr_count);
  
-@@ -2760,6 +3171,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2760,6 +3199,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
@@ -1022,7 +1153,7 @@ index b50cd22ed5..d0b8e85244 100644
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2773,6 +3185,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2773,6 +3213,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
@@ -1030,7 +1161,7 @@ index b50cd22ed5..d0b8e85244 100644
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2785,6 +3198,7 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2785,6 +3226,7 @@ static AOM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
@@ -1038,7 +1169,7 @@ index b50cd22ed5..d0b8e85244 100644
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
            (void)added_ext_cnt;
-@@ -2795,6 +3209,9 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2795,6 +3237,9 @@ static AOM_INLINE void setup_ref_mv_list(
  
    if (warp_param_stack && valid_num_warp_candidates &&
        *valid_num_warp_candidates < max_num_of_warp_candidates) {
@@ -1048,7 +1179,18 @@ index b50cd22ed5..d0b8e85244 100644
      // Insert warp parameters from the bank
  #if WARP_CU_BANK
      const WARP_PARAM_BANK *warp_param_bank = &xd->warp_param_bank;
-@@ -2821,6 +3238,9 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2817,10 +3262,20 @@ static AOM_INLINE void setup_ref_mv_list(
+         insert_neighbor_warp_candidate(warp_param_stack, &cand_warp_param,
+                                        *valid_num_warp_candidates,
+                                        PROJ_PARAM_BANK);
++        if (have_warp)
++        DEBUG_REFMV_printf("Bank[%d/%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
++                           idx_bank, *valid_num_warp_candidates,
++                           cand_warp_param.wmmat[0], cand_warp_param.wmmat[1],
++                           cand_warp_param.wmmat[2], cand_warp_param.wmmat[3],
++                           cand_warp_param.wmmat[4], cand_warp_param.wmmat[5],
++                           cand_warp_param.wmtype);
+         (*valid_num_warp_candidates)++;
        }
      }
  
@@ -1058,7 +1200,21 @@ index b50cd22ed5..d0b8e85244 100644
      // Insert Global motion of the current
      if (*valid_num_warp_candidates < max_num_of_warp_candidates) {
        if (!xd->global_motion[ref_frame].invalid &&
-@@ -2834,6 +3254,9 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2830,10 +3285,23 @@ static AOM_INLINE void setup_ref_mv_list(
+         insert_neighbor_warp_candidate(
+             warp_param_stack, &xd->global_motion[ref_frame],
+             *valid_num_warp_candidates, PROJ_GLOBAL_MOTION);
++        if (have_warp)
++        DEBUG_REFMV_printf("GMV[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
++                           *valid_num_warp_candidates,
++                           xd->global_motion[ref_frame].wmmat[0],
++                           xd->global_motion[ref_frame].wmmat[1],
++                           xd->global_motion[ref_frame].wmmat[2],
++                           xd->global_motion[ref_frame].wmmat[3],
++                           xd->global_motion[ref_frame].wmmat[4],
++                           xd->global_motion[ref_frame].wmmat[5],
++                           xd->global_motion[ref_frame].wmtype);
+         (*valid_num_warp_candidates)++;
        }
      }
  
@@ -1068,7 +1224,21 @@ index b50cd22ed5..d0b8e85244 100644
      // Filled with default values( currently all params are zeros)
      int max_num_of_default_allowed = AOMMIN(2, max_num_of_warp_candidates);
      int current_number_of_defaults = 0;
-@@ -2852,6 +3275,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2844,6 +3312,13 @@ static AOM_INLINE void setup_ref_mv_list(
+          cand_num++) {
+       warp_param_stack[cand_num].wm_params = default_warp_params;
+       warp_param_stack[cand_num].proj_type = PROJ_DEFAULT;
++        if (have_warp)
++        DEBUG_REFMV_printf("Defaults[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
++                           *valid_num_warp_candidates,
++                           default_warp_params.wmmat[0], default_warp_params.wmmat[1],
++                           default_warp_params.wmmat[2], default_warp_params.wmmat[3],
++                           default_warp_params.wmmat[4], default_warp_params.wmmat[5],
++                           default_warp_params.wmtype);
+       (*valid_num_warp_candidates)++;
+       current_number_of_defaults++;
+     }
+@@ -2852,6 +3327,8 @@ static AOM_INLINE void setup_ref_mv_list(
    // If there are open slots in reference BV candidate list
    // fetch reference BVs from the default BVPs
    if (xd->mi[0]->use_intrabc[xd->tree_type == CHROMA_PART]) {
@@ -1077,7 +1247,7 @@ index b50cd22ed5..d0b8e85244 100644
      const int w = xd->width * MI_SIZE;
      const int h = xd->height * MI_SIZE;
      const int sb_width = block_size_wide[cm->sb_size];
-@@ -2874,6 +3299,8 @@ static AOM_INLINE void setup_ref_mv_list(
+@@ -2874,6 +3351,8 @@ static AOM_INLINE void setup_ref_mv_list(
        add_to_ref_bv_list(tmp_mv, ref_mv_stack, ref_mv_weight, refmv_count);
      }
    }
@@ -1086,7 +1256,7 @@ index b50cd22ed5..d0b8e85244 100644
  }
  
  void get_skip_mode_ref_offsets(const AV1_COMMON *cm, int ref_order_hint[2]) {
-@@ -3001,7 +3428,7 @@ void av1_find_mv_refs(
+@@ -3001,7 +3480,7 @@ void av1_find_mv_refs(
          (SKIP_MODE_MVP_LIST *)&(xd->skip_mvp_candidate_list);
      av1_initialize_ref_mv_stack(skip_list->ref_mv_stack,
                                  USABLE_REF_MV_STACK_SIZE);
@@ -1095,7 +1265,7 @@ index b50cd22ed5..d0b8e85244 100644
                        skip_list->ref_mv_stack, skip_list->weight,
                        mv_ref_list ? mv_ref_list[ref_frame] : NULL, gm_mv,
                        mi_row, mi_col, NULL, 0, NULL);
-@@ -3023,14 +3450,14 @@ void av1_find_mv_refs(
+@@ -3023,14 +3502,14 @@ void av1_find_mv_refs(
      } else {
        av1_initialize_ref_mv_stack(ref_mv_stack[rf[0]], MAX_REF_MV_STACK_SIZE);
      }
@@ -1112,7 +1282,7 @@ index b50cd22ed5..d0b8e85244 100644
        assert(rf[0] == mi->ref_frame[0]);
        assert(rf[1] == mi->ref_frame[1]);
        const BLOCK_SIZE bsize = mi->sb_type[PLANE_TYPE_Y];
-@@ -3040,7 +3467,7 @@ void av1_find_mv_refs(
+@@ -3040,7 +3519,7 @@ void av1_find_mv_refs(
        gm_mv[1].as_int = 0;
  
        av1_initialize_ref_mv_stack(ref_mv_stack[rf[1]], MAX_REF_MV_STACK_SIZE);
@@ -1121,7 +1291,7 @@ index b50cd22ed5..d0b8e85244 100644
                          ref_mv_stack[rf[1]], ref_mv_weight[rf[1]],
                          mv_ref_list ? mv_ref_list[rf[1]] : NULL, gm_mv, mi_row,
                          mi_col, derive_wrl ? warp_param_stack[rf[1]] : NULL,
-@@ -4690,6 +5117,9 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
+@@ -4690,6 +5169,9 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
    if (xd->tree_type == CHROMA_PART) return;
    const int mi_sb_size = cm->mib_size;
    const int mi_sb_size_log2 = cm->mib_size_log2;
@@ -1131,7 +1301,7 @@ index b50cd22ed5..d0b8e85244 100644
    const int mi_row_in_sb = xd->mi_row % mi_sb_size;
    const int mi_col_in_sb = xd->mi_col % mi_sb_size;
    const int rmb_unit_mi_size_log2 = mi_sb_size_log2 - SB_TO_RMB_UNITS_LOG2;
-@@ -4704,23 +5134,79 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
+@@ -4704,23 +5186,79 @@ void decide_rmb_unit_update_count(const AV1_COMMON *const cm,
      xd->ref_mv_bank.remain_hits =
          AOMMAX(rmb_units_count, BANK_1ST_UNIT_UPDATE_COUNT);
      xd->ref_mv_bank.rmb_unit_hits = 0;
@@ -1211,7 +1381,7 @@ index b50cd22ed5..d0b8e85244 100644
        return;
      }
  
-@@ -4728,7 +5214,13 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+@@ -4728,7 +5266,13 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
      ref_mv_bank->rmb_unit_hits++;
    } else {
      // If max hits have been reached return.
@@ -1226,7 +1396,7 @@ index b50cd22ed5..d0b8e85244 100644
    }
  
    // else increment count and proceed with updating.
-@@ -4768,11 +5260,18 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+@@ -4768,11 +5312,18 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
          rmb_ref_frame[idx0] = rmb_ref_frame[idx1];
        }
      }
@@ -1245,7 +1415,7 @@ index b50cd22ed5..d0b8e85244 100644
      return;
    }
  
-@@ -4785,11 +5284,16 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
+@@ -4785,11 +5336,16 @@ static INLINE void update_ref_mv_bank(const AV1_COMMON *const cm,
      rmb_ref_frame[idx] = ref_frame;
    }
    queue[idx].cwp_idx = mbmi->cwp_idx;
@@ -1262,7 +1432,7 @@ index b50cd22ed5..d0b8e85244 100644
  }
  
  void av1_update_ref_mv_bank(const AV1_COMMON *const cm, MACROBLOCKD *const xd,
-@@ -4852,12 +5356,40 @@ void span_submv(const AV1_COMMON *cm, SUBMB_INFO **submi, int mi_row,
+@@ -4852,12 +5408,40 @@ void span_submv(const AV1_COMMON *cm, SUBMB_INFO **submi, int mi_row,
    }
  }
  
@@ -1304,7 +1474,7 @@ index b50cd22ed5..d0b8e85244 100644
  #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
                                            int cand_from_sb_above,
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
-@@ -4877,7 +5409,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4877,7 +5461,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
        int found = -1;
  
        // If max hits have been reached return.
@@ -1317,7 +1487,7 @@ index b50cd22ed5..d0b8e85244 100644
        // else increment count and proceed with updating.
        ++warp_param_bank->wpb_sb_hits;
  
-@@ -4914,6 +5450,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4914,6 +5502,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
          }
          const int tail = (start_idx + count - 1) % WARP_PARAM_BANK_SIZE;
          queue[tail] = cand;
@@ -1334,7 +1504,7 @@ index b50cd22ed5..d0b8e85244 100644
          return;
        }
  
-@@ -4933,6 +5479,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4933,6 +5531,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
        } else {
          ++warp_param_bank->wpb_start_idx[ref_frame];
        }
@@ -1351,7 +1521,7 @@ index b50cd22ed5..d0b8e85244 100644
      }
    }
  }
-@@ -4944,7 +5500,8 @@ void av1_update_warp_param_bank(const AV1_COMMON *const cm,
+@@ -4944,7 +5552,8 @@ void av1_update_warp_param_bank(const AV1_COMMON *const cm,
                                  const MB_MODE_INFO *const mbmi) {
    (void)cm;
    if (is_warp_mode(mbmi->motion_mode)) {
@@ -2059,7 +2229,7 @@ index 70e22ec4ea..a9dff1b78d 100644
             features->enable_bawp,
             features->allow_warpmv_mode,
 diff --git a/av1/decoder/decodemv.c b/av1/decoder/decodemv.c
-index 5cf0f0e74f..1b1a7f793f 100644
+index 5cf0f0e74f..cfa5a41881 100644
 --- a/av1/decoder/decodemv.c
 +++ b/av1/decoder/decodemv.c
 @@ -42,7 +42,8 @@
@@ -3433,17 +3603,39 @@ index 5cf0f0e74f..1b1a7f793f 100644
    const PRECISION_SET *precision_def =
        &av1_mv_precision_sets[mbmi->mb_precision_set];
    int nsymbs = precision_def->num_precisions - 1;
-@@ -2784,7 +3146,8 @@ MvSubpelPrecision av1_read_pb_mv_precision(AV1_COMMON *const cm,
+@@ -2784,7 +3146,30 @@ MvSubpelPrecision av1_read_pb_mv_precision(AV1_COMMON *const cm,
    return av1_get_precision_from_index(mbmi, down);
  }
  
 -static void read_inter_block_mode_info(AV1Decoder *const pbi,
++#if DEBUG_BLOCK_INFO
++static void debug_warp_matrix(const AV1_COMMON *cm, const int mi_row,
++                              const int mi_col, const MB_MODE_INFO *mbmi,
++                              const int idx, const int depth)
++{
++#define signabs(v) v < 0 ? '-' : ' ', abs(v)
++    DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ],t=%d "
++                       "mv=y:%d,x:%d\n", depth, "",
++                       signabs(mbmi->wm_params[idx].wmmat[0]),
++                       signabs(mbmi->wm_params[idx].wmmat[1]),
++                       signabs(mbmi->wm_params[idx].wmmat[2]),
++                       signabs(mbmi->wm_params[idx].wmmat[3]),
++                       signabs(mbmi->wm_params[idx].wmmat[4]),
++                       signabs(mbmi->wm_params[idx].wmmat[5]),
++                       mbmi->wm_params[idx].invalid ? -1 : mbmi->wm_params[idx].wmtype,
++                       mbmi->mv[idx].as_mv.row, mbmi->mv[idx].as_mv.col);
++#undef signabs
++}
++#else
++#define debug_warp_matrix(...)
++#endif
++
 +static void read_inter_block_mode_info(DB_ONLY(const int depth)
 +                                       AV1Decoder *const pbi,
                                         DecoderCodingBlock *dcb,
                                         MB_MODE_INFO *const mbmi,
                                         aom_reader *r) {
-@@ -2826,7 +3189,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2826,7 +3211,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
  
    av1_collect_neighbors_ref_counts(xd);
  
@@ -3456,7 +3648,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
    int is_compound = has_second_ref(mbmi);
  
    const MV_REFERENCE_FRAME ref_frame = av1_ref_frame_type(mbmi->ref_frame);
-@@ -2860,10 +3227,27 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2860,10 +3249,27 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      read_drl_idx(cm->features.max_drl_bits,
                   av1_mode_context_pristine(inter_mode_ctx, mbmi->ref_frame),
                   ec_ctx, mbmi, r);
@@ -3484,7 +3676,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
  
      is_compound = has_second_ref(mbmi);
      if (!is_compound) {
-@@ -2880,9 +3264,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2880,9 +3286,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
        const int16_t mode_ctx =
            av1_mode_context_analyzer(inter_mode_ctx, mbmi->ref_frame);
        if (is_compound)
@@ -3498,7 +3690,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
  
        mbmi->use_amvd = 0;
        if (cm->seq_params.enable_adaptive_mvd && allow_amvd_mode(mbmi->mode)) {
-@@ -2892,12 +3278,65 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2892,12 +3300,65 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          mbmi->use_amvd =
              aom_read_symbol(r, ec_ctx->amvd_mode_cdf[amvd_index][amvd_ctx], 2,
                              ACCT_INFO("use_amvd"));
@@ -3564,7 +3756,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
  
        if (cm->features.enable_bawp &&
            av1_allow_bawp(cm, mbmi, xd->mi_row, xd->mi_col)) {
-@@ -2917,14 +3356,17 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2917,14 +3378,17 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
                r, xd->tile_ctx->explicit_bawp_scale_cdf, EXPLICIT_BAWP_SCALE_CNT,
                ACCT_INFO("explicit_bawp_scales"));
          }
@@ -3589,7 +3781,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
        }
  
        for (int ref = 0; ref < 1 + has_second_ref(mbmi); ++ref) {
-@@ -2941,7 +3383,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2941,7 +3405,8 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          if (has_second_ref(mbmi))
            mbmi->num_proj_ref[1] = av1_findSamples(cm, xd, pts1, pts1_inref, 1);
        }
@@ -3599,7 +3791,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
        int is_warpmv_warp_causal =
            ((mbmi->motion_mode == WARP_CAUSAL) && mbmi->mode == WARPMV);
        if (mbmi->motion_mode == WARP_DELTA || is_warpmv_warp_causal) {
-@@ -2952,27 +3395,39 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -2952,27 +3417,39 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
              xd->valid_num_warp_candidates[av1_ref_frame_type(mbmi->ref_frame)],
              NULL);
  
@@ -3643,7 +3835,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
        }
        if (enable_adaptive_mvd_resolution(cm, mbmi))
          set_amvd_mv_precision(mbmi, mbmi->max_mv_precision);
-@@ -3022,13 +3477,14 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3022,13 +3499,14 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
    }
  
    const int mv_corrupted_flag =
@@ -3660,7 +3852,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
    }
  
    mbmi->warp_inter_intra = 0;
-@@ -3061,10 +3517,15 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3061,10 +3539,15 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
          }
        }
      }  // if (mbmi->warp_inter_intra)
@@ -3677,7 +3869,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
    }
  
    // init
-@@ -3079,8 +3540,9 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3079,8 +3562,9 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      const int masked_compound_used = is_any_masked_compound_used(bsize) &&
                                       cm->seq_params.enable_masked_compound;
  
@@ -3688,7 +3880,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
        mbmi->comp_group_idx = (uint8_t)aom_read_symbol(
            r, ec_ctx->comp_group_idx_cdf[ctx_comp_group_idx], 2,
            ACCT_INFO("comp_group_idx"));
-@@ -3119,11 +3581,28 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3119,11 +3603,28 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
              aom_read_literal(r, MAX_DIFFWTD_MASK_BITS, ACCT_INFO("mask_type"));
        }
      }
@@ -3718,7 +3910,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
      if (is_cwp_allowed(mbmi) && mbmi->skip_mode)
        mbmi->cwp_idx =
            xd->skip_mvp_candidate_list.ref_mv_stack[mbmi->ref_mv_idx[0]].cwp_idx;
-@@ -3132,10 +3611,13 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3132,10 +3633,13 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
      mbmi->refinemv_flag = 0;
    }
  
@@ -3733,28 +3925,22 @@ index 5cf0f0e74f..1b1a7f793f 100644
  
    if (mbmi->motion_mode == WARP_CAUSAL) {
      mbmi->wm_params[0].wmtype = DEFAULT_WMTYPE;
-@@ -3226,13 +3708,37 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
+@@ -3226,13 +3730,31 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
    }
  
    if (xd->tree_type != LUMA_PART) xd->cfl.store_y = store_cfl_required(cm, xd);
 +    if (is_inter_ref_frame(mbmi->ref_frame[1])) {
-+        // FIXME newmv^2 can be WARP_CAUSAL?
-+        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n", depth, "",
-+                           mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col,
-+                           mbmi->mv[1].as_mv.row, mbmi->mv[1].as_mv.col);
++        if (mbmi->motion_mode >= WARP_CAUSAL) {
++            for (int i = 0; i < 2; i++)
++                debug_warp_matrix(cm, mi_row, mi_col, mbmi, i, depth);
++        } else {
++            DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n", depth, "",
++                               mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col,
++                               mbmi->mv[1].as_mv.row, mbmi->mv[1].as_mv.col);
++        }
 +    } else {
 +        if (mbmi->motion_mode >= WARP_CAUSAL) {
-+#define signabs(v) v < 0 ? '-' : ' ', abs(v)
-+            DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ], "
-+                               "mv=y:%d,x:%d\n", depth, "",
-+                               signabs(mbmi->wm_params[0].wmmat[0]),
-+                               signabs(mbmi->wm_params[0].wmmat[1]),
-+                               signabs(mbmi->wm_params[0].wmmat[2]),
-+                               signabs(mbmi->wm_params[0].wmmat[3]),
-+                               signabs(mbmi->wm_params[0].wmmat[4]),
-+                               signabs(mbmi->wm_params[0].wmmat[5]),
-+                               mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col);
-+#undef signabs
++            debug_warp_matrix(cm, mi_row, mi_col, mbmi, 0, depth);
 +        } else {
 +            DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n", depth, "",
 +                               mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col);
@@ -3772,7 +3958,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
                                         DecoderCodingBlock *dcb, aom_reader *r) {
    AV1_COMMON *const cm = &pbi->common;
    MACROBLOCKD *const xd = &dcb->xd;
-@@ -3256,9 +3762,13 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3256,9 +3778,13 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->refinemv_flag = 0;
  
    if (xd->tree_type != CHROMA_PART)
@@ -3788,7 +3974,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
  
    mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
  
-@@ -3275,7 +3785,8 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3275,7 +3801,8 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    }
  
    if (!mbmi->skip_mode) {
@@ -3798,7 +3984,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
    }
  
    if (!inter_block &&
-@@ -3288,11 +3799,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3288,11 +3815,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          aom_read_symbol(r, xd->tile_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -3816,7 +4002,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -3308,16 +3824,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3308,16 +3840,16 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
    mbmi->warp_inter_intra = 0;
  
    if (!cm->seg.segid_preskip && xd->tree_type != CHROMA_PART)
@@ -3838,7 +4024,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -3334,7 +3850,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3334,7 +3866,7 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      mbmi->ref_frame[1] = NONE_FRAME;
      mbmi->palette_mode_info.palette_size[0] = 0;
      mbmi->palette_mode_info.palette_size[1] = 0;
@@ -3847,7 +4033,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -3343,9 +3859,9 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
+@@ -3343,9 +3875,9 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
      }
    }
    if (inter_block)
@@ -3859,7 +4045,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
  }
  
  static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
-@@ -3371,7 +3887,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
+@@ -3371,7 +3903,8 @@ static void intra_copy_frame_mvs(AV1_COMMON *const cm, int mi_row, int mi_col,
    }
  }
  
@@ -3869,7 +4055,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
                          aom_reader *r, int x_inside_boundary,
                          int y_inside_boundary) {
    AV1_COMMON *const cm = &pbi->common;
-@@ -3383,7 +3900,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3383,7 +3916,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
      mi->sb_type[PLANE_TYPE_UV] = mi->sb_type[PLANE_TYPE_Y];
  
    if (frame_is_intra_only(cm)) {
@@ -3878,7 +4064,7 @@ index 5cf0f0e74f..1b1a7f793f 100644
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_intrabc_block(mbmi, xd->tree_type)) {
-@@ -3396,7 +3913,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3396,7 +3929,7 @@ void av1_read_mode_info(AV1Decoder *const pbi, DecoderCodingBlock *dcb,
        intra_copy_frame_mvs(cm, xd->mi_row, xd->mi_col, x_inside_boundary,
                             y_inside_boundary);
    } else {

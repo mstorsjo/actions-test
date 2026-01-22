@@ -527,7 +527,7 @@ static void debug_warp_matrix(const int depth,
                               const Av1Block *const b, const int r)
 {
 #define signabs(v) v < 0 ? '-' : ' ', abs(v)
-    DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ], "
+    DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ],t=%d "
                        "mv=y:%d,x:%d\n", depth, "",
                        signabs(t->warpmv[r].matrix[0]),
                        signabs(t->warpmv[r].matrix[1]),
@@ -535,7 +535,7 @@ static void debug_warp_matrix(const int depth,
                        signabs(t->warpmv[r].matrix[3]),
                        signabs(t->warpmv[r].matrix[4]),
                        signabs(t->warpmv[r].matrix[5]),
-                       b->mv[r].y, b->mv[r].x);
+                       t->warpmv[r].type, b->mv[r].y, b->mv[r].x);
 #undef signabs
 }
 #else

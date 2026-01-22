@@ -468,7 +468,8 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
                               st->mv, st->cnt, 6, 1, 8, mvp, &st->iter_cntr, 16);
 }
 
-static int model_from_corners(DB_ARGS(const int idx)
+static int model_from_corners(DB_ARGS(const refmvs_frame *const rf, const int by4,
+                                      const int bx4, const int idx)
                               int32_t *const mat, const mv topleft_mv,
                               const mv topright_mv, const mv bottomleft_mv,
                               const int xpos, const int ypos,
@@ -490,9 +491,9 @@ static int model_from_corners(DB_ARGS(const int idx)
     mat[5] = iclip64to32(((bottomleft_mv.y - topleft_mv.y) * (1LL << 11)) >> b_dim[3],
                          INT32_MIN, INT32_MAX);
     mat[0] = iclip64to32(topleft_mv.x * (1LL << 13) - (int64_t) xpos * mat[2] -
-                         (int64_t) ypos * mat[3], -0x7ffffc0, 0x7ffffc0);
+                         (int64_t) ypos * mat[3], -0x8000000, 0x7ffffc0);
     mat[1] = iclip64to32(topleft_mv.y * (1LL << 13) - (int64_t) xpos * mat[4] -
-                         (int64_t) ypos * mat[5], -0x7ffffc0, 0x7ffffc0);
+                         (int64_t) ypos * mat[5], -0x8000000, 0x7ffffc0);
 #define reduce(i) \
     mat[i] = iclip(mat[i], -0x7fc0, 0x7fc0); \
     mat[i] += 0x20 - (mat[i] < 0); \
@@ -505,6 +506,12 @@ static int model_from_corners(DB_ARGS(const int idx)
     mat[2] += 0x10000;
     mat[5] += 0x10000;
     mat[6] = DAV1D_WM_TYPE_AFFINE;
+
+    DEBUG_REFMV_printf("MFC[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d "
+                       "from tl=y:%d,x:%d,bl=y:%d,x:%d,tr=y:%d,x:%d\n",
+                       idx, mat[0], mat[1], mat[2], mat[3], mat[4], mat[5],
+                       mat[6], topleft_mv.y, topleft_mv.x, bottomleft_mv.y,
+                       bottomleft_mv.x, topright_mv.y, topright_mv.x);
 
     return 1;
 }
@@ -633,7 +640,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 const mv tr_mv = !(rmt->mf & 2) ? rmt->mv.mv[tr_ref_idx] :
                     get_warpmv_proj(rmt->m, (bx4 + bw4) * 4, by4 * 4,
                                     minx, maxx, miny, maxy);
-                cnt[1] = model_from_corners(DB_ARGS(0)
+                cnt[1] = model_from_corners(DB_ARGS(rf, by4, bx4, 0)
                                             warp[0], tl_mv, tr_mv, bl_mv,
                                             bx4 * 4, by4 * 4, b_dim);
             }
@@ -649,7 +656,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 const mv tr_mv = !(tr->mf & 2) ? tr->mv.mv[tr_ref_idx] :
                     get_warpmv_proj(tr->m, (bx4 + bw4) * 4, by4 * 4,
                                     minx, maxx, miny, maxy);
-                cnt[1] = model_from_corners(DB_ARGS(1)
+                cnt[1] = model_from_corners(DB_ARGS(rf, by4, bx4, 1)
                                             warp[0], tl_mv, tr_mv, bl_mv,
                                             bx4 * 4, by4 * 4, b_dim);
             }
@@ -683,54 +690,60 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         (((by4 + bh4 - 1) & (rf->sbsz - 1)) >> 1) * stride;
     const ptrdiff_t left_8x8x = (bx4 - 1) >> 1;
     if (bml) {
-        add_spatial_candidate(bh4 - 1, -1,
-                              rt, &st, 1, bml, bms_8x8y + left_8x8x,
-                              ref, gmv);
         if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0] &&
             bml->m[6] != DAV1D_WM_TYPE_INVALID)
         {
-            memcpy(warp[cnt[1]++], bml->m, sizeof(int32_t) * 7);
+#define add_matrix(var) do { \
+            DEBUG_REFMV_printf("Spatial[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d from %s\n", \
+                               cnt[1], var->m[0], var->m[1], var->m[2], \
+                               var->m[3], var->m[4], var->m[5], var->m[6], #var); \
+            memcpy(warp[cnt[1]++], var->m, sizeof(int32_t) * 7); \
+} while (0)
+            add_matrix(bml);
         }
+        add_spatial_candidate(bh4 - 1, -1,
+                              rt, &st, 1, bml, bms_8x8y + left_8x8x,
+                              ref, gmv);
     }
 
     // right-most top
     const ptrdiff_t top_8x8y = by4 & (rf->sbsz - 1) ?
         (((by4 - 1) & (rf->sbsz - 1)) >> 1) * stride : -stride;
     if (rmt) {
+        if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0] &&
+            rmt->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
+            add_matrix(rmt);
+        }
         const int xpos = abw4 - (1 << is_sb_boundary) - x_off;
         add_spatial_candidate(-1, xpos,
                               rt, &st, xpos >= 0, rmt,
                               top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
-        if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0] &&
-            rmt->m[6] != DAV1D_WM_TYPE_INVALID)
-        {
-            memcpy(warp[cnt[1]++], rmt->m, sizeof(int32_t) * 7);
-        }
     }
 
     // top-most left
     const refmvs_block *tml = NULL;
     if (have_left && bh4 > 1) {
         tml = &rt->r[(by4 & 63) * 128 + ((bx4 - 1) & 127)];
-        add_spatial_candidate(0, -1,
-                              rt, &st, 1, tml, tms_8x8y + left_8x8x, ref, gmv);
         if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0] &&
             tml->m[6] != DAV1D_WM_TYPE_INVALID)
         {
-            memcpy(warp[cnt[1]++], tml->m, sizeof(int32_t) * 7);
+            add_matrix(tml);
         }
+        add_spatial_candidate(0, -1,
+                              rt, &st, 1, tml, tms_8x8y + left_8x8x, ref, gmv);
     }
 
     // left-most top
     if (lmt) {
-        const int xpos = -x_off;
-        add_spatial_candidate(-1, xpos, rt, &st, !x_off, lmt,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0] &&
             lmt->m[6] != DAV1D_WM_TYPE_INVALID)
         {
-            memcpy(warp[cnt[1]++], lmt->m, sizeof(int32_t) * 7);
+            add_matrix(lmt);
         }
+        const int xpos = -x_off;
+        add_spatial_candidate(-1, xpos, rt, &st, !x_off, lmt,
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
     }
 
     // bottom-left
@@ -738,27 +751,27 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         by4 + bh4 < rt->tile_row.end)
     {
         const refmvs_block *const bl = &rt->r[((by4 + bh4) & 63) * 128 + ((bx4 - 1) & 127)];
+        if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0] &&
+            bl->m[6] != DAV1D_WM_TYPE_INVALID)
+        {
+            add_matrix(bl);
+        }
         add_spatial_candidate(bh4, -1,
                               rt, &st, 1, bl, left_8x8x +
                               (((by4 + bh4) & (rf->sbsz - 1)) >> 1) * stride,
                               ref, gmv);
-        if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0] &&
-            bl->m[6] != DAV1D_WM_TYPE_INVALID)
-        {
-            memcpy(warp[cnt[1]++], bl->m, sizeof(int32_t) * 7);
-        }
     }
 
     // top-right
     if (tr && tr->mv.mv[0].n != INVALID_MV) {
-        const int xpos = abw4 - x_off;
-        add_spatial_candidate(-1, xpos, rt, &st, 1, tr,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0] &&
             tr->m[6] != DAV1D_WM_TYPE_INVALID)
         {
-            memcpy(warp[cnt[1]++], tr->m, sizeof(int32_t) * 7);
+            add_matrix(tr);
         }
+        const int xpos = abw4 - x_off;
+        add_spatial_candidate(-1, xpos, rt, &st, 1, tr,
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
     }
 
     // normal priority TMVP
@@ -787,14 +800,14 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     // top-left
     DEBUG_REFMV_printf("Extra Spatial MVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
     if (tl) {
-        const int xpos = -(1 << is_sb_boundary) - x_off;
-        add_spatial_candidate(-1, xpos, rt, &st, 0, tl,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
         if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0] &&
             tl->m[6] != DAV1D_WM_TYPE_INVALID)
         {
-            memcpy(warp[cnt[1]++], tl->m, sizeof(int32_t) * 7);
+            add_matrix(tl);
         }
+        const int xpos = -(1 << is_sb_boundary) - x_off;
+        add_spatial_candidate(-1, xpos, rt, &st, 0, tl,
+                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
     }
 
     const int nearest_refmv_count = *cnt;
@@ -806,40 +819,40 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         if (bx4 - adj >= rt->tile_col.start) {
             if (bh4 == h4) {
                 const int pos = ((by4 + bh4 - 1) & 63) * 128 + ((bx4 - adj) & 127);
-                const refmvs_block *const cand_b = &rt->r[pos];
+                const refmvs_block *const ext_bml = &rt->r[pos];
                 assert(bml);
-                if (dav1d_block_dimensions[cand_b->bs][0] < adj ||
-                    cand_b->bs != bml->bs)
+                if (dav1d_block_dimensions[ext_bml->bs][0] < adj ||
+                    ext_bml->bs != bml->bs)
                 {
+                    if (warp && cnt[1] < 4 && ext_bml->mf & 2 &&
+                        ext_bml->ref.ref[0] == ref.ref[0])
+                    {
+                        add_matrix(ext_bml);
+                    }
                     add_spatial_candidate(bh4 - 1, -adj,
-                                          rt, &st, 0, cand_b,
+                                          rt, &st, 0, ext_bml,
                                           bms_8x8y + ((bx4 - adj) >> 1),
                                           ref, gmv);
-                    if (warp && cnt[1] < 4 && cand_b->mf & 2 &&
-                        cand_b->ref.ref[0] == ref.ref[0])
-                    {
-                        memcpy(warp[cnt[1]++], cand_b->m, sizeof(int32_t) * 7);
-                    }
                 }
             }
 
             if (bh4 > 1) {
                 const int pos = (by4 & 63) * 128 + ((bx4 - adj) & 127);
-                const refmvs_block *const cand_b = &rt->r[pos];
+                const refmvs_block *const ext_tml = &rt->r[pos];
                 assert(tml);
-                if (dav1d_block_dimensions[cand_b->bs][0] < adj ||
-                    cand_b->bs != tml->bs)
+                if (dav1d_block_dimensions[ext_tml->bs][0] < adj ||
+                    ext_tml->bs != tml->bs)
                 {
+                    if (warp && cnt[1] < 4 && ext_tml->mf & 2 &&
+                        ext_tml->ref.ref[0] == ref.ref[0])
+                    {
+                        add_matrix(ext_tml);
+                    }
                     add_spatial_candidate(0, -adj,
-                                          rt, &st, 0, cand_b,
+                                          rt, &st, 0, ext_tml,
                                           tms_8x8y + ((bx4 - adj) >> 1),
                                           ref, gmv);
-                    if (warp && cnt[1] < 4 && cand_b->mf & 2 &&
-                        cand_b->ref.ref[0] == ref.ref[0])
-                    {
-                        memcpy(warp[cnt[1]++], cand_b->m, sizeof(int32_t) * 7);
-                    }
-            }
+                }
             }
         }
     }
@@ -966,33 +979,33 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                            last, gmv[0].y, gmv[0].x, gmv[1].y, gmv[1].x, 0);
         *cnt = last + 1;
     end_gmv: {}
-    }
 
-    if (imin(bw4, bh4) > 8) {
-        DEBUG_REFMV_printf("Ext MVP candidates [%d|%d]\n",
-                           *cnt, warp ? cnt[1] : 0);
-        if (*cnt >= 2 && *cnt < 6) {
-            static const struct { uint8_t y, x; } ext_mvp[] = {
-                { .y = 0, .x = 1 }, { .y = 1, .x = 0 },
-                { .y = 0, .x = 2 }, { .y = 2, .x = 0 },
-                { .y = 1, .x = 2 }, { .y = 2, .x = 1 },
-            };
-            for (int c = 0, n; c < 2; c++) {
-                for (n = c * 2; n < c * 4 + 2; n++) {
-                    const int yidx = ext_mvp[n].y, xidx = ext_mvp[n].x;
-                    st.dr[n].mv.mv[0].y = mvstack[yidx].mv.mv[0].y;
-                    st.dr[n].mv.mv[0].x = mvstack[xidx].mv.mv[0].x;
-                    if (ref.ref[1] > 0) {
-                        st.dr[n].mv.mv[1].y = mvstack[yidx].mv.mv[1].y;
-                        st.dr[n].mv.mv[1].x = mvstack[xidx].mv.mv[1].x;
+        if (imin(bw4, bh4) > 8) {
+            DEBUG_REFMV_printf("Ext MVP candidates [%d|%d]\n",
+                               *cnt, warp ? cnt[1] : 0);
+            if (*cnt >= 2 && *cnt < 6) {
+                static const struct { uint8_t y, x; } ext_mvp[] = {
+                    { .y = 0, .x = 1 }, { .y = 1, .x = 0 },
+                    { .y = 0, .x = 2 }, { .y = 2, .x = 0 },
+                    { .y = 1, .x = 2 }, { .y = 2, .x = 1 },
+                };
+                for (int c = 0, n; c < 2; c++) {
+                    for (n = c * 2; n < c * 4 + 2; n++) {
+                        const int yidx = ext_mvp[n].y, xidx = ext_mvp[n].x;
+                        st.dr[n].mv.mv[0].y = mvstack[yidx].mv.mv[0].y;
+                        st.dr[n].mv.mv[0].x = mvstack[xidx].mv.mv[0].x;
+                        if (ref.ref[1] > 0) {
+                            st.dr[n].mv.mv[1].y = mvstack[yidx].mv.mv[1].y;
+                            st.dr[n].mv.mv[1].x = mvstack[xidx].mv.mv[1].x;
+                        }
+                        RDB_ONLY(st.dr[n].x_off = xidx;
+                                 st.dr[n].y_off = yidx);
                     }
-                    RDB_ONLY(st.dr[n].x_off = xidx;
-                             st.dr[n].y_off = yidx);
+                    st.drvd_cnt = n;
+                    if (*cnt == 2) break;
                 }
-                st.drvd_cnt = n;
-                if (*cnt == 2) break;
+                add_derived(DB_ARGS(rf, "insert_cand") &st, 6, ref.ref[1] > 0);
             }
-            add_derived(DB_ARGS(rf, "insert_cand") &st, 6, ref.ref[1] > 0);
         }
     }
 
@@ -1006,6 +1019,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         for (int n = 0; n < sz && cnt[1] < 4; n++) {
             const int32_t *const mat =
                 rt->warp.mat[ref.ref[0] - 1][(start - n) & 3];
+            DEBUG_REFMV_printf("Bank[%d/%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
+                               n, cnt[1], mat[0], mat[1], mat[2],
+                               mat[3], mat[4], mat[5], mat[6]);
             memcpy(warp[cnt[1]++], mat, sizeof(int32_t) * 7);
         }
 
@@ -1013,6 +1029,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         if (cnt[1] < 4) {
             const int32_t *const mat = rf->frm_hdr->gmv[ref.ref[0] - 1].matrix;
             warp[cnt[1]][6] = rf->frm_hdr->gmv[ref.ref[0] - 1].type;
+            DEBUG_REFMV_printf("GMV[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
+                               cnt[1], mat[0], mat[1], mat[2],
+                               mat[3], mat[4], mat[5], warp[cnt[1]][6]);
             memcpy(warp[cnt[1]++], mat, sizeof(int32_t) * 6);
         }
 
@@ -1020,8 +1039,12 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         for (int n = 0; n < 2; n++) {
             if (cnt[1] >= 4) break;
             warp[cnt[1]][6] = dav1d_default_wm_params.type;
-            memcpy(warp[cnt[1]++], dav1d_default_wm_params.matrix,
-                   sizeof(int32_t) * 6);
+            const int32_t *const mat = dav1d_default_wm_params.matrix;
+            DEBUG_REFMV_printf("Defaults[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
+                               cnt[1], mat[0], mat[1], mat[2],
+                               mat[3], mat[4], mat[5], warp[cnt[1]][6]);
+            memcpy(warp[cnt[1]++], mat, sizeof(int32_t) * 6);
+#undef add_matrix
         }
     }
     assert(*cnt <= 6);
