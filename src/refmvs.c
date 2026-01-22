@@ -1360,8 +1360,10 @@ void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
         if (r->mf & 2) {
             Dav1dWarpedMotionParams wmp;
             wmp.type = r->m[6];
-            memcpy(wmp.matrix, r->m, sizeof(int32_t) * 6);
-            dav1d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0] - 1);
+            if (wmp.type != DAV1D_WM_TYPE_INVALID) {
+                memcpy(wmp.matrix, r->m, sizeof(int32_t) * 6);
+                dav1d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0] - 1);
+            }
         }
         if (++hits == 4) break;
     }
