@@ -2946,7 +2946,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const refmvs_block *r;
                     const int sb_mask = f->sb_step - 1;
                     if (is_sb_boundary && y_off == -1) {
-                        r = (t->bx + x_off) & sb_mask ?
+                        r = t->bx & sb_mask || x_off >= 0 ?
                             &t->rt.ra[(t->bx + x_off) >> 1] : &t->rt.ra_tl;
                     } else {
                         r = &t->rt.r[((t->by + y_off) & 63) * 128 +
@@ -2955,6 +2955,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     if (r->ref.ref[0] - 1 == TIP_FRAME)
                         x_off = y_off = 0;
                 }
+                const int bx4_lmt_aligned = bx4 & ~is_sb_boundary;
+                const int bx4_rmt_aligned = bx4_lmt_aligned + bw4 - (1 + is_sb_boundary);
                 if (x_off || y_off) {
                     /* do nothing */
                 } else if (have_bottom_left &&
@@ -2964,11 +2966,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     y_off = bh4 - 1;
                     x_off = -1;
                 } else if (have_top_right &&
-                           (t->a->ref[0][bx4 + bw4 - 1] == b->ref[0] ||
-                            t->a->ref[1][bx4 + bw4 - 1] == b->ref[0]))
+                           (t->a->ref[0][bx4_rmt_aligned] == b->ref[0] ||
+                            t->a->ref[1][bx4_rmt_aligned] == b->ref[0]))
                 {
                     y_off = -1;
-                    x_off = bw4 - 1;
+                    x_off = bx4_rmt_aligned - bx4;
                 } else if (have_left &&
                            (t->l.ref[0][by4] == b->ref[0] ||
                             t->l.ref[1][by4] == b->ref[0]))
@@ -2976,11 +2978,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     y_off = 0;
                     x_off = -1;
                 } else if (have_top &&
-                           (t->a->ref[0][bx4] == b->ref[0] ||
-                            t->a->ref[1][bx4] == b->ref[0]))
+                           (t->a->ref[0][bx4_lmt_aligned] == b->ref[0] ||
+                            t->a->ref[1][bx4_lmt_aligned] == b->ref[0]))
                 {
                     y_off = -1;
-                    x_off = 0;
+                    x_off = bx4_lmt_aligned - bx4;
                 }
                 if (y_off || x_off)
                     extend_warpmv(t, x_off, y_off, b_dim, b, &t->warpmv[0]);
