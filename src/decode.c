@@ -4876,19 +4876,23 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
         if (f->frame_hdr->tip.frame_mode != 2) {
             res = dav1d_decode_frame_init_cdf(f);
         } else {
-            const int tile_col = 0, tile_row = 0;
-            const int col_sb_start = f->frame_hdr->tiling.t.col_start_sb[tile_col];
-            const int col_sb_end = f->frame_hdr->tiling.t.col_start_sb[tile_col + 1];
-            const int row_sb_start = f->frame_hdr->tiling.t.row_start_sb[tile_row];
-            const int row_sb_end = f->frame_hdr->tiling.t.row_start_sb[tile_row + 1];
+            const struct Dav1dTileInfo *const ti = &f->frame_hdr->tiling.t;
             const int sb_shift = f->sb_shift;
-            Dav1dTileState *const ts = f->ts;
-            ts->tiling.row = tile_row;
-            ts->tiling.col = tile_col;
-            ts->tiling.col_start = col_sb_start << sb_shift;
-            ts->tiling.col_end = imin(col_sb_end << sb_shift, f->bw);
-            ts->tiling.row_start = row_sb_start << sb_shift;
-            ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
+            for (int tile_row = 0, tile = 0; tile_row < ti->rows; tile_row++) {
+                for (int tile_col = 0; tile_col < ti->cols; tile_col++, tile++) {
+                    const int col_sb_start = ti->col_start_sb[tile_col];
+                    const int col_sb_end = ti->col_start_sb[tile_col + 1];
+                    const int row_sb_start = ti->row_start_sb[tile_row];
+                    const int row_sb_end = ti->row_start_sb[tile_row + 1];
+                    Dav1dTileState *const ts = &f->ts[tile];
+                    ts->tiling.row = tile_row;
+                    ts->tiling.col = tile_col;
+                    ts->tiling.col_start = col_sb_start << sb_shift;
+                    ts->tiling.col_end = imin(col_sb_end << sb_shift, f->bw);
+                    ts->tiling.row_start = row_sb_start << sb_shift;
+                    ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
+                }
+            }
         }
     }
     // wait until all threads have completed
