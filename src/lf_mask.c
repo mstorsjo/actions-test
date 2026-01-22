@@ -157,14 +157,14 @@ static inline void mask_edges(uint16_t (*const masks)[64][4][4],
     uint64_t mask = 1ULL << by4;
     for (y = 0; y < h4; y++, mask <<= 1) {
         const int sidx = (by4 + y) >> 4;
-        const unsigned smask = mask >> (sidx << 4);
+        const unsigned smask = (unsigned) (mask >> (sidx << 4));
         masks[0][bx4][imin(bwl4c, l[y])][sidx] |= smask;
     }
 
     // top block edge
     for (x = 0, mask = 1ULL << bx4; x < w4; x++, mask <<= 1) {
         const int sidx = (bx4 + x) >> 4;
-        const unsigned smask = mask >> (sidx << 4);
+        const unsigned smask = (unsigned) (mask >> (sidx << 4));
         masks[1][by4][imin(bhl4c, a[x])][sidx] |= smask;
     }
 
@@ -187,14 +187,14 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][4][4],
     uint64_t mask = 1ULL << by4;
     for (y = 0; y < h4; y++, mask <<= 1) {
         const int sidx = (by4 + y) >> 4;
-        const unsigned smask = mask >> (sidx << 4);
+        const unsigned smask = (unsigned) (mask >> (sidx << 4));
         masks[0][bx4][imin(twl4c, l[y])][sidx] |= smask;
     }
 
     // top block edge
     for (x = 0, mask = 1ULL << bx4; x < w4; x++, mask <<= 1) {
         const int sidx = (bx4 + x) >> 4;
-        const unsigned smask = mask >> (sidx << 4);
+        const unsigned smask = (unsigned) (mask >> (sidx << 4));
         masks[1][by4][imin(thl4c, a[x])][sidx] |= smask;
     }
 
