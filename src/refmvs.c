@@ -1713,19 +1713,23 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         const mv *const mv_src = &rp_traj[ref1][pos1];
         const int py = mv_dst->y = iclip(mv_src->y + mv_in.y, -2047, 2047);
         const int px = mv_dst->x = iclip(mv_src->x + mv_in.x, -2047, 2047);
-        const int y2 = (y1 + apply_sign(abs(py) >> 6, py)) & mask;
-        const int x2 = (x1 + apply_sign(abs(px) >> 6, px)) & mask;
+        int y2 = y1 + apply_sign(abs(py) >> 6, py);
+        int x2 = x1 + apply_sign(abs(px) >> 6, px);
         if (x2 < x_proj_start || x2 >= x_proj_end) continue;
         if (y2 < y_proj_start || y2 >= y_proj_end) continue;
+        y2 &= mask;
+        x2 &= mask;
         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
         refmvs_traj_map *const map2 = &map[k][ref2][pos2];
         map2->y = y1 - y2;
         map2->x = x1 - x2;
     }
 
-    const int y1 = (y + apply_sign(abs(mv_in.y) >> 6, mv_in.y)) & mask;
-    const int x1 = (x + apply_sign(abs(mv_in.x) >> 6, mv_in.x)) & mask;
+    int y1 = y + apply_sign(abs(mv_in.y) >> 6, mv_in.y);
+    int x1 = x + apply_sign(abs(mv_in.x) >> 6, mv_in.x);
     if (imin(y1, x1) < 0 || y1 >= rf->ih8 || x1 >= rf->iw8) return;
+    y1 &= mask;
+    x1 &= mask;
     for (int k = 0; k < 3; k++) {
         const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
         refmvs_traj_map *const map1 = &map[k][ref2][pos1];
@@ -1752,10 +1756,12 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         const mv *const mv_src = &rp_traj[ref2][pos2];
         const int py = mv_dst->y = iclip(mv_src->y - mv_in.y, -0xffff, 0xffff);
         const int px = mv_dst->x = iclip(mv_src->x - mv_in.x, -0xffff, 0xffff);
-        const int y3 = (y2 + apply_sign(abs(py) >> 6, py)) & mask;
-        const int x3 = (x2 + apply_sign(abs(px) >> 6, px)) & mask;
+        int y3 = y2 + apply_sign(abs(py) >> 6, py);
+        int x3 = x2 + apply_sign(abs(px) >> 6, px);
         if (x3 < x_proj_start || x3 >= x_proj_end) continue;
         if (y3 < y_proj_start || y3 >= y_proj_end) continue;
+        y3 &= mask;
+        x3 &= mask;
         const ptrdiff_t pos3 = (y3 & (sbsz8 - 1)) * stride + x3;
         refmvs_traj_map *const map2 = &map[k][ref1][pos3];
         map2->y = y2 - y3;
