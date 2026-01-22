@@ -183,12 +183,12 @@ build-debian:
               fi
           done
           files=(
-              "./media/avm-v12.0.0-sdp0-cctx0-cfl1-mhccp1.ivf"
+              "./media/avm-v12.0.0-sdp0.ivf"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"
-              a_md5=$(./avm/x86-64/aomdec "$file" -o - --inloopfilters=deblock+cdef+ccso --md5 --rawvideo | cut -d' ' -f1)
-              d_md5=$(./build/tools/dav1d -i "$file" -o - --inloopfilters=deblock+cdef+ccso --threads=1 --quiet --muxer=md5)
+              a_md5=$(./avm/x86-64/aomdec "$file" -o - --inloopfilters=cdef+ccso --md5 --rawvideo | cut -d' ' -f1)
+              d_md5=$(./build/tools/dav1d -i "$file" -o - --inloopfilters=cdef+ccso --threads=1 --quiet --muxer=md5)
               if [[ "$a_md5" == "$d_md5" ]]; then
                   echo $base "[OK] md5:$a_md5"
               else

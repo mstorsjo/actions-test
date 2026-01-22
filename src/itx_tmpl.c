@@ -40,6 +40,23 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
+static void cctx_c(coef *const u, coef *const v,
+                   const int w, const int h, const int idx HIGHBD_DECL_SUFFIX)
+{
+    const int bd = bitdepth_from_max(bitdepth_max);
+    const int min = -(1 << (bd + 7));
+    const int max = (1 << (bd + 7)) - 1;
+    const int cosa = dav1d_cctx_angle[idx][0];
+    const int sina = dav1d_cctx_angle[idx][1];
+    const int n = w << ulog2(h);
+    for (int i = 0; i < n; i++) {
+        const int a = u[i] * cosa - v[i] * sina;
+        const int b = u[i] * sina + v[i] * cosa;
+        u[i] = iclip((a + 0x80) >> 8, min, max);
+        v[i] = iclip((b + 0x80) >> 8, min, max);
+    }
+}
+
 static NOINLINE void
 inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                const enum TxfmType txtp, const int eob,
@@ -234,6 +251,7 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
 #define assign_itx(w, h, pfx) \
     c->itxfm_add[pfx##TX_##w##X##h] = inv_txfm_add_##w##x##h##_c
 
+    c->cctx = cctx_c;
     c->iwht_add_4x4 = inv_txfm_add_wht_wht_4x4_c;
     assign_itx( 4,  4, );
     assign_itx( 4,  8, R);

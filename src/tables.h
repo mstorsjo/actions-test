@@ -55,6 +55,8 @@ EXTERN const int8_t dav1d_tx_part_tbl[N_BS_SIZES][8];
 EXTERN const uint8_t /* enum TxfmType */
                      dav1d_txtp_from_uvmode[N_UV_INTRA_PRED_MODES];
 
+EXTERN const int16_t dav1d_cctx_angle[6][2];
+
 EXTERN const uint8_t dav1d_mode_to_angle_map[8];
 
 EXTERN const uint8_t /* enum InterPredMode */

@@ -427,8 +427,8 @@ struct Dav1dTaskContext {
     } pb;
     refmvs_tile rt;
     ALIGN(union, 64) {
-        int16_t cf_8bpc [32 * 32];
-        int32_t cf_16bpc[32 * 32];
+        int16_t cf_8bpc [2][32 * 32];
+        int32_t cf_16bpc[2][32 * 32];
     };
     union {
         uint8_t  al_pal_8bpc [2 /* a/l */][64 /* bx/y4 */][8 /* palette_idx */];

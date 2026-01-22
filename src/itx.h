@@ -34,6 +34,10 @@
 
 #include "src/levels.h"
 
+#define decl_cctx_fn(name) \
+void (name)(coef *u, coef *v, int w, int h, int cctx_type HIGHBD_DECL_SUFFIX)
+typedef decl_cctx_fn(*cctx_fn);
+
 #define decl_itxfm_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, coef *coeff, \
             enum TxfmType txtp, int eob HIGHBD_DECL_SUFFIX)
@@ -54,6 +58,7 @@ decl_itx_w_fns(32, ext); \
 decl_itx_w_fns(64, ext)
 
 typedef struct Dav1dInvTxfmDSPContext {
+    cctx_fn cctx;
     itxfm_fn itxfm_add[N_RECT_TX_SIZES];
     itxfm_fn iwht_add_4x4;
 } Dav1dInvTxfmDSPContext;

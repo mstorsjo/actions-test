@@ -332,7 +332,6 @@ static inline int tcq_next_state(const int state, const int abs_level) {
             ((state & 0x6) >> 1) | -0x80000000) & (state >> 31);
 }
 
-
 static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         uint8_t *const a, uint8_t *const l,
                         const enum RectTxfmSize tx, const enum BlockSize bs,
@@ -690,6 +689,7 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                                          ts->cdf.m.cctx, 6);
         DEBUG_CF_printf("%*sPost-cctx[%d]: r=%d\n",
                         depth, "", cctx, ts->msac.rng);
+        *txtp |= cctx << 8;
     }
 
     // base tokens
@@ -2029,7 +2029,7 @@ static int recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         eob = -1;
         stx = 0;
     } else {
-        cf = bitfn(t->cf);
+        cf = bitfn(t->cf)[0];
         eob = decode_coefs(t, DB_ONLY(depth + 1)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
                            tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
@@ -3057,7 +3057,6 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     // chroma
 chroma: {}
-    coef *const cf = bitfn(t->cf);
     const enum RectTxfmSize uvtx = dav1d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
     const TxfmInfo *const uv_t_dim = &dav1d_txfm_dimensions[uvtx];
     const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
@@ -3068,50 +3067,27 @@ chroma: {}
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
     const ptrdiff_t stride = f->cur.stride[1];
     const int sbsz = f->sb_step;
+    const int intra = b->intra && !b->intrabc;
 
     const enum IntraPredMode orig_uv_mode = b->uv_mode;
     int angle = b->uv_angle;
-    if (b->intra && !b->intrabc)
+    if (intra)
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
 
     const int can_cfl = b->uv_mode == CFL_PRED ? b->cfl_type > CFL_EXPLICIT ?
         0x3 : (!!b->cfl_alpha[0]) | (!!b->cfl_alpha[1] << 1) : 0x0;
-    if (b->intra && !b->intrabc && can_cfl)
+    if (intra && can_cfl)
         cfl(t, b, cbs, uv_t_dim, can_cfl);
 
-    for (int pl = 1; pl <= 2; pl++) {
-        // decode coefficients
-        uint8_t cf_ctx;
-        enum TxfmType txtp;
-        int eob;
-        if (b->skip_txfm) {
-            eob = -1;
-            cf_ctx = 0x40;
-        } else {
-            txtp = t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
-            eob = decode_coefs(t, DB_ONLY(depth + 1)
-                               &t->a->ccoef[pl - 1][cbx4],
-                               &t->l.ccoef[pl - 1][cby4], uvtx, b->bs,
-                               b, pl, cf, &txtp, &cf_ctx);
-            if (eob == INT_MIN) return -1;
-            DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
-                               depth + 1, "", "uv"[pl - 1], uv_t_dim->w * 4,
-                               uv_t_dim->h * 4,
-                               dav1d_tx1d_names[txtp & 7],
-                               dav1d_tx1d_names[txtp >> 5],
-                               eob, t->ts->msac.rng);
-        }
-        dav1d_memset_likely_pow2(&t->a->ccoef[pl - 1][cbx4], cf_ctx, ctw4);
-        dav1d_memset_likely_pow2(&t->l.ccoef[pl - 1][cby4], cf_ctx, cth4);
-
-        pixel *const dst = ((pixel *) f->cur.data[pl]) +
+    for (int pl = 0; pl < 2; pl++) {
+        pixel *const dst = ((pixel *) f->cur.data[1 + pl]) +
             4 * (ssby * PXSTRIDE(stride) + ssbx);
-        if (b->intra && !b->intrabc && !(can_cfl & pl)) {
+        if (intra && !(can_cfl & (pl + 1))) {
             // intra prediction
             pixel *const edge = bitfn(t->scratch.edge) + 128;
             const pixel *top_sb_edge = NULL;
             if (!(t->cby & (sbsz - 1))) {
-                top_sb_edge = f->ipred_edge[pl];
+                top_sb_edge = f->ipred_edge[1 + pl];
                 const int sby = t->cby >> f->sb_shift;
                 top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
             }
@@ -3179,7 +3155,7 @@ chroma: {}
                                      4 * f->bh - 4 * t->cby HIGHBD_CALL_SUFFIX);
 
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                hex_dump(dst, stride, ctw, cth, pl == 1 ? "u-intra-pred" : "v-intra-pred");
+                hex_dump(dst, stride, ctw, cth, pl ? "v-intra-pred" : "u-intra-pred");
             }
             const int has_orip = uvtx && (
                 b->uv_mode == VERT_PRED ? uv_t_dim->w < 8 :
@@ -3194,19 +3170,65 @@ chroma: {}
                     hex_dump(dst, stride, ctw, cth, "orip");
             }
         }
+    }
 
-        // inverse transform
-        if (eob != -1) {
-            // don't print chroma as avm does things in a different order
-            // (decode coefs of both planes first then pred + itx)
-            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                coef_dump(cf, imin(uv_t_dim->w, 8) * 4,
-                          imin(uv_t_dim->h, 8) * 4, 3, "dq");
-            }
-            dsp->itx.itxfm_add[uvtx](dst, stride, cf, txtp, eob HIGHBD_CALL_SUFFIX);
+    const int cctx = f->seq_hdr->cctx &&
+        (f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
+    enum TxfmType txtp[2];
+    int eob[2];
+    uint8_t cf_ctx[2];
+    coef *const cf[2] = { bitfn(t->cf)[0], bitfn(t->cf)[1] };
+
+    if (b->skip_txfm) {
+        for (int pl = 0; pl < 2; pl++) {
+            dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, ctw4);
+            dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, cth4);
         }
+    } else {
+        int cctx_type;
+        // decode coefficients
+        for (int pl = 0; pl < 2; pl++) {
+            txtp[pl] = t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+            eob[pl] = decode_coefs(t, DB_ONLY(depth + 1)
+                                   &t->a->ccoef[pl][cbx4], &t->l.ccoef[pl][cby4],
+                                   uvtx, b->bs, b, pl + 1,
+                                   cf[pl], &txtp[pl], &cf_ctx[pl]);
+            if (eob[pl] == INT_MIN) return -1;
+            if (!pl) cctx_type = cctx && eob[0] >= intra ? (txtp[0] >> 8) : 0;
+            DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
+                               depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
+                               uv_t_dim->h * 4,
+                               dav1d_tx1d_names[txtp[pl] & 7],
+                               dav1d_tx1d_names[(txtp[pl] >> 5) & 7],
+                               eob[pl], t->ts->msac.rng);
+            dav1d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx[pl], ctw4);
+            dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx[pl], cth4);
+        }
+        if (cctx_type) {
+            dsp->itx.cctx(cf[0], cf[1], imin(ctw, 32), imin(cth, 32),
+                          cctx_type - 1 HIGHBD_CALL_SUFFIX);
+            txtp[0] &= 0xff;
+        }
+        // inverse transform
+        for (int pl = 0; pl < 2; pl++) {
+            if (eob[pl] != -1) {
+                // don't print chroma as avm does things in a different order
+                // (decode coefs of both planes first then pred + itx)
+                if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                    coef_dump(cf[pl], imin(ctw, 32), imin(cth, 32), 3, "dq");
+                }
+                pixel *const dst = ((pixel *) f->cur.data[1 + pl]) +
+                    4 * (ssby * PXSTRIDE(stride) + ssbx);
+                dsp->itx.itxfm_add[uvtx](dst, stride, cf[pl], txtp[pl], eob[pl]
+                                         HIGHBD_CALL_SUFFIX);
+            }
+        }
+    }
+    for (int pl = 1; pl <= 2; pl++) {
         if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-            hex_dump(dst, stride, uv_t_dim->w * 4, uv_t_dim->h * 4, "recon");
+            const pixel *const dst = ((pixel *) f->cur.data[pl]) +
+                4 * (ssby * PXSTRIDE(stride) + ssbx);
+            hex_dump(dst, stride, ctw, cth, "recon");
         }
     }
 
