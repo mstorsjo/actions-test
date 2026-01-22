@@ -293,7 +293,7 @@ const uint8_t /* enum TxfmType */
     [PAETH_PRED]           = ADST_ADST,
 };
 
-const uint8_t av1_mode_to_angle_map[8] = {
+const uint8_t dav1d_mode_to_angle_map[8] = {
     90, 180, 45, 135, 113, 157, 203, 67
 };
 

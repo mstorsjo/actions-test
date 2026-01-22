@@ -1980,7 +1980,7 @@ static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
 
     // map directional modes
     const int mrl_adj = (mrl_idx == 1) - (mrl_idx == 2);
-    *angle = av1_mode_to_angle_map[mode - 1] + *angle * 3 + mrl_adj;
+    *angle = dav1d_mode_to_angle_map[mode - 1] + *angle * 3 + mrl_adj;
     static const uint8_t thresh[] = { 61, 73, 82, 86 };
     const int rect = t_dim->lw - t_dim->lh;
     // FIXME below, we should return 180 +/- angle after mode remapping,
