@@ -72,7 +72,6 @@ is_asm_enabled = (get_option('enable_asm') == true and
      host_machine.cpu() == 'ppc64le' or
      host_machine.cpu_family().startswith('riscv') or
      host_machine.cpu_family().startswith('loongarch') or
-     host_machine.cpu_family() == 'x86' or
      (host_machine.cpu_family() == 'x86_64' and cc.get_define('__ILP32__').strip() == '')))
 cdata.set10('HAVE_ASM', is_asm_enabled)
 
