@@ -1838,10 +1838,10 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 int ref2ref = rf->mfmv_ref2ref[n][b_ref - 1];
                 if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
                 const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref - 1][0]);
-                int y1 = (y - apply_sign(abs(mv1.y) >> 6, mv1.y));
+                int y1 = y - apply_sign(abs(mv1.y) >> 6, mv1.y);
                 if (y1 < 0 || y1 >= rf->ih8) continue;
                 y1 &= mask;
-                int x1 = (x - apply_sign(abs(mv1.x) >> 6, mv1.x));
+                int x1 = x - apply_sign(abs(mv1.x) >> 6, mv1.x);
                 if (x1 < 0 || x1 >= rf->iw8) continue;
                 x1 &= mask;
                 const int y_proj_start = y1 & ~(mfmv_sbsz8 - 1);
@@ -1871,12 +1871,12 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref - 1][1]);
                         rp_traj[ref2idx][pos1].y = iclip(mv2.y, -2047, 2047);
                         rp_traj[ref2idx][pos1].x = iclip(mv2.x, -2047, 2047);
-                        const int y2 = (y + apply_sign(abs(b_mv.y) >> 6,
-                                                       b_mv.y)) & mask;
+                        int y2 = y + apply_sign(abs(b_mv.y) >> 6, b_mv.y);
                         if (y2 < y_proj_start || y2 >= y_proj_end) break;
-                        const int x2 = (x + apply_sign(abs(b_mv.x) >> 6,
-                                                       b_mv.x)) & mask;
+                        y2 &= mask;
+                        int x2 = x + apply_sign(abs(b_mv.x) >> 6, b_mv.x);
                         if (x2 < x_proj_start || x2 >= x_proj_end) break;
+                        x2 &= mask;
                         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
                         rp_map[k][ref2idx][pos2].y = y1 - y2;
                         rp_map[k][ref2idx][pos2].x = x1 - x2;
