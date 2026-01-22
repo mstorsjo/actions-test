@@ -2676,9 +2676,10 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     } else if (!b->intra) {
         if (b->ref[1] == -1 && b->ref[0] != TIP_FRAME) {
             const Dav1dThreadPicture *const refp = &f->refp[b->ref[0]];
-            if ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
-                (b->motion_mode >= MM_WARP_CAUSAL &&
-                 t->warpmv[0].type > DAV1D_WM_TYPE_INVALID))
+            if (!f->frame_hdr->force_integer_mv &&
+                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                 (b->motion_mode >= MM_WARP_CAUSAL &&
+                  t->warpmv[0].type > DAV1D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, dst, NULL, f->cur.stride[0], b_dim, 0, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
