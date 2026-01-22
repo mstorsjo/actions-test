@@ -4382,7 +4382,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     // error out on symbol decoder overread
     if (ts->msac.cnt <= -15) return 1;
 
-    return c->strict_std_compliance &&
+    return c->strict_std_compliance && f->frame_hdr->tip.frame_mode != 2 &&
            (t->by >> f->sb_shift) + 1 >= f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] &&
            check_trailing_bits_after_symbol_coder(&ts->msac);
 }
