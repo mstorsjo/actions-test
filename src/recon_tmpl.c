@@ -2278,8 +2278,17 @@ static void bawp(Dav1dTaskContext *const t,
     t->pb.bawp.alpha = 256;
     t->pb.bawp.beta = 0;
     Dav1dTileState *const ts = t->ts;
-    const int tile_top_edge = ts->tiling.row_start * 4;
-    const int tile_left_edge = ts->tiling.col_start * 4;
+    int tile_top_edge, tile_left_edge, tile_bottom_edge, tile_right_edge;
+    if (refp == &f->sr_cur) {
+        tile_top_edge = ts->tiling.row_start * 4;
+        tile_left_edge = ts->tiling.col_start * 4;
+        tile_bottom_edge = ts->tiling.row_end * 4;
+        tile_right_edge = ts->tiling.col_end * 4;
+    } else {
+        tile_top_edge = tile_left_edge = 0;
+        tile_bottom_edge = f->bh * 4;
+        tile_right_edge = f->bw * 4;
+    }
     const int mvx = (mv.x + 3 + (mv.x >= 0)) >> 3;
     const int mvy = (mv.y + 3 + (mv.y >= 0)) >> 3;
     const int ref_y = (t->by * 4 + mvy);
@@ -2288,8 +2297,6 @@ static void bawp(Dav1dTaskContext *const t,
     const int ref_tmplt_y = ref_y - 1;
     const int ref_bottom_edge = ref_y + h4 * 4;
     const int ref_right_edge = ref_x + w4 * 4;
-    const int tile_bottom_edge = ts->tiling.row_end * 4;
-    const int tile_right_edge = ts->tiling.col_end * 4;
 
     const int can_morph =
         ref_bottom_edge <= tile_bottom_edge &&
