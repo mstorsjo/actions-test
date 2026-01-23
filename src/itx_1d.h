@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2019, VideoLAN and dav1d authors
- * Copyright © 2018-2019, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 
 typedef void (*itx_1d_fn)(int32_t *c, ptrdiff_t stride);
 
-EXTERN const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES];
+EXTERN const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1];
 
 void dav1d_inv_wht4_1d_c(int32_t *c, ptrdiff_t stride);
 

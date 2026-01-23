@@ -276,7 +276,7 @@ static void inv_identity32_1d_c(int32_t *const c, const ptrdiff_t stride) {
         c[stride * i] *= 362;
 }
 
-const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES] = {
+const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
     [TX_4X4] = {
         [DCT] = inv_dct4_1d_c,
         [ADST] = inv_adst4_1d_c,
