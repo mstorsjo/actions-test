@@ -3213,8 +3213,8 @@ chroma: {}
             dav1d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx[pl], cth4);
         }
         if (cctx_type) {
-            dsp->itx.cctx(cf[0], cf[1], imin(ctw, 32), imin(cth, 32),
-                          cctx_type - 1 HIGHBD_CALL_SUFFIX);
+            dsp->itx.cctx(cf[0], cf[1], dav1d_cctx_angle[cctx_type - 1],
+                          umin(ctw, 32) * umin(cth, 32) HIGHBD_CALL_SUFFIX);
             txtp[0] &= 0xff;
         }
         // inverse transform

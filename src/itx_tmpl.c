@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2025, VideoLAN and dav1d authors
- * Copyright © 2018-2025, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,20 +40,19 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
-static void cctx_c(coef *const u, coef *const v,
-                   const int w, const int h, const int idx HIGHBD_DECL_SUFFIX)
+static void cctx_c(coef *const u, coef *const v, const int16_t angle[2],
+                   const size_t sz HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int min = -(1 << (bd + 7));
     const int max = (1 << (bd + 7)) - 1;
-    const int cosa = dav1d_cctx_angle[idx][0];
-    const int sina = dav1d_cctx_angle[idx][1];
-    const int n = w << ulog2(h);
-    for (int i = 0; i < n; i++) {
+    const int cosa = angle[0];
+    const int sina = angle[1];
+    for (size_t i = 0; i < sz; i++) {
         const int a = u[i] * cosa - v[i] * sina;
         const int b = u[i] * sina + v[i] * cosa;
-        u[i] = iclip((a + 0x80) >> 8, min, max);
-        v[i] = iclip((b + 0x80) >> 8, min, max);
+        u[i] = iclip((a + 128) >> 8, min, max);
+        v[i] = iclip((b + 128) >> 8, min, max);
     }
 }
 

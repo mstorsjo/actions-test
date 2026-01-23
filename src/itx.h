@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,8 @@
 #include "src/levels.h"
 
 #define decl_cctx_fn(name) \
-void (name)(coef *u, coef *v, int w, int h, int cctx_type HIGHBD_DECL_SUFFIX)
+void (name)(coef *u, coef *v, const int16_t angle[2], \
+            size_t sz HIGHBD_DECL_SUFFIX)
 typedef decl_cctx_fn(*cctx_fn);
 
 #define decl_itxfm_fn(name) \
