@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2025, VideoLAN and dav1d authors
- * Copyright © 2018-2025, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -115,17 +115,6 @@ static const int8_t flipadst4_kernel[4 * 4] = {
      18, -50,  75, -89,
 };
 
-static const int8_t flipadst8_kernel[8 * 8] = {
-     89, -86,  79, -70,  58, -44,  29, -14,
-     86, -58,  12,  38, -75,  88, -74,  40,
-     79, -12, -66,  87, -35, -44,  86, -62,
-     70,  39, -87,   1,  86, -44, -59,  78,
-     58,  76, -34, -86,  10,  88,   6, -84,
-     44,  89,  48, -41, -89, -44,  50,  81,
-     28,  74,  89,  68,  17, -44, -83, -69,
-     11,  34,  54,  71,  84,  88,  79,  50,
-};
-
 static const int8_t flipadst16_kernel[16 * 16] = {
      89,  88,  87,  84,  81,  77,  73,  67,  62,  55,  48,  41,  33,  25,  17,   8,
      88,  81,  67,  48,  25,   0, -25, -48, -67, -81, -88, -88, -81, -67, -48, -25,
@@ -175,36 +164,6 @@ static const int8_t ddt16_kernel[16 * 16] = {
      50, -76,  83, -90,  97, -86,  83, -68,  67, -56,  49, -40,  32, -19,   5,   2,
 };
 
-static const int8_t fddt8_kernel[8 * 8] = {
-     80, -98,  82, -66,  53, -41,  26,  -6,
-    106, -57, -23,  54, -71,  75, -56,  19,
-     98,  45, -86,  34,  20, -66,  79, -33,
-     65, 100,   0, -73,  55,  15, -82,  54,
-     33,  77,  88, -26, -69,  56,  56, -77,
-     15,  36,  85,  76, -43, -80,   7,  98,
-      7,  14,  48,  94,  73, -17, -79, -96,
-      4,   6,  22,  57,  96, 103,  78,  56,
-};
-
-static const int8_t fddt16_kernel[16 * 16] = {
-     50, -76,  83, -90,  97, -86,  83, -68,  67, -56,  49, -40,  32, -19,   5,   2,
-     68, -99,  84, -69,  32,   3, -37,  55, -75,  81, -83,  82, -69,  48, -11,  -3,
-     83, -99,  40,   8, -74,  88, -83,  47, -14, -21,  56, -83,  88, -71,  22,   5,
-     93, -73, -28,  81, -92,  29,  39, -70,  81, -55,  11,  46, -81,  90, -31,  -4,
-     97, -30, -83,  86,   3, -77,  82, -17, -43,  76, -70,  15,  53, -99,  44,   3,
-     94,  19, -96,  21,  93, -55, -41,  80, -51, -17,  77, -68,  -6,  98, -56,   1,
-     88,  59, -67, -57,  75,  54, -85,  -5,  75, -60, -17,  84, -43, -80,  71,  -6,
-     78,  83, -18, -91, -16,  88,  28, -84,  12,  73, -60, -46,  81,  49, -83,  16,
-     66,  87,  29, -65, -83,   4,  92,  18, -83,   4,  85, -22, -85,  -6,  97, -30,
-     51,  76,  61,  -8, -77, -82,  11,  94,  16, -81, -22,  79,  50, -37,-103,  54,
-     39,  61,  75,  40, -29, -87, -78,  10,  89,  36, -69, -67,  18,  67,  89, -81,
-     30,  48,  75,  66,  19, -31, -79, -91,  -5,  84,  71, -16, -78, -60, -45, 108,
-     23,  38,  69,  73,  49,  28, -19, -80, -96, -45,  42,  88,  75,  14, -17,-126,
-     19,  30,  60,  69,  61,  64,  40,   3, -53, -99, -91, -46,   2,  47,  73, 124,
-     15,  23,  49,  60,  60,  74,  70,  73,  48,   9, -35, -71, -83, -79, -89, -95,
-     12,  17,  37,  45,  47,  60,  64,  82,  89, 100,  92,  84,  69,  50,  51,  44,
-};
-
 static NOINLINE void inv_dct_1d_c(int32_t *const c, const ptrdiff_t stride,
                                   const int8_t *mat, const int n) {
     int32_t a[16], b[16];
@@ -252,8 +211,8 @@ static void inv_dct32_1d_c(int32_t *const c, const ptrdiff_t stride) {
     inv_dct_1d_c(c, stride, dct32_kernel, 16);
 }
 
-static NOINLINE void inv_dst_1d_c(int32_t *const c, const ptrdiff_t stride,
-                                  const int8_t *mat, const int n)
+static NOINLINE void inv_dst_1d_c(int32_t *c, ptrdiff_t stride,
+                                  const int8_t *mat, const int n, const int f)
 {
     int32_t sums[16];
     assert(stride > 0);
@@ -265,25 +224,30 @@ static NOINLINE void inv_dst_1d_c(int32_t *const c, const ptrdiff_t stride,
         sums[i] = sum;
     }
 
+    if (f) {
+        c += f * stride;
+        stride = -stride;
+    }
+
     for (int i = 0; i < n; i++)
         c[i * stride] = sums[i];
 }
 
-#define inv_dst_1d(type, sz) \
+#define inv_dst_1d(type, kernel, sz, flip) \
 static void inv_##type##sz##_1d_c(int32_t *const c, const ptrdiff_t stride) { \
-    inv_dst_1d_c(c, stride, type##sz##_kernel, sz); \
+    inv_dst_1d_c(c, stride, kernel##sz##_kernel, sz, flip ? sz - 1 : 0); \
 } \
 
-inv_dst_1d(adst,      4);
-inv_dst_1d(adst,      8);
-inv_dst_1d(adst,     16);
-inv_dst_1d(flipadst,  4);
-inv_dst_1d(flipadst,  8);
-inv_dst_1d(flipadst, 16);
-inv_dst_1d(ddt,       8);
-inv_dst_1d(ddt,      16);
-inv_dst_1d(fddt,      8);
-inv_dst_1d(fddt,     16);
+inv_dst_1d(adst,     adst,      4, 0);
+inv_dst_1d(adst,     adst,      8, 0);
+inv_dst_1d(adst,     adst,     16, 0);
+inv_dst_1d(flipadst, flipadst,  4, 0);
+inv_dst_1d(flipadst, adst,      8, 1);
+inv_dst_1d(flipadst, flipadst, 16, 0);
+inv_dst_1d(ddt,      ddt,       8, 0);
+inv_dst_1d(ddt,      ddt,      16, 0);
+inv_dst_1d(fddt,     ddt,       8, 1);
+inv_dst_1d(fddt,     ddt,      16, 1);
 
 static void inv_identity4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
