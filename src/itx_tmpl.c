@@ -43,6 +43,7 @@
 static void cctx_c(coef *const u, coef *const v, const int16_t angle[2],
                    const size_t sz HIGHBD_DECL_SUFFIX)
 {
+    assert(!(sz & (sz - 1)) && sz >= 4 * 4 && sz <= 32 * 32);
     const int bd = bitdepth_from_max(bitdepth_max);
     const int min = -(1 << (bd + 7));
     const int max = (1 << (bd + 7)) - 1;
@@ -64,8 +65,8 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
     const uint8_t *const tx_shift = dav1d_tx_shift[tx];
     const int w = 4 * t_dim->w, h = 4 * t_dim->h;
-    assert(w >= 4 && w <= 64);
-    assert(h >= 4 && h <= 64);
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
     assert(eob >= 0);
 
     const int is_rect2 = (t_dim->lw + t_dim->lh) & 1;
