@@ -64,6 +64,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t multi_mrl[3][2], 4);
     ALIGN(uint16_t pal_y[2], 4);
     ALIGN(uint16_t pal_sz[7+1], 16);
+    ALIGN(uint16_t dip[3][2], 4);
     ALIGN(uint16_t dip_mode[6+2], 16);
     ALIGN(uint16_t cfl[3][2], 4);
     ALIGN(uint16_t intra_uv_mode[2][8], 16);
@@ -96,7 +97,6 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t cctx[7+1], 16);
     ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS], 16);
     ALIGN(uint16_t delta_q[4], 8);
-    ALIGN(uint16_t delta_lf[5][4], 8);
 
     /* inter/switch */
     ALIGN(uint16_t skip_mode[3][2], 4);
@@ -171,7 +171,6 @@ typedef struct CdfCoefContext {
     ALIGN(uint16_t br_y_tok_idtx[3][7][4], 8);
     ALIGN(uint16_t base_y_tok_idtx[3][7][4], 8);
     ALIGN(uint16_t sign_idtx[3][9][2], 4);
-    ALIGN(uint16_t dip[3][2], 4);
     ALIGN(uint16_t skip_v[12][2], 4);
     ALIGN(uint16_t eob_base_uv_tok_hf[4][3+1], 8);
     ALIGN(uint16_t base_uv_tok_hf[12][4], 8);

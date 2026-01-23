@@ -70,7 +70,7 @@ static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
     // and then ac == dc
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
         const int yac = frame_hdr->segmentation.enabled ?
-            qidx + frame_hdr->segmentation.seg_data.d[i].delta_q : qidx;
+            qidx + frame_hdr->segmentation.d.delta_q[i] : qidx;
         const int ydc = yac + frame_hdr->quant.ydc_delta;
         const int uac = yac + frame_hdr->quant.uac_delta;
         const int udc = yac + frame_hdr->quant.udc_delta;
@@ -105,7 +105,7 @@ static void init_deblock_lut(const Dav1dSequenceHeader *const seq_hdr,
     const int qmax = 255 + 48 * seq_hdr->hbd;
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
         const int yac = frame_hdr->segmentation.enabled ?
-            iclip(qidx + frame_hdr->segmentation.seg_data.d[i].delta_q, 0, qmax) : qidx;
+            iclip(qidx + frame_hdr->segmentation.d.delta_q[i], 0, qmax) : qidx;
         for (int dir = 0; dir < 2; dir++) {
             const int dir_yac = yac + 8 * frame_hdr->loopfilter.delta_q_y[dir];
             lut->thr[dir][0][i] = deblock_quant_thr(seq_hdr->hbd, dir_yac);
@@ -323,7 +323,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     if (!dav1d_find_affine_int(pts, np, bw4, bh4, mv, wmp, t->bx, t->by) &&
         !dav1d_get_shear_params(wmp))
     {
-        wmp->type = DAV1D_WM_TYPE_AFFINE;
+        wmp->type = warp_type(wmp->matrix);
     } else
         wmp->type = DAV1D_WM_TYPE_INVALID;
 }
@@ -380,8 +380,7 @@ static void extend_warpmv(Dav1dTaskContext *const t,
         m[4] = iclip((m4 + 0x20 - (m4 < 0)) & ~0x3f, -0x7fc0, 0x7fc0);
     }
     dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], wmp, t->bx, t->by);
-    wmp->type = dav1d_get_shear_params(wmp) ? DAV1D_WM_TYPE_INVALID :
-                                              DAV1D_WM_TYPE_AFFINE;
+    wmp->type = dav1d_get_shear_params(wmp) ? DAV1D_WM_TYPE_INVALID : warp_type(m);
 }
 
 static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
@@ -1047,8 +1046,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     b->bs = bs;
 
-    const Dav1dSegmentationData *seg = NULL;
-
     static const uint8_t size_group_lookup[] = {
         [BS_4x4] = 0,
         [BS_4x8] = 0,
@@ -1096,8 +1093,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else {
                 b->seg_id = 0;
             }
-            seg = &f->frame_hdr->segmentation.seg_data.d[b->seg_id];
-        } else if (f->frame_hdr->segmentation.seg_data.preskip) {
+        } else if (f->frame_hdr->segmentation.preskip) {
             if (f->frame_hdr->segmentation.temporal &&
                 (seg_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
                                 ts->cdf.m.seg_pred[t->a->seg_pred[bx4] +
@@ -1123,7 +1119,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                           ts->cdf.m.seg_id[seg_ctx],
                                           DAV1D_MAX_SEGMENTS - 1);
                 const unsigned last_active_seg_id =
-                    f->frame_hdr->segmentation.seg_data.last_active_segid;
+                    f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
                                              last_active_seg_id + 1);
                 if (b->seg_id > last_active_seg_id) b->seg_id = 0; // error?
@@ -1133,8 +1129,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (DEBUG_BLOCK_INFO)
                 printf("Post-segid[preskip;%d]: r=%d\n",
                        b->seg_id, ts->msac.rng);
-
-            seg = &f->frame_hdr->segmentation.seg_data.d[b->seg_id];
         }
     } else {
         b->seg_id = 0;
@@ -1161,7 +1155,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // skip_mode
-    if ((!seg || (!seg->globalmv && seg->ref == -1 && !seg->skip)) &&
+    if (!((f->frame_hdr->segmentation.d.globalmv_mask |
+           f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id)) &&
         f->frame_hdr->skip_mode_enabled && bw4 * bh4 > 2 && !t->intra_region)
     {
         const int ctx = nx[0]->skip_mode[xoff[0]] + nx[1]->skip_mode[xoff[1]];
@@ -1180,8 +1175,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // mixed-intra/inter regions in inter frames with chroma planes
             // of different sizes (in AVM language: with offsets) are inter
             b->intra = 0;
-        } else if (seg && (seg->ref >= 0 || seg->globalmv)) {
-            b->intra = !seg->ref;
         } else {
             const int ictx = get_intra_ctx(nx, xoff, idx);
             b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac,
@@ -1241,7 +1234,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // skip_txfm
-    if ((seg && seg->skip)) {
+    if (f->frame_hdr->segmentation.d.skip_mask & (1 << b->seg_id)) {
         b->skip_txfm = 1;
     } else if (b->intra && !b->intrabc) {
         b->skip_txfm = 0;
@@ -1257,7 +1250,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     // segment_id
     if (f->frame_hdr->segmentation.enabled &&
         f->frame_hdr->segmentation.update_map &&
-        !f->frame_hdr->segmentation.seg_data.preskip)
+        !f->frame_hdr->segmentation.preskip)
     {
         if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
             (seg_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
@@ -1286,15 +1279,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                           ts->cdf.m.seg_id[seg_ctx],
                                           DAV1D_MAX_SEGMENTS - 1);
                 const unsigned last_active_seg_id =
-                    f->frame_hdr->segmentation.seg_data.last_active_segid;
+                    f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
                                              last_active_seg_id + 1);
                 if (b->seg_id > last_active_seg_id) b->seg_id = 0; // error?
             }
             if (b->seg_id >= DAV1D_MAX_SEGMENTS) b->seg_id = 0; // error?
         }
-
-        seg = &f->frame_hdr->segmentation.seg_data.d[b->seg_id];
 
         if (DEBUG_BLOCK_INFO)
             printf("Post-segid[postskip;%d]: r=%d\n",
@@ -1345,7 +1336,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     idx & 3 ? cdef_ptr[-1] :
                     t->lf_mask[-1].cdef_idx[idx + 3];
                 const int top_cdef_idx =
-                    t->by - 16 < ts->tiling.row_start ? -1 :
+                    !((t->by & ~15) & (f->sb_step - 1)) ? -1 :
                     idx & 0xc ? cdef_ptr[-4] :
                     t->lf_mask[-f->sb256w].cdef_idx[idx + 12];
                 // cdef_idx=-1: --, 0: true, 1-7: false, edge combo -> context
@@ -1434,30 +1425,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (have_delta_q && DEBUG_BLOCK_INFO)
                 printf("Post-delta_q[%d->%d]: r=%d\n",
                        delta_q, ts->last_qidx, ts->msac.rng);
-
-            // TODO: will be removed in v13
-            if (f->frame_hdr->delta.lf.present) {
-                const int n_lfs = f->frame_hdr->delta.lf.multi ?
-                    f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 ? 4 : 2 : 1;
-
-                for (int i = 0; i < n_lfs; i++) {
-                    int delta_lf = dav1d_msac_decode_symbol_adapt4(&ts->msac,
-                        ts->cdf.m.delta_lf[i + f->frame_hdr->delta.lf.multi], 3);
-                    if (delta_lf == 3) {
-                        const int n_bits = 1 + dav1d_msac_decode_bools_bypass(&ts->msac, 3);
-                        delta_lf = dav1d_msac_decode_bools_bypass(&ts->msac, n_bits) +
-                                   1 + (1 << n_bits);
-                    }
-                    if (delta_lf) {
-                        if (dav1d_msac_decode_bool_bypass(&ts->msac))
-                            delta_lf = -delta_lf;
-                        delta_lf *= 1 << f->frame_hdr->delta.lf.res_log2;
-                    }
-                    if (have_delta_q && DEBUG_BLOCK_INFO)
-                        printf("Post-delta_lf[%d:%d]: r=%d\n", i, delta_lf,
-                               ts->msac.rng);
-                }
-            }
         }
         if (ts->last_qidx == f->frame_hdr->quant.yac) {
             // assign frame-wide q values to this sb
@@ -1745,7 +1712,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int ctx = (boff[0] == -1 ? 0 : nb[0]->dip[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->dip[boff[1]]);
                 b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
-                                                      ts->cdf.coef.dip[ctx]);
+                                                      ts->cdf.m.dip[ctx]);
                 if (b->dip) {
                     const int tp = dav1d_msac_decode_bool_bypass(&ts->msac);
                     const int m =
@@ -2017,7 +1984,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         if (b->skip_mode) {
             is_comp = 1;
         } else if (!is_tip &&
-                   (!seg || (seg->ref == -1 && !seg->globalmv && !seg->skip)) &&
+                   !((f->frame_hdr->segmentation.d.globalmv_mask |
+                      f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id)) &&
                    f->frame_hdr->switchable_comp_refs && bw4 * bh4 >= 4)
         {
             const int ctx = get_comp_ctx(nx, xoff, idx, &f->refdir_with_intra[1]);
@@ -2203,7 +2171,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
                 amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[mode_ctx][ctx]);
-                mvprec_def = 2 - (!amvd || f->frame_hdr->mv_precision < 3);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=%d|%d,%d]: r=%d\n",
                                    depth, "", mode_ctx, ctx, amvd, ts->msac.rng);
             }
@@ -2551,9 +2518,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->comp_type = COMP_INTER_NONE;
 
             // ref
-            if (seg && seg->ref > 0) {
-                b->ref[0] = seg->ref - 1;
-            } else if (seg && (seg->globalmv || seg->skip)) {
+            if ((f->frame_hdr->segmentation.d.globalmv_mask |
+                 f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id))
+            {
                 b->ref[0] = 0;
             } else {
                 if (is_tip) {
@@ -2599,7 +2566,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                 have_top_right, have_bottom_left, b_dim, b->ref[0]);
             const int is_sb_boundary = !(t->by & (f->sb_step - 1));
 
-            if (seg && (seg->globalmv || seg->skip)) {
+            if ((f->frame_hdr->segmentation.d.globalmv_mask |
+                 f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id))
+            {
                 b->inter_mode = GLOBALMV;
             } else if (is_tip) {
                 b->inter_mode = NEARMV +
@@ -2639,7 +2608,6 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
                 amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[4][ctx]);
-                mvprec_def = 2 - (!amvd || f->frame_hdr->mv_precision < 3);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=4|%d,%d]: r=%d\n",
                                    depth, "", ctx, amvd, ts->msac.rng);
             }
@@ -2835,9 +2803,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->mv[0] = b->inter_mode == WARPMV ?
                     get_warpmv_2d(warp[warp_ref_idx], t->bx, t->by,
                                   bw4, bh4, f->bw, f->bh,
-                                  // this works around a bug in v12 (see AVM #835)
-                                  warpmv_with_mvd && warp[warp_ref_idx][6] >=
-                                      DAV1D_WM_TYPE_ROT_ZOOM ? mv_prec : 6) :
+                                  warpmv_with_mvd ? mv_prec : 6) :
                     mvstack[drl_idx].mv.mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
@@ -2921,8 +2887,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
                 t->warpmv[0].type = dav1d_get_shear_params(&t->warpmv[0]) ?
-                    DAV1D_WM_TYPE_INVALID : np == 4 ?
-                    DAV1D_WM_TYPE_AFFINE : DAV1D_WM_TYPE_ROT_ZOOM;
+                    DAV1D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
                 DEBUG_BLOCK_printf("%*sPost-warp_param_signal[%d,%d,%d,%d]: r=%d\n",
                                    depth, "", b->matrix[0], b->matrix[1],
                                    (np == 4) ? b->matrix[2] : 0,
@@ -2932,7 +2897,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                        sizeof(int32_t) * 6);
                 dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
                 t->warpmv[0].type = dav1d_get_shear_params(&t->warpmv[0]) ?
-                    DAV1D_WM_TYPE_INVALID : warp[warp_ref_idx][6];
+                    DAV1D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
             } else if (b->motion_mode == MM_WARP_CAUSAL) {
                 derive_warpmv(t, have_top, have_left, bw4, bh4, w4, h4,
                               b->ref[0], b->mv[0], &t->warpmv[0]);
@@ -4654,8 +4619,6 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
         init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
     }
-    dav1d_calc_lf_values(f->lf.lvl, f->frame_hdr, (int8_t[4]) { 0, 0, 0, 0 });
-    memset(f->lf.mask, 0, sizeof(*f->lf.mask) * num_sb256);
 
     const int ipred_edge_sz = f->sbh * f->sb256w << hbd;
     if (ipred_edge_sz != f->ipred_edge_sz) {
@@ -4729,7 +4692,7 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
         dav1d_cdf_pri_sec_average(f->in_cdf.data.cdf,
                                   &f->src_cdf[0], &f->src_cdf[1]);
     }
-    if (f->frame_hdr->refresh_context)
+    if (!f->frame_hdr->disable_cdf_update)
         dav1d_cdf_thread_copy(f->out_cdf.data.cdf, &f->in_cdf);
 
     // parse individual tiles per tile group
@@ -4760,7 +4723,7 @@ int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
                 tile_col = 0;
                 tile_row++;
             }
-            if (j == f->frame_hdr->tiling.update && f->frame_hdr->refresh_context)
+            if (j == f->frame_hdr->tiling.update && !f->frame_hdr->disable_cdf_update)
                 f->task_thread.update_set = 1;
             data += tile_sz;
             size -= tile_sz;
@@ -4851,7 +4814,7 @@ void dav1d_decode_frame_exit(Dav1dFrameContext *const f, int retval) {
         dav1d_cdf_thread_unref(&f->src_cdf[0]);
         dav1d_cdf_thread_unref(&f->src_cdf[1]);
     }
-    if (f->frame_hdr && f->frame_hdr->refresh_context) {
+    if (f->frame_hdr && !f->frame_hdr->disable_cdf_update) {
         if (f->out_cdf.progress)
             atomic_store(f->out_cdf.progress, retval == 0 ? 1 : TILE_ERROR);
         dav1d_cdf_thread_unref(&f->out_cdf);
@@ -4913,7 +4876,7 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
             res = f->task_thread.retval;
         } else {
             res = dav1d_decode_frame_main(f);
-            if (!res && f->frame_hdr->refresh_context && f->task_thread.update_set) {
+            if (!res && !f->frame_hdr->disable_cdf_update && f->task_thread.update_set) {
                 const int shift = f->frame_hdr->tiling.t.log2_cols +
                                   f->frame_hdr->tiling.t.log2_rows;
                 if (shift && f->seq_hdr->avg_cdf_type) {
@@ -5117,7 +5080,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             dav1d_cdf_thread_ref(&f->src_cdf[1], &c->cdf[sec_ref]);
         }
     }
-    if (f->frame_hdr->refresh_context) {
+    if (!f->frame_hdr->disable_cdf_update) {
         res = dav1d_cdf_thread_alloc(c, &f->out_cdf, c->n_fc > 1);
         if (res < 0) goto error;
     }
@@ -5302,7 +5265,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             dav1d_thread_picture_ref(&c->refs[i].p, &f->sr_cur);
 
             dav1d_cdf_thread_unref(&c->cdf[i]);
-            if (f->frame_hdr->refresh_context) {
+            if (!f->frame_hdr->disable_cdf_update) {
                 dav1d_cdf_thread_ref(&c->cdf[i], &f->out_cdf);
             } else {
                 dav1d_cdf_thread_ref(&c->cdf[i], &f->in_cdf);
@@ -5350,7 +5313,7 @@ error:
         dav1d_cdf_thread_unref(&f->src_cdf[0]);
         dav1d_cdf_thread_unref(&f->src_cdf[1]);
     }
-    if (f->frame_hdr->refresh_context)
+    if (!f->frame_hdr->disable_cdf_update)
         dav1d_cdf_thread_unref(&f->out_cdf);
     for (int i = 0; i < 7; i++) {
         if (f->refp[i].p.frame_hdr)

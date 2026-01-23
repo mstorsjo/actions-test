@@ -126,12 +126,12 @@ bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 
     // FIXME SMOOTH predictors don't need all of the edge pixels
     EdgeMask e = intra_prediction_edges[mode];
-    if (is_dir && apply_ibp) {
+    if ((mode == Z1_PRED || mode == Z3_PRED) && apply_ibp) {
         e.needs_top = 1;
         e.needs_left = 1;
         e.needs_topleft = 1;
-        e.needs_bottomleft |= *angle < 90;
-        e.needs_topright |= *angle > 180;
+        e.needs_bottomleft = 1;
+        e.needs_topright = 1;
     }
 
     const pixel *dst_top, *dst_top2;

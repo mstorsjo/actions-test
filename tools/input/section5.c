@@ -63,11 +63,11 @@ static int section5_probe(const uint8_t *data) {
             return 0;
 
         switch (type) {
-        case DAV1D_OBU_TILE_GRP:
+        case DAV1D_OBU_OPEN_LOOP_KF:
+        case DAV1D_OBU_CLOSED_LOOP_KF:
             return 1;
-        case DAV1D_OBU_TD:
-            return 0;
         default:
+            cnt += ret;
             break;
         }
     }
@@ -103,8 +103,22 @@ static int section5_open(Section5InputContext *const c, const char *const file,
         if (fread(&byte[0], 1, 1, c->f) < 1)
             return -1;
         const enum Dav1dObuType obu_type = (byte[0] >> 2) & 0x1f;
-        if (obu_type == DAV1D_OBU_TILE_GRP || obu_type == DAV1D_OBU_TIP)
+        switch (obu_type) {
+        case DAV1D_OBU_OPEN_LOOP_KF:
+        case DAV1D_OBU_CLOSED_LOOP_KF:
+        case DAV1D_OBU_LEADING_TILE_GRP:
+        case DAV1D_OBU_TILE_GRP:
+        case DAV1D_OBU_SWITCH:
+        case DAV1D_OBU_LEADING_SEF:
+        case DAV1D_OBU_SEF:
+        case DAV1D_OBU_LEADING_TIP:
+        case DAV1D_OBU_TIP:
+        case DAV1D_OBU_BRIDGE:
+        case DAV1D_OBU_RAS:
             (*num_frames)++;
+            break;
+        default: break;
+        }
         const int has_extension = byte[0] >> 7;
         if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
             return -1;

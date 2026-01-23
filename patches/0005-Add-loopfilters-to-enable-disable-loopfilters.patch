@@ -1,94 +1,44 @@
-From 1c63c26743794afc9a0b30bbbc162ad3036c3c7e Mon Sep 17 00:00:00 2001
+From cee10e56dc662c5c3d58db2badd79fac9fd8ed3b Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
 
 ---
- aom/aom_codec.h           | 10 ++++++++++
- aom/aomdx.h               | 11 +++++++++++
- apps/aomdec.c             | 34 ++++++++++++++++++++++++++++++++++
- av1/av1_dx_iface.c        | 16 ++++++++++++++++
- av1/decoder/decodeframe.c | 31 +++++++++++++++++++++----------
- av1/decoder/decoder.h     |  2 ++
- 6 files changed, 94 insertions(+), 10 deletions(-)
+ apps/avmdec.c             | 35 ++++++++++++++++++++++++++++++++++-
+ av2/av2_dx_iface.c        | 15 +++++++++++++++
+ av2/decoder/decodeframe.c | 32 +++++++++++++++++++++-----------
+ av2/decoder/decoder.h     |  2 ++
+ avm/avm_codec.h           | 10 ++++++++++
+ avm/avmdx.h               | 11 +++++++++++
+ 6 files changed, 93 insertions(+), 12 deletions(-)
 
-diff --git a/aom/aom_codec.h b/aom/aom_codec.h
-index a338ed5614..5cda54d2d6 100644
---- a/aom/aom_codec.h
-+++ b/aom/aom_codec.h
-@@ -635,6 +635,16 @@ typedef enum {
- 
- } OBU_METADATA_TYPE;
- 
-+enum InloopFilterType {
-+    INLOOPFILTER_NONE        = 0,
-+    INLOOPFILTER_DEBLOCK     = 1 << 0,
-+    INLOOPFILTER_CDEF        = 1 << 1,
-+    INLOOPFILTER_RESTORATION = 1 << 2,
-+    INLOOPFILTER_CCSO        = 1 << 3,
-+    INLOOPFILTER_GDF         = 1 << 4,
-+    INLOOPFILTER_ALL         = -1,
-+};
-+
- /*!\brief Returns string representation of OBU_TYPE.
-  *
-  * \param[in]     type            The OBU_TYPE to convert to string.
-diff --git a/aom/aomdx.h b/aom/aomdx.h
-index b5d454c67d..8adc78cbbf 100644
---- a/aom/aomdx.h
-+++ b/aom/aomdx.h
-@@ -342,6 +342,14 @@ enum aom_dec_control_id {
-    */
-   AV1D_SET_SKIP_FILM_GRAIN,
- 
-+  /*!\brief Codec control function to set the inloop filters, int
-+   * parameter
-+   *
-+   * Valid values are integers. The decoder will skip inloop filters when its
-+   * value is set to nonzero. The default value is INLOOPFILTER_ALL.
-+   */
-+  AV1D_SET_INLOOP_FILTERS,
-+
-   AV1D_SET_BRU_OPT_MODE,
- 
-   AOM_DECODER_CTRL_ID_MAX,
-@@ -497,6 +505,9 @@ AOM_CTRL_USE_TYPE(AV1D_SET_ROW_MT, unsigned int)
- AOM_CTRL_USE_TYPE(AV1D_SET_SKIP_FILM_GRAIN, int)
- #define AOM_CTRL_AV1D_SET_SKIP_FILM_GRAIN
- 
-+AOM_CTRL_USE_TYPE(AV1D_SET_INLOOP_FILTERS, int)
-+#define AOM_CTRL_AV1D_SET_DUMP_INTRA_FILE
-+
- AOM_CTRL_USE_TYPE(AV1D_SET_BRU_OPT_MODE, int)
- #define AOM_CTRL_AV1D_SET_BRU_OPT_MODE
- 
-diff --git a/apps/aomdec.c b/apps/aomdec.c
-index 43aa5753dd..5416316ef1 100644
---- a/apps/aomdec.c
-+++ b/apps/aomdec.c
-@@ -61,6 +61,27 @@ struct AvxDecInputContext {
+diff --git a/apps/avmdec.c b/apps/avmdec.c
+index 83d10a0059..bf2f41dbcd 100644
+--- a/apps/avmdec.c
++++ b/apps/avmdec.c
+@@ -62,6 +62,27 @@ struct AvxDecInputContext {
    struct WebmInputContext *webm_ctx;
  };
  
 +static const struct arg_enum_list inloop_filters_tbl[] = {
-+    { "none",                          INLOOPFILTER_NONE },
-+    { "deblock",                       INLOOPFILTER_DEBLOCK },
-+    { "nodeblock",                     INLOOPFILTER_ALL - INLOOPFILTER_DEBLOCK },
-+    { "cdef",                          INLOOPFILTER_CDEF },
-+    { "deblock+cdef",                  INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF },
-+    { "nocdef",                        INLOOPFILTER_ALL - INLOOPFILTER_CDEF },
-+    { "ccso",                          INLOOPFILTER_CCSO },
-+    { "cdef+ccso",                     INLOOPFILTER_CDEF | INLOOPFILTER_CCSO },
-+    { "deblock+cdef+ccso",             INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
-+                                                  INLOOPFILTER_CCSO },
-+    { "noccso",                        INLOOPFILTER_ALL - INLOOPFILTER_CCSO },
-+    { "restoration",                   INLOOPFILTER_RESTORATION },
-+    { "norestoration",                 INLOOPFILTER_ALL - INLOOPFILTER_RESTORATION },
-+    { "deblock+cdef+ccso+restoration", INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
-+                                                  INLOOPFILTER_CCSO | INLOOPFILTER_RESTORATION },
-+    { "gdf",                           INLOOPFILTER_GDF },
-+    { "nogdf",                         INLOOPFILTER_ALL - INLOOPFILTER_GDF },
-+    { "all",                           INLOOPFILTER_ALL },
++  { "none",                          INLOOPFILTER_NONE },
++  { "deblock",                       INLOOPFILTER_DEBLOCK },
++  { "nodeblock",                     INLOOPFILTER_ALL - INLOOPFILTER_DEBLOCK },
++  { "cdef",                          INLOOPFILTER_CDEF },
++  { "deblock+cdef",                  INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF },
++  { "nocdef",                        INLOOPFILTER_ALL - INLOOPFILTER_CDEF },
++  { "ccso",                          INLOOPFILTER_CCSO },
++  { "cdef+ccso",                     INLOOPFILTER_CDEF | INLOOPFILTER_CCSO },
++  { "deblock+cdef+ccso",             INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
++                                                INLOOPFILTER_CCSO },
++  { "noccso",                        INLOOPFILTER_ALL - INLOOPFILTER_CCSO },
++  { "restoration",                   INLOOPFILTER_RESTORATION },
++  { "norestoration",                 INLOOPFILTER_ALL - INLOOPFILTER_RESTORATION },
++  { "deblock+cdef+ccso+restoration", INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
++                                                INLOOPFILTER_CCSO | INLOOPFILTER_RESTORATION },
++  { "gdf",                           INLOOPFILTER_GDF },
++  { "nogdf",                         INLOOPFILTER_ALL - INLOOPFILTER_GDF },
++  { "all",                           INLOOPFILTER_ALL },
 +};
 +
  static const arg_def_t help =
@@ -100,73 +50,74 @@ index 43aa5753dd..5416316ef1 100644
      ARG_DEF(NULL, "skip-film-grain", 0, "Skip film grain application");
 +static const arg_def_t inloopfiltersarg =
 +    ARG_DEF_ENUM(NULL, "inloopfilters", 1, "Which in-loop filters to enable", inloop_filters_tbl);
- static const arg_def_t bruoptmodearg =
-     ARG_DEF(NULL, "bru-opt-mode", 0, "Use BRU optimized decode mode");
- #if CONFIG_ICC_METADATA
-@@ -158,6 +181,7 @@ static const arg_def_t *all_args[] = { &help,
-                                        &oppointarg,
-                                        &outallarg,
-                                        &skipfilmgrain,
-+                                       &inloopfiltersarg,
-                                        &bruoptmodearg,
- #if CONFIG_ICC_METADATA
-                                        &icc_file,
-@@ -647,6 +671,7 @@ static int main_loop(int argc, const char **argv_) {
+ #if CONFIG_F024_KEYOBU
+ static const arg_def_t randomaccess =
+     ARG_DEF(NULL, "random-access", 0,
+@@ -141,7 +164,7 @@ static const arg_def_t *all_args[] = {
+ #endif
+   &threadsarg,     &verbosearg,    &scalearg,    &fb_arg,         &md5arg,
+   &verifyarg,      &framestatsarg, &continuearg, &outbitdeptharg, &oppointarg,
+-  &outallarg,      &skipfilmgrain,
++  &outallarg,      &skipfilmgrain, &inloopfiltersarg,
+ #if CONFIG_F024_KEYOBU
+   &randomaccess,
+ #endif  // CONFIG_F024_KEYOBU
+@@ -656,6 +679,7 @@ static int main_loop(int argc, const char **argv_) {
    int operating_point = 0;
    int output_all_layers = 0;
    int skip_film_grain = 0;
 +  enum InloopFilterType inloop_filters = INLOOPFILTER_ALL;
-   int bru_opt_mode = 0;
-   aom_image_t *scaled_img = NULL;
-   aom_image_t *img_shifted = NULL;
-@@ -798,6 +823,8 @@ static int main_loop(int argc, const char **argv_) {
+ #if CONFIG_F024_KEYOBU
+   int random_access = 0;
+ #endif  // CONFIG_F024_KEYOBU
+@@ -805,6 +829,8 @@ static int main_loop(int argc, const char **argv_) {
        output_all_layers = 1;
      } else if (arg_match(&arg, &skipfilmgrain, argi)) {
        skip_film_grain = 1;
 +    } else if (arg_match(&arg, &inloopfiltersarg, argi)) {
 +      inloop_filters = arg_parse_enum(&arg);
-     } else if (arg_match(&arg, &bruoptmodearg, argi)) {
-       bru_opt_mode = 1;
- #if CONFIG_ICC_METADATA
-@@ -945,6 +972,13 @@ static int main_loop(int argc, const char **argv_) {
+ #if CONFIG_F024_KEYOBU
+     } else if (arg_match(&arg, &randomaccess, argi)) {
+       random_access = arg_parse_uint(&arg);
+@@ -963,6 +989,13 @@ static int main_loop(int argc, const char **argv_) {
      goto fail;
    }
  
-+  if (AOM_CODEC_CONTROL_TYPECHECKED(&decoder, AV1D_SET_INLOOP_FILTERS,
++  if (AVM_CODEC_CONTROL_TYPECHECKED(&decoder, AV2D_SET_INLOOP_FILTERS,
 +                                    inloop_filters)) {
 +    fprintf(stderr, "Failed to set inloop_filters: %s\n",
-+            aom_codec_error(&decoder));
++            avm_codec_error(&decoder));
 +    goto fail;
 +  }
 +
-   if (AOM_CODEC_CONTROL_TYPECHECKED(&decoder, AV1D_SET_BRU_OPT_MODE,
-                                     bru_opt_mode)) {
-     fprintf(stderr, "Failed to set bru_opt_mode: %s\n",
-diff --git a/av1/av1_dx_iface.c b/av1/av1_dx_iface.c
-index be11305845..7d0ae14c4e 100644
---- a/av1/av1_dx_iface.c
-+++ b/av1/av1_dx_iface.c
-@@ -51,6 +51,7 @@ struct aom_codec_alg_priv {
+ #if CONFIG_F024_KEYOBU
+   if (AVM_CODEC_CONTROL_TYPECHECKED(&decoder, AV2D_SET_RANDOM_ACCESS,
+                                     random_access)) {
+diff --git a/av2/av2_dx_iface.c b/av2/av2_dx_iface.c
+index e80aa01a7b..0f2126e2da 100644
+--- a/av2/av2_dx_iface.c
++++ b/av2/av2_dx_iface.c
+@@ -51,6 +51,7 @@ struct avm_codec_alg_priv {
    int byte_alignment;
    int skip_loop_filter;
    int skip_film_grain;
 +  int inloop_filters;
-   int bru_opt_mode;
-   unsigned int row_mt;
-   EXTERNAL_REFERENCES ext_refs;
-@@ -629,6 +630,7 @@ static void init_buffer_callbacks(aom_codec_alg_priv_t *ctx) {
+ #if CONFIG_F024_KEYOBU
+   uint64_t random_access;
+ #endif  // CONFIG_F024_KEYOBU
+@@ -582,6 +583,7 @@ static void init_buffer_callbacks(avm_codec_alg_priv_t *ctx) {
    cm->features.byte_alignment = ctx->byte_alignment;
    pbi->skip_loop_filter = ctx->skip_loop_filter;
    pbi->skip_film_grain = ctx->skip_film_grain;
 +  pbi->inloop_filters = ctx->inloop_filters;
-   pbi->bru_opt_mode = ctx->bru_opt_mode;
+ #if CONFIG_F024_KEYOBU
+   pbi->random_access_point_index = ctx->random_access;
+ #endif  // CONFIG_F024_KEYOBU
+@@ -1776,6 +1778,18 @@ static avm_codec_err_t ctrl_set_skip_film_grain(avm_codec_alg_priv_t *ctx,
  
-   if (ctx->get_ext_fb_cb != NULL && ctx->release_ext_fb_cb != NULL) {
-@@ -1715,6 +1717,19 @@ static aom_codec_err_t ctrl_set_skip_film_grain(aom_codec_alg_priv_t *ctx,
-   return AOM_CODEC_OK;
+   return AVM_CODEC_OK;
  }
- 
-+static aom_codec_err_t ctrl_set_inloop_filters(aom_codec_alg_priv_t *ctx,
++static avm_codec_err_t ctrl_set_inloop_filters(avm_codec_alg_priv_t *ctx,
 +                                               va_list args) {
 +  ctx->inloop_filters = va_arg(args, int);
 +
@@ -176,56 +127,55 @@ index be11305845..7d0ae14c4e 100644
 +    frame_worker_data->pbi->inloop_filters = ctx->inloop_filters;
 +  }
 +
-+  return AOM_CODEC_OK;
++  return AVM_CODEC_OK;
 +}
-+
- static aom_codec_err_t ctrl_set_bru_opt_mode(aom_codec_alg_priv_t *ctx,
-                                              va_list args) {
-   ctx->bru_opt_mode = va_arg(args, int);
-@@ -1802,6 +1817,7 @@ static aom_codec_ctrl_fn_map_t decoder_ctrl_maps[] = {
-   { AV1D_SET_ROW_MT, ctrl_set_row_mt },
-   { AV1D_SET_EXT_REF_PTR, ctrl_set_ext_ref_ptr },
-   { AV1D_SET_SKIP_FILM_GRAIN, ctrl_set_skip_film_grain },
-+  { AV1D_SET_INLOOP_FILTERS, ctrl_set_inloop_filters },
-   { AV1D_SET_BRU_OPT_MODE, ctrl_set_bru_opt_mode },
-   { AV1D_ENABLE_SUBGOP_STATS, ctrl_enable_subgop_stats },
- 
-diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index e6f4c89224..e8f6cf3ab9 100644
---- a/av1/decoder/decodeframe.c
-+++ b/av1/decoder/decodeframe.c
-@@ -687,9 +687,10 @@ static void dec_calc_subpel_params_and_extend(
+ #if CONFIG_F024_KEYOBU
+ static avm_codec_err_t ctrl_set_random_access(avm_codec_alg_priv_t *ctx,
+                                               va_list args) {
+@@ -1869,6 +1883,7 @@ static avm_codec_ctrl_fn_map_t decoder_ctrl_maps[] = {
+   { AV2_SET_INSPECTION_CALLBACK, ctrl_set_inspection_callback },
+   { AV2D_SET_ROW_MT, ctrl_set_row_mt },
+   { AV2D_SET_SKIP_FILM_GRAIN, ctrl_set_skip_film_grain },
++  { AV2D_SET_INLOOP_FILTERS, ctrl_set_inloop_filters },
+ #if CONFIG_F024_KEYOBU
+   { AV2D_SET_RANDOM_ACCESS, ctrl_set_random_access },
+ #endif  // CONFIG_F024_KEYOBU
+diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
+index 93278555eb..f28de42a42 100644
+--- a/av2/decoder/decodeframe.c
++++ b/av2/decoder/decodeframe.c
+@@ -667,9 +667,10 @@ static void dec_calc_subpel_params_and_extend(
                     inter_pred_params->is_intrabc, mc_buf[ref], pre, src_stride);
  }
  
--static void av1_dec_setup_tip_frame(AV1_COMMON *cm, MACROBLOCKD *xd,
-+static void av1_dec_setup_tip_frame(AV1Decoder *pbi, MACROBLOCKD *xd,
+-static void av2_dec_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd,
++static void av2_dec_setup_tip_frame(AV2Decoder *pbi, MACROBLOCKD *xd,
                                      uint16_t **mc_buf,
                                      CONV_BUF_TYPE *tmp_conv_dst) {
-+  AV1_COMMON *const cm = &pbi->common;
-   av1_setup_tip_motion_field(cm);
-   av1_setup_tip_frame(cm, xd, mc_buf, tmp_conv_dst,
++  AV2_COMMON *const cm = &pbi->common;
+   av2_setup_tip_motion_field(cm);
+   av2_setup_tip_frame(cm, xd, mc_buf, tmp_conv_dst,
                        dec_calc_subpel_params_and_extend,
-@@ -714,7 +715,8 @@ static void av1_dec_setup_tip_frame(AV1_COMMON *cm, MACROBLOCKD *xd,
+@@ -694,7 +695,8 @@ static void av2_dec_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd,
      cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q =
          avg_v_ac_delta_q;
    }
 -  if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu) {
 +  if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu &&
 +      pbi->inloop_filters & INLOOPFILTER_DEBLOCK) {
-     init_tip_lf_parameter(cm, 0, av1_num_planes(cm));
-     loop_filter_tip_frame(cm, 0, av1_num_planes(cm));
+     init_tip_lf_parameter(cm, 0, av2_num_planes(cm));
+     loop_filter_tip_frame(cm, 0, av2_num_planes(cm));
    }
-@@ -10281,7 +10283,7 @@ static AOM_INLINE void process_tip_mode(AV1Decoder *pbi) {
+@@ -9662,7 +9664,7 @@ static AVM_INLINE void process_tip_mode(AV2Decoder *pbi) {
  
    if (cm->features.tip_frame_mode == TIP_FRAME_AS_OUTPUT) {
      xd->opfl_vxy_bufs = pbi->td.opfl_vxy_bufs;
--    av1_dec_setup_tip_frame(cm, xd, pbi->td.mc_buf, pbi->td.tmp_conv_dst);
-+    av1_dec_setup_tip_frame(pbi, xd, pbi->td.mc_buf, pbi->td.tmp_conv_dst);
+-    av2_dec_setup_tip_frame(cm, xd, pbi->td.mc_buf, pbi->td.tmp_conv_dst);
++    av2_dec_setup_tip_frame(pbi, xd, pbi->td.mc_buf, pbi->td.tmp_conv_dst);
    } else if (cm->features.tip_frame_mode == TIP_FRAME_AS_REF) {
-     av1_setup_tip_motion_field(cm);
+     av2_setup_tip_motion_field(cm);
    }
-@@ -10917,8 +10919,16 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10112,9 +10114,16 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
      }
    }
  
@@ -237,13 +187,14 @@ index e6f4c89224..e8f6cf3ab9 100644
 +  const int enable_gdf = filters & INLOOPFILTER_GDF;
 +
    if (!cm->bru.frame_inactive_flag) {
--    if (cm->lf.filter_level[0] || cm->lf.filter_level[1]) {
+-    if (cm->lf.apply_deblocking_filter[0] ||
+-        cm->lf.apply_deblocking_filter[1]) {
 +    if (enable_deblock &&
-+        (cm->lf.filter_level[0] || cm->lf.filter_level[1])) {
++        (cm->lf.apply_deblocking_filter[0]|| cm->lf.apply_deblocking_filter[1])) {
        if (pbi->num_workers > 1) {
-         av1_loop_filter_frame_mt(&cm->cur_frame->buf, cm, &pbi->dcb.xd, 0,
+         av2_loop_filter_frame_mt(&cm->cur_frame->buf, cm, &pbi->dcb.xd, 0,
                                   num_planes, 0, pbi->tile_workers,
-@@ -10929,7 +10939,7 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10125,7 +10134,7 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
        }
      }
  
@@ -252,14 +203,14 @@ index e6f4c89224..e8f6cf3ab9 100644
          !pbi->skip_loop_filter && !cm->features.coded_lossless &&
          (cm->ccso_info.ccso_enable[0] || cm->ccso_info.ccso_enable[1] ||
           cm->ccso_info.ccso_enable[2]);
-@@ -10952,16 +10962,17 @@ void av1_decode_tg_tiles_and_wrapup(AV1Decoder *pbi, const uint8_t *data,
+@@ -10148,16 +10157,17 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
        extend_ccso_border(&cm->cur_frame->buf, ext_rec_y, CCSO_PADDING_SIZE);
      }
  
 -    const int do_loop_restoration =
 -        cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
 +    const int do_loop_restoration = enable_restoration &&
-+        (cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
++       (cm->rst_info[0].frame_restoration_type != RESTORE_NONE ||
          (cm->rst_info[1].frame_restoration_type != RESTORE_NONE &&
           !cm->seq_params.monochrome) ||
          (cm->rst_info[2].frame_restoration_type != RESTORE_NONE &&
@@ -273,13 +224,13 @@ index e6f4c89224..e8f6cf3ab9 100644
 -    const int do_gdf = is_gdf_enabled(cm);
 +    const int do_gdf = enable_gdf && is_gdf_enabled(cm);
      const int optimized_loop_restoration =
- #if CONFIG_CONTROL_LOOPFILTERS_ACROSS_TILES
-         !cm->seq_params.disable_loopfilters_across_tiles &&
-diff --git a/av1/decoder/decoder.h b/av1/decoder/decoder.h
-index 232423f86a..725b1f94ab 100644
---- a/av1/decoder/decoder.h
-+++ b/av1/decoder/decoder.h
-@@ -322,6 +322,8 @@ typedef struct AV1Decoder {
+         !cm->seq_params.disable_loopfilters_across_tiles && !do_gdf &&
+         !use_ccso && !do_cdef;
+diff --git a/av2/decoder/decoder.h b/av2/decoder/decoder.h
+index 4715185cd0..c364adac6f 100644
+--- a/av2/decoder/decoder.h
++++ b/av2/decoder/decoder.h
+@@ -340,6 +340,8 @@ typedef struct AV2Decoder {
    // So we track whether this is the first frame or not.
    int decoding_first_frame;
  
@@ -288,6 +239,56 @@ index 232423f86a..725b1f94ab 100644
    int max_threads;
    int inv_tile_order;
    int need_resync;  // wait for key/intra-only frame.
+diff --git a/avm/avm_codec.h b/avm/avm_codec.h
+index a0057f064a..92268adbe3 100644
+--- a/avm/avm_codec.h
++++ b/avm/avm_codec.h
+@@ -622,6 +622,16 @@ typedef enum {
+   NUM_OBU_METADATA_TYPES,
+ } OBU_METADATA_TYPE;
+ 
++enum InloopFilterType {
++  INLOOPFILTER_NONE        = 0,
++  INLOOPFILTER_DEBLOCK     = 1 << 0,
++  INLOOPFILTER_CDEF        = 1 << 1,
++  INLOOPFILTER_RESTORATION = 1 << 2,
++  INLOOPFILTER_CCSO        = 1 << 3,
++  INLOOPFILTER_GDF         = 1 << 4,
++  INLOOPFILTER_ALL         = -1,
++};
++
+ /*!\brief Returns string representation of OBU_TYPE.
+  *
+  * \param[in]     type            The OBU_TYPE to convert to string.
+diff --git a/avm/avmdx.h b/avm/avmdx.h
+index 8d46452022..13fd143ac7 100644
+--- a/avm/avmdx.h
++++ b/avm/avmdx.h
+@@ -331,6 +331,14 @@ enum avm_dec_control_id {
+    */
+   AV2D_SET_SKIP_FILM_GRAIN,
+ 
++  /*!\brief Codec control function to set the inloop filters, int
++   * parameter
++   *
++   * Valid values are integers. The decoder will skip inloop filters when its
++   * value is set to nonzero. The default value is INLOOPFILTER_ALL.
++   */
++  AV2D_SET_INLOOP_FILTERS,
++
+ #if CONFIG_F024_KEYOBU
+   AV2D_SET_RANDOM_ACCESS,
+ #endif  // CONFIG_F024_KEYOBU
+@@ -487,6 +495,9 @@ AVM_CTRL_USE_TYPE(AV2D_SET_ROW_MT, unsigned int)
+ AVM_CTRL_USE_TYPE(AV2D_SET_SKIP_FILM_GRAIN, int)
+ #define AVM_CTRL_AV2D_SET_SKIP_FILM_GRAIN
+ 
++AVM_CTRL_USE_TYPE(AV2D_SET_INLOOP_FILTERS, int)
++#define AVM_CTRL_AV2D_SET_DUMP_INTRA_FILE
++
+ #if CONFIG_F024_KEYOBU
+ AVM_CTRL_USE_TYPE(AV2D_SET_RANDOM_ACCESS, int)
+ #define AVM_CTRL_AV2D_SET_RANDOM_ACCESS
 -- 
 2.48.1
 

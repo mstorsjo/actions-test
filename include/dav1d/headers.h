@@ -47,23 +47,31 @@ extern "C" {
 #define DAV1D_TOTAL_REFS_PER_FRAME (DAV1D_REFS_PER_FRAME + 1)
 
 enum Dav1dObuType {
-    DAV1D_OBU_SEQ_HDR         = 1,
-    DAV1D_OBU_TD              = 2,
-    DAV1D_OBU_MULTI_FRAME_HDR = 3,
-    DAV1D_OBU_TILE_GRP        = 4,
-    DAV1D_OBU_METADATA        = 5,
-    DAV1D_OBU_METADATA_GRP    = 6,
-    DAV1D_OBU_SWITCH          = 7,
-    DAV1D_OBU_SEF             = 8,
-    DAV1D_OBU_TIP             = 9,
-    DAV1D_OBU_BUF_RM_TIMING   = 10,
-    DAV1D_OBU_LAYER_CFG_REC   = 11,
-    DAV1D_OBU_ATLAS_SEG       = 12,
-    DAV1D_OBU_OP_PT_SET       = 13,
-    DAV1D_OBU_BRIDGE          = 14,
-    DAV1D_OBU_MSDO            = 15,
-    DAV1D_OBU_RAS             = 16,
-    DAV1D_OBU_PADDING         = 17,
+    DAV1D_OBU_SEQ_HDR          = 1,
+    DAV1D_OBU_TD               = 2,
+    DAV1D_OBU_MULTI_FRAME_HDR  = 3,
+    DAV1D_OBU_CLOSED_LOOP_KF   = 4,
+    DAV1D_OBU_OPEN_LOOP_KF     = 5,
+    DAV1D_OBU_LEADING_TILE_GRP = 6,
+    DAV1D_OBU_TILE_GRP         = 7,
+    DAV1D_OBU_METADATA         = 8,
+    DAV1D_OBU_METADATA_GRP     = 9,
+    DAV1D_OBU_SWITCH           = 10,
+    DAV1D_OBU_LEADING_SEF      = 11,
+    DAV1D_OBU_SEF              = 12,
+    DAV1D_OBU_LEADING_TIP      = 13,
+    DAV1D_OBU_TIP              = 14,
+    DAV1D_OBU_BUF_RM_TIMING    = 15,
+    DAV1D_OBU_LAYER_CFG_REC    = 16,
+    DAV1D_OBU_ATLAS_SEG        = 17,
+    DAV1D_OBU_OP_PT_SET        = 18,
+    DAV1D_OBU_BRIDGE           = 19,
+    DAV1D_OBU_MSDO             = 20,
+    DAV1D_OBU_RAS              = 21,
+    DAV1D_OBU_QM               = 22,
+    DAV1D_OBU_FGM              = 23,
+    DAV1D_OBU_CONTENT_INTERP   = 24,
+    DAV1D_OBU_PADDING          = 25,
 };
 
 enum Dav1dTxfmMode {
@@ -214,6 +222,11 @@ typedef struct Dav1dITUTT35 {
     uint8_t *payload;
 } Dav1dITUTT35;
 
+typedef struct Dav1dSegmentationDataSet {
+    int16_t delta_q[DAV1D_MAX_SEGMENTS];
+    uint16_t delta_q_mask, skip_mask, globalmv_mask;
+} Dav1dSegmentationDataSet;
+
 typedef struct Dav1dSequenceHeader {
     uint8_t id;
     /**
@@ -222,6 +235,11 @@ typedef struct Dav1dSequenceHeader {
      * or 12 bits/component at any chroma subsampling.
      */
     uint8_t profile;
+    uint8_t reduced_still_picture_header;
+    uint8_t lcr_id;
+    uint8_t still_picture;
+    uint8_t level;
+    uint8_t tier;
     /**
      * Maximum dimensions for this stream. In non-scalable streams, these
      * are often the actual dimensions of the stream, although that is not
@@ -234,13 +252,8 @@ typedef struct Dav1dSequenceHeader {
         unsigned left, right, top, bottom;
     } crop;
     uint8_t /*enum Dav1dPixelLayout*/ layout; ///< format of the picture
+    uint8_t ss_hor, ss_ver;
 
-    uint8_t sb128; // 2: 256x256, 1: 128x128, 0: 64x64
-
-    uint8_t /*enum Dav1dColorPrimaries*/ pri; ///< color primaries (av1)
-    uint8_t /*enum Dav1dTransferCharacteristics*/ trc; ///< transfer characteristics (av1)
-    uint8_t /*enum Dav1dMatrixCoefficients*/ mtrx; ///< matrix coefficients (av1)
-    uint8_t /*enum Dav1dChromaSamplePosition*/ chr; ///< chroma sample position (av1)
     /**
      * 0, 1 and 2 mean 8, 10 or 12 bits/component, respectively. This is not
      * exactly the same as 'hbd' from the spec; the spec's hbd distinguishes
@@ -249,47 +262,36 @@ typedef struct Dav1dSequenceHeader {
      * the spec's hbd, use !!our_hbd, and to get twelve_bit, use hbd == 2.
      */
     uint8_t hbd;
-    /**
-     * Pixel data uses JPEG pixel range ([0,255] for 8bits) instead of
-     * MPEG pixel range ([16,235] for 8bits luma, [16,240] for 8bits chroma).
-     */
-    uint8_t color_range;
-    uint8_t ss_hor, ss_ver;
-    uint8_t color_description_present;
 
-    uint8_t num_operating_points;
-    struct Dav1dSequenceHeaderOperatingPoint {
-        uint8_t level;
-        uint8_t initial_display_delay;
-        uint16_t idc;
-        uint8_t tier;
-        uint8_t decoder_model_param_present;
-        uint8_t display_model_param_present;
-    } operating_points[DAV1D_MAX_OPERATING_POINTS];
+    uint8_t max_display_model_info_present;
+    uint8_t max_initial_display_delay;
+    uint8_t decoder_model_info_present;
+    uint8_t max_decoder_model_present;
+    uint32_t num_units_in_decoding_tick;
+    uint32_t max_decoder_buffer_delay;
+    uint32_t max_encoder_buffer_delay;
+    uint8_t max_low_delay_mode;
 
     uint8_t max_tlayer_id, max_mlayer_id;
     uint8_t tlayer_dependency_present, mlayer_dependency_present;
     uint8_t tlayer_dependencies[8], mlayer_dependencies[8];
 
-    uint8_t still_picture;
-    uint8_t reduced_still_picture_header;
-    uint8_t timing_info_present;
-    uint32_t num_units_in_tick;
-    uint32_t time_scale;
-    uint8_t equal_picture_interval;
-    uint32_t num_ticks_per_picture;
-    uint8_t decoder_model_info_present;
-    uint8_t encoder_decoder_buffer_delay_length;
-    uint32_t num_units_in_decoding_tick;
-    uint8_t buffer_removal_delay_length;
-    uint8_t frame_presentation_delay_length;
-    uint8_t display_model_info_present;
+    uint8_t sb128; // 2: 256x256, 1: 128x128, 0: 64x64
+
+    // partition flags
+    uint8_t sdp, ext_sdp;
+    uint8_t ext_partitions, uneven_4way_partitions;
+    uint8_t max_pb_aspect_ratio_log2;
+
+    // segmentation
+    struct {
+        uint8_t ext, info_present, adaptive;
+        Dav1dSegmentationDataSet d;
+    } segmentation;
 
     // intra tools
-    uint8_t intra_dip;
-    uint8_t intra_edge_filter;
-    uint8_t mrls, cfl, mhccp;
-    uint8_t orip, ibp;
+    uint8_t intra_dip, intra_edge_filter;
+    uint8_t mrls, cfl, cfl_ds_filter_index, mhccp, ibp;
 
     // inter tools
     uint8_t motion_modes; // translation, inter-intra, warp [3x]
@@ -302,22 +304,34 @@ typedef struct Dav1dSequenceHeader {
 
     uint8_t refmv_bank, drl_reorder;
     uint8_t explicit_ref_frame_map;
-    uint8_t ref_frames, ref_frames_log2;
+    uint8_t ref_frames, ref_frames_log2, number_of_bits_for_lt_frame_id;
     uint8_t def_max_drl_bits, allow_frame_max_drl_bits;
     uint8_t def_max_bvp_drl_bits, allow_max_bvp_drl_bits;
     uint8_t num_same_ref_comp;
 
     uint8_t tip, tip_hole_fill;
     uint8_t mv_traj, bawp, cwp, imp_msk_bld;
-    uint8_t fsc, idtx_intra, lf_sub_pu, tip_explicit_qp;
+    uint8_t lf_sub_pu, tip_explicit_qp;
 
-    uint8_t opfl_refine, adaptive_mvd, refine_mv, tip_refine_mv;
-    uint8_t bru, mvd_sign_derive, flex_mvres;
+    uint8_t opfl_refine, refine_mv, tip_refine_mv;
+    uint8_t bru, adaptive_mvd, mvd_sign_derive, flex_mvres;
     uint8_t global_motion, short_refresh_frame_flags;
 
     // screen content flags
     uint8_t /*enum Dav1dAdaptiveBoolean*/ screen_content_tools;
     uint8_t /*enum Dav1dAdaptiveBoolean*/ force_integer_mv;
+
+    // tx group tools
+    uint8_t fsc, idtx_intra;
+    uint8_t ist[2 /* intra, inter */];
+    uint8_t chroma_dctonly, inter_ddt, reduced_tx_part_set;
+    uint8_t cctx;
+
+    // coef flags
+    uint8_t /*enum Dav1dAdaptiveBoolean*/ tcq;
+    uint8_t parity_hiding;
+
+    uint8_t avg_cdf, avg_cdf_type;
 
     // filtering flags
     uint8_t disable_loopfilters_across_tiles;
@@ -325,19 +339,9 @@ typedef struct Dav1dSequenceHeader {
     uint8_t gdf;
     uint8_t restoration;
     uint8_t rst_disable_mask[2];
-    uint8_t ccso, cfl_ds_filter_index;
-
-    // coef flags
-    uint8_t /*enum Dav1dAdaptiveBoolean*/ tcq;
-    uint8_t parity_hiding;
-
-    // partition flags
-    uint8_t ext_partitions, uneven_4way_partitions;
-
-    // tx group tools
-    uint8_t sdp, ext_sdp, ist[2 /* intra, inter */];
-    uint8_t chroma_dctonly, inter_ddt, reduced_tx_part_set;
-    uint8_t cctx, number_of_bits_for_lt_frame_id, ext_seg;
+    uint8_t ccso;
+    uint8_t /*enum Dav1dAdaptiveBoolean*/ cdef_on_skiptx;
+    uint8_t df_par_bits;
 
     // quant tools
     uint8_t separate_uv_delta_q;
@@ -358,39 +362,7 @@ typedef struct Dav1dSequenceHeader {
     } tiling;
 
     uint8_t film_grain_present;
-
-    uint8_t /*enum Dav1dAdaptiveBoolean*/ cdef_on_skiptx;
-    uint8_t avg_cdf, avg_cdf_type;
-
-    uint8_t max_pb_aspect_ratio_log2, df_par_bits;
-    uint8_t user_defined_qmatrix;
-
-    // Dav1dSequenceHeaders of the same sequence are required to be
-    // bit-identical until this offset. See 7.5 "Ordering of OBUs":
-    //   Within a particular coded video sequence, the contents of
-    //   sequence_header_obu must be bit-identical each time the
-    //   sequence header appears except for the contents of
-    //   operating_parameters_info.
-    struct Dav1dSequenceHeaderOperatingParameterInfo {
-        uint32_t decoder_buffer_delay;
-        uint32_t encoder_buffer_delay;
-        uint8_t low_delay_mode;
-    } operating_parameter_info[DAV1D_MAX_OPERATING_POINTS];
 } Dav1dSequenceHeader;
-
-typedef struct Dav1dSegmentationData {
-    int16_t delta_q;
-    int8_t delta_lf_y_v, delta_lf_y_h, delta_lf_u, delta_lf_v;
-    int8_t ref;
-    uint8_t skip;
-    uint8_t globalmv;
-} Dav1dSegmentationData;
-
-typedef struct Dav1dSegmentationDataSet {
-    Dav1dSegmentationData d[DAV1D_MAX_SEGMENTS];
-    uint8_t preskip;
-    int8_t last_active_segid;
-} Dav1dSegmentationDataSet;
 
 typedef struct Dav1dFilmGrainData {
     unsigned seed;
@@ -429,16 +401,13 @@ typedef struct Dav1dFrameHeader {
     uint32_t frame_presentation_delay;
     uint8_t show_frame;
     uint8_t showable_frame;
+    uint8_t cross_frame_context;
     uint8_t disable_cdf_update;
     uint8_t allow_screen_content_tools;
     uint8_t force_integer_mv;
     uint8_t frame_size_override;
     uint8_t primary_ref_signaled, primary_ref_frame, secondary_ref_frame;
     uint8_t n_ref_frames;
-    uint8_t buffer_removal_time_present;
-    struct Dav1dFrameHeaderOperatingPoint {
-        uint32_t buffer_removal_time;
-    } operating_points[DAV1D_MAX_OPERATING_POINTS];
     uint8_t refresh_frame_flags;
     uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
     uint8_t max_bvp_drl_bits, max_drl_bits;
@@ -453,14 +422,13 @@ typedef struct Dav1dFrameHeader {
         uint8_t frame_mode;
         uint8_t hole_fill;
         uint8_t global_wtd_idx;
-        uint8_t filter_level;
+        uint8_t apply_filter;
         struct {
             int8_t y, x;
         } gmv;
         uint8_t subpel_filter;
         uint8_t refs[2];
     } tip;
-    uint8_t refresh_context;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {
         struct Dav1dTileInfo t;
@@ -476,8 +444,10 @@ typedef struct Dav1dFrameHeader {
         } qm;
     } quant;
     struct {
-        uint8_t enabled, update_map, temporal, update_data;
-        Dav1dSegmentationDataSet seg_data;
+        uint8_t enabled, update_map, temporal;
+        Dav1dSegmentationDataSet d;
+        uint8_t preskip;
+        int8_t last_active_segid;
         uint8_t lossless[DAV1D_MAX_SEGMENTS], qidx[DAV1D_MAX_SEGMENTS];
     } segmentation;
     struct {
@@ -485,11 +455,6 @@ typedef struct Dav1dFrameHeader {
             uint8_t present;
             uint8_t res_log2;
         } q;
-        struct {
-            uint8_t present;
-            uint8_t res_log2;
-            uint8_t multi;
-        } lf;
     } delta;
     uint8_t all_lossless;
     uint8_t tcq, parity_hiding;

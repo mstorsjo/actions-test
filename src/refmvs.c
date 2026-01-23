@@ -191,13 +191,27 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                   const refmvs_tile *const rt,
                                   struct refmvs_state *const st,
                                   const int weight, const refmvs_block *const b,
-                                  const ptrdiff_t off_8x8,
+                                  ptrdiff_t off_y_8x8, ptrdiff_t off_x_8x8,
                                   const union refmvs_refpair ref, const mv gmv[2])
 {
     if (*st->cnt >= 6) return;
     if (b->mv.mv[0].n == INVALID_MV) return; // intra block, no intrabc
 
     const refmvs_frame *const rf = rt->rf;
+    if (b->ref.ref[0] - 1 == TIP_FRAME) {
+        const int tip16 = rf->frm_hdr->tip.frame_mode == 2 ?
+            !rf->seq_hdr->tip_refine_mv ||
+                rf->frm_hdr->tip.subpel_filter != DAV1D_FILTER_8TAP_SHARP :
+            (!rf->seq_hdr->tip_refine_mv &&
+             imin(dav1d_block_dimensions[b->bs][0],
+                  dav1d_block_dimensions[b->bs][1]) >= 4) || b->bs == BS_256x256;
+        const int tip16m = ~tip16;
+        // FIXME this should be relative to the block's top/left position
+        off_y_8x8 &= tip16m;
+        off_x_8x8 &= tip16m;
+    }
+    const ptrdiff_t off_8x8 = rf->rp_stride * off_y_8x8 + off_x_8x8;
+
     if (ref.ref[1] == -1) {
         for (int n = 0; n < 2; n++) {
             if (b->ref.ref[n] == ref.ref[0]) {
@@ -225,16 +239,14 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                        b->ref.ref[0] - 1 == rf->frm_hdr->tip.refs[0] &&
                        b->ref.ref[1] - 1 == rf->frm_hdr->tip.refs[1])
             {
-                // see #1014 (fixed in v13)
-                const union mv *const b_mv = b->mf & 2 ? b->lmv.mv : b->mv.mv;
                 const mv in_delta = (mv) {
-                    .y = b_mv[0].y - b_mv[1].y,
-                    .x = b_mv[0].x - b_mv[1].x,
+                    .y = b->mv.mv[0].y - b->mv.mv[1].y,
+                    .x = b->mv.mv[0].x - b->mv.mv[1].x,
                 };
                 const mv out_delta = scale_mv(in_delta, rf->tip_sf[0]);
                 const mv cand_mv = (mv) {
-                    .y = iclip(b_mv[0].y - out_delta.y, -0xffff, 0xffff),
-                    .x = iclip(b_mv[0].x - out_delta.x, -0xffff, 0xffff),
+                    .y = iclip(b->mv.mv[0].y - out_delta.y, -0xffff, 0xffff),
+                    .x = iclip(b->mv.mv[0].x - out_delta.x, -0xffff, 0xffff),
                 };
                 add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "tip2-spc", n)
@@ -396,7 +408,7 @@ static void add_derived(DB_ARGS(const refmvs_frame *const rf,
                         struct refmvs_state *const st,
                         const int lim, const int comp)
 {
-    for (int n = 0; n < st->drvd_cnt; n++)
+    for (int n = 0; n < st->drvd_cnt && *st->cnt < 6; n++)
         if (comp) {
             add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                        st->dr[n].y_off, st->dr[n].x_off, tag)
@@ -664,7 +676,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     }
 
     const ptrdiff_t stride = rf->rp_stride;
-    const ptrdiff_t tms_8x8y = ((by4 & (rf->sbsz - 1)) >> 1) * stride;
+    const ptrdiff_t tms_8x8y = (by4 & (rf->sbsz - 1)) >> 1;
     const ptrdiff_t lms_8x8x = bx4 >> 1;
     struct refmvs_state st = {
         .mv = mvstack,
@@ -674,7 +686,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         .iter_cntr = 0,
         .drvd_iter_cntr = 0,
         .sngl_iter_cntr = 0,
-        .b8x8 = lms_8x8x + tms_8x8y,
+        .b8x8 = lms_8x8x + tms_8x8y * stride,
 #if DEBUG_BLOCK_INFO && DEBUG_REFMV
         .by4 = by4,
         .bx4 = bx4,
@@ -686,8 +698,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     DEBUG_REFMV_printf("Spatial MVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
 
     // bottom-most left
-    const ptrdiff_t bms_8x8y =
-        (((by4 + bh4 - 1) & (rf->sbsz - 1)) >> 1) * stride;
+    const ptrdiff_t bms_8x8y = ((by4 + bh4 - 1) & (rf->sbsz - 1)) >> 1;
     const ptrdiff_t left_8x8x = (bx4 - 1) >> 1;
     if (bml) {
         if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0] &&
@@ -702,13 +713,13 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             add_matrix(bml);
         }
         add_spatial_candidate(bh4 - 1, -1,
-                              rt, &st, 1, bml, bms_8x8y + left_8x8x,
+                              rt, &st, 1, bml, bms_8x8y, left_8x8x,
                               ref, gmv);
     }
 
     // right-most top
     const ptrdiff_t top_8x8y = by4 & (rf->sbsz - 1) ?
-        (((by4 - 1) & (rf->sbsz - 1)) >> 1) * stride : -stride;
+        ((by4 - 1) & (rf->sbsz - 1)) >> 1 : -1;
     if (rmt) {
         if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0] &&
             rmt->m[6] != DAV1D_WM_TYPE_INVALID)
@@ -718,7 +729,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         const int xpos = abw4 - (1 << is_sb_boundary) - x_off;
         add_spatial_candidate(-1, xpos,
                               rt, &st, xpos >= 0, rmt,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
+                              top_8x8y, (bx4 + xpos) >> 1, ref, gmv);
     }
 
     // top-most left
@@ -731,7 +742,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             add_matrix(tml);
         }
         add_spatial_candidate(0, -1,
-                              rt, &st, 1, tml, tms_8x8y + left_8x8x, ref, gmv);
+                              rt, &st, 1, tml, tms_8x8y, left_8x8x, ref, gmv);
     }
 
     // left-most top
@@ -743,7 +754,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         }
         const int xpos = -x_off;
         add_spatial_candidate(-1, xpos, rt, &st, !x_off, lmt,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
+                              top_8x8y, (bx4 + xpos) >> 1, ref, gmv);
     }
 
     // bottom-left
@@ -757,9 +768,9 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
             add_matrix(bl);
         }
         add_spatial_candidate(bh4, -1,
-                              rt, &st, 1, bl, left_8x8x +
-                              (((by4 + bh4) & (rf->sbsz - 1)) >> 1) * stride,
-                              ref, gmv);
+                              rt, &st, 1, bl,
+                              ((by4 + bh4) & (rf->sbsz - 1)) >> 1,
+                              left_8x8x, ref, gmv);
     }
 
     // top-right
@@ -771,7 +782,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         }
         const int xpos = abw4 - x_off;
         add_spatial_candidate(-1, xpos, rt, &st, 1, tr,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
+                              top_8x8y, (bx4 + xpos) >> 1, ref, gmv);
     }
 
     // normal priority TMVP
@@ -807,7 +818,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         }
         const int xpos = -(1 << is_sb_boundary) - x_off;
         add_spatial_candidate(-1, xpos, rt, &st, 0, tl,
-                              top_8x8y + ((bx4 + xpos) >> 1), ref, gmv);
+                              top_8x8y, (bx4 + xpos) >> 1, ref, gmv);
     }
 
     const int nearest_refmv_count = *cnt;
@@ -831,7 +842,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                     }
                     add_spatial_candidate(bh4 - 1, -adj,
                                           rt, &st, 0, ext_bml,
-                                          bms_8x8y + ((bx4 - adj) >> 1),
+                                          bms_8x8y, (bx4 - adj) >> 1,
                                           ref, gmv);
                 }
             }
@@ -850,7 +861,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                     }
                     add_spatial_candidate(0, -adj,
                                           rt, &st, 0, ext_tml,
-                                          tms_8x8y + ((bx4 - adj) >> 1),
+                                          tms_8x8y, (bx4 - adj) >> 1,
                                           ref, gmv);
                 }
             }
@@ -1101,7 +1112,7 @@ void dav1d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
     if (rf->n_tile_threads == 1) tile_row_idx = 0;
     const ptrdiff_t off1 = rf->rp_stride * tile_row_idx;
     const int sbsz8 = rf->sbsz >> 1;
-    const ptrdiff_t off2 = sbsz8 * off1, off3 = (sbsz8 + 1) * off1 + rf->rp_stride;
+    const ptrdiff_t off2 = sbsz8 * off1, off3 = (sbsz8 + 2) * off1 + 2 * rf->rp_stride;
     rt->rp_proj = &rf->rp_proj[off3];
     for (int n = 0; n < 7; n++)
         rt->rp_traj[n] = &rf->rp_traj[n][off2];
@@ -1172,11 +1183,8 @@ int dav1d_refmvs_warp_add(refmvs_tile *const rt,
     int n;
     for (n = 0; n < sz; n++) {
         const int32_t *const m = &rt->warp.mat[ref][(idx + n) & 3][2];
-        if (!memcmp(m, &mat->matrix[2], sizeof(int32_t) * 4) &&
-            m[4] == (int) mat->type /* see #834 */)
-        {
+        if (!memcmp(m, &mat->matrix[2], sizeof(int32_t) * 4))
             break;
-        }
     }
     if (n < sz) {
         const int to = sz == 4 ? (idx - 1) & 3 : sz - 1, from = (idx + n) & 3;
@@ -1196,7 +1204,7 @@ int dav1d_refmvs_warp_add(refmvs_tile *const rt,
             memcpy(rt->warp.mat[ref][to], bak, sizeof(int32_t) * 7);
         }
         debug_warpbank(rt, ref, by4, bx4);
-        return -1;
+        return 0;
     }
     const int tgt = sz == 4 ? rt->warp.idx[ref]++ & 3 : rt->warp.size[ref]++;
     memcpy(rt->warp.mat[ref][tgt], mat->matrix, sizeof(int32_t) * 6);
@@ -1344,7 +1352,11 @@ void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
 
     rt->warp.hits = 0;
 
-    if (by == rt->tile_row.start || IS_KEY_OR_INTRA(rf->frm_hdr)) return;
+    if (by == rt->tile_row.start || IS_KEY_OR_INTRA(rf->frm_hdr) ||
+        rf->frm_hdr->tip.frame_mode == 2)
+    {
+        return;
+    }
 
     const int end_x4 = imin(bx + rf->sbsz, rt->tile_col.end);
     for (int x = bx, sz4, hits = 0; x < end_x4; x += sz4) {
@@ -1791,9 +1803,12 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     const int sample_step = rf->frm_hdr->tmvp_sample_step;
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t offset = sbsz8 * stride * tile_row_idx;
-    const ptrdiff_t poffset = (sbsz8 + 1) * stride * tile_row_idx + stride;
+    const ptrdiff_t poffset = (sbsz8 + 2) * stride * tile_row_idx + 2 * stride;
     refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[poffset];
-    memcpy(&rp_proj[col_start8 - rf->rp_stride],
+    memcpy(&rp_proj[col_start8 - 2 * rf->rp_stride],
+           &rp_proj[col_start8 + (sbsz8 - 2) * rf->rp_stride],
+           (col_end8 - col_start8) * sizeof(*rp_proj));
+    memcpy(&rp_proj[col_start8 - 1 * rf->rp_stride],
            &rp_proj[col_start8 + (sbsz8 - 1) * rf->rp_stride],
            (col_end8 - col_start8) * sizeof(*rp_proj));
     for (int y = row_start8; y < row_end8; y++) {
@@ -2011,7 +2026,7 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
 #endif
     if (n_blocks * rf->sbsz > rf->n_blocks) {
         const int sbsz8 = rf->sbsz >> 1;
-        const size_t rp_proj_sz = sizeof(*rf->rp_proj) * (1 + sbsz8) * n_blocks;
+        const size_t rp_proj_sz = sizeof(*rf->rp_proj) * (2 + sbsz8) * n_blocks;
         const size_t rp_traj_sz = sizeof(mv) * sbsz8 * n_blocks;
         const size_t rp_map_sz = sizeof(**rf->rp_map) * sbsz8 * n_blocks;
         const size_t r_above_sz = sizeof(*rf->ra) * n_blocks;

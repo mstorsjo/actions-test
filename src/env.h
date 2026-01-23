@@ -417,4 +417,10 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
     }
 }
 
+static inline enum Dav1dWarpedMotionType warp_type(const int32_t *const mtx) {
+    if (mtx[2] != mtx[5] || mtx[3] != -mtx[4]) return DAV1D_WM_TYPE_AFFINE;
+    if (mtx[2] != 0x10000 || mtx[3]) return DAV1D_WM_TYPE_ROT_ZOOM;
+    return mtx[0] | mtx[1] ? DAV1D_WM_TYPE_TRANSLATION : DAV1D_WM_TYPE_IDENTITY;
+}
+
 #endif /* DAV1D_SRC_ENV_H */

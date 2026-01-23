@@ -76,7 +76,7 @@ static int write_header(Y4m2OutputContext *const c, const Dav1dPicture *const p)
 
     const char *const ss_name =
         p->p.layout == DAV1D_PIXEL_LAYOUT_I420 && p->p.bpc == 8 ?
-        chr_names_8bpc_i420[imin(p->seq_hdr->chr, 2)] :
+        chr_names_8bpc_i420[DAV1D_CHR_CENTER] : //imin(p->seq_hdr->chr, 2)] :
         ss_names[p->p.layout][p->seq_hdr->hbd];
 
     const unsigned fw = p->p.w;

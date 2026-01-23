@@ -729,7 +729,7 @@ void *dav1d_worker_task(void *data) {
             int res = DAV1D_ERR(EINVAL);
             if (!atomic_load(&f->task_thread.error))
                 res = dav1d_decode_frame_init_cdf(f);
-            if (f->frame_hdr->refresh_context && !f->task_thread.update_set) {
+            if (!f->frame_hdr->disable_cdf_update && !f->task_thread.update_set) {
                 atomic_store(f->out_cdf.progress, res < 0 ? TILE_ERROR : 1);
             }
             if (!res) {
@@ -798,7 +798,7 @@ void *dav1d_worker_task(void *data) {
                 atomic_store(&ts->progress[p], progress);
                 reset_task_cur(c, ttd, t->frame_idx);
                 error = atomic_load(&f->task_thread.error);
-                if (f->frame_hdr->refresh_context &&
+                if (!f->frame_hdr->disable_cdf_update &&
                     tc->frame_thread.pass <= 1 && f->task_thread.update_set &&
                     f->frame_hdr->tiling.update == tile_idx)
                 {

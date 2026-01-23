@@ -638,20 +638,19 @@ static int decode_coefs(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             int stx_set = 0;
             if (stx_type && intra) {
                 if (t_dim->min >= TX_8X8 && *txtp == ADST_ADST) {
-                    // FIXME last 3 are unused
                     static const uint8_t inv_most_probable_stx_mapping_adst[][7] = {
-                        { 6, 1, 0, 4, 5, 3, 2 },  // DC_PRED
-                        { 1, 6, 0, 4, 2, 5, 3 },  // V_PRED
-                        { 1, 6, 0, 4, 2, 5, 3 },  // H_PRED
-                        { 1, 6, 0, 4, 2, 5, 3 },  // D45_PRED
-                        { 0, 4, 6, 1, 3, 2, 5 },  // D135_PRED
-                        { 4, 1, 0, 6, 3, 5, 2 },  // D113_PRED
-                        { 4, 1, 0, 6, 3, 5, 2 },  // D157_PRED
-                        { 1, 0, 6, 4, 5, 2, 3 },  // D203_PRED
-                        { 1, 0, 6, 4, 5, 2, 3 },  // D67_PRED
-                        { 6, 1, 0, 4, 5, 3, 2 },  // SMOOTH_PRED
-                        { 1, 6, 0, 4, 2, 5, 3 },  // SMOOTH_V_PRED
-                        { 1, 6, 0, 4, 2, 5, 3 },  // SMOOTH_H_PRED
+                        { 3, 1, 0, 2 },  // DC_PRED
+                        { 1, 3, 0, 2 },  // V_PRED
+                        { 1, 3, 0, 2 },  // H_PRED
+                        { 1, 3, 0, 2 },  // D45_PRED
+                        { 0, 2, 3, 1 },  // D135_PRED
+                        { 2, 1, 0, 3 },  // D113_PRED
+                        { 2, 1, 0, 3 },  // D157_PRED
+                        { 1, 0, 3, 2 },  // D203_PRED
+                        { 1, 0, 3, 2 },  // D67_PRED
+                        { 3, 1, 0, 2 },  // SMOOTH_PRED
+                        { 1, 3, 0, 2 },  // SMOOTH_V_PRED
+                        { 1, 3, 0, 2 },  // SMOOTH_H_PRED
                     };
                     stx_set = dav1d_msac_decode_symbol_adapt4(&ts->msac,
                                   ts->cdf.m.stx_set_adst, 3);
@@ -2132,9 +2131,7 @@ static int recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
             f->cur.stride[0], top_sb_edge, b->y_mode, &angle,
             t_dim->w, t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
-        // FIXME this is a hack so that we fill in the edges orip needs,
-        // but we normally might not fill as the predictor itself might not
-        // need them
+        // FIXME remove this flag before calling prepare_intra_edges()
         if (b->y_angle & 1) intra_flags &= ~ANGLE_IBP_FLAG;
 
         dsp->ipred.intra_pred[m](dst, f->cur.stride[0],
@@ -2145,19 +2142,6 @@ static int recon_b_luma_tx(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(dst, f->cur.stride[0], tw, th, "y-intra-pred");
-        }
-
-        // XXX fix m to y_mode
-        const int has_orip = !mrl_idx && tx && (
-            m == VERT_PRED ? t_dim->w < 8 : m == HOR_PRED ? t_dim->h < 8 :
-                m == SMOOTH_PRED && t_dim->w < 8 && t_dim->h < 8);
-        if (has_orip) {
-            const unsigned th_mask = ((m == VERT_PRED) << 1) | (m == HOR_PRED);
-            dsp->ipred.orip(dst, f->cur.stride[0], edge, th_mask,
-                            tw, th HIGHBD_CALL_SUFFIX);
-
-            if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-                hex_dump(dst, f->cur.stride[0], tw, th, "orip");
         }
     }
 
@@ -2383,7 +2367,7 @@ static void bawp(Dav1dTaskContext *const t,
         const int abs_diff = abs(diff);
         beta = apply_sign(abs_diff >> count_l2, diff);
     } else {
-        beta = -256;
+        beta = -128;
     }
     t->pb.bawp.alpha = alpha;
     t->pb.bawp.beta = beta;
@@ -2745,7 +2729,7 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const int sby = t->by >> f->sb_shift;
                     top_sb_edge += f->sb256w * 256 * (sby - 1);
                 }
-                const int intra_flags = ANGLE_IBP_FLAG /* for dc; or orip */ |
+                const int intra_flags = ANGLE_IBP_FLAG /* for dc */ |
                     ((t->bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
                     ((t->by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
                 m = bytefn(dav1d_prepare_intra_edges)(
@@ -2759,19 +2743,6 @@ int bytefn(dav1d_recon_b)(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                     hex_dump(tmp, bw4 * 4 * sizeof(pixel),
                              bw4 * 4, bh4 * 4, "y-intra-pred");
-                }
-                const int has_orip = bs != BS_4x4 && (
-                    m == VERT_PRED ? bw4 < 8 : m == HOR_PRED ? bh4 < 8 :
-                    m == SMOOTH_PRED && bw4 < 8 && bh4 < 8);
-                if (has_orip) {
-                    const unsigned th_mask =
-                        ((m == VERT_PRED) << 1) | (m == HOR_PRED);
-                    dsp->ipred.orip(tmp, 4 * bw4 * sizeof(pixel), tl_edge, th_mask,
-                                    bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
-
-                    if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-                        hex_dump(tmp, 4 * bw4 * sizeof(pixel),
-                                 bw4 * 4, bh4 * 4, "orip");
                 }
                 const uint8_t *const mask = b->wedge_idx == -1 ?
                     II_MASK(bs, bw4, bh4, b->interintra_mode) :
@@ -3153,9 +3124,7 @@ chroma: {}
                 n_tr, n_bl, dst, stride, top_sb_edge, uv_mode,
                 &angle, uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
 
-            // FIXME this is a hack so that we fill in the edges orip needs,
-            // but we normally might not fill as the predictor itself might
-            // not need them
+            // FIXME remove this flag before calling prepare_intra_edges()
             if (!apply_ibp) intra_flags &= ~ANGLE_IBP_FLAG;
             dsp->ipred.intra_pred[m](dst, stride,
                                      edge, ctw, cth, angle | intra_flags,
@@ -3164,18 +3133,6 @@ chroma: {}
 
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 hex_dump(dst, stride, ctw, cth, pl ? "v-intra-pred" : "u-intra-pred");
-            }
-            const int has_orip = uvtx && (
-                b->uv_mode == VERT_PRED ? uv_t_dim->w < 8 :
-                b->uv_mode == HOR_PRED ? uv_t_dim->h < 8 :
-                b->uv_mode == SMOOTH_PRED && uv_t_dim->w < 8 && uv_t_dim->h < 8);
-            if (has_orip) {
-                const unsigned cth_mask = ((m == VERT_PRED) << 1) | (m == HOR_PRED);
-                dsp->ipred.orip(dst, stride, edge, cth_mask,
-                                ctw, cth HIGHBD_CALL_SUFFIX);
-
-                if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-                    hex_dump(dst, stride, ctw, cth, "orip");
             }
         }
     }

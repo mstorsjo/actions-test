@@ -132,8 +132,6 @@ int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
     const int sux = rsux * 8;
     const int duy = suy + mv.y;
     const int dux = sux + mv.x;
-    const int isuy = by4 * 4 + rsuy;
-    const int isux = bx4 * 4 + rsux;
 
     for (int i = 0; i < np; i++) {
         const int dx = pts[i][1][0] - dux;
@@ -153,7 +151,12 @@ int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
 
     // compute determinant of a
     const int64_t det = (int64_t) a[0][0] * a[1][1] - (int64_t) a[0][1] * a[0][1];
-    if (det == 0) return 1;
+    if (det == 0) {
+        mat[2] = mat[5] = 0x10000;
+        mat[3] = mat[4] = 0;
+        dav1d_set_affine_mv2d(bw4, bh4, mv, wm, bx4, by4);
+        return 0;
+    }
     int shift, idet = apply_sign64(resolve_divisor_64(llabs(det), &shift), det);
     shift -= 16;
     if (shift < 0) {
@@ -172,10 +175,7 @@ int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
     mat[5] = get_mult_shift_diag((int64_t) a[0][0] * by[1] -
                                  (int64_t) a[0][1] * by[0], idet, r, shift);
 
-    mat[0] = iclip64to32(mv.x * 0x2000LL - (int64_t) isux * (mat[2] - 0x10000) -
-                         (int64_t) isuy * mat[3], -0x8000000, 0x7ffffc0);
-    mat[1] = iclip64to32(mv.y * 0x2000LL - (int64_t) isux * mat[4] -
-                         (int64_t) isuy * (mat[5] - 0x10000), -0x8000000, 0x7ffffc0);
+    dav1d_set_affine_mv2d(bw4, bh4, mv, wm, bx4, by4);
 
     return 0;
 }

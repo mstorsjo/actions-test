@@ -1,259 +1,256 @@
-From c51ac229d792ee8ae84abb1d8e1a6611a7a625d3 Mon Sep 17 00:00:00 2001
+From 2b6ad195024cd0ca982c6624016a5ac30e3da2e7 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
-Date: Wed, 27 Aug 2025 09:40:39 -0400
-Subject: [PATCH 2/5] frame header debugging
+Date: Fri, 23 Jan 2026 09:07:44 -0500
+Subject: [PATCH 2/5] Frame header debugging.
 
 ---
- aom/debug.h               |   1 +
- av1/decoder/decodeframe.c | 179 +++++++++++++++++++++++++++++++++++++-
- 2 files changed, 179 insertions(+), 1 deletion(-)
+ av2/decoder/decodeframe.c | 192 +++++++++++++++++++++++++++++++++++++-
+ avm/debug.h               |   1 +
+ 2 files changed, 192 insertions(+), 1 deletion(-)
 
-diff --git a/aom/debug.h b/aom/debug.h
-index 3339b3439f..8c8847f1eb 100644
---- a/aom/debug.h
-+++ b/aom/debug.h
-@@ -30,5 +30,6 @@
+diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
+index 9ed482186c..73f19b9805 100644
+--- a/av2/decoder/decodeframe.c
++++ b/av2/decoder/decodeframe.c
+@@ -3608,6 +3608,11 @@ static AVM_INLINE void setup_qm_params(AV2Decoder *pbi,
+       quant_params->qm_v[i] = 0;
+     }
+   }
++#if DEBUG_FRAME_HDR
++  printf("HDR: post-qm[%d]: off=%u\n",
++         quant_params->using_qmatrix,
++         rb->bit_offset);
++#endif
+ }
+ // Build y/uv dequant values based on segmentation.
+ static AVM_INLINE void setup_segmentation_dequant(AV2Decoder *const pbi,
+@@ -4031,6 +4036,10 @@ static AVM_INLINE void setup_frame_size(AV2_COMMON *cm,
+   realloc_bru_info(cm);
+   av2_validate_frame_level_conformance(&cm->seq_params, width, height,
+                                        &cm->error);
++#if DEBUG_FRAME_HDR
++  printf("HDR: post-framesize[%dx%d]: off=%u\n",
++         cm->width, cm->height, rb->bit_offset);
++#endif
+ }
  
- #define DEBUG_OBU_HDR 0
- #define DEBUG_SEQ_HDR 0
-+#define DEBUG_FRAME_HDR 0
+ static AVM_INLINE void setup_seq_sb_size(SequenceHeader *seq_params,
+@@ -4132,6 +4141,10 @@ static AVM_INLINE void setup_frame_size_with_refs(
+   realloc_bru_info(cm);
+   av2_validate_frame_level_conformance(&cm->seq_params, width, height,
+                                        &cm->error);
++#if DEBUG_FRAME_HDR
++  printf("HDR: post-framesize[%dx%d]: off=%u\n",
++         cm->width, cm->height, rb->bit_offset);
++#endif
+ }
  
- #endif /* AOM_DEBUG_H */
-diff --git a/av1/decoder/decodeframe.c b/av1/decoder/decodeframe.c
-index 6a04bf6a0e..70e22ec4ea 100644
---- a/av1/decoder/decodeframe.c
-+++ b/av1/decoder/decodeframe.c
-@@ -6333,6 +6333,11 @@ static AOM_INLINE void read_film_grain(AV1_COMMON *cm,
-                                        struct aom_read_bit_buffer *rb) {
-   if (cm->seq_params.film_grain_params_present) {
-     av1_read_film_grain_params(cm, rb);
+ // Reconstructs the tile information
+@@ -4272,6 +4285,7 @@ static AVM_INLINE void read_tile_info(AV2Decoder *const pbi,
+     }
+   }
+   pbi->context_update_tile_id = 0;
++  pbi->tile_size_bytes = 0;
+   if (cm->tiles.rows * cm->tiles.cols > 1 &&
+       cm->features.tip_frame_mode != TIP_FRAME_AS_OUTPUT) {
+     if (!cm->seq_params.enable_avg_cdf || !cm->seq_params.avg_cdf_type) {
+@@ -4286,6 +4300,11 @@ static AVM_INLINE void read_tile_info(AV2Decoder *const pbi,
+     // tile size magnitude
+     pbi->tile_size_bytes = avm_rb_read_literal(rb, 2) + 1;
+   }
++#if DEBUG_FRAME_HDR
++  printf("HDR: post-tiling[%dx%dtiles,%dbytes]: off=%u\n",
++         pbi->common.tiles.cols, pbi->common.tiles.rows, pbi->tile_size_bytes,
++         rb->bit_offset);
++#endif
+ }
+ 
+ static size_t mem_get_varsize(const uint8_t *src, int sz) {
+@@ -5867,6 +5886,11 @@ static void setup_film_grain(AV2Decoder *pbi, struct avm_read_bit_buffer *rb) {
+       }
+       copy_fgm_from_list(cm, pars, &pbi->fgm_list[cm->fgm_id]);
+     }
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-filmgrain[%d]: off=%u\n",
-+           cm->cur_frame->film_grain_params_present,
++           cm->cur_frame->film_grain_params.apply_grain,
 +           rb->bit_offset);
 +#endif
+   }
+   cm->cur_frame->film_grain_params = cm->film_grain_params;
+ }
+@@ -7185,6 +7209,14 @@ static INLINE void read_intrabc_params(AV2_COMMON *const cm,
+     }
+     read_frame_max_bvp_drl_bits(cm, rb);
+   }
++#if DEBUG_FRAME_HDR
++  printf("HDR: post-ibc[intrabc:%d,global:%d,local:%d,drlbits:%d]: off=%u\n",
++         features->allow_intrabc,
++         features->allow_intrabc ? features->allow_global_intrabc : 0,
++         features->allow_intrabc ? features->allow_local_intrabc : 0,
++         features->allow_intrabc ? features->max_bvp_drl_bits : 0,
++         rb->bit_offset);
++#endif
+ }
+ static INLINE void read_screen_content_params(AV2_COMMON *const cm,
+                                               struct avm_read_bit_buffer *rb) {
+@@ -7207,6 +7239,12 @@ static INLINE void read_screen_content_params(AV2_COMMON *const cm,
    } else {
-     memset(&cm->film_grain_params, 0, sizeof(cm->film_grain_params));
+     features->cur_frame_force_integer_mv = 0;
    }
-@@ -8303,6 +8308,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-     }
- #endif  // CONFIG_MULTI_FRAME_HEADER
- #if CONFIG_CWG_F317
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-ids[f=%d,s=%d]: off=%u\n",
-+           cm->cur_mfh_id, cm->mfh_params[cm->cur_mfh_id].mfh_seq_header_id,
-+           rb->bit_offset);
++  printf("HDR: post-screencontent[sctools:%d,forceintmv:%d]: off=%u\n",
++         features->allow_screen_content_tools,
++         features->cur_frame_force_integer_mv,
++         rb->bit_offset);
 +#endif
-   }
- #endif  // CONFIG_CWG_F317
+ }
  
-@@ -8342,6 +8352,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-     }
- #endif  // CONFIG_CWG_F317
-     pbi->reset_decoder_state = 0;
+ static void set_primary_ref_frame_and_ctx(AV2Decoder *pbi) {
+@@ -7453,6 +7491,10 @@ static int read_show_existing_frame(AV2Decoder *pbi,
+   // already been allocated, it will not be released by
+   // assign_frame_buffer_p()!
+   assert(!cm->cur_frame->raw_frame_buffer.data);
 +#if DEBUG_FRAME_HDR
-+      printf("HDR: post-show_existing_frame[%d]: off=%u\n",
-+             cm->show_existing_frame, rb->bit_offset);
++  printf("HDR: post-existing_frame_idx[%d,poc=%d]: off=%u\n",
++         existing_frame_idx, current_frame->order_hint, rb->bit_offset);
 +#endif
  
-     if (cm->show_existing_frame) {
-       if (pbi->sequence_header_changed) {
-@@ -8418,6 +8432,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-       } else {
-         current_frame->refresh_frame_flags = 0;
+   FrameHash raw_frame_hash = cm->cur_frame->raw_frame_hash;
+   FrameHash grain_frame_hash = cm->cur_frame->grain_frame_hash;
+@@ -7893,6 +7935,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+ 
+   int seq_header_id_for_frame_header = setup_sequence_header_id(cm, rb);
+   assert(seq_header_id_for_frame_header >= 0);
++#if DEBUG_FRAME_HDR
++  printf("HDR: post-ids[f:%d,s:%d]: off=%u\n",
++         cm->cur_mfh_id, cm->mfh_params[cm->cur_mfh_id].mfh_seq_header_id,
++         rb->bit_offset);
++#endif
+ 
+   handle_sequence_header(pbi,
+ #if CONFIG_F024_KEYOBU
+@@ -8099,6 +8146,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+ #endif  // !CONFIG_F024_KEYOBU
+     cm->cur_frame->showable_frame = cm->showable_frame;
+     cm->cur_frame->frame_output_done = 0;
++#if DEBUG_FRAME_HDR
++    printf("HDR: post-frametype_bits[type:%d,ltrid:%d,show:%d|%d]: off=%u\n",
++           current_frame->frame_type, current_frame->long_term_id,
++           cm->show_frame, cm->showable_frame, rb->bit_offset);
++#endif
+   }
+   av2_set_frame_sb_size(cm, cm->seq_params.sb_size);
+ 
+@@ -8188,6 +8240,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+         }
        }
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-existing_frame_idx[%d]: off=%u\n",
-+           existing_frame_idx, rb->bit_offset);
-+#endif
- 
-       return 0;
      }
-@@ -8460,17 +8478,29 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- #if CONFIG_CWG_F317
-     }
- #endif  // CONFIG_CWG_F317
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-frametype[%d]: off=%u\n",
-+           current_frame->frame_type, rb->bit_offset);
-+#endif
- #if CONFIG_RANDOM_ACCESS_SWITCH_FRAME
-     current_frame->long_term_id = -1;
-     if (current_frame->frame_type == KEY_FRAME) {
-       current_frame->long_term_id =
-           aom_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-ltr_id[%d]: off=%u\n",
-+           current_frame->long_term_id, rb->bit_offset);
-+#endif
-     } else if (obu_type == OBU_RAS_FRAME) {
-       cm->num_ref_key_frames = aom_rb_read_literal(rb, 3);
-       for (int i = 0; i < cm->num_ref_key_frames; i++) {
-         cm->ref_long_term_ids[i] =
-             aom_rb_read_literal(rb, seq_params->number_of_bits_for_lt_frame_id);
-       }
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-ltr_setup[%d]: off=%u\n",
-+           cm->num_ref_key_frames, rb->bit_offset);
-+#endif
-     }
- #endif  // CONFIG_RANDOM_ACCESS_SWITCH_FRAME
-     if (pbi->sequence_header_changed) {
-@@ -8570,6 +8600,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- #endif  // CONFIG_CWG_F317
- #endif  // !CONFIG_F322_OBUER_ERM
-   }
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-frametype_bits[%d,show=%d|%d]: off=%u\n",
-+           current_frame->frame_type, cm->show_frame, cm->showable_frame,
-+           rb->bit_offset);
-+#endif
- 
-   av1_set_frame_sb_size(cm, cm->seq_params.sb_size);
- 
-@@ -8629,6 +8664,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- #endif  // CONFIG_CWG_F317
-     }
-   }
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-frame_size_override_flag[%d,poc=%d,p_ref=%d]: off=%u\n",
++    printf("HDR: post-frame_size_override_flag[%d,poc:%d,p_ref:%d|%d]: off=%u\n",
 +           frame_size_override_flag, current_frame->order_hint,
-+           pbi->signal_primary_ref_frame, rb->bit_offset);
-+#endif
- 
- #if !CONFIG_CWG_F293_BUFFER_REMOVAL_TIMING
-   if (seq_params->decoder_model_info_present_flag) {
-@@ -8661,6 +8701,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-         }
-       }
-     }
-+#if DEBUG_FRAME_HDR
-+        printf("HDR: post-buffer_removal_timings[%d]: off=%u\n",
-+               cm->buffer_removal_time_present, rb->bit_offset);
++           pbi->signal_primary_ref_frame, features->primary_ref_frame,
++           rb->bit_offset);
 +#endif
    }
- #endif  // CONFIG_CWG_F293_BUFFER_REMOVAL_TIMING
-   if (current_frame->frame_type == KEY_FRAME) {
-@@ -8778,6 +8822,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+ 
+ #if CONFIG_F024_KEYOBU
+@@ -8331,6 +8389,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        }
      }
    }
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-refresh_frame_flags[%x]: off=%u\n",
-+           current_frame->refresh_frame_flags, rb->bit_offset);
++  printf("HDR: post-refresh_frame_flags[%x]: off=%u\n",
++         current_frame->refresh_frame_flags, rb->bit_offset);
 +#endif
  
- #if CONFIG_F322_OBUER_ERM
- #if CONFIG_RANDOM_ACCESS_SWITCH_FRAME
-@@ -8884,6 +8932,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- 
-     features->tip_frame_mode = TIP_FRAME_DISABLED;
-     setup_frame_size(cm, frame_size_override_flag, rb);
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-framesize[%dx%d]: off=%u\n",
-+           cm->width, cm->height, rb->bit_offset);
-+#endif
-     read_screen_content_params(cm, rb);
-     features->allow_intrabc = aom_rb_read_bit(rb);
-     if (features->allow_intrabc) {
-@@ -8897,6 +8949,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-     cm->prev_frame = NULL;
- 
-     cm->cur_frame->num_ref_frames = 0;
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-screencontent_ibc[%d,%d,%d,%d,%d,%d]: off=%u\n",
-+           features->allow_screen_content_tools,
-+           features->cur_frame_force_integer_mv,
-+           features->allow_intrabc,
-+           features->allow_global_intrabc,
-+           features->allow_local_intrabc,
-+           features->max_bvp_drl_bits,
-+           rb->bit_offset);
-+#endif
-   } else {
-     cm->current_frame.temporal_layer_id = cm->tlayer_id;
-     cm->current_frame.mlayer_id = cm->mlayer_id;
-@@ -8907,6 +8969,10 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-       cm->cur_frame->film_grain_params_present =
-           seq_params->film_grain_params_present;
-       setup_frame_size(cm, frame_size_override_flag, rb);
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-framesize[%dx%d]: off=%u\n",
-+           cm->width, cm->height, rb->bit_offset);
-+#endif
-       read_screen_content_params(cm, rb);
-       features->allow_intrabc = aom_rb_read_bit(rb);
-       if (features->allow_intrabc) {
-@@ -8917,6 +8983,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-       }
- 
-       cm->cur_frame->num_ref_frames = 0;
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-screencontent_ibc[%d,%d,%d,%d,%d,%d]: off=%u\n",
-+           features->allow_screen_content_tools,
-+           features->cur_frame_force_integer_mv,
-+           features->allow_intrabc,
-+           features->allow_global_intrabc,
-+           features->allow_local_intrabc,
-+           features->max_bvp_drl_bits,
-+           rb->bit_offset);
-+#endif
- 
-     } else if (pbi->need_resync != 1) { /* Skip if need resync */
-       // Implicitly derive the reference mapping
-@@ -9332,6 +9408,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-         if (features->allow_intrabc) {
-           read_frame_max_bvp_drl_bits(cm, rb);
-         }
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-screencontent_ibc[%d,%d,%d,%d,%d,%d]: off=%u\n",
-+           features->allow_screen_content_tools,
-+           features->cur_frame_force_integer_mv,
-+           features->allow_intrabc,
-+           features->allow_global_intrabc,
-+           features->allow_local_intrabc,
-+           features->max_bvp_drl_bits,
-+           rb->bit_offset);
-+#endif
- 
-         if (features->cur_frame_force_integer_mv) {
-           features->fr_mv_precision = MV_PRECISION_ONE_PEL;
-@@ -9432,6 +9518,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-                                "Reference frame has invalid dimensions");
+   if (cm->is_leading_picture == 1) {
+     // other obu_types cannot overwrite the slots OBU_OLK is stored
+@@ -8487,6 +8549,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+           cm->remapped_ref_idx[i] = ref;
          }
        }
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-frametype-specific-bits[mvprec:%d,flt:%d,mm:%d]: off=%u\n",
-+           features->fr_mv_precision - 3,
-+           features->interp_filter, features->enabled_motion_modes,
-+           rb->bit_offset);
++      printf("HDR: post-refs[explicit:%d,refs:%d,%d,%d,%d,%d,%d,%d]: off=%u\n",
++             explicit_ref_frame_map,
++             cm->remapped_ref_idx[0], cm->remapped_ref_idx[1],
++             cm->remapped_ref_idx[2], cm->remapped_ref_idx[3],
++             cm->remapped_ref_idx[4], cm->remapped_ref_idx[5],
++             cm->remapped_ref_idx[6], rb->bit_offset);
 +#endif
+       if (!frame_is_sframe(cm) && frame_size_override_flag &&
+           !cm->bridge_frame_info.is_bridge_frame) {
+         setup_frame_size_with_refs(cm, explicit_ref_frame_map, rb);
+@@ -8498,6 +8568,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+       if (!explicit_ref_frame_map) {
+         av2_get_ref_frames(cm, current_frame->display_order_hint, 1, 0,
+                            cm->ref_frame_map_pairs);
++#if DEBUG_FRAME_HDR
++        printf("HDR: post-refs2[refs:%d,%d,%d,%d,%d,%d,%d]: off=%u\n",
++               cm->remapped_ref_idx[0], cm->remapped_ref_idx[1],
++               cm->remapped_ref_idx[2], cm->remapped_ref_idx[3],
++               cm->remapped_ref_idx[4], cm->remapped_ref_idx[5],
++               cm->remapped_ref_idx[6], rb->bit_offset);
++#endif
+ 
+         // Note: The following if block implements bitstream constraint checks
+         // for consistent reference frame mapping when (embedded or temporal)
+@@ -8722,6 +8799,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+         cm->tmvp_sample_step = 1;
+         cm->tmvp_sample_stepl2 = 0;
+       }
++#if DEBUG_FRAME_HDR
++      printf("HDR: post-refmvbits[%d,step:%d]: off=%u\n",
++             features->allow_ref_frame_mvs, cm->tmvp_sample_step,
++             rb->bit_offset);
++#endif
+ 
+       cm->tip_global_motion.as_int = 0;
+       cm->tip_interp_filter = MULTITAP_SHARP;
+@@ -8790,6 +8872,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+             !cm->bridge_frame_info.is_bridge_frame)
+           read_frame_opfl_refine_type(cm, rb);
+       }
++#if DEBUG_FRAME_HDR
++      printf("HDR: post-refinemv-tip[opfl/refine:%d,tip:%d,holefill:%d,glbwt:%d,"
++             "gmv:y=%d,x=%d,interpfilt:%d]: off=%u\n",
++             cm->features.opfl_refine_type,
++             features->tip_frame_mode,
++             features->tip_frame_mode ? features->allow_tip_hole_fill : 0,
++             cm->tip_global_wtd_index,
++             cm->tip_global_motion.as_mv.row, cm->tip_global_motion.as_mv.col,
++             cm->tip_interp_filter, rb->bit_offset);
++#endif
+ 
+       if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT &&
+           !cm->bridge_frame_info.is_bridge_frame &&
+@@ -8837,6 +8929,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+           features->enabled_motion_modes =
+               cm->seq_params.seq_enabled_motion_modes;
+         }
++#if DEBUG_FRAME_HDR
++        printf("HDR: post-frametype-specific-bits[drlbits:%d,mvprec:%d,flt:%d,mm:%x]: off=%u\n",
++               features->max_drl_bits, features->fr_mv_precision - 3,
++               features->interp_filter, features->enabled_motion_modes,
++               rb->bit_offset);
++#endif
+       }
      }
-   }
  
-@@ -9641,8 +9733,18 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- #if CONFIG_CWG_F317
-   }
- #endif  // CONFIG_CWG_F317
+@@ -9031,6 +9129,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+     } else {
+       features->disable_cdf_update = 1;
+     }
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-refresh_context[%d,%d]: off=%u\n",
-+           features->disable_cdf_update, features->refresh_frame_context,
-+           rb->bit_offset);
++    printf("HDR: post-disable_cdf_update[%d]: off=%u\n",
++           features->disable_cdf_update, rb->bit_offset);
 +#endif
  
-   read_tile_info(pbi, rb);
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-tiling[%dx%dtiles,%dbytes]: off=%u\n",
-+           pbi->common.tiles.cols, pbi->common.tiles.rows, pbi->tile_size_bytes,
-+           rb->bit_offset);
-+#endif
-   if (!av1_is_min_tile_width_satisfied(cm)) {
-     aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
-                        "Minimum tile width requirement not satisfied");
-@@ -9654,6 +9756,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-   cm->cur_frame->u_ac_delta_q = quant_params->u_ac_delta_q;
-   cm->cur_frame->v_ac_delta_q = quant_params->v_ac_delta_q;
-   xd->bd = (int)seq_params->bit_depth;
+     read_tile_info(pbi, rb);
+     if (!av2_is_min_tile_width_satisfied(cm)) {
+@@ -9044,6 +9146,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+     cm->cur_frame->u_ac_delta_q = quant_params->u_ac_delta_q;
+     cm->cur_frame->v_ac_delta_q = quant_params->v_ac_delta_q;
+     xd->bd = (int)seq_params->bit_depth;
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-quant[yac:%d,deltas=ydc:%d,uac:%d/dc:%d,vac:%d/dc:%d]: off=%u\n",
 +           quant_params->base_qindex,
@@ -265,73 +262,83 @@ index 6a04bf6a0e..70e22ec4ea 100644
 +           rb->bit_offset);
 +#endif
  
-   set_primary_ref_frame_and_ctx(pbi);
+     set_primary_ref_frame_and_ctx(pbi);
  
-@@ -9671,12 +9783,22 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-   }
+@@ -9061,6 +9173,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+     }
  
-   setup_segmentation(cm, rb);
+     setup_segmentation(cm, rb);
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-segmentation[%d]: off=%u\n",
 +           cm->seg.enabled,
 +           rb->bit_offset);
 +#endif
  
-   setup_qm_params(&cm->seq_params,
- #if CONFIG_CWG_E242_SEQ_HDR_ID
-                   pbi->active_seq,
- #endif  // CONFIG_CWG_E242_SEQ_HDR_ID
-                   quant_params, cm->seg.enabled, av1_num_planes(cm), rb);
-+#if DEBUG_FRAME_HDR
-+    printf("HDR: post-qm[%d]: off=%u\n",
-+           quant_params->using_qmatrix,
-+           rb->bit_offset);
-+#endif
- 
-   cm->delta_q_info.delta_q_res = 1;
-   cm->delta_q_info.delta_lf_res = 1;
-@@ -9694,6 +9816,12 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-       av1_reset_loop_filter_delta(xd, av1_num_planes(cm));
+     setup_qm_params(pbi, quant_params, cm->seg.enabled, av2_num_planes(cm), rb);
+     cm->delta_q_info.delta_q_res = 1;
+@@ -9070,6 +9187,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+       xd->current_base_qindex = quant_params->base_qindex;
+       cm->delta_q_info.delta_q_res = 1 << avm_rb_read_literal(rb, 2);
      }
-   }
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-delta_q_lf[q:%d,lf:%d]: off=%u\n",
++    printf("HDR: post-delta_q[%d]: off=%u\n",
 +           cm->delta_q_info.delta_q_present_flag,
-+           cm->delta_q_info.delta_lf_present_flag,
 +           rb->bit_offset);
 +#endif
  
-   xd->cur_frame_force_integer_mv = features->cur_frame_force_integer_mv;
- #if CONFIG_DISABLE_LOOP_FILTERS_LOSSLESS
-@@ -9754,6 +9882,11 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-     features->allow_parity_hiding = false;
-   else
-     features->allow_parity_hiding = aom_rb_read_bit(rb);
+     xd->cur_frame_force_integer_mv = features->cur_frame_force_integer_mv;
+     features->has_lossless_segment = 0;
+@@ -9130,6 +9252,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+       features->allow_parity_hiding = false;
+     else
+       features->allow_parity_hiding = avm_rb_read_bit(rb);
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-tcq_parity[tcq:%d,par:%d]: off=%u\n",
 +           features->tcq_mode, features->allow_parity_hiding,
 +           rb->bit_offset);
 +#endif
  
-   setup_segmentation_dequant(cm, xd);
+     setup_segmentation_dequant(pbi, xd);
  
-@@ -9773,23 +9906,51 @@ static int read_uncompressed_header(AV1Decoder *pbi,
-     cm->rst_info[2].frame_filters_on = 0;
+@@ -9170,29 +9297,76 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+       cm->cur_frame->base_qindex = cm->quant_params.base_qindex;
+       cm->cur_frame->u_ac_delta_q = cm->quant_params.u_ac_delta_q;
+       cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q;
++#if DEBUG_FRAME_HDR
++      printf("HDR: post-tip_quant[yac:%d,deltas=uac:%d,vac:%d]: off=%u\n",
++             cm->quant_params.base_qindex,
++             cm->quant_params.u_ac_delta_q,
++             cm->quant_params.v_ac_delta_q,
++             rb->bit_offset);
++#endif
+     }
+     features->disable_cdf_update = 1;
+     features->coded_lossless = 0;
+     features->all_lossless = 0;
    }
    setup_loopfilter(cm, rb);
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-deblock[y:%d|%d,u:%d,v:%d]: off=%u\n",
-+           cm->lf.filter_level[0], cm->lf.filter_level[1],
-+           cm->lf.filter_level_u, cm->lf.filter_level_v,
++  if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT)
++    printf("HDR: post-deblock[lfsubpu:%d,y:%d|%d,u:%d,v:%d,"
++           "dqy:%d|%d,dqu:%d,dqv:%d]: off=%u\n",
++           cm->features.allow_lf_sub_pu,
++           cm->lf.apply_deblocking_filter[0], cm->lf.apply_deblocking_filter[1],
++           cm->lf.apply_deblocking_filter_u, cm->lf.apply_deblocking_filter_v,
++           cm->lf.delta_q_luma[0], cm->lf.delta_q_luma[1],
++           cm->lf.delta_q_u, cm->lf.delta_q_v, rb->bit_offset);
++  else
++    printf("HDR: post-tip_deblock[lfsubpu:%d,apply:%d]: off=%u\n",
++           cm->features.allow_lf_sub_pu, cm->lf.apply_deblocking_filter_tip,
 +           rb->bit_offset);
 +#endif
  
    if (!features->coded_lossless && seq_params->enable_gdf) {
      setup_gdf(cm, rb);
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-gdf[%d]: off=%u\n",
-+           cm->gdf_info.gdf_mode,
-+           rb->bit_offset);
++    if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT)
++      printf("HDR: post-gdf[%d]: off=%u\n",
++             cm->gdf_info.gdf_mode,
++             rb->bit_offset);
 +#endif
    } else {
      cm->gdf_info.gdf_mode = 0;
@@ -339,19 +346,21 @@ index 6a04bf6a0e..70e22ec4ea 100644
    if (!features->coded_lossless && seq_params->enable_cdef) {
      setup_cdef(cm, rb);
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-cdef[%d]: off=%u\n",
-+           cm->cdef_info.cdef_frame_enable,
-+           rb->bit_offset);
++    if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT)
++      printf("HDR: post-cdef[%d]: off=%u\n",
++             cm->cdef_info.cdef_frame_enable,
++             rb->bit_offset);
 +#endif
    }
    if (!features->all_lossless && seq_params->enable_restoration) {
      decode_restoration_mode(cm, rb);
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-restoration[y:%d,u:%d,v:%d]: off=%u\n",
-+           cm->rst_info[0].frame_restoration_type,
-+           cm->rst_info[1].frame_restoration_type,
-+           cm->rst_info[2].frame_restoration_type,
-+           rb->bit_offset);
++    if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT)
++      printf("HDR: post-restoration[y:%d,u:%d,v:%d]: off=%u\n",
++             cm->rst_info[0].frame_restoration_type,
++             cm->rst_info[1].frame_restoration_type,
++             cm->rst_info[2].frame_restoration_type,
++             rb->bit_offset);
 +#endif
    }
    for (int plane = 0; plane < CCSO_NUM_COMPONENTS; plane++) {
@@ -360,31 +369,32 @@ index 6a04bf6a0e..70e22ec4ea 100644
    if (!features->coded_lossless && seq_params->enable_ccso) {
      setup_ccso(cm, rb);
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-ccso[%d]: off=%u\n",
-+           cm->ccso_info.ccso_frame_flag,
-+           rb->bit_offset);
++    if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT)
++      printf("HDR: post-ccso[%d]: off=%u\n",
++             cm->ccso_info.ccso_frame_flag,
++             rb->bit_offset);
 +#endif
    }
+   if (features->tip_frame_mode == TIP_FRAME_AS_OUTPUT) {
+     if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu &&
+@@ -9228,6 +9402,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+   features->enable_imp_msk_bld = seq_params->enable_imp_msk_bld;
  
-   features->tx_mode = read_tx_mode(rb, features->coded_lossless);
-@@ -9821,6 +9982,16 @@ static int read_uncompressed_header(AV1Decoder *pbi,
- #else
-       aom_rb_read_bit(rb);
- #endif  // CONFIG_REDUCED_TX_SET_EXT
+   features->reduced_tx_set_used = avm_rb_read_literal(rb, 2);
 +#if DEBUG_FRAME_HDR
-+    printf("HDR: post-modebits[tx:%d,refmode:%d,skipmode:%d,bawp:%d,warp:%d,redtxset:%d]: off=%u\n",
-+           features->tx_mode,
-+           current_frame->reference_mode,
-+           current_frame->skip_mode_info.skip_mode_flag,
-+           features->enable_bawp,
-+           features->allow_warpmv_mode,
-+           features->reduced_tx_set_used,
-+           rb->bit_offset);
++  printf("HDR: post-modebits[tx:%d,refmode:%d,skipmode:%d,bawp:%d,warp:%d,redtxset:%d]: off=%u\n",
++         features->tx_mode,
++         current_frame->reference_mode >> 1,
++         current_frame->skip_mode_info.skip_mode_flag,
++         features->enable_bawp,
++         features->allow_warpmv_mode,
++         features->reduced_tx_set_used,
++         rb->bit_offset);
 +#endif
  
    if (features->allow_ref_frame_mvs && !frame_might_allow_ref_frame_mvs(cm)) {
-     aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
-@@ -9832,7 +10003,13 @@ static int read_uncompressed_header(AV1Decoder *pbi,
+     avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
+@@ -9239,7 +9423,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                         "Frame wrongly requests TIP mode");
    }
  
@@ -396,9 +406,20 @@ index 6a04bf6a0e..70e22ec4ea 100644
 +           rb->bit_offset);
 +#endif
 +  }
+   setup_film_grain(pbi, rb);
+   features->enable_ext_seg = seq_params->enable_ext_seg;
+   return 0;
+diff --git a/avm/debug.h b/avm/debug.h
+index 36030e147d..b605a9125c 100644
+--- a/avm/debug.h
++++ b/avm/debug.h
+@@ -30,5 +30,6 @@
  
-   cm->cur_frame->film_grain_params_present =
-       seq_params->film_grain_params_present;
+ #define DEBUG_OBU_HDR 0
+ #define DEBUG_SEQ_HDR 0
++#define DEBUG_FRAME_HDR 0
+ 
+ #endif /* AVM_DEBUG_H */
 -- 
 2.48.1
 

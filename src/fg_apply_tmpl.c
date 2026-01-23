@@ -170,7 +170,7 @@ void bitfn(dav1d_apply_grain_row)(const Dav1dFilmGrainDSPContext *const dsp,
     const int ss_y = in->p.layout == DAV1D_PIXEL_LAYOUT_I420;
     const int ss_x = in->p.layout != DAV1D_PIXEL_LAYOUT_I444;
     const int cpw = (out->p.w + ss_x) >> ss_x;
-    const int is_id = out->seq_hdr->mtrx == DAV1D_MC_IDENTITY;
+    const int is_id = 0; //out->seq_hdr->mtrx == DAV1D_MC_IDENTITY;
     pixel *const luma_src =
         ((pixel *) in->data[0]) + row * FG_BLOCK_SIZE * PXSTRIDE(in->stride[0]);
 #if BITDEPTH != 8

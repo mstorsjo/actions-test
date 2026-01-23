@@ -159,17 +159,6 @@ void (name)(pixel *dst, ptrdiff_t stride, const pixel *pal, \
             const uint8_t *idx, int w, int h)
 typedef decl_pal_pred_fn(*pal_pred_fn);
 
-/*
- * 9-tap filter that can be applied to intra prediction
- * - topleft is the same as the argument given to dav1d_prepare_intra_edges(),
- *   see ipred_prepare.h for more detailed documentation.
- * - th_mask disables vertical (bit: 1) or horizontal (bit:0) filtering
- */
-#define decl_orip_fn(name) \
-void (name)(pixel *dst, ptrdiff_t stride, const pixel *topleft, \
-            unsigned th_mask, int width, int height HIGHBD_DECL_SUFFIX)
-typedef decl_orip_fn(*orip_fn);
-
 typedef struct Dav1dIntraPredDSPContext {
     angular_ipred_fn intra_pred[N_IMPL_INTRA_PRED_MODES];
 
@@ -186,9 +175,6 @@ typedef struct Dav1dIntraPredDSPContext {
 
     // palette
     pal_pred_fn pal_pred;
-
-    // offset-based refinement for intra prediction
-    orip_fn orip;
 } Dav1dIntraPredDSPContext;
 
 bitfn_decls(void dav1d_intra_pred_dsp_init, Dav1dIntraPredDSPContext *c);
