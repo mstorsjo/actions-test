@@ -246,8 +246,8 @@ inv_dst_1d(flipadst, adst,      8, 1);
 inv_dst_1d(flipadst, flipadst, 16, 0);
 inv_dst_1d(ddt,      ddt,       8, 0);
 inv_dst_1d(ddt,      ddt,      16, 0);
-inv_dst_1d(fddt,     ddt,       8, 1);
-inv_dst_1d(fddt,     ddt,      16, 1);
+inv_dst_1d(flipddt,  ddt,       8, 1);
+inv_dst_1d(flipddt,  ddt,      16, 1);
 
 static void inv_identity4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
@@ -278,29 +278,29 @@ static void inv_identity32_1d_c(int32_t *const c, const ptrdiff_t stride) {
 
 const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
     [TX_4X4] = {
-        [DCT] = inv_dct4_1d_c,
-        [ADST] = inv_adst4_1d_c,
+        [DCT]      = inv_dct4_1d_c,
+        [ADST]     = inv_adst4_1d_c,
         [FLIPADST] = inv_flipadst4_1d_c,
         [IDENTITY] = inv_identity4_1d_c,
     }, [TX_8X8] = {
-        [DCT] = inv_dct8_1d_c,
-        [ADST] = inv_adst8_1d_c,
+        [DCT]      = inv_dct8_1d_c,
+        [ADST]     = inv_adst8_1d_c,
         [FLIPADST] = inv_flipadst8_1d_c,
         [IDENTITY] = inv_identity8_1d_c,
-        [DDT] = inv_ddt8_1d_c,
-        [FDDT] = inv_fddt8_1d_c,
+        [DDT]      = inv_ddt8_1d_c,
+        [FLIPDDT]  = inv_flipddt8_1d_c,
     }, [TX_16X16] = {
-        [DCT] = inv_dct16_1d_c,
-        [ADST] = inv_adst16_1d_c,
+        [DCT]      = inv_dct16_1d_c,
+        [ADST]     = inv_adst16_1d_c,
         [FLIPADST] = inv_flipadst16_1d_c,
         [IDENTITY] = inv_identity16_1d_c,
-        [DDT] = inv_ddt16_1d_c,
-        [FDDT] = inv_fddt16_1d_c,
+        [DDT]      = inv_ddt16_1d_c,
+        [FLIPDDT]  = inv_flipddt16_1d_c,
     }, [TX_32X32] = {
-        [DCT] = inv_dct32_1d_c,
+        [DCT]      = inv_dct32_1d_c,
         [IDENTITY] = inv_identity32_1d_c,
     }, [TX_64X64] = {
-        [DCT] = inv_dct32_1d_c,
+        [DCT]      = inv_dct32_1d_c,
     },
 };
 

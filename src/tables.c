@@ -221,7 +221,7 @@ const char *const dav1d_tx1d_names[N_TX_1D_TYPES] = {
     [ADST]     = "adst",
     [FLIPADST] = "flipadst",
     [DDT]      = "ddt",
-    [FDDT]     = "fddt",
+    [FLIPDDT]  = "flipddt",
     [WHT]      = "wht",
 };
 #endif
