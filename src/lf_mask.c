@@ -197,62 +197,60 @@ void dav2d_create_lf_mask_intra(Av1Filter *const lflvl,
     const int bh4 = imin(ih - by, b_dim[1]);
     const int bx4 = bx & 63;
     const int by4 = by & 63;
-    assert(bw4 >= 0 && bh4 >= 0);
+    assert(bw4 > 0 && bh4 > 0);
 
-    if (bw4 && bh4) {
-        if (b->intra || !b->skip_txfm) {
-            const enum TxPartition tx_part = b->tx_part;
-            const int8_t *const tp = dav2d_tx_part_tbl[bs];
-            const enum RectTxfmSize tx = tp[tx_part];
-            if (tx_part < TX_PARTITION_H5) {
-                mask_edges_part(lflvl->filter_y, by4, bx4, bw4, bh4, tx, ay, ly);
-            } else if (tx_part == TX_PARTITION_H5) {
-                const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
-                const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
-                               *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
-                const int th4_small = t_dim_small->h;
-                const int th4_big = t_dim_big->h;
-                int cby4 = by4;
-                int rem_h4 = bh4; // remaining height
-                mask_edges_part(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
+    if (b->intra || !b->skip_txfm) {
+        const enum TxPartition tx_part = b->tx_part;
+        const int8_t *const tp = dav2d_tx_part_tbl[bs];
+        const enum RectTxfmSize tx = tp[tx_part];
+        if (tx_part < TX_PARTITION_H5) {
+            mask_edges_part(lflvl->filter_y, by4, bx4, bw4, bh4, tx, ay, ly);
+        } else if (tx_part == TX_PARTITION_H5) {
+            const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
+            const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
+                           *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
+            const int th4_small = t_dim_small->h;
+            const int th4_big = t_dim_big->h;
+            int cby4 = by4;
+            int rem_h4 = bh4; // remaining height
+            mask_edges_part(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
 
-                rem_h4 -= th4_small;
+            rem_h4 -= th4_small;
+            if (rem_h4 > 0) {
+                cby4 += th4_small;
+                ly += th4_small;
+                mask_edges_part(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_big), tx_big, ay, ly);
+                rem_h4 -= th4_big;
                 if (rem_h4 > 0) {
-                    cby4 += th4_small;
-                    ly += th4_small;
-                    mask_edges_part(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_big), tx_big, ay, ly);
-                    rem_h4 -= th4_big;
-                    if (rem_h4 > 0) {
-                        cby4 += th4_big;
-                        ly += th4_big;
-                        mask_edges_part(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
-                    }
-                }
-            } else if (tx_part == TX_PARTITION_V5) {
-                const enum RectTxfmSize tx_big = tp[TX_PARTITION_V];
-                const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
-                               *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
-                const int tw4_small = t_dim_small->w;
-                const int tw4_big = t_dim_big->w;
-                int cbx4 = bx4;
-                int rem_w4 = bw4; // remaining width
-                mask_edges_part(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
-                rem_w4 -= tw4_small;
-                if (rem_w4 > 0) {
-                    cbx4 += tw4_small;
-                    ay += tw4_small;
-                    mask_edges_part(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_big), bh4, tx_big, ay, ly);
-                    rem_w4 -= tw4_big;
-                    if (rem_w4 > 0) {
-                        cbx4 += tw4_big;
-                        ay += tw4_big;
-                        mask_edges_part(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
-                    }
+                    cby4 += th4_big;
+                    ly += th4_big;
+                    mask_edges_part(lflvl->filter_y, cby4, bx4, bw4, imin(rem_h4, th4_small), tx, ay, ly);
                 }
             }
-        } else {
-            mask_edges(lflvl->filter_y, by4, bx4, bw4, bh4, b_dim[2], b_dim[3], ay, ly);
+        } else if (tx_part == TX_PARTITION_V5) {
+            const enum RectTxfmSize tx_big = tp[TX_PARTITION_V];
+            const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
+                           *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
+            const int tw4_small = t_dim_small->w;
+            const int tw4_big = t_dim_big->w;
+            int cbx4 = bx4;
+            int rem_w4 = bw4; // remaining width
+            mask_edges_part(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
+            rem_w4 -= tw4_small;
+            if (rem_w4 > 0) {
+                cbx4 += tw4_small;
+                ay += tw4_small;
+                mask_edges_part(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_big), bh4, tx_big, ay, ly);
+                rem_w4 -= tw4_big;
+                if (rem_w4 > 0) {
+                    cbx4 += tw4_big;
+                    ay += tw4_big;
+                    mask_edges_part(lflvl->filter_y, by4, cbx4, imin(rem_w4, tw4_small), bh4, tx, ay, ly);
+                }
+            }
         }
+    } else {
+        mask_edges(lflvl->filter_y, by4, bx4, bw4, bh4, b_dim[2], b_dim[3], ay, ly);
     }
 
 #if 0
