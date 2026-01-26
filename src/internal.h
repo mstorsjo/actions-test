@@ -506,6 +506,6 @@ struct Dav2dTaskContext {
     } task_thread;
 };
 
-struct OutputQueue *queue_output(Dav2dContext *c, Dav2dThreadPicture *p);
+struct OutputQueue *dav2d_queue_output(Dav2dContext *c, Dav2dThreadPicture *p);
 
 #endif /* DAV2D_SRC_INTERNAL_H */

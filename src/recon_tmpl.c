@@ -1601,7 +1601,7 @@ static void opfl_mv_adj(const struct OpflRegressionData *const r,
     const int det = su2 * sv2 - suv * suv;
     if (det > 0) {
         int s[2] = { sv2 * suw - suv * svw, su2 * svw - suv * suw }, shift;
-        const int idet = resolve_divisor_32(det, &shift), idet_bits = ulog2(idet);
+        const int idet = dav2d_resolve_divisor_32(det, &shift), idet_bits = ulog2(idet);
         for (int i = 0; i < 2; i++) {
             if (!s[i]) continue;
             int abss = abs(s[i]);
@@ -2156,24 +2156,24 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const int type = (stx & 3) - 1;
             const int set = (stx >> 2) & 15;
             if (tw >= 8 && th >= 8) {
-                const int8_t *kernel = &stx_8x8_kernel[set][type][0][0];
+                const int8_t *kernel = &dav2d_stx_8x8_kernel[set][type][0][0];
                 coef sums[48];
                 dsp->stx.stxfm(sums, cf, kernel, 48, eob HIGHBD_CALL_SUFFIX);
                 memset(cf, 0, 32 * sizeof(coef));
                 // Subtract 1 to map {8,16,32} to idx {0,1,2}
                 const int idx = imin(t_dim->lh, 3) - 1;
-                const uint8_t *scan_out = stx_scan_orders_8x8[idx][transpose];
-                const uint8_t *mapping = coeff8x8_mapping[set * 3 + type];
+                const uint8_t *scan_out = dav2d_stx_scan_orders_8x8[idx][transpose];
+                const uint8_t *mapping = dav2d_coeff8x8_mapping[set * 3 + type];
                 for (int x = 0; x < 48; x++) {
                     cf[scan_out[mapping[x]]] = sums[x];
                 }
                 eob = (uint8_t[]){ 63, 119, 231 }[idx];
             } else {
-                const int8_t *kernel = &stx_4x4_kernel[set][type][0][0];
+                const int8_t *kernel = &dav2d_stx_4x4_kernel[set][type][0][0];
                 coef sums[16];
                 dsp->stx.stxfm(sums, cf, kernel, 16, eob HIGHBD_CALL_SUFFIX);
                 const int idx = imin(t_dim->lh, 3);
-                const uint8_t *scan_out = stx_scan_orders_4x4[idx][transpose];
+                const uint8_t *scan_out = dav2d_stx_scan_orders_4x4[idx][transpose];
                 memset(&cf[4], 0, 4 * sizeof(coef));
                 for (int x = 0; x < 16; x++) {
                     cf[scan_out[x]] = sums[x];

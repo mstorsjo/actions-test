@@ -30,7 +30,7 @@
 #include "src/stx_tables.h"
 
 // Scan order of primary transform coefficients for 4x4 IST
-const uint8_t stx_scan_orders_4x4[TX_64X64][2][16] = {
+const uint8_t dav2d_stx_scan_orders_4x4[TX_64X64][2][16] = {
     [TX_4X4] = {
         { 0,  1,  4,  8,  5,  2,  3,  6,  9, 12, 13, 10,  7, 11, 14, 15 },
         { 0,  4,  1,  2,  5,  8, 12,  9,  6,  3,  7, 10, 13, 14, 11, 15 },
@@ -46,7 +46,7 @@ const uint8_t stx_scan_orders_4x4[TX_64X64][2][16] = {
     }
 };
 
-const uint8_t stx_scan_orders_8x8[TX_32X32][2][64] = {
+const uint8_t dav2d_stx_scan_orders_8x8[TX_32X32][2][64] = {
     [TX_8X8 - 1] = {
         {
           0,   1,   8,  16,   9,   2,   3,  10,  17,  24,  32,  25,  18,  11,   4,   5,
@@ -86,7 +86,7 @@ const uint8_t stx_scan_orders_8x8[TX_32X32][2][64] = {
     }
 };
 
-const uint8_t coeff8x8_mapping[33][48] = {
+const uint8_t dav2d_coeff8x8_mapping[33][48] = {
     {  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,
       16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  30,  31,  32,  33,  34,
       35,  36,  37,  38,  39,  40,  45,  46,  47,  48,  49,  50,  51,  56,  57,  58, },
@@ -188,7 +188,7 @@ const uint8_t coeff8x8_mapping[33][48] = {
       32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  44,  45,  46,  47,  51, }
 };
 
-const int8_t stx_4x4_kernel[14][3][8][16] = {
+const int8_t dav2d_stx_4x4_kernel[14][3][8][16] = {
     {
         {
             { 102, -45, -53,  -5, -13,  -3,  -3,  19,  22,  -2,   3,   8,   2,  -5,  -8,  -4 },
@@ -598,7 +598,7 @@ const int8_t stx_4x4_kernel[14][3][8][16] = {
     }
 };
 
-const int8_t stx_8x8_kernel[11][3][32][48] = {
+const int8_t dav2d_stx_8x8_kernel[11][3][32][48] = {
     {
         {
             { 103, -44, -48,  -9, -12,  -6,  -4,  19,  24,  -2,  -2,   4,

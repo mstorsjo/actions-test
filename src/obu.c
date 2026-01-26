@@ -2387,7 +2387,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 goto error;
             }
             if (c->n_fc == 1) {
-                queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
+                dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
 #if 0
                 dav2d_picture_copy_props(&c->out.p,
                                          c->content_light, c->content_light_ref,

@@ -2399,8 +2399,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         b->inter_mode == OPFL_JOINT_NEWMV)
                     {
                         n &= 1; // "the one not handled above"
-                        diff[n] = mv_projection(diff[!n], refdist[1], refdist[0],
-                                                -0xffff, 0xffff);
+                        diff[n] = dav2d_mv_projection(diff[!n], refdist[1], refdist[0],
+                                                      -0xffff, 0xffff);
                         jmvd_scale(&diff[n], amvd, jmvd_scale_mode);
                         b->mv[n] = mvstack[drl_idx[n]].mv[n];
                         b->mv[n].x += diff[n].x;
@@ -5109,7 +5109,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     // move f->cur into output queue
     struct OutputQueue *q = NULL;
     if (f->frame_hdr->show_frame || c->output_invisible_frames) {
-        q = queue_output(c, &f->sr_cur);
+        q = dav2d_queue_output(c, &f->sr_cur);
 #if 0
         c->event_flags |= dav2d_picture_get_event_flags(&f->sr_cur);
 #endif

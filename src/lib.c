@@ -352,8 +352,8 @@ static void queue_flush(Dav2dContext *const c) {
     }
 }
 
-struct OutputQueue *queue_output(Dav2dContext *const c,
-                                 Dav2dThreadPicture *const p)
+struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
+                                       Dav2dThreadPicture *const p)
 {
     assert(c->seq_hdr);
 

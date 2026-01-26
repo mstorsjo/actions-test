@@ -38,7 +38,7 @@ static inline int iclip_wmp(const int v) {
     return iclip((v + 0x20 - (v < 0)) & ~0x3f, -0x8000, 0x7fc0);
 }
 
-int resolve_divisor_32(const unsigned d, int *const shift) {
+int dav2d_resolve_divisor_32(const unsigned d, int *const shift) {
     *shift = ulog2(d);
     const int e = d - (1 << *shift);
     const int f = *shift > 7 ? (e + (1 << (*shift - 8))) >> (*shift - 7) :
@@ -58,7 +58,7 @@ int dav2d_get_shear_params(Dav2dWarpedMotionParams *const wm) {
     wm->u.p.beta = iclip_wmp(mat[3]);
 
     int shift;
-    const int y = apply_sign(resolve_divisor_32(abs(mat[2]), &shift), mat[2]);
+    const int y = apply_sign(dav2d_resolve_divisor_32(abs(mat[2]), &shift), mat[2]);
     const int64_t v1 = ((int64_t) mat[4] * 0x10000) * y;
     const int rnd = (1 << shift) >> 1;
     wm->u.p.gamma = iclip_wmp(apply_sign64((int) ((llabs(v1) + rnd) >> shift), v1));

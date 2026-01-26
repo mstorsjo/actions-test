@@ -216,7 +216,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8);
 
-mv mv_projection(mv in, int num, int den, int min, int max);
+mv dav2d_mv_projection(mv in, int num, int den, int min, int max);
 static ALWAYS_INLINE mv scale_mv(const mv in, const int sf) {
     const int64_t y = in.y * (int64_t) sf, x = in.x * (int64_t) sf;
     return (mv) {
