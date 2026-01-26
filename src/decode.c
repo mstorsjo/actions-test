@@ -3035,24 +3035,6 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (res < 0) return res;
         }
 
-#if 0
-        if (f->frame_hdr->loopfilter.level_y[0] ||
-            f->frame_hdr->loopfilter.level_y[1])
-        {
-            const uint16_t tx_split[2] = { 0, 0 };
-            enum RectTxfmSize ytx = dav2d_max_txfm_size_for_bs[bs][0], uvtx = b->uvtx;
-            if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
-                ytx  = (enum RectTxfmSize) TX_4X4;
-                uvtx = (enum RectTxfmSize) TX_4X4;
-            }
-            dav2d_create_lf_mask_inter(t->lf_mask, t->bx, t->by, f->bw, f->bh, b->skip_txfm,
-                                       bs, ytx, tx_split, uvtx, f->cur.p.layout,
-                                       &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
-                                       has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
-                                       has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
-        }
-#endif
-
         // context updates
         BlockContext *edge = t->a;
         for (int i = 0, off = bx4; i < 2; i++, off = by4, edge = &t->l) {
