@@ -4586,6 +4586,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         }
         f->lf.mask_sz = num_sb256;
     }
+    memset(f->lf.mask, 0, sizeof(*f->lf.mask) * num_sb256);
 
     const int lr_mask_sz = f->sb256w * f->sb256h;
     if (lr_mask_sz != f->lf.lr_mask_sz) {
