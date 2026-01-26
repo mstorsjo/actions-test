@@ -64,7 +64,7 @@ build-debian:
         - |
           mkdir x86-64
           cd x86-64
-          cmake .. -DENABLE_TESTS=0 -DCONFIG_AV1_ENCODER=0
+          cmake .. -DENABLE_TESTS=0 -DCONFIG_AV2_ENCODER=0
           make -j$(nproc) avmdec
           cd ../..
         - |
