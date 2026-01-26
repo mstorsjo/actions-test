@@ -31,7 +31,7 @@
 extern "C" {
 #endif
 
-#define DAV2D_API_VERSION_MAJOR 7
+#define DAV2D_API_VERSION_MAJOR 1
 #define DAV2D_API_VERSION_MINOR 0
 #define DAV2D_API_VERSION_PATCH 0
 
