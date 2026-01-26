@@ -3215,6 +3215,8 @@ chroma: {}
         if (cctx_type) {
             dsp->itx.cctx(cf[0], cf[1], dav1d_cctx_angle[cctx_type - 1],
                           umin(ctw, 32) * umin(cth, 32) HIGHBD_CALL_SUFFIX);
+            const int gt = eob[1] > eob[0];
+            eob[!gt] = eob[gt];
             txtp[0] &= 0xff;
         }
         // inverse transform
