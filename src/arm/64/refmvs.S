@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021, VideoLAN and dav1d authors
+ * Copyright © 2021, VideoLAN and dav2d authors
  * Copyright © 2021, Martin Storsjo
  * All rights reserved.
  *
@@ -31,7 +31,7 @@
 
 #define INVALID_MV 0x80008000
 
-// void dav1d_splat_mv_neon(refmvs_block **rr, const refmvs_block *rmv,
+// void dav2d_splat_mv_neon(refmvs_block **rr, const refmvs_block *rmv,
 //                          int bx4, int bw4, int bh4)
 
 function splat_mv_neon, export=1
@@ -105,7 +105,7 @@ const mask_mult, align=4
         .byte           1, 2, 1, 2, 0, 0, 0, 0
 endconst
 
-// void dav1d_save_tmvs_neon(refmvs_temporal_block *rp, ptrdiff_t stride,
+// void dav2d_save_tmvs_neon(refmvs_temporal_block *rp, ptrdiff_t stride,
 //                           refmvs_block **rr, const uint8_t *ref_sign,
 //                           int col_end8, int row_end8,
 //                           int col_start8, int row_start8)
@@ -296,7 +296,7 @@ jumptable save_tmvs_tbl
         .word 10b  - save_tmvs_tbl
 endjumptable
 
-// void dav1d_load_tmvs_neon(const refmvs_frame *const rf, int tile_row_idx,
+// void dav2d_load_tmvs_neon(const refmvs_frame *const rf, int tile_row_idx,
 //                           const int col_start8, const int col_end8,
 //                           const int row_start8, int row_end8)
 function load_tmvs_neon, export=1

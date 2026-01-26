@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_IPRED_H
-#define DAV1D_SRC_IPRED_H
+#ifndef DAV2D_SRC_IPRED_H
+#define DAV2D_SRC_IPRED_H
 
 #include <stddef.h>
 
@@ -69,7 +69,7 @@
  * Intra prediction.
  * - a is the angle (in degrees) for directional intra predictors. For other
  *   modes, it is ignored;
- * - topleft is the same as the argument given to dav1d_prepare_intra_edges(),
+ * - topleft is the same as the argument given to dav2d_prepare_intra_edges(),
  *   see ipred_prepare.h for more detailed documentation.
  */
 #define decl_angular_ipred_fn(name) \
@@ -159,7 +159,7 @@ void (name)(pixel *dst, ptrdiff_t stride, const pixel *pal, \
             const uint8_t *idx, int w, int h)
 typedef decl_pal_pred_fn(*pal_pred_fn);
 
-typedef struct Dav1dIntraPredDSPContext {
+typedef struct Dav2dIntraPredDSPContext {
     angular_ipred_fn intra_pred[N_IMPL_INTRA_PRED_MODES];
 
     // chroma-from-luma (implicit and explicit alpha)
@@ -175,8 +175,8 @@ typedef struct Dav1dIntraPredDSPContext {
 
     // palette
     pal_pred_fn pal_pred;
-} Dav1dIntraPredDSPContext;
+} Dav2dIntraPredDSPContext;
 
-bitfn_decls(void dav1d_intra_pred_dsp_init, Dav1dIntraPredDSPContext *c);
+bitfn_decls(void dav2d_intra_pred_dsp_init, Dav2dIntraPredDSPContext *c);
 
-#endif /* DAV1D_SRC_IPRED_H */
+#endif /* DAV2D_SRC_IPRED_H */

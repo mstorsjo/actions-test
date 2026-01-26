@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -56,6 +56,6 @@ static void stxfm_c(coef *const cf_out,
     }
 }
 
-COLD void bitfn(dav1d_stx_dsp_init)(Dav1dStxDSPContext *const c) {
+COLD void bitfn(dav2d_stx_dsp_init)(Dav2dStxDSPContext *const c) {
     c->stxfm = stxfm_c;
 }

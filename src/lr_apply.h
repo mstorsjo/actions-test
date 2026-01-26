@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LR_APPLY_H
-#define DAV1D_SRC_LR_APPLY_H
+#ifndef DAV2D_SRC_LR_APPLY_H
+#define DAV2D_SRC_LR_APPLY_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -41,7 +41,7 @@ enum LrRestorePlanes {
     LR_RESTORE_V = 1 << 2,
 };
 
-void bytefn(dav1d_lr_sbrow)(Dav1dFrameContext *const f, pixel *const dst[3],
+void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
                             int sby);
 
-#endif /* DAV1D_SRC_LR_APPLY_H */
+#endif /* DAV2D_SRC_LR_APPLY_H */

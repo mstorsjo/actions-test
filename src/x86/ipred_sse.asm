@@ -1,4 +1,4 @@
-; Copyright © 2018-2021, VideoLAN and dav1d authors
+; Copyright © 2018-2021, VideoLAN and dav2d authors
 ; Copyright © 2018, Two Orioles, LLC
 ; All rights reserved.
 ;
@@ -147,7 +147,7 @@ cextern filter_intra_taps
 SECTION .text
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_h_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_h_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 %macro IPRED_SET   3                                          ; width, stride, stride size pshuflw_imm8
@@ -218,7 +218,7 @@ cglobal ipred_h_8bpc, 3, 6, 2, dst, stride, tl, w, h, stride3
     IPRED_H                      64
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_v_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_v_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_v_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
@@ -235,7 +235,7 @@ cglobal ipred_v_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     jmp                  wq
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_dc_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_dc_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_dc_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
@@ -477,7 +477,7 @@ ALIGN function_align
     RET
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_dc_left_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_dc_left_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_dc_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
@@ -527,7 +527,7 @@ cglobal ipred_dc_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     jmp                  wq
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_dc_128_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_dc_128_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_dc_128_8bpc, 2, 7, 6, dst, stride, tl, w, h, stride3
@@ -544,7 +544,7 @@ cglobal ipred_dc_128_8bpc, 2, 7, 6, dst, stride, tl, w, h, stride3
     jmp                  wq
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_dc_top_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_dc_top_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_dc_top_8bpc, 3, 7, 6, dst, stride, tl, w, h
@@ -566,7 +566,7 @@ cglobal ipred_dc_top_8bpc, 3, 7, 6, dst, stride, tl, w, h
     jmp                  r6
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_smooth_v_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_smooth_v_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 %macro SMOOTH 6 ; src[1-2], mul[1-2], add[1-2]
@@ -734,7 +734,7 @@ ALIGN function_align
     RET
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_smooth_h_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_smooth_h_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_smooth_h_8bpc, 3, 7, 8, dst, stride, tl, w, h
@@ -925,7 +925,7 @@ ALIGN function_align
     RET
 
 ;---------------------------------------------------------------------------------------
-;int dav1d_ipred_smooth_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;int dav2d_ipred_smooth_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
 ;---------------------------------------------------------------------------------------
 %macro SMOOTH_2D_END  7                                  ; src[1-2], mul[1-2], add[1-2], m3
@@ -974,11 +974,11 @@ ALIGN function_align
     pmaddubsw            m2, m1, m5                       ; 127 * left - 127 * right
     paddw                m2, m1                           ; 128 * left + 129 * right
     mova                 m3, m2
-    pmaddubsw            m0, m1, %6                       ; weights_hor = &dav1d_sm_weights[width];
+    pmaddubsw            m0, m1, %6                       ; weights_hor = &dav2d_sm_weights[width];
     pmaddubsw            m1, %7
     paddw                m2, m3, m0
     paddw                m3, m1
-    movd                 m1, [v_weightsq]                 ; weights_ver = &dav1d_sm_weights[height];
+    movd                 m1, [v_weightsq]                 ; weights_ver = &dav2d_sm_weights[height];
     mova                 m7, [rsp+16*%9]
     pshufb               m1, m7
     mova        [rsp+16*%8], m3
@@ -1011,7 +1011,7 @@ cglobal ipred_smooth_8bpc, 3, 7, 8, -13*16, dst, stride, tl, w, h, v_weights
     pshufb               m0, m2                           ; bottom
     movddup              m3, [base+pw_255]
     add                  wq, r6
-    lea          v_weightsq, [base+smooth_weights+hq*2]   ; weights_ver = &dav1d_sm_weights[height]
+    lea          v_weightsq, [base+smooth_weights+hq*2]   ; weights_ver = &dav2d_sm_weights[height]
     jmp                  wq
 .w4:
     mova                 m7, [base+ipred_v_shuf]
@@ -1028,7 +1028,7 @@ cglobal ipred_smooth_8bpc, 3, 7, 8, -13*16, dst, stride, tl, w, h, v_weights
     paddw                m2, m3                           ; 128 * top + 129 * bottom + 255
     mova         [rsp+16*0], m1
     mova         [rsp+16*1], m2
-    movq                 m1,  [base+smooth_weights+4*2]   ; weights_hor = &dav1d_sm_weights[width];
+    movq                 m1,  [base+smooth_weights+4*2]   ; weights_hor = &dav2d_sm_weights[width];
     punpcklqdq           m1, m1
     mova         [rsp+16*2], m1
     mova         [rsp+16*3], m4
@@ -1048,7 +1048,7 @@ cglobal ipred_smooth_8bpc, 3, 7, 8, -13*16, dst, stride, tl, w, h, v_weights
     pmaddubsw            m1, m4
     paddw                m2, m0
     paddw                m3, m1
-    movq                 m1, [v_weightsq]             ; weights_ver = &dav1d_sm_weights[height];
+    movq                 m1, [v_weightsq]             ; weights_ver = &dav2d_sm_weights[height];
     add          v_weightsq, 8
     pshufb               m0, m1, m6
     pshufb               m1, m7
@@ -1084,7 +1084,7 @@ ALIGN function_align
     paddw                m2, m3
     mova         [rsp+16*0], m1
     mova         [rsp+16*1], m2
-    mova                 m1, [base+smooth_weights+8*2] ; weights_hor = &dav1d_sm_weights[width];
+    mova                 m1, [base+smooth_weights+8*2] ; weights_hor = &dav2d_sm_weights[width];
     mova         [rsp+16*2], m1
     mova         [rsp+16*3], m4
     mova         [rsp+16*4], m6
@@ -1104,7 +1104,7 @@ ALIGN function_align
     pmaddubsw            m1, m4
     paddw                m2, m0
     paddw                m3, m1
-    movd                 m1, [v_weightsq]              ; weights_ver = &dav1d_sm_weights[height];
+    movd                 m1, [v_weightsq]              ; weights_ver = &dav2d_sm_weights[height];
     add          v_weightsq, 4
     pshufb               m0, m1, m6
     pshufb               m1, m7
@@ -1150,11 +1150,11 @@ ALIGN function_align
     paddw                m2, m1                          ; 128 * left + 129 * right
     mova                 m0, m1
     mova                 m3, m2
-    pmaddubsw            m0, [base+smooth_weights+16*2]  ; weights_hor = &dav1d_sm_weights[width];
+    pmaddubsw            m0, [base+smooth_weights+16*2]  ; weights_hor = &dav2d_sm_weights[width];
     pmaddubsw            m1, [base+smooth_weights+16*3]
     paddw                m2, m0
     paddw                m3, m1
-    movd                 m1, [v_weightsq]                ; weights_ver = &dav1d_sm_weights[height];
+    movd                 m1, [v_weightsq]                ; weights_ver = &dav2d_sm_weights[height];
     add          v_weightsq, 2
     mova                 m7, [rsp+16*2]
     pshufb               m1, m7
@@ -3474,7 +3474,7 @@ cglobal ipred_z3_8bpc, 4, 7, 8, -16*10, dst, stride, tl, w, h, angle, dy
     RET
 
 ;-------------------------------------------------------------------------------
-;int dav1d_pal_pred_ssse3(pixel *dst, ptrdiff_t stride, const pixel *pal,
+;int dav2d_pal_pred_ssse3(pixel *dst, ptrdiff_t stride, const pixel *pal,
 ;                         const uint8_t *idx, int w, int h);
 ;-------------------------------------------------------------------------------
 cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
@@ -3571,7 +3571,7 @@ cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
     RET
 
 ;---------------------------------------------------------------------------------------
-;void dav1d_ipred_cfl_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;void dav2d_ipred_cfl_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                           const int width, const int height, const int16_t *ac, const int alpha);
 ;---------------------------------------------------------------------------------------
 %macro IPRED_CFL 1                   ; ac in, unpacked pixels out
@@ -3825,7 +3825,7 @@ ALIGN function_align
     RET
 
 ;---------------------------------------------------------------------------------------
-;void dav1d_ipred_cfl_left_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;void dav2d_ipred_cfl_left_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                           const int width, const int height, const int16_t *ac, const int alpha);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_cfl_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, ac, alpha
@@ -3866,7 +3866,7 @@ cglobal ipred_cfl_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, ac, alpha
     jmp                  wq
 
 ;---------------------------------------------------------------------------------------
-;void dav1d_ipred_cfl_top_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;void dav2d_ipred_cfl_top_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                           const int width, const int height, const int16_t *ac, const int alpha);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_cfl_top_8bpc, 3, 7, 6, dst, stride, tl, w, h, ac, alpha
@@ -3890,7 +3890,7 @@ cglobal ipred_cfl_top_8bpc, 3, 7, 6, dst, stride, tl, w, h, ac, alpha
     jmp                  r6
 
 ;---------------------------------------------------------------------------------------
-;void dav1d_ipred_cfl_128_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
+;void dav2d_ipred_cfl_128_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                           const int width, const int height, const int16_t *ac, const int alpha);
 ;---------------------------------------------------------------------------------------
 cglobal ipred_cfl_128_8bpc, 3, 7, 6, dst, stride, tl, w, h, ac, alpha

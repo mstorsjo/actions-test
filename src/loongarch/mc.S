@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -146,7 +146,7 @@ function warp_affine_8x8\t\()_8bpc_lsx
     alsl.w          t3,       a3,      a3,     1
     sub.d           a2,       a2,      t3
     addi.d          a2,       a2,      -3
-    la.local        t4,       dav1d_mc_warp_filter
+    la.local        t4,       dav2d_mc_warp_filter
 
 .ifnb \t
     slli.d          a1,       a1,      1
@@ -350,7 +350,7 @@ function warp_affine_8x8\t\()_8bpc_lasx
     alsl.w          t2,       a3,      a3,     1
     addi.w          t3,       a5,      0
     la.local        t4,       warp_sh
-    la.local        t5,       dav1d_mc_warp_filter
+    la.local        t5,       dav2d_mc_warp_filter
     sub.d           a2,       a2,      t2
     addi.d          a2,       a2,      -3
     vld             vr0,      a2,      0
@@ -2435,7 +2435,7 @@ endconst
 
 .macro PUT_8TAP_8BPC_LSX lable
     li.w             t0,     4
-    la.local         t6,     dav1d_mc_subpel_filters
+    la.local         t6,     dav2d_mc_subpel_filters
     slli.d           t2,     a3,    1  //src_stride*2
     add.d            t3,     t2,    a3 //src_stride*3
     slli.d           t4,     t2,    1  //src_stride*4
@@ -3122,7 +3122,7 @@ endconst
     vreplvei.w       vr19,   vr9,   2
     vreplvei.w       vr20,   vr9,   3
 
-    //DAV1D_FILTER_8TAP_RND
+    //DAV2D_FILTER_8TAP_RND
     vshuf.b          vr0,    vr0,   vr0,  vr7
     vshuf.b          vr1,    vr1,   vr1,  vr7
     vshuf.b          vr2,    vr2,   vr2,  vr7
@@ -3176,7 +3176,7 @@ endconst
     vldx             vr10,   a2,    a3
     add.d            a2,     a2,    t2
 
-    //DAV1D_FILTER_8TAP_CLIP
+    //DAV2D_FILTER_8TAP_CLIP
     vshuf.b          vr9,    vr9,   vr9,  vr7
     vshuf.b          vr10,   vr10,  vr10, vr7
     vmulwev.h.bu.b   vr11,   vr9,   vr8
@@ -3523,7 +3523,7 @@ endconst
 
 .macro PREP_8TAP_8BPC_LASX lable
     li.w             t0,     4
-    la.local         t6,     dav1d_mc_subpel_filters
+    la.local         t6,     dav2d_mc_subpel_filters
     slli.d           t2,     a2,    1  //src_stride*2
     add.d            t3,     t2,    a2 //src_stride*3
     slli.d           t4,     t2,    1
@@ -4363,7 +4363,7 @@ endfunc
 
 .macro PREP_8TAP_8BPC_LSX lable
     li.w             t0,     4
-    la.local         t6,     dav1d_mc_subpel_filters
+    la.local         t6,     dav2d_mc_subpel_filters
     la.local         t7,     shufb1
     vld              vr23,   t7,    0
     slli.d           t2,     a2,    1  //src_stride*2
@@ -4632,7 +4632,7 @@ endfunc
     vreplvei.w       vr19,   vr9,   2
     vreplvei.w       vr20,   vr9,   3
 
-    //DAV1D_FILTER_8TAP_RND
+    //DAV2D_FILTER_8TAP_RND
     vshuf.b          vr0,    vr0,   vr0,  vr7
     vshuf.b          vr1,    vr1,   vr1,  vr7
     vshuf.b          vr2,    vr2,   vr2,  vr7
@@ -4686,7 +4686,7 @@ endfunc
     vldx             vr10,   a1,    a2
     add.d            a1,     a1,    t2
 
-    //DAV1D_FILTER_8TAP_CLIP
+    //DAV2D_FILTER_8TAP_CLIP
     vshuf.b          vr9,    vr9,   vr9,  vr7
     vshuf.b          vr10,   vr10,  vr10, vr7
     vmulwev.h.bu.b   vr11,   vr9,   vr8

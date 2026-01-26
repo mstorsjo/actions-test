@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_CTX_H
-#define DAV1D_SRC_CTX_H
+#ifndef DAV2D_SRC_CTX_H
+#define DAV2D_SRC_CTX_H
 
 #include <stdint.h>
 
@@ -38,13 +38,13 @@ PACKED(union alias32 { uint32_t u32; uint8_t u8[4]; }) ATTR_ALIAS;
 PACKED(union alias16 { uint16_t u16; uint8_t u8[2]; }) ATTR_ALIAS;
 union alias8 { uint8_t u8; } ATTR_ALIAS;
 
-typedef void (*dav1d_memset_pow2_fn)(void *ptr, int value);
-EXTERN const dav1d_memset_pow2_fn dav1d_memset_pow2[7];
+typedef void (*dav2d_memset_pow2_fn)(void *ptr, int value);
+EXTERN const dav2d_memset_pow2_fn dav2d_memset_pow2[7];
 
-static inline void dav1d_memset_likely_pow2(void *const ptr, const int value, const int n) {
+static inline void dav2d_memset_likely_pow2(void *const ptr, const int value, const int n) {
     assert(n >= 1 && n <= 64);
     if ((n&(n-1)) == 0) {
-        dav1d_memset_pow2[ulog2(n)](ptr, value);
+        dav2d_memset_pow2[ulog2(n)](ptr, value);
     } else {
         memset(ptr, value, n);
     }
@@ -90,4 +90,4 @@ static inline void dav1d_memset_likely_pow2(void *const ptr, const int value, co
     default: assert(0); \
     }
 
-#endif /* DAV1D_SRC_CTX_H */
+#endif /* DAV2D_SRC_CTX_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,10 +25,10 @@
  */
 
 /*
- * Dav1dPlay FIFO helper
+ * Dav2dPlay FIFO helper
  */
 
-typedef struct dp_fifo Dav1dPlayPtrFifo;
+typedef struct dp_fifo Dav2dPlayPtrFifo;
 
 /* Create a FIFO
  *
@@ -36,20 +36,20 @@ typedef struct dp_fifo Dav1dPlayPtrFifo;
  * If the capacity is reached, new inserts into the FIFO
  * will block until enough space is available again.
  */
-Dav1dPlayPtrFifo *dp_fifo_create(size_t capacity);
+Dav2dPlayPtrFifo *dp_fifo_create(size_t capacity);
 
 /* Destroy a FIFO
  *
  * The FIFO must be empty before it is destroyed!
  */
-void dp_fifo_destroy(Dav1dPlayPtrFifo *fifo);
+void dp_fifo_destroy(Dav2dPlayPtrFifo *fifo);
 
 /* Shift FIFO
  *
  * Return the first item from the FIFO, thereby removing it from
  * the FIFO and making room for new entries.
  */
-void *dp_fifo_shift(Dav1dPlayPtrFifo *fifo);
+void *dp_fifo_shift(Dav2dPlayPtrFifo *fifo);
 
 /* Push to FIFO
  *
@@ -58,6 +58,6 @@ void *dp_fifo_shift(Dav1dPlayPtrFifo *fifo);
  * space in the FIFO, so calling this from the "consumer" thread if no
  * other thread will call dp_fifo_shift will lead to a deadlock.
  */
-void dp_fifo_push(Dav1dPlayPtrFifo *fifo, void *element);
+void dp_fifo_push(Dav2dPlayPtrFifo *fifo, void *element);
 
-void dp_fifo_flush(Dav1dPlayPtrFifo *fifo, void (*destroy_elem)(void *));
+void dp_fifo_flush(Dav2dPlayPtrFifo *fifo, void (*destroy_elem)(void *));

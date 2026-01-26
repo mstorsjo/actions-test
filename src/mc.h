@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_MC_H
-#define DAV1D_SRC_MC_H
+#ifndef DAV2D_SRC_MC_H
+#define DAV2D_SRC_MC_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -154,28 +154,28 @@ unsigned (name)(const pixel *p0, ptrdiff_t p0_stride, \
 typedef decl_sad8x8_fn(*sad8x8_fn);
 
 #define decl_8tap_gen(decl_name, fn_name, opt) \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_regular, opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_smooth,  opt)); \
-    decl_##decl_name##_fn(BF(dav1d_##fn_name##_8tap_sharp,   opt))
+    decl_##decl_name##_fn(BF(dav2d_##fn_name##_8tap_regular, opt)); \
+    decl_##decl_name##_fn(BF(dav2d_##fn_name##_8tap_smooth,  opt)); \
+    decl_##decl_name##_fn(BF(dav2d_##fn_name##_8tap_sharp,   opt))
 
 #define decl_8tap_fns(opt) \
     decl_8tap_gen(mc,  put,  opt); \
     decl_8tap_gen(mct, prep, opt)
 
 #define init_8tap_gen(name, opt) \
-    init_##name##_fn(DAV1D_FILTER_8TAP_REGULAR, 8tap_regular, opt); \
-    init_##name##_fn(DAV1D_FILTER_8TAP_SMOOTH,  8tap_smooth,  opt); \
-    init_##name##_fn(DAV1D_FILTER_8TAP_SHARP,   8tap_sharp,   opt)
+    init_##name##_fn(DAV2D_FILTER_8TAP_REGULAR, 8tap_regular, opt); \
+    init_##name##_fn(DAV2D_FILTER_8TAP_SMOOTH,  8tap_smooth,  opt); \
+    init_##name##_fn(DAV2D_FILTER_8TAP_SHARP,   8tap_sharp,   opt)
 
 #define init_8tap_fns(opt) \
     init_8tap_gen(mc,  opt); \
     init_8tap_gen(mct, opt)
 
-typedef struct Dav1dMCDSPContext {
-    mc_fn mc[DAV1D_N_FILTERS];
-    mc_scaled_fn mc_scaled[DAV1D_N_FILTERS];
-    mct_fn mct[DAV1D_N_FILTERS];
-    mct_scaled_fn mct_scaled[DAV1D_N_FILTERS];
+typedef struct Dav2dMCDSPContext {
+    mc_fn mc[DAV2D_N_FILTERS];
+    mc_scaled_fn mc_scaled[DAV2D_N_FILTERS];
+    mct_fn mct[DAV2D_N_FILTERS];
+    mct_scaled_fn mct_scaled[DAV2D_N_FILTERS];
     avg_fn avg;
     w_avg_fn w_avg;
     mask_fn mask;
@@ -191,8 +191,8 @@ typedef struct Dav1dMCDSPContext {
     opfl_derive_mv_fn opfl_derive_mv;
     sad_refine_mv_fn sad_refine_mv;
     sad8x8_fn sad8x8;
-} Dav1dMCDSPContext;
+} Dav2dMCDSPContext;
 
-bitfn_decls(void dav1d_mc_dsp_init, Dav1dMCDSPContext *c);
+bitfn_decls(void dav2d_mc_dsp_init, Dav2dMCDSPContext *c);
 
-#endif /* DAV1D_SRC_MC_H */
+#endif /* DAV2D_SRC_MC_H */

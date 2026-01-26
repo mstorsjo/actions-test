@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2023, VideoLAN and dav1d authors
+ * Copyright © 2018-2023, VideoLAN and dav2d authors
  * Copyright © 2018-2023, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_INTRA_EDGE_H
-#define DAV1D_SRC_INTRA_EDGE_H
+#ifndef DAV2D_SRC_INTRA_EDGE_H
+#define DAV2D_SRC_INTRA_EDGE_H
 
 #include <stdint.h>
 
@@ -47,4 +47,4 @@ enum EdgeFlags {
                                 EDGE_ALL_LEFT_HAS_BOTTOM,
 };
 
-#endif /* DAV1D_SRC_INTRA_EDGE_H */
+#endif /* DAV2D_SRC_INTRA_EDGE_H */

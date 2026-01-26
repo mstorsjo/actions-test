@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -39,7 +39,7 @@ typedef struct MuxerPriv {
 } YuvOutputContext;
 
 static int yuv_open(YuvOutputContext *const c, const char *const file,
-                    const Dav1dPictureParameters *const p,
+                    const Dav2dPictureParameters *const p,
                     const unsigned fps[2])
 {
     if (!strcmp(file, "-")) {
@@ -52,7 +52,7 @@ static int yuv_open(YuvOutputContext *const c, const char *const file,
     return 0;
 }
 
-static int yuv_write(YuvOutputContext *const c, Dav1dPicture *const p) {
+static int yuv_write(YuvOutputContext *const c, Dav2dPicture *const p) {
     uint8_t *ptr;
     const int hbd = p->p.bpc > 8;
 
@@ -63,10 +63,10 @@ static int yuv_write(YuvOutputContext *const c, Dav1dPicture *const p) {
         ptr += p->stride[0];
     }
 
-    if (p->p.layout != DAV1D_PIXEL_LAYOUT_I400) {
+    if (p->p.layout != DAV2D_PIXEL_LAYOUT_I400) {
         // u/v
-        const int ss_ver = p->p.layout == DAV1D_PIXEL_LAYOUT_I420;
-        const int ss_hor = p->p.layout != DAV1D_PIXEL_LAYOUT_I444;
+        const int ss_ver = p->p.layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = p->p.layout != DAV2D_PIXEL_LAYOUT_I444;
         const int cw = (p->p.w + ss_hor) >> ss_hor;
         const int ch = (p->p.h + ss_ver) >> ss_ver;
         for (int pl = 1; pl <= 2; pl++) {
@@ -79,11 +79,11 @@ static int yuv_write(YuvOutputContext *const c, Dav1dPicture *const p) {
         }
     }
 
-    dav1d_picture_unref(p);
+    dav2d_picture_unref(p);
     return 0;
 
 error:
-    dav1d_picture_unref(p);
+    dav2d_picture_unref(p);
     fprintf(stderr, "Failed to write frame data: %s\n", strerror(errno));
     return -1;
 }

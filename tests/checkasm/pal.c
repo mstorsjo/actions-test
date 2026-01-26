@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 
 #include <stdio.h>
 
-static void check_pal_idx_finish(const Dav1dPalDSPContext *const c) {
+static void check_pal_idx_finish(const Dav2dPalDSPContext *const c) {
     ALIGN_STK_64(uint8_t, src, 64 * 64,);
     ALIGN_STK_64(uint8_t, c_dst, 32 * 64,);
     ALIGN_STK_64(uint8_t, a_dst, 32 * 64,);
@@ -64,8 +64,8 @@ static void check_pal_idx_finish(const Dav1dPalDSPContext *const c) {
 }
 
 void checkasm_check_pal(void) {
-    Dav1dPalDSPContext c;
-    dav1d_pal_dsp_init(&c);
+    Dav2dPalDSPContext c;
+    dav2d_pal_dsp_init(&c);
 
     check_pal_idx_finish(&c);
 }

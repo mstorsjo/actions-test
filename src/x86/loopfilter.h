@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -29,41 +29,41 @@
 #include "src/loopfilter.h"
 
 #define decl_loopfilter_sb_fns(ext) \
-decl_loopfilter_sb_fn(BF(dav1d_lpf_h_sb_y, ext)); \
-decl_loopfilter_sb_fn(BF(dav1d_lpf_v_sb_y, ext)); \
-decl_loopfilter_sb_fn(BF(dav1d_lpf_h_sb_uv, ext)); \
-decl_loopfilter_sb_fn(BF(dav1d_lpf_v_sb_uv, ext))
+decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_y, ext)); \
+decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_y, ext)); \
+decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_uv, ext)); \
+decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_uv, ext))
 
 decl_loopfilter_sb_fns(ssse3);
 decl_loopfilter_sb_fns(avx2);
 decl_loopfilter_sb_fns(avx512icl);
 
-static ALWAYS_INLINE void loop_filter_dsp_init_x86(Dav1dLoopFilterDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void loop_filter_dsp_init_x86(Dav2dLoopFilterDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSSE3)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
 
-    c->loop_filter_sb[0][0] = BF(dav1d_lpf_h_sb_y, ssse3);
-    c->loop_filter_sb[0][1] = BF(dav1d_lpf_v_sb_y, ssse3);
-    c->loop_filter_sb[1][0] = BF(dav1d_lpf_h_sb_uv, ssse3);
-    c->loop_filter_sb[1][1] = BF(dav1d_lpf_v_sb_uv, ssse3);
+    c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, ssse3);
+    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, ssse3);
+    c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, ssse3);
+    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, ssse3);
 
 #if ARCH_X86_64
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
-    c->loop_filter_sb[0][0] = BF(dav1d_lpf_h_sb_y, avx2);
-    c->loop_filter_sb[0][1] = BF(dav1d_lpf_v_sb_y, avx2);
-    c->loop_filter_sb[1][0] = BF(dav1d_lpf_h_sb_uv, avx2);
-    c->loop_filter_sb[1][1] = BF(dav1d_lpf_v_sb_uv, avx2);
+    c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, avx2);
+    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, avx2);
+    c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, avx2);
+    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, avx2);
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX512ICL)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
-    c->loop_filter_sb[0][1] = BF(dav1d_lpf_v_sb_y, avx512icl);
-    c->loop_filter_sb[1][1] = BF(dav1d_lpf_v_sb_uv, avx512icl);
+    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, avx512icl);
+    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, avx512icl);
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SLOW_GATHER)) {
-        c->loop_filter_sb[0][0] = BF(dav1d_lpf_h_sb_y, avx512icl);
-        c->loop_filter_sb[1][0] = BF(dav1d_lpf_h_sb_uv, avx512icl);
+    if (!(flags & DAV2D_X86_CPU_FLAG_SLOW_GATHER)) {
+        c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, avx512icl);
+        c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, avx512icl);
     }
 #endif
 }

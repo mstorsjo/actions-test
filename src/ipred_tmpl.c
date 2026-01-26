@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -44,7 +44,7 @@ typedef struct {
     int8_t d;
 } DRFilter4Tap;
 
-static const DRFilter4Tap av1_dr_interp_filter[32] = {
+static const DRFilter4Tap dr_interp_filter[32] = {
     {   0, 128,   0,   0 },
     {  -2, 127,   4,  -1 },
     {  -3, 125,   8,  -2 },
@@ -217,7 +217,7 @@ static inline unsigned fast_div32_dc(const unsigned num, const unsigned den) {
     const int idx = rem << (7 - shift);
     assert(idx <= 128);
     shift += 9;
-    return ((num * dav1d_div_recip[idx]) + ((1 << shift) >> 1)) >> shift;
+    return ((num * dav2d_div_recip[idx]) + ((1 << shift) >> 1)) >> shift;
 }
 
 static unsigned dc_gen(const pixel *const topleft,
@@ -413,7 +413,7 @@ static void ipred_smooth_c(pixel *dst, const ptrdiff_t stride,
     const int rnd_hor = width >> 1;
     const int n_pel = width * height;
     const int scale = (n_pel >= 64) + (n_pel > 512);
-    const uint8_t *const weights = dav1d_avm_sm_weights[scale];
+    const uint8_t *const weights = dav2d_avm_sm_weights[scale];
     const int right = topleft[width + 1], bottom = topleft[-(height + 1)];
 
     for (int y = 0; y < height; y++) {
@@ -445,7 +445,7 @@ static void ipred_smooth_v_c(pixel *dst, const ptrdiff_t stride,
     const int rnd = height >> 1;
     const int n_pel = width * height;
     const int scale = (n_pel >= 64) + (n_pel > 512);
-    const uint8_t *const weights = dav1d_avm_sm_weights[scale];
+    const uint8_t *const weights = dav2d_avm_sm_weights[scale];
     const int bottom = topleft[-(height + 1)];
 
     for (int y = 0; y < height; y++) {
@@ -471,7 +471,7 @@ static void ipred_smooth_h_c(pixel *dst, const ptrdiff_t stride,
     const int rnd = width >> 1;
     const int n_pel = width * height;
     const int scale = (n_pel >= 64) + (n_pel > 512);
-    const uint8_t *const weights = dav1d_avm_sm_weights[scale];
+    const uint8_t *const weights = dav2d_avm_sm_weights[scale];
     const int right = topleft[width + 1];
 
     for (int y = 0; y < height; y++) {
@@ -602,7 +602,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
         return;
     }
 
-    const int dx = dav1d_dr_intra_derivative[angle];
+    const int dx = dav2d_dr_intra_derivative[angle];
     const int max_base_x = (width + height) - 1 + (mrl_idx << 1);
 
     // Buffer organization:
@@ -635,7 +635,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
             break;
         }
         const int shift = (xpos & 0x3F) >> 1;
-        const DRFilter4Tap f = av1_dr_interp_filter[shift];
+        const DRFilter4Tap f = dr_interp_filter[shift];
         for (int x = 0; x < width; x++, base++) {
             if (base > max_base_x) {
                 pixel_set(&dst[y * PXSTRIDE(stride) + x], top[max_base_x],
@@ -671,7 +671,7 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
                    (180 + angle) | angle_flags,
                    max_width, max_height HIGHBD_TAIL_SUFFIX);
         ibp_blend(dst, stride, tmp, width, height, 0,
-                  dav1d_ibp_weights[mode_idx] HIGHBD_TAIL_SUFFIX);
+                  dav2d_ibp_weights[mode_idx] HIGHBD_TAIL_SUFFIX);
     }
 }
 
@@ -710,8 +710,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
         return;
     }
 
-    const int dy = dav1d_dr_intra_derivative[angle - 90];
-    const int dx = dav1d_dr_intra_derivative[180 - angle];
+    const int dy = dav2d_dr_intra_derivative[angle - 90];
+    const int dx = dav2d_dr_intra_derivative[180 - angle];
 
     // Buffer organization:
     // - 1 pixels top|left padding;
@@ -757,10 +757,10 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
             const int shift = (ypos_l & 0x3F) >> 1;
             if (is_luma) {
                 const int v =
-                    av1_dr_interp_filter[shift].a * left[-(base_y + 1)] +
-                    av1_dr_interp_filter[shift].b * left[-(base_y + 2)] +
-                    av1_dr_interp_filter[shift].c * left[-(base_y + 3)] +
-                    av1_dr_interp_filter[shift].d * left[-(base_y + 4)];
+                    dr_interp_filter[shift].a * left[-(base_y + 1)] +
+                    dr_interp_filter[shift].b * left[-(base_y + 2)] +
+                    dr_interp_filter[shift].c * left[-(base_y + 3)] +
+                    dr_interp_filter[shift].d * left[-(base_y + 4)];
                 dst[x] = iclip_pixel((v + 64) >> 7);
             } else {
                 const int v = (32 - shift) * left[-(base_y + 2)] +
@@ -774,10 +774,10 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
             const int shift = (xpos & 0x3F) >> 1;
             if (is_luma) {
                 const int v =
-                    av1_dr_interp_filter[shift].a * top[base_x + 1] +
-                    av1_dr_interp_filter[shift].b * top[base_x + 2] +
-                    av1_dr_interp_filter[shift].c * top[base_x + 3] +
-                    av1_dr_interp_filter[shift].d * top[base_x + 4];
+                    dr_interp_filter[shift].a * top[base_x + 1] +
+                    dr_interp_filter[shift].b * top[base_x + 2] +
+                    dr_interp_filter[shift].c * top[base_x + 3] +
+                    dr_interp_filter[shift].d * top[base_x + 4];
                 dst[x] = iclip_pixel((v + 64) >> 7);
             } else {
                 const int v = (32 - shift) * top[base_x + 2] +
@@ -825,7 +825,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
         return;
     }
 
-    const int dy = dav1d_dr_intra_derivative[270 - angle];
+    const int dy = dav2d_dr_intra_derivative[270 - angle];
     const int max_base_y = width + height - 1 + (mrl_idx << 1);
 
     // Buffer organization:
@@ -854,7 +854,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     int ypos = dy * (1 + mrl_idx);
     for (int x = 0; x < width; x++, ypos += dy) {
         const int shift = (ypos & 0x3F) >> 1;
-        const DRFilter4Tap f = av1_dr_interp_filter[shift];
+        const DRFilter4Tap f = dr_interp_filter[shift];
         for (int y = 0, base = ypos >> 6; y < height; y++, base++) {
             if (base <= max_base_y) {
                 if (is_luma) {
@@ -894,7 +894,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
                    (angle - 180) | angle_flags,
                    max_width, max_height HIGHBD_TAIL_SUFFIX);
         ibp_blend(dst, stride, tmp, width, height, 1,
-                  dav1d_ibp_weights[mode_idx] HIGHBD_TAIL_SUFFIX);
+                  dav2d_ibp_weights[mode_idx] HIGHBD_TAIL_SUFFIX);
     }
 }
 
@@ -1313,10 +1313,10 @@ static void get_div_scale_sh(int d, int *scale, int *sh) {
     d &= (1 << 14) - 1;
 
     const int idx = d >> 11;
-    const uint8_t coefw = dav1d_div_scale_sh_coefw[idx];
-    const uint8_t coefq = dav1d_div_scale_sh_coefq[idx];
-    const uint16_t bias = dav1d_div_scale_sh_bias[idx];
-    d -= dav1d_div_scale_sh_offset[idx];
+    const uint8_t coefw = dav2d_div_scale_sh_coefw[idx];
+    const uint8_t coefq = dav2d_div_scale_sh_coefq[idx];
+    const uint16_t bias = dav2d_div_scale_sh_bias[idx];
+    d -= dav2d_div_scale_sh_offset[idx];
     *scale = (((coefw * ((d * d) >> 14)) >> 8) - ((coefq * d) >> 8) + bias) << 2;
 }
 
@@ -1547,7 +1547,7 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
             const int idx = trans ? (ix * 8 + iy) : (iy * 8 + ix);
             int sum = 0;
             for (int i = 0; i < 11; i++) {
-                sum += dav1d_dip_weights[m][idx][i] * in[i];
+                sum += dav2d_dip_weights[m][idx][i] * in[i];
             }
             dst[y * PXSTRIDE(stride) + x] =
                 iclip_pixel(((sum + 2048) >> 12) - in_sum);
@@ -1606,7 +1606,7 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
 #endif
 #endif
 
-COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
+COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
     c->intra_pred[DC_PRED      ] = ipred_dc_c;
     c->intra_pred[DC_128_PRED  ] = ipred_dc_128_c;
     c->intra_pred[TOP_DC_PRED  ] = ipred_dc_top_c;
@@ -1623,12 +1623,12 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
     c->intra_pred[DIP_PRED     ] = ipred_dip_c;
 
     /* CFL EXPLICIT / IMPLICIT */
-    c->cfl_dc[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_dc_420_c;
-    c->cfl_dc[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_dc_422_c;
-    c->cfl_dc[DAV1D_PIXEL_LAYOUT_I444 - 1] = cfl_dc_444_c;
-    c->cfl_ac[DAV1D_PIXEL_LAYOUT_I420 - 1] = cfl_ac_420_c;
-    c->cfl_ac[DAV1D_PIXEL_LAYOUT_I422 - 1] = cfl_ac_422_c;
-    c->cfl_ac[DAV1D_PIXEL_LAYOUT_I444 - 1] = cfl_ac_444_c;
+    c->cfl_dc[DAV2D_PIXEL_LAYOUT_I420 - 1] = cfl_dc_420_c;
+    c->cfl_dc[DAV2D_PIXEL_LAYOUT_I422 - 1] = cfl_dc_422_c;
+    c->cfl_dc[DAV2D_PIXEL_LAYOUT_I444 - 1] = cfl_dc_444_c;
+    c->cfl_ac[DAV2D_PIXEL_LAYOUT_I420 - 1] = cfl_ac_420_c;
+    c->cfl_ac[DAV2D_PIXEL_LAYOUT_I422 - 1] = cfl_ac_422_c;
+    c->cfl_ac[DAV2D_PIXEL_LAYOUT_I444 - 1] = cfl_ac_444_c;
     c->cfl_pred[DC_PRED     ] = ipred_cfl_c;
     c->cfl_pred[DC_128_PRED ] = ipred_cfl_128_c;
     c->cfl_pred[TOP_DC_PRED ] = ipred_cfl_top_c;
@@ -1636,9 +1636,9 @@ COLD void bitfn(dav1d_intra_pred_dsp_init)(Dav1dIntraPredDSPContext *const c) {
 
     /* CFL_MHCCP */
 #define assign_cfl_mhccp(dir, name) \
-    c->cfl_gen_y[DAV1D_PIXEL_LAYOUT_I420 - 1][0] = cfl_gen_y_420_center_c; \
-    c->cfl_gen_y[DAV1D_PIXEL_LAYOUT_I420 - 1][1] = cfl_gen_y_420_rect_c; \
-    c->cfl_gen_y[DAV1D_PIXEL_LAYOUT_I420 - 1][2] = cfl_gen_y_420_cross_c; \
+    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_gen_y_420_center_c; \
+    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_gen_y_420_rect_c; \
+    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_gen_y_420_cross_c; \
     c->cfl_gen_mat[dir] = cfl_gen_mat_##name##_c; \
     c->cfl_calc_alphas = cfl_calc_alphas_c; \
     c->cfl_mhccp_pred[dir] = cfl_mhccp_pred_##name##_c;

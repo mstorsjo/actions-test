@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2023, Nathan Egge
  * All rights reserved.
  *
@@ -41,10 +41,10 @@ decl_itx16_fns(16, 16, ext)
 
 decl_itx_fns(rvv);
 
-static ALWAYS_INLINE void itx_dsp_init_riscv(Dav1dInvTxfmDSPContext *const c, int const bpc) {
-  const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void itx_dsp_init_riscv(Dav2dInvTxfmDSPContext *const c, int const bpc) {
+  const unsigned flags = dav2d_get_cpu_flags();
 
-  if (!(flags & DAV1D_RISCV_CPU_FLAG_V)) return;
+  if (!(flags & DAV2D_RISCV_CPU_FLAG_V)) return;
 
 #if BITDEPTH == 8
   assign_itx17_fn( ,  4,  4, rvv);

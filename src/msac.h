@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_MSAC_H
-#define DAV1D_SRC_MSAC_H
+#ifndef DAV2D_SRC_MSAC_H
+#define DAV2D_SRC_MSAC_H
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,8 +47,8 @@ typedef struct MsacContext {
 #endif
 } MsacContext;
 
-EXTERN const uint8_t dav1d_msac_rate[125 /* para */][3 /* count */];
-EXTERN const uint16_t dav1d_msac_min_prob[7 /* n_symbols*/][8];
+EXTERN const uint8_t dav2d_msac_rate[125 /* para */][3 /* count */];
+EXTERN const uint16_t dav2d_msac_min_prob[7 /* n_symbols*/][8];
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
@@ -60,51 +60,51 @@ EXTERN const uint16_t dav1d_msac_min_prob[7 /* n_symbols*/][8];
 #endif
 #endif
 
-void dav1d_msac_init(MsacContext *s, const uint8_t *data, size_t sz,
+void dav2d_msac_init(MsacContext *s, const uint8_t *data, size_t sz,
                      int disable_cdf_update_flag);
-unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *s, uint16_t *cdf,
+unsigned dav2d_msac_decode_symbol_adapt_c(MsacContext *s, uint16_t *cdf,
                                           size_t n_symbols);
-unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *s, uint16_t *cdf);
-unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *s, unsigned n_bits);
-unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *s, unsigned max_bits);
+unsigned dav2d_msac_decode_bool_adapt_c(MsacContext *s, uint16_t *cdf);
+unsigned dav2d_msac_decode_bools_bypass_c(MsacContext *s, unsigned n_bits);
+unsigned dav2d_msac_decode_unary_bypass_c(MsacContext *s, unsigned max_bits);
 
 /* Supported n_symbols ranges: adapt4: 1-3, adapt8: 1-7 */
-#ifndef dav1d_msac_decode_symbol_adapt4
-#define dav1d_msac_decode_symbol_adapt4  dav1d_msac_decode_symbol_adapt_c
+#ifndef dav2d_msac_decode_symbol_adapt4
+#define dav2d_msac_decode_symbol_adapt4  dav2d_msac_decode_symbol_adapt_c
 #endif
-#ifndef dav1d_msac_decode_symbol_adapt8
-#define dav1d_msac_decode_symbol_adapt8  dav1d_msac_decode_symbol_adapt_c
+#ifndef dav2d_msac_decode_symbol_adapt8
+#define dav2d_msac_decode_symbol_adapt8  dav2d_msac_decode_symbol_adapt_c
 #endif
-#ifndef dav1d_msac_decode_bool_adapt
-#define dav1d_msac_decode_bool_adapt     dav1d_msac_decode_bool_adapt_c
+#ifndef dav2d_msac_decode_bool_adapt
+#define dav2d_msac_decode_bool_adapt     dav2d_msac_decode_bool_adapt_c
 #endif
-#ifndef dav1d_msac_decode_bool_bypass
-#define dav1d_msac_decode_bool_bypass    dav1d_msac_decode_bool_bypass_c
+#ifndef dav2d_msac_decode_bool_bypass
+#define dav2d_msac_decode_bool_bypass    dav2d_msac_decode_bool_bypass_c
 #endif
-#ifndef dav1d_msac_decode_bools_bypass
-#define dav1d_msac_decode_bools_bypass   dav1d_msac_decode_bools_bypass_c
+#ifndef dav2d_msac_decode_bools_bypass
+#define dav2d_msac_decode_bools_bypass   dav2d_msac_decode_bools_bypass_c
 #endif
-#ifndef dav1d_msac_decode_unary_bypass6
-#define dav1d_msac_decode_unary_bypass6  dav1d_msac_decode_unary_bypass_c
+#ifndef dav2d_msac_decode_unary_bypass6
+#define dav2d_msac_decode_unary_bypass6  dav2d_msac_decode_unary_bypass_c
 #endif
-#ifndef dav1d_msac_decode_unary_bypass21
-#define dav1d_msac_decode_unary_bypass21 dav1d_msac_decode_unary_bypass21_c
+#ifndef dav2d_msac_decode_unary_bypass21
+#define dav2d_msac_decode_unary_bypass21 dav2d_msac_decode_unary_bypass21_c
 #endif
 
-static inline unsigned dav1d_msac_decode_bool_bypass_c(MsacContext *const s) {
-    return dav1d_msac_decode_bools_bypass_c(s, 1);
+static inline unsigned dav2d_msac_decode_bool_bypass_c(MsacContext *const s) {
+    return dav2d_msac_decode_bools_bypass_c(s, 1);
 }
 
-static inline unsigned dav1d_msac_decode_unary_bypass21_c(MsacContext *const s) {
-    return dav1d_msac_decode_unary_bypass_c(s, 21);
+static inline unsigned dav2d_msac_decode_unary_bypass21_c(MsacContext *const s) {
+    return dav2d_msac_decode_unary_bypass_c(s, 21);
 }
-static inline int dav1d_msac_decode_uniform(MsacContext *const s, const unsigned n) {
+static inline int dav2d_msac_decode_uniform(MsacContext *const s, const unsigned n) {
     assert(n > 0);
     const int l = ulog2(n) + 1;
     assert(l > 1);
     const unsigned m = (1 << l) - n;
-    const unsigned v = dav1d_msac_decode_bools_bypass(s, l - 1);
-    return v < m ? v : (v << 1) - m + dav1d_msac_decode_bool_bypass(s);
+    const unsigned v = dav2d_msac_decode_bools_bypass(s, l - 1);
+    return v < m ? v : (v << 1) - m + dav2d_msac_decode_bool_bypass(s);
 }
 
-#endif /* DAV1D_SRC_MSAC_H */
+#endif /* DAV2D_SRC_MSAC_H */

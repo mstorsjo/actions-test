@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -25,29 +25,29 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LOONGARCH_CDEF_H
-#define DAV1D_SRC_LOONGARCH_CDEF_H
+#ifndef DAV2D_SRC_LOONGARCH_CDEF_H
+#define DAV2D_SRC_LOONGARCH_CDEF_H
 
 #include "config.h"
 #include "src/cdef.h"
 #include "src/cpu.h"
 
-decl_cdef_dir_fn(BF(dav1d_cdef_find_dir, lsx));
-decl_cdef_fn(BF(dav1d_cdef_filter_block_4x4, lsx));
-decl_cdef_fn(BF(dav1d_cdef_filter_block_4x8, lsx));
-decl_cdef_fn(BF(dav1d_cdef_filter_block_8x8, lsx));
+decl_cdef_dir_fn(BF(dav2d_cdef_find_dir, lsx));
+decl_cdef_fn(BF(dav2d_cdef_filter_block_4x4, lsx));
+decl_cdef_fn(BF(dav2d_cdef_filter_block_4x8, lsx));
+decl_cdef_fn(BF(dav2d_cdef_filter_block_8x8, lsx));
 
-static ALWAYS_INLINE void cdef_dsp_init_loongarch(Dav1dCdefDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void cdef_dsp_init_loongarch(Dav2dCdefDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_LOONGARCH_CPU_FLAG_LSX)) return;
+    if (!(flags & DAV2D_LOONGARCH_CPU_FLAG_LSX)) return;
 
 #if BITDEPTH == 8
-    c->dir = BF(dav1d_cdef_find_dir, lsx);
-    c->fb[0] = BF(dav1d_cdef_filter_block_8x8, lsx);
-    c->fb[1] = BF(dav1d_cdef_filter_block_4x8, lsx);
-    c->fb[2] = BF(dav1d_cdef_filter_block_4x4, lsx);
+    c->dir = BF(dav2d_cdef_find_dir, lsx);
+    c->fb[0] = BF(dav2d_cdef_filter_block_8x8, lsx);
+    c->fb[1] = BF(dav2d_cdef_filter_block_4x8, lsx);
+    c->fb[2] = BF(dav2d_cdef_filter_block_4x4, lsx);
 #endif
 }
 
-#endif /* DAV1D_SRC_LOONGARCH_CDEF_H */
+#endif /* DAV2D_SRC_LOONGARCH_CDEF_H */

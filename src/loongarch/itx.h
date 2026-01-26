@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LOONGARCH_ITX_H
-#define DAV1D_SRC_LOONGARCH_ITX_H
+#ifndef DAV2D_SRC_LOONGARCH_ITX_H
+#define DAV2D_SRC_LOONGARCH_ITX_H
 
 #include "src/cpu.h"
 #include "src/itx.h"
@@ -40,38 +40,38 @@ decl_itx16_fns( 8, 16, lsx);
 decl_itx2_fns ( 8, 32, lsx);
 decl_itx16_fns(16,  8, lsx);
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_16x4, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_identity_identity_16x4, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_adst_dct_16x4, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x4, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_identity_identity_16x4, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_adst_dct_16x4, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_adst_adst_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_adst_dct_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_adst_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_flipadst_dct_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_flipadst_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_adst_flipadst_16x16, lsx));
-decl_itx_fn(BF(dav1d_inv_txfm_add_flipadst_adst_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_adst_adst_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_adst_dct_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_adst_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_flipadst_dct_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_flipadst_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_adst_flipadst_16x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_flipadst_adst_16x16, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_16x32, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x32, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_32x8, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x8, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_32x16, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x16, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_32x32, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x32, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x32, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x32, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x64, lsx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x64, lsx));
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_adst_adst_16x16, lasx));
+decl_itx_fn(BF(dav2d_inv_txfm_add_adst_adst_16x16, lasx));
 
-static ALWAYS_INLINE void itx_dsp_init_loongarch(Dav1dInvTxfmDSPContext *const c, int bpc) {
+static ALWAYS_INLINE void itx_dsp_init_loongarch(Dav2dInvTxfmDSPContext *const c, int bpc) {
 #if BITDEPTH == 8
-    const unsigned flags = dav1d_get_cpu_flags();
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_LOONGARCH_CPU_FLAG_LSX)) return;
+    if (!(flags & DAV2D_LOONGARCH_CPU_FLAG_LSX)) return;
 
     if (BITDEPTH != 8 ) return;
 
@@ -86,34 +86,34 @@ static ALWAYS_INLINE void itx_dsp_init_loongarch(Dav1dInvTxfmDSPContext *const c
     assign_itx1_fn (R, 64, 32, lsx);
     assign_itx1_fn ( , 64, 64, lsx);
 
-    c->itxfm_add[RTX_16X4][DCT_DCT] = dav1d_inv_txfm_add_dct_dct_16x4_8bpc_lsx;
-    c->itxfm_add[RTX_16X4][IDTX] = dav1d_inv_txfm_add_identity_identity_16x4_8bpc_lsx;
-    c->itxfm_add[RTX_16X4][DCT_ADST] = dav1d_inv_txfm_add_adst_dct_16x4_8bpc_lsx;
+    c->itxfm_add[RTX_16X4][DCT_DCT] = dav2d_inv_txfm_add_dct_dct_16x4_8bpc_lsx;
+    c->itxfm_add[RTX_16X4][IDTX] = dav2d_inv_txfm_add_identity_identity_16x4_8bpc_lsx;
+    c->itxfm_add[RTX_16X4][DCT_ADST] = dav2d_inv_txfm_add_adst_dct_16x4_8bpc_lsx;
 
-    c->itxfm_add[TX_16X16][DCT_DCT] = dav1d_inv_txfm_add_dct_dct_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][ADST_ADST] = dav1d_inv_txfm_add_adst_adst_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][DCT_ADST] = dav1d_inv_txfm_add_adst_dct_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][ADST_DCT] = dav1d_inv_txfm_add_dct_adst_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][DCT_FLIPADST] = dav1d_inv_txfm_add_flipadst_dct_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][FLIPADST_DCT] = dav1d_inv_txfm_add_dct_flipadst_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][FLIPADST_ADST] = dav1d_inv_txfm_add_adst_flipadst_16x16_8bpc_lsx;
-    c->itxfm_add[TX_16X16][ADST_FLIPADST] = dav1d_inv_txfm_add_flipadst_adst_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][DCT_DCT] = dav2d_inv_txfm_add_dct_dct_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][ADST_ADST] = dav2d_inv_txfm_add_adst_adst_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][DCT_ADST] = dav2d_inv_txfm_add_adst_dct_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][ADST_DCT] = dav2d_inv_txfm_add_dct_adst_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][DCT_FLIPADST] = dav2d_inv_txfm_add_flipadst_dct_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][FLIPADST_DCT] = dav2d_inv_txfm_add_dct_flipadst_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][FLIPADST_ADST] = dav2d_inv_txfm_add_adst_flipadst_16x16_8bpc_lsx;
+    c->itxfm_add[TX_16X16][ADST_FLIPADST] = dav2d_inv_txfm_add_flipadst_adst_16x16_8bpc_lsx;
 
-    c->itxfm_add[RTX_16X32][DCT_DCT] = dav1d_inv_txfm_add_dct_dct_16x32_8bpc_lsx;
+    c->itxfm_add[RTX_16X32][DCT_DCT] = dav2d_inv_txfm_add_dct_dct_16x32_8bpc_lsx;
 
-    c->itxfm_add[RTX_32X8][DCT_DCT] = dav1d_inv_txfm_add_dct_dct_32x8_8bpc_lsx;
+    c->itxfm_add[RTX_32X8][DCT_DCT] = dav2d_inv_txfm_add_dct_dct_32x8_8bpc_lsx;
 
-    c->itxfm_add[RTX_32X16][DCT_DCT] = dav1d_inv_txfm_add_dct_dct_32x16_8bpc_lsx;
+    c->itxfm_add[RTX_32X16][DCT_DCT] = dav2d_inv_txfm_add_dct_dct_32x16_8bpc_lsx;
 
-    c->itxfm_add[TX_32X32][DCT_DCT] = dav1d_inv_txfm_add_dct_dct_32x32_8bpc_lsx;
+    c->itxfm_add[TX_32X32][DCT_DCT] = dav2d_inv_txfm_add_dct_dct_32x32_8bpc_lsx;
 
-    if (!(flags & DAV1D_LOONGARCH_CPU_FLAG_LASX)) return;
+    if (!(flags & DAV2D_LOONGARCH_CPU_FLAG_LASX)) return;
 
     if (BITDEPTH != 8 ) return;
 
-    c->itxfm_add[TX_16X16][ADST_ADST] = dav1d_inv_txfm_add_adst_adst_16x16_8bpc_lasx;
+    c->itxfm_add[TX_16X16][ADST_ADST] = dav2d_inv_txfm_add_adst_adst_16x16_8bpc_lasx;
 
 #endif
 }
 
-#endif /* DAV1D_SRC_LOONGARCH_ITX_H */
+#endif /* DAV2D_SRC_LOONGARCH_ITX_H */

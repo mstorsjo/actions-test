@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2025, VideoLAN and dav1d authors
+ * Copyright © 2018-2025, VideoLAN and dav2d authors
  * Copyright © 2018-2025, Two Orioles, LLC
  * All rights reserved.
  *
@@ -56,7 +56,7 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
      * test */
 
     const enum TxClass tx_class = (txtp >> 3) & 3;
-    const uint16_t *const scan = dav1d_scans[tx];
+    const uint16_t *const scan = dav2d_scans[tx];
     const int sub_high = subsh > 0 ? subsh * 8 - 1 : 0;
     const int sub_low  = subsh > 1 ? sub_high - 8 : 0;
     const int coef_sign = (coef_max + 1) >> 1;
@@ -159,7 +159,7 @@ static const uint8_t valid_txtp_per_txsz[N_RECT_TX_SIZES][29] = {
     [RTX_64X4]  = { TXTP_MASK_DCT_HOR },
 };
 
-static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
+static void check_itxfm_add(Dav2dInvTxfmDSPContext *const c,
                             const enum RectTxfmSize tx)
 {
     ALIGN_STK_64(coef, coeff, 2, [32 * 32]);
@@ -168,11 +168,11 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
 
     static const uint8_t subsh_iters[5] = { 2, 2, 3, 5, 5 };
 
-    const int w = dav1d_txfm_dimensions[tx].w * 4;
-    const int h = dav1d_txfm_dimensions[tx].h * 4;
+    const int w = dav2d_txfm_dimensions[tx].w * 4;
+    const int h = dav2d_txfm_dimensions[tx].h * 4;
     const int sw = imin(w, 32), sh = imin(h, 32);
-    const int subsh_max = subsh_iters[imax(dav1d_txfm_dimensions[tx].lw,
-                                           dav1d_txfm_dimensions[tx].lh)];
+    const int subsh_max = subsh_iters[imax(dav2d_txfm_dimensions[tx].lw,
+                                           dav2d_txfm_dimensions[tx].lh)];
 #if BITDEPTH == 16
     const int bpc_min = 10, bpc_max = 12;
 #else
@@ -188,7 +188,7 @@ static void check_itxfm_add(Dav1dInvTxfmDSPContext *const c,
          * Randomize the range a bit to cover more scenarios. */
         const int coef_max = (1 << ((rnd() % (bpc + 5)) + 4)) - 1;
         const int bitdepth_max = (1 << bpc) - 1;
-        bitfn(dav1d_itx_dsp_init)(c, bpc);
+        bitfn(dav2d_itx_dsp_init)(c, bpc);
 
         for (int txtp_idx = 0; valid_txtp_per_txsz[tx][txtp_idx] != 0xff;
              txtp_idx++)
@@ -249,7 +249,7 @@ void bitfn(checkasm_check_itx)(void) {
         RTX_64X16, RTX_32X64, RTX_64X32, TX_64X64,
     };
 
-    Dav1dInvTxfmDSPContext c;
+    Dav2dInvTxfmDSPContext c;
 
     const uint8_t *txfm = txfm_size_order;
     for (int i = 0; i < 5; i++) {

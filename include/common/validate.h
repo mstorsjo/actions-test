@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_COMMON_VALIDATE_H
-#define DAV1D_COMMON_VALIDATE_H
+#ifndef DAV2D_COMMON_VALIDATE_H
+#define DAV2D_COMMON_VALIDATE_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,4 +58,4 @@
 
 #define validate_input(x) validate_input_or_ret(x, )
 
-#endif /* DAV1D_COMMON_VALIDATE_H */
+#endif /* DAV2D_COMMON_VALIDATE_H */

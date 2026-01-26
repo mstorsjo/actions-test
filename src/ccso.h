@@ -1,5 +1,5 @@
 /*
- * Copyright © 2025, VideoLAN and dav1d authors
+ * Copyright © 2025, VideoLAN and dav2d authors
  * Copyright © 2025, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_CCSO_H
-#define DAV1D_SRC_CCSO_H
+#ifndef DAV2D_SRC_CCSO_H
+#define DAV2D_SRC_CCSO_H
 
 #include "cdef.h"
 
@@ -46,11 +46,11 @@ void (name)(pixel *dst, const ptrdiff_t dst_stride, const uint8_t *idx, \
             HIGHBD_DECL_SUFFIX)
 typedef decl_ccso_add_fn(*ccso_add_fn);
 
-typedef struct Dav1dCcsoDSPContext {
+typedef struct Dav2dCcsoDSPContext {
     ccso_prep_fn prep[3 /* 444/luma, 422, 420 */];
     ccso_add_fn add;
-} Dav1dCcsoDSPContext;
+} Dav2dCcsoDSPContext;
 
-bitfn_decls(void dav1d_ccso_dsp_init, Dav1dCcsoDSPContext *c);
+bitfn_decls(void dav2d_ccso_dsp_init, Dav2dCcsoDSPContext *c);
 
-#endif /* DAV1D_SRC_CCSO_H */
+#endif /* DAV2D_SRC_CCSO_H */

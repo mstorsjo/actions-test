@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Two Orioles, LLC
  * All rights reserved.
  *
@@ -68,7 +68,7 @@ static void pal_idx_finish_c(uint8_t *dst, const uint8_t *src,
 #endif
 #endif
 
-COLD void dav1d_pal_dsp_init(Dav1dPalDSPContext *const c) {
+COLD void dav2d_pal_dsp_init(Dav2dPalDSPContext *const c) {
     c->pal_idx_finish = pal_idx_finish_c;
 
 #if HAVE_ASM

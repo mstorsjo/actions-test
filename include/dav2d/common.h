@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_COMMON_H
-#define DAV1D_COMMON_H
+#ifndef DAV2D_COMMON_H
+#define DAV2D_COMMON_H
 
 #include <errno.h>
 #include <stddef.h>
@@ -36,37 +36,37 @@
 extern "C" {
 #endif
 
-#ifndef DAV1D_API
+#ifndef DAV2D_API
     #if defined _WIN32
-      #if defined DAV1D_BUILDING_DLL
-        #define DAV1D_API __declspec(dllexport)
+      #if defined DAV2D_BUILDING_DLL
+        #define DAV2D_API __declspec(dllexport)
       #else
-        #define DAV1D_API
+        #define DAV2D_API
       #endif
     #else
       #if __GNUC__ >= 4
-        #define DAV1D_API __attribute__ ((visibility ("default")))
+        #define DAV2D_API __attribute__ ((visibility ("default")))
       #else
-        #define DAV1D_API
+        #define DAV2D_API
       #endif
     #endif
 #endif
 
 #if EPERM > 0
-#define DAV1D_ERR(e) (-(e)) ///< Negate POSIX error code.
+#define DAV2D_ERR(e) (-(e)) ///< Negate POSIX error code.
 #else
-#define DAV1D_ERR(e) (e)
+#define DAV2D_ERR(e) (e)
 #endif
 
-#define DAV1D_EOF -('E' | ('O' << 8) | ('F' << 16))
+#define DAV2D_EOF -('E' | ('O' << 8) | ('F' << 16))
 
 /**
  * A reference-counted object wrapper for a user-configurable pointer.
  */
-typedef struct Dav1dUserData {
+typedef struct Dav2dUserData {
     const uint8_t *data; ///< data pointer
-    struct Dav1dRef *ref; ///< allocation origin
-} Dav1dUserData;
+    struct Dav2dRef *ref; ///< allocation origin
+} Dav2dUserData;
 
 /**
  * Input packet metadata which are copied from the input data used to
@@ -76,21 +76,21 @@ typedef struct Dav1dUserData {
  * still be passed from input data to output picture without being
  * used internally.
  */
-typedef struct Dav1dDataProps {
+typedef struct Dav2dDataProps {
     int64_t timestamp; ///< container timestamp of input data, INT64_MIN if unknown (default)
     int64_t duration; ///< container duration of input data, 0 if unknown (default)
     int64_t offset; ///< stream offset of input data, -1 if unknown (default)
-    size_t size; ///< packet size, default Dav1dData.sz
-    struct Dav1dUserData user_data; ///< user-configurable data, default NULL members
-} Dav1dDataProps;
+    size_t size; ///< packet size, default Dav2dData.sz
+    struct Dav2dUserData user_data; ///< user-configurable data, default NULL members
+} Dav2dDataProps;
 
 /**
- * Release reference to a Dav1dDataProps.
+ * Release reference to a Dav2dDataProps.
  */
-DAV1D_API void dav1d_data_props_unref(Dav1dDataProps *props);
+DAV2D_API void dav2d_data_props_unref(Dav2dDataProps *props);
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* DAV1D_COMMON_H */
+#endif /* DAV2D_COMMON_H */

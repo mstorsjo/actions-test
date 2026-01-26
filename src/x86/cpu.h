@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,20 +25,20 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_X86_CPU_H
-#define DAV1D_SRC_X86_CPU_H
+#ifndef DAV2D_SRC_X86_CPU_H
+#define DAV2D_SRC_X86_CPU_H
 
 enum CpuFlags {
-    DAV1D_X86_CPU_FLAG_SSE2        = 1 << 0,
-    DAV1D_X86_CPU_FLAG_SSSE3       = 1 << 1,
-    DAV1D_X86_CPU_FLAG_SSE41       = 1 << 2,
-    DAV1D_X86_CPU_FLAG_AVX2        = 1 << 3,
-    DAV1D_X86_CPU_FLAG_AVX512ICL   = 1 << 4, /* F/CD/BW/DQ/VL/VNNI/IFMA/VBMI/VBMI2/
+    DAV2D_X86_CPU_FLAG_SSE2        = 1 << 0,
+    DAV2D_X86_CPU_FLAG_SSSE3       = 1 << 1,
+    DAV2D_X86_CPU_FLAG_SSE41       = 1 << 2,
+    DAV2D_X86_CPU_FLAG_AVX2        = 1 << 3,
+    DAV2D_X86_CPU_FLAG_AVX512ICL   = 1 << 4, /* F/CD/BW/DQ/VL/VNNI/IFMA/VBMI/VBMI2/
                                               * VPOPCNTDQ/BITALG/GFNI/VAES/VPCLMULQDQ */
-    DAV1D_X86_CPU_FLAG_SLOW_GATHER = 1 << 5, /* Flag CPUs where gather instructions are slow enough
+    DAV2D_X86_CPU_FLAG_SLOW_GATHER = 1 << 5, /* Flag CPUs where gather instructions are slow enough
                                               * to cause performance regressions. */
 };
 
-unsigned dav1d_get_cpu_flags_x86(void);
+unsigned dav2d_get_cpu_flags_x86(void);
 
-#endif /* DAV1D_SRC_X86_CPU_H */
+#endif /* DAV2D_SRC_X86_CPU_H */

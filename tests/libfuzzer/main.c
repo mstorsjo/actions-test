@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Janne Grunau
  * All rights reserved.
  *
@@ -36,7 +36,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "dav1d_fuzzer.h"
+#include "dav2d_fuzzer.h"
 
 // expects ivf input
 

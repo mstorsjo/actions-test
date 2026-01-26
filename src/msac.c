@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -33,7 +33,7 @@
 
 #include "src/msac.h"
 
-const uint8_t dav1d_msac_rate[125][3] = {
+const uint8_t dav2d_msac_rate[125][3] = {
     { 4, 5, 6 }, { 4, 5, 5 }, { 4, 5, 4 }, { 4, 5, 7 }, { 4, 5, 7 },
     { 4, 4, 6 }, { 4, 4, 5 }, { 4, 4, 4 }, { 4, 4, 7 }, { 4, 4, 7 },
     { 4, 3, 6 }, { 4, 3, 5 }, { 4, 3, 4 }, { 4, 3, 7 }, { 4, 3, 7 },
@@ -61,7 +61,7 @@ const uint8_t dav1d_msac_rate[125][3] = {
     { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
 };
 
-const uint16_t ALIGN(dav1d_msac_min_prob[7][8], 16) = {
+const uint16_t ALIGN(dav2d_msac_min_prob[7][8], 16) = {
     {    63, 65535, 65535, 65535, 65535, 65535, 65535, 65535 },
     {    47,    87, 65535, 65535, 65535, 65535, 65535, 65535 },
     {    31,    63,    95, 65535, 65535, 65535, 65535, 65535 },
@@ -86,7 +86,7 @@ static inline void ctx_refill(MsacContext *const s) {
     s->buf_pos = buf_pos;
 }
 
-unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
+unsigned dav2d_msac_decode_bools_bypass_c(MsacContext *const s,
                                           const unsigned n_bits)
 {
     assert(n_bits > 0 && n_bits <= 32);
@@ -112,7 +112,7 @@ unsigned dav1d_msac_decode_bools_bypass_c(MsacContext *const s,
     return ret;
 }
 
-unsigned dav1d_msac_decode_unary_bypass_c(MsacContext *const s,
+unsigned dav2d_msac_decode_unary_bypass_c(MsacContext *const s,
                                           const unsigned max_bits)
 {
     assert(max_bits == 5 || max_bits == 6 || max_bits == 21);
@@ -161,7 +161,7 @@ static inline void ctx_norm(MsacContext *const s, const uint64_t dif,
 /* Decode a single binary value.
  * f: The probability that the bit is one
  * Return: The value decoded (0 or 1). */
-static unsigned dav1d_msac_decode_bool_c(MsacContext *const s, const unsigned f) {
+static unsigned dav2d_msac_decode_bool_c(MsacContext *const s, const unsigned f) {
     const unsigned r = s->rng;
     uint64_t dif = s->dif;
     assert((dif >> 48) < r);
@@ -177,13 +177,13 @@ static unsigned dav1d_msac_decode_bool_c(MsacContext *const s, const unsigned f)
 
 /* Decodes a symbol given an inverse cumulative distribution function (CDF)
  * table in Q15. */
-unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
+unsigned dav2d_msac_decode_symbol_adapt_c(MsacContext *const s,
                                           uint16_t *const cdf,
                                           const size_t n_symbols)
 {
     const unsigned c = s->dif >> 48, r = s->rng >> 8;
     unsigned u, v = s->rng, val = -1;
-    const uint16_t *const min_prob = dav1d_msac_min_prob[n_symbols - 1];
+    const uint16_t *const min_prob = dav2d_msac_min_prob[n_symbols - 1];
 
     assert(n_symbols <= 7);
 
@@ -202,7 +202,7 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
         const unsigned pc = cdf[n_symbols];
         const unsigned count = (uint8_t)pc;
         assert(count <= 32);
-        const int rate = dav1d_msac_rate[pc >> 8][count >> 4] + (n_symbols > 2);
+        const int rate = dav2d_msac_rate[pc >> 8][count >> 4] + (n_symbols > 2);
         unsigned i;
         for (i = 0; i < val; i++)
             cdf[i] += (32768 - cdf[i]) >> rate;
@@ -214,16 +214,16 @@ unsigned dav1d_msac_decode_symbol_adapt_c(MsacContext *const s,
     return val;
 }
 
-unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
+unsigned dav2d_msac_decode_bool_adapt_c(MsacContext *const s,
                                         uint16_t *const cdf)
 {
-    const unsigned bit = dav1d_msac_decode_bool_c(s, *cdf);
+    const unsigned bit = dav2d_msac_decode_bool_c(s, *cdf);
 
     if (s->allow_update_cdf) {
         // update_cdf() specialized for boolean CDFs
         const unsigned pc = cdf[1];
         const unsigned count = (uint8_t)pc;
-        const int rate = dav1d_msac_rate[pc >> 8][count >> 4];
+        const int rate = dav2d_msac_rate[pc >> 8][count >> 4];
         if (bit)
             cdf[0] += (32768 - cdf[0]) >> rate;
         else
@@ -234,7 +234,7 @@ unsigned dav1d_msac_decode_bool_adapt_c(MsacContext *const s,
     return bit;
 }
 
-void dav1d_msac_init(MsacContext *const s, const uint8_t *const data,
+void dav2d_msac_init(MsacContext *const s, const uint8_t *const data,
                      const size_t sz, const int disable_cdf_update_flag)
 {
     s->buf_pos = data;
@@ -246,8 +246,8 @@ void dav1d_msac_init(MsacContext *const s, const uint8_t *const data,
     ctx_refill(s);
 
 #if HAVE_ASM && ARCH_X86_64
-    s->unary_bypass6  = dav1d_msac_decode_unary_bypass_c;
-    s->unary_bypass21 = dav1d_msac_decode_unary_bypass21_c;
+    s->unary_bypass6  = dav2d_msac_decode_unary_bypass_c;
+    s->unary_bypass21 = dav2d_msac_decode_unary_bypass21_c;
     msac_dsp_init_x86(s);
 #endif
 }

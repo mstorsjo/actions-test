@@ -1,5 +1,5 @@
 /*
- * Copyright © 2025, VideoLAN and dav1d authors
+ * Copyright © 2025, VideoLAN and dav2d authors
  * Copyright © 2025, Two Orioles, LLC
  * All rights reserved.
  *
@@ -155,7 +155,7 @@ static void ccso_add_c(pixel *dst, const ptrdiff_t dst_stride,
     }
 }
 
-COLD void bitfn(dav1d_ccso_dsp_init)(Dav1dCcsoDSPContext *const c) {
+COLD void bitfn(dav2d_ccso_dsp_init)(Dav2dCcsoDSPContext *const c) {
     c->prep[0] = ccso_prep_444_c;
     c->prep[1] = ccso_prep_422_c;
     c->prep[2] = ccso_prep_420_c;

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LF_APPLY_H
-#define DAV1D_SRC_LF_APPLY_H
+#ifndef DAV2D_SRC_LF_APPLY_H
+#define DAV2D_SRC_LF_APPLY_H
 
 #include <stdint.h>
 
@@ -35,14 +35,14 @@
 #include "src/internal.h"
 #include "src/levels.h"
 
-void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *f,
+void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *f,
                                          pixel *const p[3], Av1Filter *lflvl,
                                          int sby, int start_of_tile_row);
-void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *f,
+void bytefn(dav2d_loopfilter_sbrow_rows)(const Dav2dFrameContext *f,
                                          pixel *const p[3], Av1Filter *lflvl,
                                          int sby);
 
-void bytefn(dav1d_copy_lpf)(Dav1dFrameContext *const f,
+void bytefn(dav2d_copy_lpf)(Dav2dFrameContext *const f,
                             /*const*/ pixel *const src[3], int sby);
 
-#endif /* DAV1D_SRC_LF_APPLY_H */
+#endif /* DAV2D_SRC_LF_APPLY_H */

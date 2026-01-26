@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Janne Grunau
  * All rights reserved.
  *
@@ -33,11 +33,11 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <dav1d/dav1d.h>
+#include <dav2d/dav2d.h>
 #include "src/cpu.h"
-#include "dav1d_fuzzer.h"
+#include "dav2d_fuzzer.h"
 
-#ifdef DAV1D_ALLOC_FAIL
+#ifdef DAV2D_ALLOC_FAIL
 
 #include "alloc_fail.h"
 
@@ -53,7 +53,7 @@ static unsigned r32le(const uint8_t *const p) {
     return ((uint32_t)p[3] << 24U) | (p[2] << 16U) | (p[1] << 8U) | p[0];
 }
 
-#define DAV1D_FUZZ_MAX_SIZE 4096 * 4096
+#define DAV2D_FUZZ_MAX_SIZE 4096 * 4096
 
 // search for "--cpumask xxx" in argv and remove both parameters
 int LLVMFuzzerInitialize(int *argc, char ***argv) {
@@ -71,7 +71,7 @@ int LLVMFuzzerInitialize(int *argc, char ***argv) {
                     res = (unsigned) strtoul(cpumask, &end, 0);
                 }
                 if (end != cpumask && !end[0]) {
-                    dav1d_set_cpu_flags_mask(res);
+                    dav2d_set_cpu_flags_mask(res);
                 }
             }
             break;
@@ -92,17 +92,17 @@ int LLVMFuzzerInitialize(int *argc, char ***argv) {
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    Dav1dSettings settings = { 0 };
-    Dav1dContext * ctx = NULL;
-    Dav1dPicture pic;
+    Dav2dSettings settings = { 0 };
+    Dav2dContext * ctx = NULL;
+    Dav2dPicture pic;
     const uint8_t *ptr = data;
     int have_seq_hdr = 0;
     int err;
 
-    dav1d_version();
+    dav2d_version();
 
     if (size < 32) goto end;
-#ifdef DAV1D_ALLOC_FAIL
+#ifdef DAV2D_ALLOC_FAIL
     unsigned h = djb_xor(ptr, 32);
     unsigned seed = h;
     unsigned probability = h > (RAND_MAX >> 5) ? RAND_MAX >> 5 : h;
@@ -113,26 +113,26 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 #endif
     ptr += 32; // skip ivf header
 
-    dav1d_default_settings(&settings);
+    dav2d_default_settings(&settings);
 
-#ifdef DAV1D_MT_FUZZING
+#ifdef DAV2D_MT_FUZZING
     settings.max_frame_delay = settings.n_threads = 4;
-#elif defined(DAV1D_ALLOC_FAIL)
+#elif defined(DAV2D_ALLOC_FAIL)
     settings.max_frame_delay = max_frame_delay;
     settings.n_threads = n_threads;
-    dav1d_setup_alloc_fail(seed, probability);
+    dav2d_setup_alloc_fail(seed, probability);
 #else
     settings.max_frame_delay = settings.n_threads = 1;
 #endif
-#if defined(DAV1D_FUZZ_MAX_SIZE)
-    settings.frame_size_limit = DAV1D_FUZZ_MAX_SIZE;
+#if defined(DAV2D_FUZZ_MAX_SIZE)
+    settings.frame_size_limit = DAV2D_FUZZ_MAX_SIZE;
 #endif
 
-    err = dav1d_open(&ctx, &settings);
+    err = dav2d_open(&ctx, &settings);
     if (err < 0) goto end;
 
     while (ptr <= data + size - 12) {
-        Dav1dData buf;
+        Dav2dData buf;
         uint8_t *p;
 
         size_t frame_size = r32le(ptr);
@@ -144,8 +144,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         if (!frame_size) continue;
 
         if (!have_seq_hdr) {
-            Dav1dSequenceHeader seq;
-            int err = dav1d_parse_sequence_header(&seq, ptr, frame_size);
+            Dav2dSequenceHeader seq;
+            int err = dav2d_parse_sequence_header(&seq, ptr, frame_size);
             // skip frames until we see a sequence header
             if  (err != 0) {
                 ptr += frame_size;
@@ -155,22 +155,22 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         }
 
         // copy frame data to a new buffer to catch reads past the end of input
-        p = dav1d_data_create(&buf, frame_size);
+        p = dav2d_data_create(&buf, frame_size);
         if (!p) goto cleanup;
         memcpy(p, ptr, frame_size);
         ptr += frame_size;
 
         do {
-            if ((err = dav1d_send_data(ctx, &buf)) < 0) {
-                if (err != DAV1D_ERR(EAGAIN))
+            if ((err = dav2d_send_data(ctx, &buf)) < 0) {
+                if (err != DAV2D_ERR(EAGAIN))
                     break;
             }
             for (;;) {
                 memset(&pic, 0, sizeof(pic));
-                err = dav1d_get_picture(ctx, &pic);
+                err = dav2d_get_picture(ctx, &pic);
                 if (err == 0) {
-                    dav1d_picture_unref(&pic);
-                } else if (err != DAV1D_ERR(EAGAIN)) {
+                    dav2d_picture_unref(&pic);
+                } else if (err != DAV2D_ERR(EAGAIN)) {
                     goto nested_break;
                 }
             }
@@ -178,26 +178,26 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
     nested_break:
         if (buf.sz > 0)
-            dav1d_data_unref(&buf);
+            dav2d_data_unref(&buf);
     }
 
-    dav1d_send_data(ctx, NULL);
+    dav2d_send_data(ctx, NULL);
     memset(&pic, 0, sizeof(pic));
-    if ((err = dav1d_get_picture(ctx, &pic)) == 0) {
-        /* Test calling dav1d_picture_unref() after dav1d_close() */
+    if ((err = dav2d_get_picture(ctx, &pic)) == 0) {
+        /* Test calling dav2d_picture_unref() after dav2d_close() */
         do {
-            Dav1dPicture pic2 = { 0 };
-            if ((err = dav1d_get_picture(ctx, &pic2)) == 0)
-                dav1d_picture_unref(&pic2);
-        } while (err != DAV1D_EOF);
+            Dav2dPicture pic2 = { 0 };
+            if ((err = dav2d_get_picture(ctx, &pic2)) == 0)
+                dav2d_picture_unref(&pic2);
+        } while (err != DAV2D_EOF);
 
-        dav1d_close(&ctx);
-        dav1d_picture_unref(&pic);
+        dav2d_close(&ctx);
+        dav2d_picture_unref(&pic);
         return 0;
     }
 
 cleanup:
-    dav1d_close(&ctx);
+    dav2d_close(&ctx);
 end:
     return 0;
 }

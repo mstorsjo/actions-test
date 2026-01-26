@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,18 +25,18 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_INTERNAL_H
-#define DAV1D_SRC_INTERNAL_H
+#ifndef DAV2D_SRC_INTERNAL_H
+#define DAV2D_SRC_INTERNAL_H
 
 #include <stdatomic.h>
 
 #include "ccso.h"
-#include "dav1d/data.h"
+#include "dav2d/data.h"
 
-typedef struct Dav1dFrameContext Dav1dFrameContext;
-typedef struct Dav1dTileState Dav1dTileState;
-typedef struct Dav1dTaskContext Dav1dTaskContext;
-typedef struct Dav1dTask Dav1dTask;
+typedef struct Dav2dFrameContext Dav2dFrameContext;
+typedef struct Dav2dTileState Dav2dTileState;
+typedef struct Dav2dTaskContext Dav2dTaskContext;
+typedef struct Dav2dTask Dav2dTask;
 
 #include "common/attributes.h"
 
@@ -61,81 +61,81 @@ typedef struct Dav1dTask Dav1dTask;
 #include "src/stx.h"
 #include "src/thread.h"
 
-typedef struct Dav1dDSPContext {
-    Dav1dFilmGrainDSPContext fg;
-    Dav1dIntraPredDSPContext ipred;
-    Dav1dMCDSPContext mc;
-    Dav1dInvTxfmDSPContext itx;
-    Dav1dStxDSPContext stx;
-    Dav1dLoopFilterDSPContext lf;
-    Dav1dCcsoDSPContext ccso;
-    Dav1dCdefDSPContext cdef;
-    Dav1dLoopRestorationDSPContext lr;
-} Dav1dDSPContext;
+typedef struct Dav2dDSPContext {
+    Dav2dFilmGrainDSPContext fg;
+    Dav2dIntraPredDSPContext ipred;
+    Dav2dMCDSPContext mc;
+    Dav2dInvTxfmDSPContext itx;
+    Dav2dStxDSPContext stx;
+    Dav2dLoopFilterDSPContext lf;
+    Dav2dCcsoDSPContext ccso;
+    Dav2dCdefDSPContext cdef;
+    Dav2dLoopRestorationDSPContext lr;
+} Dav2dDSPContext;
 
-struct Dav1dTileGroup {
-    Dav1dData data;
+struct Dav2dTileGroup {
+    Dav2dData data;
     int start, end;
 };
 
 enum TaskType {
-    DAV1D_TASK_TYPE_INIT,
-    DAV1D_TASK_TYPE_INIT_CDF,
-    DAV1D_TASK_TYPE_TILE_ENTROPY,
-    DAV1D_TASK_TYPE_ENTROPY_PROGRESS,
-    DAV1D_TASK_TYPE_TILE_RECONSTRUCTION,
-    DAV1D_TASK_TYPE_DEBLOCK_COLS,
-    DAV1D_TASK_TYPE_DEBLOCK_ROWS,
-    DAV1D_TASK_TYPE_CDEF,
-    DAV1D_TASK_TYPE_LOOP_RESTORATION,
-    DAV1D_TASK_TYPE_RECONSTRUCTION_PROGRESS,
-    DAV1D_TASK_TYPE_FG_PREP,
-    DAV1D_TASK_TYPE_FG_APPLY,
+    DAV2D_TASK_TYPE_INIT,
+    DAV2D_TASK_TYPE_INIT_CDF,
+    DAV2D_TASK_TYPE_TILE_ENTROPY,
+    DAV2D_TASK_TYPE_ENTROPY_PROGRESS,
+    DAV2D_TASK_TYPE_TILE_RECONSTRUCTION,
+    DAV2D_TASK_TYPE_DEBLOCK_COLS,
+    DAV2D_TASK_TYPE_DEBLOCK_ROWS,
+    DAV2D_TASK_TYPE_CDEF,
+    DAV2D_TASK_TYPE_LOOP_RESTORATION,
+    DAV2D_TASK_TYPE_RECONSTRUCTION_PROGRESS,
+    DAV2D_TASK_TYPE_FG_PREP,
+    DAV2D_TASK_TYPE_FG_APPLY,
 };
 
-struct Dav1dContext {
-    Dav1dFrameContext *fc;
+struct Dav2dContext {
+    Dav2dFrameContext *fc;
     unsigned n_fc;
 
-    Dav1dTaskContext *tc;
+    Dav2dTaskContext *tc;
     unsigned n_tc;
 
     // cache of OBUs that make up a single frame before we submit them
     // to a frame worker to be decoded
-    struct Dav1dTileGroup *tile;
+    struct Dav2dTileGroup *tile;
     int n_tile_data_alloc;
     int n_tile_data;
     int n_tiles;
-    Dav1dMemPool *seq_hdr_pool;
-    Dav1dRef *seq_hdr_ref;
-    Dav1dSequenceHeader *seq_hdr;
-    Dav1dMemPool *frame_hdr_pool;
-    Dav1dRef *frame_hdr_ref;
-    Dav1dFrameHeader *frame_hdr;
+    Dav2dMemPool *seq_hdr_pool;
+    Dav2dRef *seq_hdr_ref;
+    Dav2dSequenceHeader *seq_hdr;
+    Dav2dMemPool *frame_hdr_pool;
+    Dav2dRef *frame_hdr_ref;
+    Dav2dFrameHeader *frame_hdr;
 
-    Dav1dRef *content_light_ref;
-    Dav1dContentLightLevel *content_light;
-    Dav1dRef *mastering_display_ref;
-    Dav1dMasteringDisplay *mastering_display;
-    Dav1dRef *itut_t35_ref;
-    Dav1dITUTT35 *itut_t35;
+    Dav2dRef *content_light_ref;
+    Dav2dContentLightLevel *content_light;
+    Dav2dRef *mastering_display_ref;
+    Dav2dMasteringDisplay *mastering_display;
+    Dav2dRef *itut_t35_ref;
+    Dav2dITUTT35 *itut_t35;
     int n_itut_t35;
 
     // decoded output picture queue
-    Dav1dData in;
+    Dav2dData in;
     struct OutputQueue {
-        Dav1dThreadPicture p;
+        Dav2dThreadPicture p;
         int res;
         // FIXME event/frame_flags
     } *dpb; // output buffer management
     int dpb_in, dpb_out, dpb_sz, dpb_poc, drain;
     atomic_int flush_mem, *flush;
 #if 0
-    Dav1dThreadPicture cache;
+    Dav2dThreadPicture cache;
     // dummy is a pointer to prevent compiler errors about atomic_load()
     // not taking const arguments
     struct {
-        Dav1dThreadPicture *out_delayed;
+        Dav2dThreadPicture *out_delayed;
         unsigned next;
     } frame_thread;
 #endif
@@ -155,8 +155,8 @@ struct Dav1dContext {
         struct {
             int exec, finished;
             pthread_cond_t cond;
-            const Dav1dPicture *in;
-            Dav1dPicture *out;
+            const Dav2dPicture *in;
+            Dav2dPicture *out;
             enum TaskType type;
             atomic_int progress[2]; /* [0]=started, [1]=completed */
             union {
@@ -174,22 +174,22 @@ struct Dav1dContext {
     } task_thread;
 
     // reference/entropy state
-    Dav1dMemPool *segmap_pool;
-    Dav1dMemPool *refmvs_pool;
+    Dav2dMemPool *segmap_pool;
+    Dav2dMemPool *refmvs_pool;
     struct {
-        Dav1dThreadPicture p;
-        Dav1dRef *segmap;
-        Dav1dRef *refmvs;
+        Dav2dThreadPicture p;
+        Dav2dRef *segmap;
+        Dav2dRef *refmvs;
         uint8_t refpoc[7];
     } refs[8];
-    Dav1dMemPool *cdf_pool;
+    Dav2dMemPool *cdf_pool;
     CdfThreadContext cdf[8];
 
-    Dav1dDSPContext dsp[3 /* 8, 10, 12 bits/component */];
-    Dav1dPalDSPContext pal_dsp;
-    Dav1dRefmvsDSPContext refmvs_dsp;
+    Dav2dDSPContext dsp[3 /* 8, 10, 12 bits/component */];
+    Dav2dPalDSPContext pal_dsp;
+    Dav2dRefmvsDSPContext refmvs_dsp;
 
-    Dav1dPicAllocator allocator;
+    Dav2dPicAllocator allocator;
     int apply_grain;
     int operating_point;
     unsigned operating_point_idc;
@@ -198,22 +198,22 @@ struct Dav1dContext {
     unsigned frame_size_limit;
     int strict_std_compliance;
     int output_invisible_frames;
-    enum Dav1dInloopFilterType inloop_filters;
-    enum Dav1dDecodeFrameType decode_frame_type;
+    enum Dav2dInloopFilterType inloop_filters;
+    enum Dav2dDecodeFrameType decode_frame_type;
 #if 0
     enum PictureFlags frame_flags;
-    enum Dav1dEventFlags event_flags;
-    Dav1dDataProps cached_error_props;
+    enum Dav2dEventFlags event_flags;
+    Dav2dDataProps cached_error_props;
     int cached_error;
 #endif
 
-    Dav1dLogger logger;
+    Dav2dLogger logger;
 
-    Dav1dMemPool *picture_pool;
-    Dav1dMemPool *pic_ctx_pool;
+    Dav2dMemPool *picture_pool;
+    Dav2dMemPool *pic_ctx_pool;
 };
 
-struct Dav1dTask {
+struct Dav2dTask {
     unsigned frame_idx;         // frame thread id
     enum TaskType type;         // task work
     int sby;                    // sbrow
@@ -221,21 +221,21 @@ struct Dav1dTask {
     // task dependencies
     int recon_progress, deblock_progress;
     int deps_skip;
-    struct Dav1dTask *next; // only used in task queue
+    struct Dav2dTask *next; // only used in task queue
 };
 
-struct Dav1dFrameContext {
-    Dav1dRef *seq_hdr_ref;
-    Dav1dSequenceHeader *seq_hdr;
-    Dav1dRef *frame_hdr_ref;
-    Dav1dFrameHeader *frame_hdr;
-    Dav1dThreadPicture refp[7];
-    Dav1dPicture cur; // during block coding / reconstruction
-    Dav1dThreadPicture sr_cur; // after super-resolution upscaling
-    Dav1dRef *mvs_ref;
+struct Dav2dFrameContext {
+    Dav2dRef *seq_hdr_ref;
+    Dav2dSequenceHeader *seq_hdr;
+    Dav2dRef *frame_hdr_ref;
+    Dav2dFrameHeader *frame_hdr;
+    Dav2dThreadPicture refp[7];
+    Dav2dPicture cur; // during block coding / reconstruction
+    Dav2dThreadPicture sr_cur; // after super-resolution upscaling
+    Dav2dRef *mvs_ref;
     refmvs_temporal_block *mvs, *ref_mvs[7];
-    Dav1dRef *ref_mvs_ref[7];
-    Dav1dRef *cur_segmap_ref, *prev_segmap_ref;
+    Dav2dRef *ref_mvs_ref[7];
+    Dav2dRef *cur_segmap_ref, *prev_segmap_ref;
     uint8_t *cur_segmap;
     const uint8_t *prev_segmap;
     uint8_t refpoc[7], refrefpoc[7][7], refcnt[7];
@@ -253,7 +253,7 @@ struct Dav1dFrameContext {
     uint8_t gmv_warp_allowed[7];
     int use_pri_sec_cdf;
     CdfThreadContext in_cdf, out_cdf, src_cdf[2];
-    struct Dav1dTileGroup *tile;
+    struct Dav2dTileGroup *tile;
     int n_tile_data_alloc;
     int n_tile_data;
 
@@ -263,16 +263,16 @@ struct Dav1dFrameContext {
         int step;
     } svc[7][2 /* x, y */];
 
-    const Dav1dContext *c;
-    Dav1dTileState *ts;
+    const Dav2dContext *c;
+    Dav2dTileState *ts;
     int n_ts;
-    const Dav1dDSPContext *dsp;
+    const Dav2dDSPContext *dsp;
     struct {
         recon_b_fn recon_b;
         filter_sbrow_fn filter_sbrow;
         filter_sbrow_fn filter_sbrow_deblock_cols;
         filter_sbrow_fn filter_sbrow_deblock_rows;
-        void (*filter_sbrow_cdef)(Dav1dTaskContext *tc, int sby);
+        void (*filter_sbrow_cdef)(Dav2dTaskContext *tc, int sby);
         filter_sbrow_fn filter_sbrow_lr;
         backup_ipred_edge_fn backup_ipred_edge;
         read_coef_blocks_fn read_coef_blocks;
@@ -285,7 +285,7 @@ struct Dav1dFrameContext {
     ptrdiff_t b4_stride;
     int bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
     int ss_ver, ss_hor;
-    uint32_t dq[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
+    uint32_t dq[DAV2D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];
     BlockContext *a;
     int a_sz /* w*tile_rows */;
@@ -339,7 +339,7 @@ struct Dav1dFrameContext {
         pthread_mutex_t lock;
         pthread_cond_t cond;
         struct TaskThreadData *ttd;
-        struct Dav1dTask *tasks, *tile_tasks[2], init_task;
+        struct Dav2dTask *tasks, *tile_tasks[2], init_task;
         int num_tasks, num_tile_tasks;
         atomic_int init_done;
         atomic_int done[2];
@@ -347,16 +347,16 @@ struct Dav1dFrameContext {
         int update_set; // whether we need to update CDF reference
         atomic_int error;
         atomic_int task_counter;
-        struct Dav1dTask *task_head, *task_tail;
+        struct Dav2dTask *task_head, *task_tail;
         // Points to the task directly before the cur pointer in the queue.
         // This cur pointer is theoretical here, we actually keep track of the
         // "prev_t" variable. This is needed to not loose the tasks in
         // [head;cur-1] when picking one for execution.
-        struct Dav1dTask *task_cur_prev;
+        struct Dav2dTask *task_cur_prev;
         struct { // async task insertion
             atomic_int merge;
             pthread_mutex_t lock;
-            Dav1dTask *head, *tail;
+            Dav2dTask *head, *tail;
         } pending_tasks;
     } task_thread;
 
@@ -371,7 +371,7 @@ struct Dav1dFrameContext {
     } ns_wiener;
 };
 
-struct Dav1dTileState {
+struct Dav2dTileState {
     CdfContext cdf;
     MsacContext msac;
 
@@ -392,7 +392,7 @@ struct Dav1dTileState {
     // each entry is one tile-sbrow; middle index is refidx
     int (*lowest_pixel)[7][2];
 
-    uint32_t dqmem[DAV1D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
+    uint32_t dqmem[DAV2D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint32_t (*dq)[3][2];
     int last_qidx;
 
@@ -404,10 +404,10 @@ struct Dav1dTileState {
     } ns_wiener_bank[3];
 };
 
-struct Dav1dTaskContext {
-    const Dav1dContext *c;
-    const Dav1dFrameContext *f;
-    Dav1dTileState *ts;
+struct Dav2dTaskContext {
+    const Dav2dContext *c;
+    const Dav2dFrameContext *f;
+    Dav2dTileState *ts;
     int bx, by, cbx, cby, sdp_cfl_disallowed, intra_region;
     BlockContext l, *a;
     struct SBEdgeCtx a_sb_cache;
@@ -479,7 +479,7 @@ struct Dav1dTaskContext {
     } scratch;
 
     union {
-        Dav1dWarpedMotionParams warpmv[2];
+        Dav2dWarpedMotionParams warpmv[2];
         union OpflMvDeltaBlock {
             struct OpflMvDelta {
                 int8_t x, y;
@@ -492,7 +492,7 @@ struct Dav1dTaskContext {
     // for chroma sub8x8, we need to know the filter for all 4 subblocks in
     // a 4x4 area, but the top/left one can go out of cache already, so this
     // keeps it accessible
-    enum Dav1dFilterMode tl_4x4_filter;
+    enum Dav2dFilterMode tl_4x4_filter;
 
     struct {
         int pass;
@@ -506,6 +506,6 @@ struct Dav1dTaskContext {
     } task_thread;
 };
 
-struct OutputQueue *queue_output(Dav1dContext *c, Dav1dThreadPicture *p);
+struct OutputQueue *queue_output(Dav2dContext *c, Dav2dThreadPicture *p);
 
-#endif /* DAV1D_SRC_INTERNAL_H */
+#endif /* DAV2D_SRC_INTERNAL_H */

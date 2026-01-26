@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_CDEF_H
-#define DAV1D_SRC_CDEF_H
+#ifndef DAV2D_SRC_CDEF_H
+#define DAV2D_SRC_CDEF_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -61,11 +61,11 @@ typedef decl_cdef_fn(*cdef_fn);
 int (name)(const pixel *dst, ptrdiff_t dst_stride, unsigned *var HIGHBD_DECL_SUFFIX)
 typedef decl_cdef_dir_fn(*cdef_dir_fn);
 
-typedef struct Dav1dCdefDSPContext {
+typedef struct Dav2dCdefDSPContext {
     cdef_dir_fn dir;
     cdef_fn fb[3 /* 444/luma, 422, 420 */];
-} Dav1dCdefDSPContext;
+} Dav2dCdefDSPContext;
 
-bitfn_decls(void dav1d_cdef_dsp_init, Dav1dCdefDSPContext *c);
+bitfn_decls(void dav2d_cdef_dsp_init, Dav2dCdefDSPContext *c);
 
-#endif /* DAV1D_SRC_CDEF_H */
+#endif /* DAV2D_SRC_CDEF_H */

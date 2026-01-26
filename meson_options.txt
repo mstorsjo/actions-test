@@ -13,17 +13,17 @@ option('enable_asm',
 option('enable_tools',
     type: 'boolean',
     value: true,
-    description: 'Build dav1d cli tools')
+    description: 'Build dav2d cli tools')
 
 option('enable_examples',
     type: 'boolean',
     value: false,
-    description: 'Build dav1d examples')
+    description: 'Build dav2d examples')
 
 option('enable_tests',
     type: 'boolean',
     value: true,
-    description: 'Build dav1d tests')
+    description: 'Build dav2d tests')
 
 option('enable_seek_stress',
     type: 'boolean',
@@ -33,7 +33,7 @@ option('enable_seek_stress',
 option('enable_docs',
     type: 'boolean',
     value: false,
-    description: 'Build dav1d documentation')
+    description: 'Build dav2d documentation')
 
 option('logging',
     type: 'boolean',

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#include "dav1d/data.h"
+#include "dav2d/data.h"
 
 #include "common/frame.h"
 #include "common/intops.h"
@@ -63,8 +63,8 @@ static inline int dq_lookup(const int hbd, int qidx) {
     return dq_lookup_tbl[qidx] << shift;
 }
 
-static void init_quant_tables(const Dav1dSequenceHeader *const seq_hdr,
-                              const Dav1dFrameHeader *const frame_hdr,
+static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
+                              const Dav2dFrameHeader *const frame_hdr,
                               const int qidx, uint32_t (*dq)[3][2])
 {
     // and then ac == dc
@@ -94,12 +94,12 @@ static uint16_t deblock_quant_thr(const int hbd, const int qidx) {
 static uint16_t deblock_side_thr(const int hbd, const int qidx) {
     const int bitdepth_min_8 = 2 * hbd;
     const int q_ind = imin(imax(qidx - 24 * bitdepth_min_8, 0), 296 - 1);
-    const int side_thr = dav1d_deblock_side_thresholds[q_ind];
+    const int side_thr = dav2d_deblock_side_thresholds[q_ind];
     return imax(side_thr + (1 << 4 >> bitdepth_min_8), 0) >> (5 - bitdepth_min_8);
 }
 
-static void init_deblock_lut(const Dav1dSequenceHeader *const seq_hdr,
-                             const Dav1dFrameHeader *const frame_hdr,
+static void init_deblock_lut(const Dav2dSequenceHeader *const seq_hdr,
+                             const Dav2dFrameHeader *const frame_hdr,
                              const int qidx, Av1FilterLUT *const lut)
 {
     const int qmax = 255 + 48 * seq_hdr->hbd;
@@ -114,62 +114,62 @@ static void init_deblock_lut(const Dav1dSequenceHeader *const seq_hdr,
     }
 }
 
-static inline void read_amvd(Dav1dTileState *const ts, mv *const mv) {
-    const int joint = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+static inline void read_amvd(Dav2dTileState *const ts, mv *const mv) {
+    const int joint = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                           ts->cdf.m.amvd_joint, 3);
     if (!joint) {
         mv->n = 0;
         return;
     }
     if (joint & 2) {
-        const int s = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+        const int s = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                           ts->cdf.m.amvd_index[0], 7);
         mv->y = s < 3 ? 2 + s * 2 : 1 << s;
     } else mv->y = 0;
     if (joint & 1) {
-        const int s = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+        const int s = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                           ts->cdf.m.amvd_index[1], 7);
         mv->x = s < 3 ? 2 + s * 2 : 1 << s;
     } else mv->x = 0;
 }
 
 // mv_prec=0..6 for {8,4,2,f,h,q,e}pel
-static inline void read_mv_residual(Dav1dTileState *const ts,
+static inline void read_mv_residual(Dav2dTileState *const ts,
                                     CdfMvContext *const cdf_mv, mv *const mv,
                                     const int mv_prec)
 {
     int sh_class;
     const int n_syms = 9 + mv_prec, h_syms = n_syms >> 1;
 
-    if (dav1d_msac_decode_bool_adapt(&ts->msac, cdf_mv->shell_set)) {
+    if (dav2d_msac_decode_bool_adapt(&ts->msac, cdf_mv->shell_set)) {
         const int h_syms2 = n_syms - h_syms;
         sh_class = h_syms + 1 +
-            dav1d_msac_decode_symbol_adapt8(&ts->msac,
+            dav2d_msac_decode_symbol_adapt8(&ts->msac,
                 cdf_mv->shell_upper[mv_prec], imin(h_syms2, 7));
         if (mv_prec + sh_class == 21)
-            sh_class += dav1d_msac_decode_bool_adapt(&ts->msac,
+            sh_class += dav2d_msac_decode_bool_adapt(&ts->msac,
                                                      ts->cdf.mv.shell_tip);
     } else {
-        sh_class = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+        sh_class = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                        cdf_mv->shell_lower[mv_prec], h_syms);
     }
 
     int sh_index;
     if (sh_class < 2) {
-        sh_index = dav1d_msac_decode_bool_adapt(&ts->msac,
+        sh_index = dav2d_msac_decode_bool_adapt(&ts->msac,
                        cdf_mv->shell_offset_low[sh_class]);
     } else if (sh_class == 2) {
-        sh_index = dav1d_msac_decode_bool_adapt(&ts->msac,
+        sh_index = dav2d_msac_decode_bool_adapt(&ts->msac,
                        cdf_mv->shell_offset_cl2);
         if (sh_index) {
-            sh_index += dav1d_msac_decode_bool_bypass(&ts->msac);
+            sh_index += dav2d_msac_decode_bool_bypass(&ts->msac);
             if (sh_index == 2)
-                sh_index += dav1d_msac_decode_bool_bypass(&ts->msac);
+                sh_index += dav2d_msac_decode_bool_bypass(&ts->msac);
         }
     } else {
         sh_index = 0;
         for (int i = 0, m = 1; i < sh_class; i++, m <<= 1) {
-            sh_index |= m * dav1d_msac_decode_bool_adapt(&ts->msac,
+            sh_index |= m * dav2d_msac_decode_bool_adapt(&ts->msac,
                                 cdf_mv->shell_offset_hi[i]);
         }
     }
@@ -182,13 +182,13 @@ static inline void read_mv_residual(Dav1dTileState *const ts,
 
     int pair_index = 0;
     if (sh_index >= 2) {
-        pair_index = dav1d_msac_decode_bool_adapt(&ts->msac,
+        pair_index = dav2d_msac_decode_bool_adapt(&ts->msac,
                          cdf_mv->col_component[0]);
         if (pair_index && sh_index >= 4) {
-            pair_index += dav1d_msac_decode_bool_adapt(&ts->msac,
+            pair_index += dav2d_msac_decode_bool_adapt(&ts->msac,
                               cdf_mv->col_component[1]);
             if (pair_index == 2 && sh_index >= 6)
-                pair_index += dav1d_msac_decode_uniform(&ts->msac,
+                pair_index += dav2d_msac_decode_uniform(&ts->msac,
                                   (sh_index >> 1) - 1);
         }
     }
@@ -197,7 +197,7 @@ static inline void read_mv_residual(Dav1dTileState *const ts,
     if (pair_index * 2 == sh_index) {
         mv->x = mv->y = (sh_index >> 1) << sh;
     } else {
-        const int b = dav1d_msac_decode_bool_adapt(&ts->msac,
+        const int b = dav2d_msac_decode_bool_adapt(&ts->msac,
                           cdf_mv->col_index[imin(sh_class, 3)]);
         if (b) {
             mv->y = pair_index << sh;
@@ -231,17 +231,17 @@ static int neg_deinterleave(int diff, int ref, int max) {
     }
 }
 
-static void derive_warpmv(const Dav1dTaskContext *const t,
+static void derive_warpmv(const Dav2dTaskContext *const t,
                           const int have_top, const int have_left,
                           const int bw4, const int bh4,
                           const int w4, const int h4,
                           const int ref, const union mv mv,
-                          Dav1dWarpedMotionParams *const wmp)
+                          Dav2dWarpedMotionParams *const wmp)
 {
     int pts[8][2 /* in, out */][2 /* x, y */], np = 0;
     const refmvs_block *const r = &t->rt.r[(t->by & 63) * 128], *ra;
 
-#define bs(rp) dav1d_block_dimensions[(rp)->bs]
+#define bs(rp) dav2d_block_dimensions[(rp)->bs]
 #define add_sample(dx, dy, sx, sy, rp) do { \
     const union mv *const rmv = (rp)->mf & 2 ? (rp)->lmv : (rp)->mv; \
     for (int n = 0; n < 2; n++) { \
@@ -254,7 +254,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     } \
 } while (0)
 
-    const Dav1dFrameContext *const f = t->f;
+    const Dav2dFrameContext *const f = t->f;
     int have_topleft = 0;
     int have_topright = 0;
     const int is_not_sb_boundary = t->by & (f->sb_step - 1);
@@ -308,8 +308,8 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
         if (np < 8 && have_topleft) { // top/left
             const refmvs_block *const r2 = (t->bx & ~1) & (f->sb_step - 1) ?
                                            &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl;
-            assert(r2->bx4 + dav1d_block_dimensions[r2->bs][0] <= t->bx);
-            if (r2->bx4 + dav1d_block_dimensions[r2->bs][0] == t->bx)
+            assert(r2->bx4 + dav2d_block_dimensions[r2->bs][0] <= t->bx);
+            if (r2->bx4 + dav2d_block_dimensions[r2->bs][0] == t->bx)
                 add_sample(0, 0, -1, -1, r2);
         }
         if (np < 8 && have_topright) { // top/right
@@ -320,21 +320,21 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
     assert(np > 0 && np <= 8);
 #undef bs
 
-    if (!dav1d_find_affine_int(pts, np, bw4, bh4, mv, wmp, t->bx, t->by) &&
-        !dav1d_get_shear_params(wmp))
+    if (!dav2d_find_affine_int(pts, np, bw4, bh4, mv, wmp, t->bx, t->by) &&
+        !dav2d_get_shear_params(wmp))
     {
         wmp->type = warp_type(wmp->matrix);
     } else
-        wmp->type = DAV1D_WM_TYPE_INVALID;
+        wmp->type = DAV2D_WM_TYPE_INVALID;
 }
 
-static void extend_warpmv(Dav1dTaskContext *const t,
+static void extend_warpmv(Dav2dTaskContext *const t,
                           const int x_off, const int y_off,
                           const uint8_t *const b_dim,
                           const Av1Block *const b,
-                          Dav1dWarpedMotionParams *const wmp)
+                          Dav2dWarpedMotionParams *const wmp)
 {
-    const Dav1dFrameContext *const f = t->f;
+    const Dav2dFrameContext *const f = t->f;
     const refmvs_block *const r = y_off == -1 && !(t->by & (f->sb_step - 1)) ?
         x_off < 0 && !(t->bx & (f->sb_step - 1)) ?
         &t->rt.ra_tl : &t->rt.ra[(t->bx + x_off) >> 1] :
@@ -342,14 +342,14 @@ static void extend_warpmv(Dav1dTaskContext *const t,
     int32_t *const m = wmp->matrix;
 
     if (r->mf & 2) {
-        if (r->m[6] == DAV1D_WM_TYPE_INVALID)
-            memcpy(m, &dav1d_default_wm_params.matrix, sizeof(*m) * 6);
+        if (r->m[6] == DAV2D_WM_TYPE_INVALID)
+            memcpy(m, &dav2d_default_wm_params.matrix, sizeof(*m) * 6);
         else
             memcpy(m, r->m, sizeof(*m) * 6);
     } else if (r->mf & 1) {
         memcpy(m, t->f->frame_hdr->gmv[b->ref[0]].matrix, sizeof(*m) * 6);
     } else {
-        memcpy(&m[2], &dav1d_default_wm_params.matrix[2], sizeof(*m) * 4);
+        memcpy(&m[2], &dav2d_default_wm_params.matrix[2], sizeof(*m) * 4);
         const int ref = r->ref.ref[0] - 1 != b->ref[0];
         m[0] = r->mv[ref].x * (1 << 13);
         m[1] = r->mv[ref].y * (1 << 13);
@@ -379,26 +379,26 @@ static void extend_warpmv(Dav1dTaskContext *const t,
         m[2] = iclip((m2 + 0x20 - (m2 < 0x10000)) & ~0x3f, 0x8040, 0x17fc0);
         m[4] = iclip((m4 + 0x20 - (m4 < 0)) & ~0x3f, -0x7fc0, 0x7fc0);
     }
-    dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], wmp, t->bx, t->by);
-    wmp->type = dav1d_get_shear_params(wmp) ? DAV1D_WM_TYPE_INVALID : warp_type(m);
+    dav2d_set_affine_mv2d(bw4, bh4, b->mv[0], wmp, t->bx, t->by);
+    wmp->type = dav2d_get_shear_params(wmp) ? DAV2D_WM_TYPE_INVALID : warp_type(m);
 }
 
-static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
+static int read_pal_indices(Dav2dTaskContext *const t, uint8_t *const pal_out,
                             const int pal_sz, const int sz[4])
 {
-    Dav1dTileState *const ts = t->ts;
+    Dav2dTileState *const ts = t->ts;
     uint16_t (*const pal_cdf)[8] = ts->cdf.m.pal_idx[pal_sz - 2];
     uint8_t *const pal_idx = t->scratch.pal_idx_y;
 
     const int dir = imax(sz[2], sz[3]) < 64 &&
-                    dav1d_msac_decode_bool_bypass(&ts->msac);
+                    dav2d_msac_decode_bool_bypass(&ts->msac);
     const ptrdiff_t strides[2] = { dir ? 1 : sz[2], dir ? sz[2] : 1 };
 
     const int lim1 = sz[!dir], lim2 = sz[dir];
-    int copy = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+    int copy = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                    ts->cdf.m.pal_idx_identity[3], 2);
     if (copy == 2) return -1;
-    int prev_v = pal_idx[0] = dav1d_msac_decode_uniform(&ts->msac, pal_sz);
+    int prev_v = pal_idx[0] = dav2d_msac_decode_uniform(&ts->msac, pal_sz);
     if (copy == 1) {
         // FIXME if dir=0, maybe use memset()?
         for (int m = 1; m < lim2; m++)
@@ -406,14 +406,14 @@ static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
     } else {
         int prev_h = prev_v;
         for (int m = 1; m < lim2; m++) {
-            const int v = dav1d_msac_decode_symbol_adapt8(&ts->msac, pal_cdf[0],
+            const int v = dav2d_msac_decode_symbol_adapt8(&ts->msac, pal_cdf[0],
                                                           pal_sz - 1);
             prev_h = pal_idx[m * strides[1]] = !v ? prev_h : v - (v <= prev_h);
         }
     }
     ptrdiff_t off = strides[0];
     for (int n = 1; n < lim1; n++, off += strides[0]) {
-        copy = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+        copy = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                    ts->cdf.m.pal_idx_identity[copy], 2);
         if (copy == 2) {
             // FIXME if dir=0, maybe use memcpy()?
@@ -421,7 +421,7 @@ static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
                 pal_idx[off + m * strides[1]] =
                     pal_idx[off - strides[0] + m * strides[1]];
         } else {
-            const int v = dav1d_msac_decode_symbol_adapt8(&ts->msac, pal_cdf[0],
+            const int v = dav2d_msac_decode_symbol_adapt8(&ts->msac, pal_cdf[0],
                                                           pal_sz - 1);
             const int next_v = pal_idx[off] = !v ? prev_v : v - (v <= prev_v);
 
@@ -439,7 +439,7 @@ static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
                     } else {
                         ctx = 1 + (prev_t == prev_tl || prev_l == prev_tl);
                     }
-                    const int v = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                    const int v = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                       pal_cdf[ctx], pal_sz - 1);
                     int p;
                     switch (ctx) {
@@ -499,13 +499,13 @@ static int read_pal_indices(Dav1dTaskContext *const t, uint8_t *const pal_out,
     return 0;
 }
 
-static inline unsigned get_prev_frame_segid(const Dav1dFrameContext *const f,
+static inline unsigned get_prev_frame_segid(const Dav2dFrameContext *const f,
                                             const int by, const int bx,
                                             const int w4, int h4,
                                             const uint8_t *ref_seg_map,
                                             const ptrdiff_t stride)
 {
-    assert(f->frame_hdr->primary_ref_frame != DAV1D_PRIMARY_REF_NONE);
+    assert(f->frame_hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE);
 
     unsigned seg_id = 8;
     ref_seg_map += by * stride + bx;
@@ -521,8 +521,8 @@ static inline unsigned get_prev_frame_segid(const Dav1dFrameContext *const f,
 
 #if DEBUG_BLOCK_INFO
 static void debug_warp_matrix(const int depth,
-                              const Dav1dFrameContext *const f,
-                              const Dav1dTaskContext *const t,
+                              const Dav2dFrameContext *const f,
+                              const Dav2dTaskContext *const t,
                               const Av1Block *const b, const int r)
 {
 #define signabs(v) v < 0 ? '-' : ' ', abs(v)
@@ -542,8 +542,8 @@ static void debug_warp_matrix(const int depth,
 #endif
 
 static inline void splat_oneref_mv(DB_ONLY(const int depth)
-                                   const Dav1dFrameContext *const f,
-                                   Dav1dTaskContext *const t,
+                                   const Dav2dFrameContext *const f,
+                                   Dav2dTaskContext *const t,
                                    const enum BlockSize bs,
                                    const Av1Block *const b,
                                    const int by4, const int bw4, const int bh4)
@@ -584,8 +584,8 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
 }
 
 static inline void splat_intrabc_mv(DB_ONLY(const int depth)
-                                    const Dav1dFrameContext *const f,
-                                    Dav1dTaskContext *const t,
+                                    const Dav2dFrameContext *const f,
+                                    Dav2dTaskContext *const t,
                                     const enum BlockSize bs,
                                     const Av1Block *const b,
                                     const int by4, const int bw4, const int bh4)
@@ -609,12 +609,12 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
 
     if (t->f->seq_hdr->refmv_bank)
-        dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
+        dav2d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
 }
 
 static inline void splat_tworef_mv(DB_ONLY(const int depth)
-                                   const Dav1dFrameContext *const f,
-                                   Dav1dTaskContext *const t,
+                                   const Dav2dFrameContext *const f,
+                                   Dav2dTaskContext *const t,
                                    const enum BlockSize bs,
                                    const Av1Block *const b,
                                    const int by4, const int bw4, const int bh4)
@@ -680,9 +680,9 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     }
 }
 
-static inline void splat_intraref(const Dav1dContext *const c,
-                                  const Dav1dFrameContext *const f,
-                                  Dav1dTaskContext *const t,
+static inline void splat_intraref(const Dav2dContext *const c,
+                                  const Dav2dFrameContext *const f,
+                                  Dav2dTaskContext *const t,
                                   const enum BlockSize bs,
                                   const int by4, const int bw4, const int bh4)
 {
@@ -705,7 +705,7 @@ static inline void splat_intraref(const Dav1dContext *const c,
     c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
 
     if (t->f->seq_hdr->refmv_bank)
-        dav1d_refmvs_bank_update(&t->rt, bs, t->by, t->bx);
+        dav2d_refmvs_bank_update(&t->rt, bs, t->by, t->bx);
 }
 
 #if 0
@@ -726,9 +726,9 @@ static void mc_lowest_px(int *const dst, const int by4, const int bh4,
     }
 }
 
-static ALWAYS_INLINE void affine_lowest_px(Dav1dTaskContext *const t, int *const dst,
+static ALWAYS_INLINE void affine_lowest_px(Dav2dTaskContext *const t, int *const dst,
                                            const uint8_t *const b_dim,
-                                           const Dav1dWarpedMotionParams *const wmp,
+                                           const Dav2dWarpedMotionParams *const wmp,
                                            const int ss_ver, const int ss_hor)
 {
     const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
@@ -749,41 +749,41 @@ static ALWAYS_INLINE void affine_lowest_px(Dav1dTaskContext *const t, int *const
     }
 }
 
-static NOINLINE void affine_lowest_px_luma(Dav1dTaskContext *const t, int *const dst,
+static NOINLINE void affine_lowest_px_luma(Dav2dTaskContext *const t, int *const dst,
                                            const uint8_t *const b_dim,
-                                           const Dav1dWarpedMotionParams *const wmp)
+                                           const Dav2dWarpedMotionParams *const wmp)
 {
     affine_lowest_px(t, dst, b_dim, wmp, 0, 0);
 }
 
-static NOINLINE void affine_lowest_px_chroma(Dav1dTaskContext *const t, int *const dst,
+static NOINLINE void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *const dst,
                                              const uint8_t *const b_dim,
-                                             const Dav1dWarpedMotionParams *const wmp)
+                                             const Dav2dWarpedMotionParams *const wmp)
 {
-    const Dav1dFrameContext *const f = t->f;
-    assert(f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400);
-    if (f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I444)
+    const Dav2dFrameContext *const f = t->f;
+    assert(f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400);
+    if (f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I444)
         affine_lowest_px_luma(t, dst, b_dim, wmp);
     else
-        affine_lowest_px(t, dst, b_dim, wmp, f->cur.p.layout & DAV1D_PIXEL_LAYOUT_I420, 1);
+        affine_lowest_px(t, dst, b_dim, wmp, f->cur.p.layout & DAV2D_PIXEL_LAYOUT_I420, 1);
 }
 #endif
 
-static void read_tx_part(Dav1dTaskContext *const t,
+static void read_tx_part(Dav2dTaskContext *const t,
                          DB_ONLY(const int depth) Av1Block *const b,
                          const enum BlockSize bs)
 {
-    Dav1dTileState *const ts = t->ts;
-    const Dav1dFrameContext *const f = t->f;
-    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    Dav2dTileState *const ts = t->ts;
+    const Dav2dFrameContext *const f = t->f;
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
 
     b->tx_part = TX_PARTITION_NONE;
-    b->uvtx = dav1d_max_txfm_size_for_bs[bs][f->cur.p.layout];
+    b->uvtx = dav2d_max_txfm_size_for_bs[bs][f->cur.p.layout];
     if (f->frame_hdr->segmentation.lossless[b->seg_id] || b->skip_txfm) {
         // FIXME I believe lossless can be wht as well as idtx?
     } else {
-        if (f->frame_hdr->txfm_mode == DAV1D_TX_SWITCHABLE &&
+        if (f->frame_hdr->txfm_mode == DAV2D_TX_SWITCHABLE &&
             bs != BS_4x4 && imax(bw4, bh4) <= 16)
         {
             const int inter = !b->intra || b->intrabc;
@@ -815,7 +815,7 @@ static void read_tx_part(Dav1dTaskContext *const t,
                 [BS_4x4] = 0,
             };
             const int szctx = size_to_tx_part_group_lookup[bs];
-            int is_split = dav1d_msac_decode_bool_adapt(&ts->msac,
+            int is_split = dav2d_msac_decode_bool_adapt(&ts->msac,
                                ts->cdf.m.tx_split[b->fsc][inter][szctx]);
             if (is_split) {
                 if (imin(bw4, bh4) >= 2) {
@@ -839,12 +839,12 @@ static void read_tx_part(Dav1dTaskContext *const t,
                     };
                     const int ctx = size_to_tx_type_group_vh_lookup[bs];
                     b->tx_part = 1 +
-                        dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt8(&ts->msac,
                             ts->cdf.m.tx_part_2d[b->fsc][inter][ctx], 6);
                 } else if (imax(bw4, bh4) >= 4) {
                     const int ctx = bw4 >= 4;
                     const int tx_part_4way =
-                        dav1d_msac_decode_bool_adapt(&ts->msac,
+                        dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.tx_part_1d[b->fsc][inter][ctx]);
                     b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
                 } else {
@@ -859,7 +859,7 @@ static void read_tx_part(Dav1dTaskContext *const t,
                        depth, "", b->tx_part, ts->msac.rng);
 }
 
-static int read_wedge_idx(Dav1dTileState *const ts) {
+static int read_wedge_idx(Dav2dTileState *const ts) {
     static const int8_t wedge_angle_dist2idx[20][4] = {
         { -1, 0, 1, 2 },     // WEDGE_0
         { 3, 4, 5, 6 },      // WEDGE_14
@@ -883,12 +883,12 @@ static int read_wedge_idx(Dav1dTileState *const ts) {
         { -1, 65, 66, 67 },  // WEDGE_346
     };
     const int quad =
-        dav1d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.m.wedge_quad, 3);
-    const int angle = 5 * quad + dav1d_msac_decode_symbol_adapt8(&ts->msac,
+        dav2d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.m.wedge_quad, 3);
+    const int angle = 5 * quad + dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                      ts->cdf.m.wedge_angle[quad], 4);
     const int dist = (angle - 1U >= 9U || angle == 5) ?
-        1 + dav1d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.m.wedge_dist2, 2) :
-        dav1d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.m.wedge_dist, 3);
+        1 + dav2d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.m.wedge_dist2, 2) :
+        dav2d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.m.wedge_dist, 3);
     return wedge_angle_dist2idx[angle][dist];
 }
 
@@ -920,16 +920,16 @@ static inline void jmvd_scale(union mv *const mv, const int amvd,
     }
 }
 
-static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     const enum BlockSize lbs, const enum BlockSize cbs)
 {
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
-    Dav1dTileState *const ts = t->ts;
-    const Dav1dFrameContext *const f = t->f;
+    Dav2dTileState *const ts = t->ts;
+    const Dav2dFrameContext *const f = t->f;
     Av1Block b_mem, *const b = t->frame_thread.pass ?
         &f->frame_thread.b[t->by * f->b4_stride + t->bx] : &b_mem;
-    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bx4 = t->bx & 63, by4 = t->by & 63;
     const int bw4 = b_dim[0], bh4 = b_dim[1];
     const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
@@ -942,7 +942,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         ss_hor = f->ss_hor;
         cbx4 = (t->cbx & 63) >> ss_hor;
         cby4 = (t->cby & 63) >> ss_ver;
-        const uint8_t *const cb_dim = dav1d_block_dimensions[cbs];
+        const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
         cbw4 = cb_dim[0] >> ss_hor;
         cbh4 = cb_dim[1] >> ss_ver;
         assert(cbw4 >= 1 && cbh4 >= 1);
@@ -986,24 +986,24 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             if (has_chroma) {
                 uint8_t uv_mode = b->uv_mode;
-                dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], uv_mode);
-                dav1d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], uv_mode);
+                dav2d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], uv_mode);
+                dav2d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], uv_mode);
             }
         } else {
             if (IS_INTER_OR_SWITCH(f->frame_hdr) /* not intrabc */ &&
                 b->comp_type == COMP_INTER_NONE && b->motion_mode == MM_WARP_CAUSAL)
             {
                 if (b->matrix[0] == INT16_MIN) {
-                    t->warpmv[0].type = DAV1D_WM_TYPE_IDENTITY;
+                    t->warpmv[0].type = DAV2D_WM_TYPE_IDENTITY;
                 } else {
-                    t->warpmv[0].type = DAV1D_WM_TYPE_AFFINE;
+                    t->warpmv[0].type = DAV2D_WM_TYPE_AFFINE;
                     t->warpmv[0].matrix[2] = b->matrix[0] + 0x10000;
                     t->warpmv[0].matrix[3] = b->matrix[1];
                     t->warpmv[0].matrix[4] = b->matrix[2];
                     t->warpmv[0].matrix[5] = b->matrix[3] + 0x10000;
-                    dav1d_set_affine_mv2d(bw4, bh4, b->mv2d, &t->warpmv[0],
+                    dav2d_set_affine_mv2d(bw4, bh4, b->mv2d, &t->warpmv[0],
                                           t->bx, t->by);
-                    dav1d_get_shear_params(&t->warpmv[0]);
+                    dav2d_get_shear_params(&t->warpmv[0]);
                     debug_warp_matrix(depth, f, t, b, 0);
                 }
             }
@@ -1037,8 +1037,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             if (has_chroma) {
-                dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
-                dav1d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], DC_PRED);
+                dav2d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
+                dav2d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], DC_PRED);
             }
         }
         return 0;
@@ -1095,7 +1095,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
         } else if (f->frame_hdr->segmentation.preskip) {
             if (f->frame_hdr->segmentation.temporal &&
-                (seg_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
+                (seg_pred = dav2d_msac_decode_bool_adapt(&ts->msac,
                                 ts->cdf.m.seg_pred[t->a->seg_pred[bx4] +
                                 t->l.seg_pred[by4]])))
             {
@@ -1115,15 +1115,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const unsigned pred_seg_id =
                     get_cur_frame_segid(t->by, t->bx, have_top, have_left,
                                         &seg_ctx, f->cur_segmap, f->b4_stride);
-                const unsigned diff = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                const unsigned diff = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                           ts->cdf.m.seg_id[seg_ctx],
-                                          DAV1D_MAX_SEGMENTS - 1);
+                                          DAV2D_MAX_SEGMENTS - 1);
                 const unsigned last_active_seg_id =
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
                                              last_active_seg_id + 1);
                 if (b->seg_id > last_active_seg_id) b->seg_id = 0; // error?
-                if (b->seg_id >= DAV1D_MAX_SEGMENTS) b->seg_id = 0; // error?
+                if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
             }
 
             if (DEBUG_BLOCK_INFO)
@@ -1160,7 +1160,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         f->frame_hdr->skip_mode_enabled && bw4 * bh4 > 2 && !t->intra_region)
     {
         const int ctx = nx[0]->skip_mode[xoff[0]] + nx[1]->skip_mode[xoff[1]];
-        b->skip_mode = dav1d_msac_decode_bool_adapt(&ts->msac,
+        b->skip_mode = dav2d_msac_decode_bool_adapt(&ts->msac,
                            ts->cdf.m.skip_mode[ctx]);
         DEBUG_BLOCK_printf("%*sPost-skip_mode[ctx=%d,%d]: r=%d\n",
                            depth, "", ctx, b->skip_mode, ts->msac.rng);
@@ -1171,13 +1171,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (b->skip_mode) {
         b->intra = 0;
     } else if (IS_INTER_OR_SWITCH(f->frame_hdr) && !t->intra_region) {
-        if (f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 && lbs != cbs) {
+        if (f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400 && lbs != cbs) {
             // mixed-intra/inter regions in inter frames with chroma planes
             // of different sizes (in AVM language: with offsets) are inter
             b->intra = 0;
         } else {
             const int ictx = get_intra_ctx(nx, xoff, idx);
-            b->intra = !dav1d_msac_decode_bool_adapt(&ts->msac,
+            b->intra = !dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.intra[ictx]);
             DEBUG_BLOCK_printf("%*sPost-is_inter[ctx=%d,%d]: r=%d\n",
                                depth, "", ictx, !b->intra, ts->msac.rng);
@@ -1226,7 +1226,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         {
             const int ctx = (boff[0] == -1 ? 0 : nb[0]->intrabc[boff[0]]) +
                             (boff[1] == -1 ? 0 : nb[1]->intrabc[boff[1]]);
-            b->intrabc = dav1d_msac_decode_bool_adapt(&ts->msac,
+            b->intrabc = dav2d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.intrabc[ctx]);
             DEBUG_BLOCK_printf("%*sPost-intrabc[ctx=%d,%d]: r=%d\n",
                                depth, "", ctx, b->intrabc, ts->msac.rng);
@@ -1241,7 +1241,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     } else {
         const int ctx = nx[0]->skip_txfm[xoff[0]] + nx[1]->skip_txfm[xoff[1]] +
                         b->skip_mode * 3;
-        b->skip_txfm = dav1d_msac_decode_bool_adapt(&ts->msac,
+        b->skip_txfm = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.skip_txfm[ctx]);
         DEBUG_BLOCK_printf("%*sPost-skip_txfm[ctx=%d,%d]: r=%d\n",
                            depth, "", ctx, b->skip_txfm, ts->msac.rng);
@@ -1253,7 +1253,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         !f->frame_hdr->segmentation.preskip)
     {
         if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
-            (seg_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
+            (seg_pred = dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.seg_pred[t->a->seg_pred[bx4] +
                             t->l.seg_pred[by4]])))
         {
@@ -1275,16 +1275,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (b->skip_txfm) {
                 b->seg_id = pred_seg_id;
             } else {
-                const unsigned diff = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                const unsigned diff = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                           ts->cdf.m.seg_id[seg_ctx],
-                                          DAV1D_MAX_SEGMENTS - 1);
+                                          DAV2D_MAX_SEGMENTS - 1);
                 const unsigned last_active_seg_id =
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
                                              last_active_seg_id + 1);
                 if (b->seg_id > last_active_seg_id) b->seg_id = 0; // error?
             }
-            if (b->seg_id >= DAV1D_MAX_SEGMENTS) b->seg_id = 0; // error?
+            if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
         }
 
         if (DEBUG_BLOCK_INFO)
@@ -1294,18 +1294,18 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
     if (has_luma) {
         // FIXME some of these can be pre-calculated at the start of a frame
-        const int gdf_bs = f->frame_hdr->frame_type == DAV1D_FRAME_TYPE_KEY ?
+        const int gdf_bs = f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY ?
                            32 : imax(32, 16 << f->frame_hdr->sb128);
         if (!((t->bx | t->by) & (gdf_bs - 1))) {
             int idx = ((t->by & 16) >> 3) + ((t->bx & 16) >> 4);
-            if (f->frame_hdr->gdf.enabled == DAV1D_ADAPTIVE &&
+            if (f->frame_hdr->gdf.enabled == DAV2D_ADAPTIVE &&
                 imax(f->cur.p.w, f->cur.p.h) > 4 * gdf_bs)
             {
                 for (int y = 0; y < bh4; y += gdf_bs, idx += 2) {
                     for (int x = 0; x < bw4; x += gdf_bs) {
                         // FIXME separate storage sites for 256x256 blocks
                         t->lf_mask->gdf[idx + !!x] =
-                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                            dav2d_msac_decode_bool_adapt(&ts->msac,
                                                          ts->cdf.m.gdf);
                         DEBUG_BLOCK_printf("%*sPost-gdf[y=%d,x=%d,gdf=%d]: r=%d\n",
                                            depth, "", t->by + y, t->bx + x,
@@ -1354,7 +1354,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 } else {
                     ctx = !(left_cdef_idx & top_cdef_idx) * 2;
                 }
-                if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.cdef_idx0[ctx]))
                 {
                     v = 0;
@@ -1362,19 +1362,19 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     v = 1;
                 } else {
                     const int rem = f->frame_hdr->cdef.n_strengths - 3;
-                    v = 1 + dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                    v = 1 + dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.cdef_idx[rem], rem + 1);
                 }
                 DEBUG_BLOCK_printf("%*sPost-cdef_idx[ctx=%d,%d]: r=%d\n",
                                    depth, "", ctx, v, ts->msac.rng);
             }
             const int splat_idx = imax(0, b_dim[2] - 4);
-            dav1d_memset_pow2[splat_idx](cdef_ptr, v);
+            dav2d_memset_pow2[splat_idx](cdef_ptr, v);
             if (bh4 >= 32) {
-                dav1d_memset_pow2[splat_idx](&cdef_ptr[4], v);
+                dav2d_memset_pow2[splat_idx](&cdef_ptr[4], v);
                 if (bh4 == 64) {
-                    dav1d_memset_pow2[splat_idx](&cdef_ptr[8], v);
-                    dav1d_memset_pow2[splat_idx](&cdef_ptr[12], v);
+                    dav2d_memset_pow2[splat_idx](&cdef_ptr[8], v);
+                    dav2d_memset_pow2[splat_idx](&cdef_ptr[12], v);
                 }
             }
         }
@@ -1394,7 +1394,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 // ctx=3: true/true [different coded block]
                 const int ctx = t->bx - 64 >= ts->tiling.col_start ?
                                 t->lf_mask[-1].ccso[p] * 2 : 0;
-                t->lf_mask->ccso[p] = dav1d_msac_decode_bool_adapt(&ts->msac,
+                t->lf_mask->ccso[p] = dav2d_msac_decode_bool_adapt(&ts->msac,
                                             ts->cdf.m.ccso[p][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,ctx=%d,%d]: r=%d\n",
                                    depth, "", "yuv"[p], ctx,
@@ -1410,15 +1410,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                  (bs != f->root_bs || !b->skip_txfm);
 
         if (have_delta_q) {
-            int delta_q = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+            int delta_q = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                                                           ts->cdf.m.delta_q, 3);
             if (delta_q == 3) {
-                const int n_bits = 1 + dav1d_msac_decode_bools_bypass(&ts->msac, 3);
-                delta_q = dav1d_msac_decode_bools_bypass(&ts->msac, n_bits) +
+                const int n_bits = 1 + dav2d_msac_decode_bools_bypass(&ts->msac, 3);
+                delta_q = dav2d_msac_decode_bools_bypass(&ts->msac, n_bits) +
                           1 + (1 << n_bits);
             }
             if (delta_q) {
-                if (dav1d_msac_decode_bool_bypass(&ts->msac)) delta_q = -delta_q;
+                if (dav2d_msac_decode_bool_bypass(&ts->msac)) delta_q = -delta_q;
                 delta_q *= 1 << f->frame_hdr->delta.q.res_log2;
             }
             ts->last_qidx = iclip(ts->last_qidx + delta_q, 1, 255);
@@ -1450,20 +1450,20 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         };
 
         if (has_luma) {
-            const int y_set = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+            const int y_set = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                                   ts->cdf.m.intra_y_set, 3);
             int y_mode_idx, y_mode_ctx;
             if (!y_set) {
                 y_mode_ctx = (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) +
                              (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff);
-                y_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                y_mode_idx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                  ts->cdf.m.intra_y_idx0[y_mode_ctx], 7);
                 if (y_mode_idx == 7)
-                    y_mode_idx += dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                    y_mode_idx += dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                       ts->cdf.m.intra_y_idx1[y_mode_ctx], 5);
             } else {
                 y_mode_idx = y_set * 16 - 3 +
-                             dav1d_msac_decode_bools_bypass(&ts->msac, 4);
+                             dav2d_msac_decode_bools_bypass(&ts->msac, 4);
             }
             if (y_mode_idx < 5) {
                 b->y_mode = reordered_nondir_y_mode[y_mode_idx];
@@ -1568,7 +1568,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                  !t->intra_region) ? 3 :
                                 (boff[0] == -1 ? 0 : nb[0]->fsc[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->fsc[boff[1]]);
-                b->fsc = dav1d_msac_decode_bool_adapt(&ts->msac,
+                b->fsc = dav2d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.fsc[ctx][sz_ctx]);
                 DEBUG_BLOCK_printf("%*sPost-fsc[ctx=%d|%d,%d]: r=%d\n",
                                    depth, "", ctx, sz_ctx, b->fsc, ts->msac.rng);
@@ -1578,7 +1578,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (midx != 0xff /* directional mode */) {
                 const int ctx = (boff[0] == -1 ? 0 : nb[0]->mrl[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->mrl[boff[1]]);
-                b->mrl_index = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                b->mrl_index = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                                    ts->cdf.m.mrl_index[ctx], 3);
                 DEBUG_BLOCK_printf("%*sPost-mrl_index[ctx=%d,%d]: r=%d\n",
                                    depth, "", ctx, b->mrl_index, ts->msac.rng);
@@ -1586,7 +1586,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const int ctx2 =
                         (boff[0] == -1 ? 0 : nb[0]->multi_mrl[boff[0]]) +
                         (boff[1] == -1 ? 0 : nb[1]->multi_mrl[boff[1]]);
-                    b->multi_mrl = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    b->multi_mrl = dav2d_msac_decode_bool_adapt(&ts->msac,
                                        ts->cdf.m.multi_mrl[ctx2]);
                     DEBUG_BLOCK_printf("%*sPost-multi_line_mrl[ctx=%d,%d]: r=%d\n",
                                        depth, "", ctx2, b->multi_mrl, ts->msac.rng);
@@ -1603,7 +1603,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (cfl_allowed) {
                 cfl_ctx = (t->a->uvmode[cbx4] == CFL_PRED) +
                           (t->l.uvmode[cby4] == CFL_PRED);
-                is_cfl = dav1d_msac_decode_bool_adapt(&ts->msac,
+                is_cfl = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                       ts->cdf.m.cfl[cfl_ctx]);
             }
             if (is_cfl) {
@@ -1614,10 +1614,10 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     midx = t->luma_intra_dir_mode_map[(t->by & 15) * 16 +
                                                       (t->bx & 15)];
                 uv_mode_ctx = midx != 0xff;
-                uv_mode_idx = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                uv_mode_idx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                   ts->cdf.m.intra_uv_mode[uv_mode_ctx], 7);
                 if (uv_mode_idx == 7)
-                    uv_mode_idx += dav1d_msac_decode_bools_bypass(&ts->msac, 3);
+                    uv_mode_idx += dav2d_msac_decode_bools_bypass(&ts->msac, 3);
                 if (uv_mode_idx > 12) return -1;
                 if (uv_mode_idx < uv_mode_ctx) {
                     b->uv_mode = reordered_dir_y_mode[midx / 7];
@@ -1652,31 +1652,31 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (b->uv_mode == CFL_PRED) {
                 memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
                 if (f->seq_hdr->mhccp && imax(cbw4, cbh4) <= 8 && cbw4 * cbh4 > 1 &&
-                    dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp))
+                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp))
                 {
                     const int sz_ctx = size_group_lookup[bs];
                     b->cfl_type = CFL_MHCCP;
                     b->cfl_mh_dir =
-                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mhccp_filter_dir[sz_ctx], 2);
                 } else {
-                    b->cfl_type = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    b->cfl_type = dav2d_msac_decode_bool_adapt(&ts->msac,
                                       ts->cdf.m.cfl_type);
                     if (b->cfl_type == CFL_EXPLICIT) {
-                        const int sign = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                        const int sign = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                              ts->cdf.m.cfl_sign, 7) + 1;
                         const int sign_u = sign * 0x56 >> 8;
                         const int sign_v = sign - sign_u * 3;
                         assert(sign_u == sign / 3);
                         if (sign_u) {
                             const int ctx = (sign_u == 2) * 3 + sign_v;
-                            b->cfl_alpha[0] = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                            b->cfl_alpha[0] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                     ts->cdf.m.cfl_alpha[ctx], 7) + 1;
                             if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
                         }
                         if (sign_v) {
                             const int ctx = (sign_v == 2) * 3 + sign_u;
-                            b->cfl_alpha[1] = dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                            b->cfl_alpha[1] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                     ts->cdf.m.cfl_alpha[ctx], 7) + 1;
                             if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
                         }
@@ -1696,7 +1696,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (f->frame_hdr->allow_screen_content_tools &&
                 b->y_mode == DC_PRED && imax(bw4, bh4) <= 16 && bw4 + bh4 >= 4)
             {
-                const int use_y_pal = dav1d_msac_decode_bool_adapt(&ts->msac,
+                const int use_y_pal = dav2d_msac_decode_bool_adapt(&ts->msac,
                                           ts->cdf.m.pal_y);
                 if (use_y_pal) {
                     f->bd_fn.read_pal_plane(DB_ONLY(depth) t, b, bx4, by4);
@@ -1711,12 +1711,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             {
                 const int ctx = (boff[0] == -1 ? 0 : nb[0]->dip[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->dip[boff[1]]);
-                b->dip = dav1d_msac_decode_bool_adapt(&ts->msac,
+                b->dip = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                       ts->cdf.m.dip[ctx]);
                 if (b->dip) {
-                    const int tp = dav1d_msac_decode_bool_bypass(&ts->msac);
+                    const int tp = dav2d_msac_decode_bool_bypass(&ts->msac);
                     const int m =
-                        dav1d_msac_decode_symbol_adapt8(&ts->msac, ts->cdf.m.dip_mode, 5);
+                        dav2d_msac_decode_symbol_adapt8(&ts->msac, ts->cdf.m.dip_mode, 5);
                     b->dip = (tp << 4) | (m + 1);
                 }
                 DEBUG_BLOCK_printf("%*sPost-dip[ctx=%d,%d,tp=%d,mode=%d]: r=%d\n",
@@ -1788,14 +1788,14 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.copy_pal_block_y(t, bx4, by4, bw4, bh4);
         if (has_chroma) {
             uint8_t uv_mode = b->uv_mode;
-            dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], uv_mode);
-            dav1d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], uv_mode);
+            dav2d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], uv_mode);
+            dav2d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], uv_mode);
         }
     } else if (b->intrabc) {
         // intra block copy
         refmvs_candidate mvstack[6];
         int n_mvs;
-        dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
+        dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
                           (union refmvs_refpair) { .ref = { 0, -1 }},
                           bs, 0, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
@@ -1808,11 +1808,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
 #endif
 
-        const int is_refmv = dav1d_msac_decode_bool_adapt(&ts->msac,
+        const int is_refmv = dav2d_msac_decode_bool_adapt(&ts->msac,
                                  ts->cdf.m.intrabc_mode);
         int drl_idx;
         for (drl_idx = 0; drl_idx < f->frame_hdr->max_bvp_drl_bits; drl_idx++)
-            if (!dav1d_msac_decode_bool_bypass(&ts->msac)) break;
+            if (!dav2d_msac_decode_bool_bypass(&ts->msac)) break;
 
         b->ref[0] = b->ref[1] = -1;
         b->mv[0] = mvstack[drl_idx].mv[0];
@@ -1828,18 +1828,18 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         }
         int is_qpel = !f->frame_hdr->force_integer_mv;
         if (!is_refmv && !f->frame_hdr->force_integer_mv) {
-            is_qpel = dav1d_msac_decode_bool_adapt(&ts->msac,
+            is_qpel = dav2d_msac_decode_bool_adapt(&ts->msac,
                           ts->cdf.m.intrabc_precision);
         }
         if (!is_refmv) {
             mv diff;
             read_mv_residual(ts, &ts->cdf.dmv, &diff, 3 + 2 * is_qpel);
             if (diff.y) {
-                const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                const int s = dav2d_msac_decode_bool_bypass(&ts->msac);
                 if (s) diff.y = -diff.y;
             }
             if (diff.x) {
-                const int s = dav1d_msac_decode_bool_bypass(&ts->msac);
+                const int s = dav2d_msac_decode_bool_bypass(&ts->msac);
                 if (s) diff.x = -diff.x;
             }
             if (!is_qpel) fix_int_mv_precision(&b->mv[0]);
@@ -1855,7 +1855,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         {
             morphctx = (boff[0] == -1 ? 0 : nb[0]->morph_pred[boff[0]]) +
                        (boff[1] == -1 ? 0 : nb[1]->morph_pred[boff[1]]);
-            b->morph_pred = dav1d_msac_decode_bool_adapt(&ts->msac,
+            b->morph_pred = dav2d_msac_decode_bool_adapt(&ts->msac,
                                 ts->cdf.m.morph_pred[morphctx]);
         }
 
@@ -1928,7 +1928,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         // reconstruction
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
-            b->filter = DAV1D_FILTER_BILINEAR;
+            b->filter = DAV2D_FILTER_BILINEAR;
         } else {
             const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
             if (res < 0) return res;
@@ -1964,8 +1964,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
         if (has_chroma) {
-            dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
-            dav1d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], DC_PRED);
+            dav2d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
+            dav2d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], DC_PRED);
         }
     } else {
         // inter-specific mode/mv coding
@@ -1976,7 +1976,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         {
             const int ctx = (idx < 1 ? 0 : nx[0]->ref[0][xoff[0]] == TIP_FRAME) +
                             (idx < 2 ? 0 : nx[1]->ref[0][xoff[1]] == TIP_FRAME);
-            is_tip = dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip[ctx]);
+            is_tip = dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip[ctx]);
             DEBUG_BLOCK_printf("%*sPost-tip[ctx=%d,%d]: r=%d\n",
                                depth, "", ctx, is_tip, ts->msac.rng);
         }
@@ -1989,7 +1989,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                    f->frame_hdr->switchable_comp_refs && bw4 * bh4 >= 4)
         {
             const int ctx = get_comp_ctx(nx, xoff, idx, &f->refdir_with_intra[1]);
-            is_comp = dav1d_msac_decode_bool_adapt(&ts->msac,
+            is_comp = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                    ts->cdf.m.comp[ctx]);
         } else {
             is_comp = 0;
@@ -2007,7 +2007,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             const int max_drl_bits = f->frame_hdr->max_drl_bits;
             int drl_idx = 0;
             for (int ctx = 0; drl_idx < max_drl_bits; drl_idx++, ctx += ctx < 2) {
-                if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                          ts->cdf.m.skip_mode_drl_idx[ctx]))
                 {
                     break;
@@ -2037,7 +2037,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             refmvs_candidate mvstack[6];
             int n_mvs;
-            dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
+            dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
                               (union refmvs_refpair) { .ref = {
                                     b->ref[0] + 1, b->ref[1] + 1 }},
                               bs, 1, t->by, t->bx);
@@ -2082,7 +2082,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         uint16_t *const cdf =
                             n == 0 ? ts->cdf.m.comp0_ref[ctx][i] :
                             ts->cdf.m.comp1_ref[ctx][dir ^ f->refdir[i]][i];
-                        bit = dav1d_msac_decode_bool_adapt(&ts->msac, cdf);
+                        bit = dav2d_msac_decode_bool_adapt(&ts->msac, cdf);
                     }
                     if (bit) {
                         b->ref[n++] = i;
@@ -2116,19 +2116,19 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                 b->ref, f->frame_hdr->tip.refs);
             if (b->ref[0] == b->ref[1]) {
                 b->inter_mode = NEARMV_NEARMV +
-                    dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                    dav2d_msac_decode_symbol_adapt4(&ts->msac,
                         ts->cdf.m.comp_mode_sameref[comp_ctx], 3);
                 b->inter_mode += b->inter_mode > NEARMV_NEWMV; // skip newmv_nearmv
             } else {
                 const int joint_ctx =
                     f->refdist[b->ref[0]] != -f->refdist[b->ref[1]];
-                if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                if (dav2d_msac_decode_bool_adapt(&ts->msac,
                            ts->cdf.m.comp_mode_joint[joint_ctx]))
                 {
                     b->inter_mode = JOINT_NEWMV;
                 } else {
                     b->inter_mode = NEARMV_NEARMV +
-                        dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt8(&ts->msac,
                             ts->cdf.m.comp_mode[comp_ctx], 4);
                 }
             }
@@ -2137,7 +2137,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 imin(bw4, bh4) >= 2 && f->refdir[b->ref[0]] != f->refdir[b->ref[1]])
             {
                 const int ctx = b->inter_mode > NEARMV_NEARMV;
-                if (dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
+                if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
                     b->inter_mode += 6 - (b->inter_mode >= GLOBALMV_GLOBALMV);
             }
             DEBUG_BLOCK_printf("%*sPost-comp_inter_mode[ctx=%d,%d]: r=%d\n",
@@ -2168,7 +2168,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int ctx =
                     (nx[0]->ref[0][xoff[0]] == b->ref[0] && nx[0]->amvd[xoff[0]]) +
                     (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
-                amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
+                amvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[mode_ctx][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=%d|%d,%d]: r=%d\n",
                                    depth, "", mode_ctx, ctx, amvd, ts->msac.rng);
@@ -2177,12 +2177,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             refmvs_candidate mvstack[6];
             int n_mvs[2];
             if (b->inter_mode > NEARMV_NEWMV) {
-                dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
+                dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[0] + 1, b->ref[1] + 1 } },
                                   bs, 0, t->by, t->bx);
             } else if (b->ref[0] == b->ref[1]) {
-                dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
+                dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
@@ -2191,11 +2191,11 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 n_mvs[1] = n_mvs[0];
             } else {
-                dav1d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
+                dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
                 refmvs_candidate mvstack2[6];
-                dav1d_refmvs_find(&t->rt, mvstack2, NULL, &n_mvs[1],
+                dav2d_refmvs_find(&t->rt, mvstack2, NULL, &n_mvs[1],
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[1] + 1, -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
@@ -2228,9 +2228,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             int jmvd_scale_mode = 0;
             if (b->inter_mode == JOINT_NEWMV || b->inter_mode == OPFL_JOINT_NEWMV) {
                 jmvd_scale_mode = amvd ?
-                    dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                    dav2d_msac_decode_symbol_adapt4(&ts->msac,
                         ts->cdf.m.jmvd_amvd_scale_mode, 2) :
-                    dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                    dav2d_msac_decode_symbol_adapt8(&ts->msac,
                         ts->cdf.m.jmvd_scale_mode, 4);
                 DEBUG_BLOCK_printf("%*sPost-jmvd_scale_mode[%d]: r=%d\n",
                                    depth, "", jmvd_scale_mode, ts->msac.rng);
@@ -2265,7 +2265,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     const int cs_ctx =
                         (x1 >= MM_WARP_CAUSAL || x2 >= MM_WARP_CAUSAL) +
                         (x1 == MM_WARP_CAUSAL) + (x2 == MM_WARP_CAUSAL);
-                    if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                    if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.warp_causal[cs_ctx]))
                     {
                         b->motion_mode = MM_WARP_CAUSAL;
@@ -2282,7 +2282,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int max_drl_bits = f->frame_hdr->max_drl_bits;
                 for (int r = 0, n = 0, ctx = 0; r < n_drls; r++) {
                     for (; n < max_drl_bits; n++, ctx += ctx < 2) {
-                        if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                        if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                                  ts->cdf.m.drl_idx[ctx][comp_ctx]))
                         {
                             break;
@@ -2304,12 +2304,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int mvprec1 = boff[0] == -1 ? 0 : nb[0]->mvprec[boff[0]];
                 const int mvprec2 = boff[1] == -1 ? 0 : nb[1]->mvprec[boff[1]];
                 const int ctx1 = (mvprec1 & 1) + (mvprec2 & 1);
-                if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                                                   ts->cdf.m.mvprec_def[ctx1]))
                 {
                     const int ctx2 = (mvprec1 | mvprec2) >> 1;
                     const int idx =
-                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
                     mv_prec = mv_prec_tbl[mv_prec == 6][idx];
                     mvprec_def = 2;
@@ -2341,7 +2341,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 int sum_mvd = 0, nnzc = 0;
                 for (n = start; n < end; n++) {
                     b->mv[n] = mvstack[drl_idx[n]].mv[n];
-                    m[n] = dav1d_comp_inter_pred_modes[b->inter_mode -
+                    m[n] = dav2d_comp_inter_pred_modes[b->inter_mode -
                                                        NEARMV_NEARMV][n];
                     if (m[n] != NEWMV) continue;
 
@@ -2379,12 +2379,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         if (m[n] != NEWMV) continue;
                         if (diff[n].y) {
                             const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
-                                          dav1d_msac_decode_bool_bypass(&ts->msac);
+                                          dav2d_msac_decode_bool_bypass(&ts->msac);
                             if (s) diff[n].y = -diff[n].y;
                         }
                         if (diff[n].x) {
                             const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
-                                          dav1d_msac_decode_bool_bypass(&ts->msac);
+                                          dav2d_msac_decode_bool_bypass(&ts->msac);
                             if (s) diff[n].x = -diff[n].x;
                         }
                         if (!amvd && mv_prec <= 3)
@@ -2431,7 +2431,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->refine_mv = 2; // implicitly enabled
                 } else {
                     const int ctx = b->inter_mode - NEARMV_NEARMV;
-                    b->refine_mv = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    b->refine_mv = dav2d_msac_decode_bool_adapt(&ts->msac,
                                        ts->cdf.m.refine_mv[ctx]);
                     DEBUG_BLOCK_printf("%*sPost-refinemv[ctx=%d,%d]: r=%d\n",
                                        depth, "", ctx + 1, b->refine_mv,
@@ -2448,8 +2448,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
                 !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
                 (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1 ||
-                 f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION ||
-                 f->frame_hdr->gmv[b->ref[1]].type == DAV1D_WM_TYPE_TRANSLATION);
+                 f->frame_hdr->gmv[b->ref[0]].type == DAV2D_WM_TYPE_TRANSLATION ||
+                 f->frame_hdr->gmv[b->ref[1]].type == DAV2D_WM_TYPE_TRANSLATION);
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
@@ -2466,19 +2466,19 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #undef comptype_ctx
                 const int ctx = cctx0 + cctx1 + (cctx0 && cctx1) +
                     (f->absrefdist[b->ref[0]] == f->absrefdist[b->ref[1]]) * 6;
-                const int has_mask = dav1d_msac_decode_bool_adapt(&ts->msac,
+                const int has_mask = dav2d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.comp_type_masked[ctx]);
                 if (has_mask) {
                     if (imax(bw4, bh4) <= 16 &&
-                        !dav1d_msac_decode_bool_adapt(&ts->msac,
+                        !dav2d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.comp_type_weighted))
                     {
                         b->comp_type = COMP_INTER_WEDGE;
                         b->wedge_idx = read_wedge_idx(ts);
-                        b->wedge_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        b->wedge_sign = dav2d_msac_decode_bool_bypass(&ts->msac);
                     } else {
                         b->comp_type = COMP_INTER_SEG;
-                        b->mask_sign = dav1d_msac_decode_bool_bypass(&ts->msac);
+                        b->mask_sign = dav2d_msac_decode_bool_bypass(&ts->msac);
                     }
                 }
                 DEBUG_BLOCK_printf("%*sPost-comp_inter_type[ctx=%d,%d,%c=%d|%d]: r=%d\n",
@@ -2498,7 +2498,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             {
                 int n;
                 for (n = 0; n < 4; n++) {
-                    if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                    if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                                                       ts->cdf.m.cwp_idx[n]))
                     {
                         break;
@@ -2544,7 +2544,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             const int cnt_cur = cnt[i + 1];
                             cnt_rem -= cnt_cur;
                             const int ctx = iclip(cnt_cur - cnt_rem + 1, 0, 2);
-                            if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                            if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                     ts->cdf.m.single_ref[ctx][i]))
                             {
                                 break;
@@ -2571,7 +2571,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 b->inter_mode = GLOBALMV;
             } else if (is_tip) {
                 b->inter_mode = NEARMV +
-                    2 * dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip_mode);
+                    2 * dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.tip_mode);
                 DEBUG_BLOCK_printf("%*sPost-tip_mode[%d]: r=%d\n",
                                    depth, "", b->inter_mode, ts->msac.rng);
             } else {
@@ -2584,16 +2584,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                         ts->tiling.col_end : have_top_right,
                                         have_bottom_left,
                                      is_sb_boundary, b_dim, b->ref[0]);
-                    allow_warp = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    allow_warp = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                               ts->cdf.m.warp[ctx]);
                 }
                 if (allow_warp) {
                     b->inter_mode = !f->frame_hdr->force_integer_mv &&
-                                    !dav1d_msac_decode_bool_adapt(&ts->msac,
+                                    !dav2d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.warp_newmv) ? WARPNEWMV : WARPMV;
                 } else {
                     b->inter_mode = NEARMV +
-                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.inter_mode[sngl_ctx], 2);
                 }
                 DEBUG_BLOCK_printf("%*sPost-single_inter_mode[ctx=%d,%d]: r=%d\n",
@@ -2605,7 +2605,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int ctx =
                     (nx[0]->ref[0][xoff[0]] == b->ref[0] && nx[0]->amvd[xoff[0]]) +
                     (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
-                amvd = dav1d_msac_decode_bool_adapt(&ts->msac,
+                amvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[4][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=4|%d,%d]: r=%d\n",
                                    depth, "", ctx, amvd, ts->msac.rng);
@@ -2614,7 +2614,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             refmvs_candidate mvstack[6];
             int32_t warp[4][7];
             int n_mvs[2];
-            dav1d_refmvs_find(&t->rt, mvstack,
+            dav2d_refmvs_find(&t->rt, mvstack,
                               b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV ?
                                   warp : NULL, n_mvs,
                               (union refmvs_refpair) { .ref = { b->ref[0] + 1, -1 }},
@@ -2646,19 +2646,19 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->inter_mode != GLOBALMV &&
                     imin(bw4, bh4) >= 2 && !f->svc[b->ref[0]][0].scale)
                 {
-                    b->bawp[0] = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    b->bawp[0] = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                               ts->cdf.m.bawp[0]);
                     if (b->bawp[0]) {
                         const int ctx = b->inter_mode == NEWMV ? 2 - amvd : 0;
-                        b->bawp[0] += dav1d_msac_decode_bool_adapt(&ts->msac,
+                        b->bawp[0] += dav2d_msac_decode_bool_adapt(&ts->msac,
                                           ts->cdf.m.bawp_explicit[ctx]);
                         if (b->bawp[0] == 2) {
-                            b->bawp[0] += dav1d_msac_decode_bool_adapt(&ts->msac,
+                            b->bawp[0] += dav2d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.bawp_explicit_scale);
                             b->bawp[0] |= ctx << 2;
                         }
                         if (has_chroma)
-                            b->bawp[1] = dav1d_msac_decode_bool_adapt(&ts->msac,
+                            b->bawp[1] = dav2d_msac_decode_bool_adapt(&ts->msac,
                                              ts->cdf.m.bawp[1]);
                     }
                     DEBUG_BLOCK_printf("%*sPost-bawp[%d,%d]: r=%d\n",
@@ -2672,15 +2672,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     b->inter_mode >= NEARMV && b->inter_mode <= NEWMV)
                 {
                     const int ctx = size_group_lookup[bs];
-                    if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                    if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                                      ts->cdf.m.interintra[ctx]))
                     {
                         b->motion_mode = MM_INTERINTRA;
-                        b->interintra_mode = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        b->interintra_mode = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                                 ts->cdf.m.interintra_mode[ctx], 3);
                         b->wedge_idx = -1;
                         if (imin(bw4, bh4) > 1 &&
-                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                            dav2d_msac_decode_bool_adapt(&ts->msac,
                                 ts->cdf.m.interintra_wedge))
                         {
                             b->wedge_idx = read_wedge_idx(ts);
@@ -2718,14 +2718,14 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                                    nb[1]->motion_mode[boff[1]];
                         const int ext_ctx = (x1 >= MM_WARP_CAUSAL) +
                                             (x2 >= MM_WARP_CAUSAL);
-                        if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                        if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                ts->cdf.m.warp_extend[ext_ctx]))
                         {
                             b->motion_mode = MM_WARP_EXTEND;
                         } else {
                             const int cs_ctx = (ext_ctx > 0) +
                                 (x1 == MM_WARP_CAUSAL) + (x2 == MM_WARP_CAUSAL);
-                            b->motion_mode = dav1d_msac_decode_bool_adapt(&ts->msac,
+                            b->motion_mode = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.warp_causal[cs_ctx]) ?
                                 MM_WARP_CAUSAL : MM_WARP_DELTA;
                         }
@@ -2736,7 +2736,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
                 if (b->motion_mode == MM_WARP_DELTA) {
                     for (; warp_ref_idx < 3; warp_ref_idx++) {
-                        if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                        if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                                  ts->cdf.m.warp_ref_idx[warp_ref_idx]))
                         {
                             break;
@@ -2747,7 +2747,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
 
                 if (b->inter_mode == WARPMV && warp_ref_idx < 2) {
-                    warpmv_with_mvd = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    warpmv_with_mvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                           ts->cdf.m.warpmv_with_mvd);
                     DEBUG_BLOCK_printf("%*sPost-warpmv_with_mvd[%d]: r=%d\n",
                                        depth, "", warpmv_with_mvd, ts->msac.rng);
@@ -2760,7 +2760,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int max_drl_bits = f->frame_hdr->max_drl_bits;
                 int n = 0;
                 for (int ctx = 0; n < max_drl_bits; n++, ctx += ctx < 2) {
-                    if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                    if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                              is_tip ? ts->cdf.m.tip_drl_idx[ctx] :
                                       ts->cdf.m.drl_idx[ctx][sngl_ctx]))
                     {
@@ -2780,12 +2780,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 const int mvprec1 = boff[0] == -1 ? 0 : nb[0]->mvprec[boff[0]];
                 const int mvprec2 = boff[1] == -1 ? 0 : nb[1]->mvprec[boff[1]];
                 const int ctx1 = (mvprec1 & 1) + (mvprec2 & 1);
-                if (!dav1d_msac_decode_bool_adapt(&ts->msac,
+                if (!dav2d_msac_decode_bool_adapt(&ts->msac,
                                                   ts->cdf.m.mvprec_def[ctx1]))
                 {
                     const int ctx2 = (mvprec1 | mvprec2) >> 1;
                     const int idx =
-                        dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.mvprec_rem[ctx2][mv_prec - 4], 2);
                     mv_prec = mv_prec_tbl[mv_prec == 6][idx];
                     mvprec_def = 2;
@@ -2829,12 +2829,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     }
                     if (diff.y) {
                         const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
-                                      dav1d_msac_decode_bool_bypass(&ts->msac);
+                                      dav2d_msac_decode_bool_bypass(&ts->msac);
                         if (s) diff.y = -diff.y;
                     }
                     if (diff.x) {
                         const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
-                                      dav1d_msac_decode_bool_bypass(&ts->msac);
+                                      dav2d_msac_decode_bool_bypass(&ts->msac);
                         if (s) diff.x = -diff.x;
                     }
                     if (!amvd && mv_prec <= 3)
@@ -2854,7 +2854,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 ((f->seq_hdr->six_param_warp_delta && warp_ref_idx == 1) ||
                  warp_ref_idx == 0))
             {
-                const int prec = dav1d_msac_decode_bool_adapt(&ts->msac,
+                const int prec = dav2d_msac_decode_bool_adapt(&ts->msac,
                                      ts->cdf.m.warp_delta_prec[bs]);
                 const int np = f->seq_hdr->six_param_warp_delta &&
                                warp_ref_idx == 1 ? 4 : 2;
@@ -2862,16 +2862,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 for (int n = 0; n < np; n++) {
                     const int ctx = n - 1U > 1U;
                     b->matrix[n] =
-                        dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                        dav2d_msac_decode_symbol_adapt8(&ts->msac,
                             ts->cdf.m.warp_delta_param[0][!ctx], 7);
                     if (b->matrix[n] == 7 && prec)
                         b->matrix[n] +=
-                            dav1d_msac_decode_symbol_adapt8(&ts->msac,
+                            dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.warp_delta_param[1][!ctx], 7);
                     if (b->matrix[n]) {
                         const int base = ((n - 1U) >= 2U) * 0x10000;
                         const int step = 1 << (11 - prec);
-                        const int sign = dav1d_msac_decode_bool_adapt(&ts->msac,
+                        const int sign = dav2d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.warp_delta_sign);
                         if (sign) b->matrix[n] = -b->matrix[n];
                         m[2 + n] = iclip(warp[warp_ref_idx][n + 2] + b->matrix[n] * step,
@@ -2884,9 +2884,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     m[5] = m[2];
                     m[4] = -m[3];
                 }
-                dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
-                t->warpmv[0].type = dav1d_get_shear_params(&t->warpmv[0]) ?
-                    DAV1D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
+                dav2d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
+                t->warpmv[0].type = dav2d_get_shear_params(&t->warpmv[0]) ?
+                    DAV2D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
                 DEBUG_BLOCK_printf("%*sPost-warp_param_signal[%d,%d,%d,%d]: r=%d\n",
                                    depth, "", b->matrix[0], b->matrix[1],
                                    (np == 4) ? b->matrix[2] : 0,
@@ -2894,9 +2894,9 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             } else if (b->motion_mode == MM_WARP_DELTA) {
                 memcpy(t->warpmv[0].matrix, warp[warp_ref_idx],
                        sizeof(int32_t) * 6);
-                dav1d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
-                t->warpmv[0].type = dav1d_get_shear_params(&t->warpmv[0]) ?
-                    DAV1D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
+                dav2d_set_affine_mv2d(bw4, bh4, b->mv[0], &t->warpmv[0], t->bx, t->by);
+                t->warpmv[0].type = dav2d_get_shear_params(&t->warpmv[0]) ?
+                    DAV2D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
             } else if (b->motion_mode == MM_WARP_CAUSAL) {
                 derive_warpmv(t, have_top, have_left, bw4, bh4, w4, h4,
                               b->ref[0], b->mv[0], &t->warpmv[0]);
@@ -2951,7 +2951,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 if (y_off || x_off)
                     extend_warpmv(t, x_off, y_off, b_dim, b, &t->warpmv[0]);
                 else
-                    t->warpmv[0].type = DAV1D_WM_TYPE_INVALID;
+                    t->warpmv[0].type = DAV2D_WM_TYPE_INVALID;
             }
 
             b->warp_ii = 0;
@@ -2959,13 +2959,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 imin(bw4, bh4) >= 2 && imax(bw4, bh4) <= 16)
             {
                 const int ctx = size_group_lookup[bs];
-                if (dav1d_msac_decode_bool_adapt(&ts->msac,
+                if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.warp_interintra[ctx]))
                 {
                     b->warp_ii = 1;
-                    b->interintra_mode = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                    b->interintra_mode = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                             ts->cdf.m.interintra_mode[ctx], 3);
-                    b->wedge_idx = dav1d_msac_decode_bool_adapt(&ts->msac,
+                    b->wedge_idx = dav2d_msac_decode_bool_adapt(&ts->msac,
                         ts->cdf.m.interintra_wedge) ? read_wedge_idx(ts) : -1;
                 }
                 DEBUG_BLOCK_printf("%*sPost-warp_ii[%d,%d,%d]: r=%d\n",
@@ -2976,7 +2976,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
             has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
                 (b->inter_mode != GLOBALMV || imin(bw4, bh4) == 1 ||
-                 f->frame_hdr->gmv[b->ref[0]].type == DAV1D_WM_TYPE_TRANSLATION);
+                 f->frame_hdr->gmv[b->ref[0]].type == DAV2D_WM_TYPE_TRANSLATION);
         }
 
         // subpel filter
@@ -2984,16 +2984,16 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             b->inter_mode >= OPFL_NEARMV_NEARMV)
         {
             assert(!has_subpel_filter);
-            b->filter = DAV1D_FILTER_8TAP_SHARP;
-        } else if (f->frame_hdr->subpel_filter_mode == DAV1D_FILTER_SWITCHABLE) {
+            b->filter = DAV2D_FILTER_8TAP_SHARP;
+        } else if (f->frame_hdr->subpel_filter_mode == DAV2D_FILTER_SWITCHABLE) {
             if (has_subpel_filter) {
                 const int ctx = get_filter_ctx(nb, boff, b->ref);
-                b->filter = dav1d_msac_decode_symbol_adapt4(&ts->msac,
+                b->filter = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                                 ts->cdf.m.filter[ctx],
-                                DAV1D_N_SWITCHABLE_FILTERS - 1);
+                                DAV2D_N_SWITCHABLE_FILTERS - 1);
                 DEBUG_BLOCK_printf("%*sPost-subpelfilter[ctx=%d,%d]: r=%d\n",
                                    depth, "", ctx, b->filter, ts->msac.rng);
-            } else b->filter = DAV1D_FILTER_8TAP_REGULAR;
+            } else b->filter = DAV2D_FILTER_8TAP_REGULAR;
         } else {
             b->filter = f->frame_hdr->subpel_filter_mode;
         }
@@ -3010,14 +3010,14 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                depth, "", b->mv[0].y, b->mv[0].x);
         }
         if (t->f->seq_hdr->refmv_bank)
-            dav1d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
+            dav2d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
         if (b->motion_mode > MM_INTERINTRA) {
             int res = 0;
-            if (t->warpmv[0].type != DAV1D_WM_TYPE_INVALID)
-                res = dav1d_refmvs_warp_add(&t->rt, t->warpmv,
+            if (t->warpmv[0].type != DAV2D_WM_TYPE_INVALID)
+                res = dav2d_refmvs_warp_add(&t->rt, t->warpmv,
                                             DB_ONLY(t->by, t->bx) b->ref[0]);
-            if (!res && is_comp && t->warpmv[1].type != DAV1D_WM_TYPE_INVALID)
-                dav1d_refmvs_warp_add(&t->rt, &t->warpmv[1],
+            if (!res && is_comp && t->warpmv[1].type != DAV2D_WM_TYPE_INVALID)
+                dav2d_refmvs_warp_add(&t->rt, &t->warpmv[1],
                                       DB_ONLY(t->by, t->bx) b->ref[1]);
         }
         if (is_comp)
@@ -3040,12 +3040,12 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             f->frame_hdr->loopfilter.level_y[1])
         {
             const uint16_t tx_split[2] = { 0, 0 };
-            enum RectTxfmSize ytx = dav1d_max_txfm_size_for_bs[bs][0], uvtx = b->uvtx;
+            enum RectTxfmSize ytx = dav2d_max_txfm_size_for_bs[bs][0], uvtx = b->uvtx;
             if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
                 ytx  = (enum RectTxfmSize) TX_4X4;
                 uvtx = (enum RectTxfmSize) TX_4X4;
             }
-            dav1d_create_lf_mask_inter(t->lf_mask, t->bx, t->by, f->bw, f->bh, b->skip_txfm,
+            dav2d_create_lf_mask_inter(t->lf_mask, t->bx, t->by, f->bw, f->bh, b->skip_txfm,
                                        bs, ytx, tx_split, uvtx, f->cur.p.layout,
                                        &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                        has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
@@ -3081,8 +3081,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 #undef set_ctx
         }
         if (has_chroma) {
-            dav1d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
-            dav1d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], DC_PRED);
+            dav2d_memset_pow2[ulog2(cbw4)](&t->a->uvmode[cbx4], DC_PRED);
+            dav2d_memset_pow2[ulog2(cbh4)](&t->l.uvmode[cby4], DC_PRED);
         }
     }
 
@@ -3103,7 +3103,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
     if (has_luma &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
-        dav1d_create_lf_mask_intra(t->lf_mask, b, t->bx, t->by, f->bw, f->bh,
+        dav2d_create_lf_mask_intra(t->lf_mask, b, t->bx, t->by, f->bw, f->bh,
                                    f->cur.p.layout,
                                    &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                    has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
@@ -3124,7 +3124,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
     }
-    if (f->seq_hdr->sdp && f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400 &&
+    if (f->seq_hdr->sdp && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400 &&
         cbs == BS_INVALID)
     {
         uint8_t *dirmap = &t->luma_intra_dir_mode_map[(t->by & 15) * 16 +
@@ -3149,7 +3149,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             // y
             if (imin(bw4, bh4) > 1 &&
                 ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
-                 (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV1D_WM_TYPE_TRANSLATION)))
+                 (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV2D_WM_TYPE_TRANSLATION)))
             {
                 affine_lowest_px_luma(t, &lowest_px[b->ref[0]][0], b_dim,
                                       b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
@@ -3199,7 +3199,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 } else {
                     if (imin(cbw4, cbh4) > 1 &&
                         ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
-                         (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV1D_WM_TYPE_TRANSLATION)))
+                         (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV2D_WM_TYPE_TRANSLATION)))
                     {
                         affine_lowest_px_chroma(t, &lowest_px[b->ref[0]][1], b_dim,
                                                 b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
@@ -3246,25 +3246,25 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 
 #include <sanitizer/msan_interface.h>
 
-static int checked_decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+static int checked_decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             const enum BlockSize lbs, const enum BlockSize cbs)
 {
-    const Dav1dFrameContext *const f = t->f;
+    const Dav2dFrameContext *const f = t->f;
     const int err = decode_b(t, DB_ONLY(depth) lbs, cbs);
     enum BlockSize bs[2] = { lbs, cbs };
 
     if (err == 0 && !(t->frame_thread.pass & 1))
         for (int i = 0; i < 2; i++) {
             if (bs[i] == BS_INVALID) continue;
-            const uint8_t *const b_dim = dav1d_block_dimensions[bs[i]];
+            const uint8_t *const b_dim = dav2d_block_dimensions[bs[i]];
             const int bw4 = b_dim[0], bh4 = b_dim[1];
             const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
             const ptrdiff_t stride = f->cur.stride[i];
             int bx = i ? t->cbx : t->bx, by = i ? t->cby : t->by;
 
             for (int p = i; p < 1 + i * 2; p++) {
-                const int ss_ver = p && f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
-                const int ss_hor = p && f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
+                const int ss_ver = p && f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+                const int ss_hor = p && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
                 const int width  = w4 << (2 - ss_hor + (bw4 == ss_hor));
                 const int height = h4 << (2 - ss_ver + (bh4 == ss_ver));
                 bx &= ~ss_hor; by &= ~ss_ver;
@@ -3301,15 +3301,15 @@ static int checked_decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
 // For chroma, these choices can then be used to infer the partition/direction.
 // sdp/cfl delay restrictions can also be calculated using these values.
 
-static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
+static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                      const enum BlockSize lbs, enum BlockSize cbs,
                      int *const dir_ptr)
 {
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
-    const Dav1dFrameContext *const f = t->f;
-    Dav1dTileState *const ts = t->ts;
-    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const Dav2dFrameContext *const f = t->f;
+    Dav2dTileState *const ts = t->ts;
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
     const int hw4 = bw4 >> 1, hh4 = bh4 >> 1;
     const int qw4 = hw4 >> 1, qh4 = hh4 >> 1;
@@ -3525,7 +3525,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 // inter frames, since 4x4 block sizes in such regions are invalid
                 const int is_split = mix_inter && b_dim[2] + b_dim[3] == 1 ? 0 :
                     (!have_h_split || !have_v_split) ||
-                    dav1d_msac_decode_bool_adapt(&ts->msac,
+                    dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.part_split[pl][ctx2]);
                 if (!is_split) {
                     bp = PARTITION_NONE;
@@ -3533,15 +3533,15 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     if ((bs == BS_128x128 || bs == BS_256x256) &&
                         have_v_split && have_h_split)
                     {
-                        assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
+                        assert(lbs == cbs || f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I400);
                         const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
                         const int is_square =
-                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                            dav2d_msac_decode_bool_adapt(&ts->msac,
                                 ts->cdf.m.part_square[ctx3]);
                         if (is_square)
                             bp = PARTITION_SPLIT;
                     } else if (imax(bw4, bh4) >= 32) {
-                        assert(lbs == cbs || f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400);
+                        assert(lbs == cbs || f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I400);
                         assert(bw4 != bh4);
                         bp = bw4 > bh4 ? PARTITION_V : PARTITION_H;
                     }
@@ -3558,7 +3558,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                             dir = v_aspect;
                         } else {
                             const int ctx4 = ctx1 + pcc->ctx[1] * 4;
-                            dir = dav1d_msac_decode_bool_adapt(&ts->msac,
+                            dir = dav2d_msac_decode_bool_adapt(&ts->msac,
                                       ts->cdf.m.part_dir[pl][ctx4]);
                         }
                         assert(pcc->part[dir][0] != -1);
@@ -3593,18 +3593,18 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                                        pl, dir, by4, bx4);
                                 const int ctx6 = ctx5 + pcc->ctx[0] * 4;
                                 const int is_ext =
-                                    dav1d_msac_decode_bool_adapt(&ts->msac,
+                                    dav2d_msac_decode_bool_adapt(&ts->msac,
                                         ts->cdf.m.part_ext[pl][ctx6]);
                                 if (is_ext) {
                                     bp = dir ? PARTITION_V3 : PARTITION_H3;
                                     if (has_hv4ab) {
                                         assert(pcc->part[dir][2] != -1);
                                         const int is_4way = !has_hv3 ||
-                                            dav1d_msac_decode_bool_adapt(&ts->msac,
+                                            dav2d_msac_decode_bool_adapt(&ts->msac,
                                                 ts->cdf.m.part_4way[pl][ctx6]);
                                         if (is_4way) {
                                             const int is_a_or_b =
-                                                dav1d_msac_decode_bool_bypass(&ts->msac);
+                                                dav2d_msac_decode_bool_bypass(&ts->msac);
                                             bp = PARTITION_H4A + dir * 2 + is_a_or_b;
                                         }
                                     }
@@ -3645,7 +3645,7 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
         {
             const int sz = b_dim[2] + b_dim[3];
             const int ctx = iclip(sz - 4, 0, 3) + (sz == 4);
-            t->intra_region = !dav1d_msac_decode_bool_adapt(&ts->msac,
+            t->intra_region = !dav2d_msac_decode_bool_adapt(&ts->msac,
                                    ts->cdf.m.region_type[ctx]);
             DEBUG_BLOCK_printf("%*sis_mixed_region[ctx=%d,%d]: r=%d\n",
                                depth, "", ctx, !t->intra_region, ts->msac.rng);
@@ -3689,9 +3689,9 @@ static int decode_sb(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 }
 #undef set_ctx
             } else {
-                dav1d_memset_pow2[b_dim[2]](&t->a->partition[pl][bx4],
+                dav2d_memset_pow2[b_dim[2]](&t->a->partition[pl][bx4],
                                             (uint8_t) ~(b_dim[0] - 1));
-                dav1d_memset_pow2[b_dim[3]](&t->l.partition[pl][by4],
+                dav2d_memset_pow2[b_dim[3]](&t->l.partition[pl][by4],
                                             (uint8_t) ~(b_dim[1] - 1));
             }
         }
@@ -3957,21 +3957,21 @@ static void reset_context(BlockContext *const ctx, const int keyframe, const int
     memset(ctx->mrl, 0, sizeof(ctx->mrl));
     memset(ctx->lcoef, 0x40, sizeof(ctx->lcoef));
     memset(ctx->ccoef, 0x40, sizeof(ctx->ccoef));
-    memset(ctx->filter, DAV1D_N_SWITCHABLE_FILTERS, sizeof(ctx->filter));
+    memset(ctx->filter, DAV2D_N_SWITCHABLE_FILTERS, sizeof(ctx->filter));
     memset(ctx->seg_pred, 0, sizeof(ctx->seg_pred));
     memset(ctx->pal_sz, 0, sizeof(ctx->pal_sz));
 }
 
 // { Y+U+V, Y+U } * 4
 static const uint8_t ss_size_mul[4][2] = {
-    [DAV1D_PIXEL_LAYOUT_I400] = {  4, 4 },
-    [DAV1D_PIXEL_LAYOUT_I420] = {  6, 5 },
-    [DAV1D_PIXEL_LAYOUT_I422] = {  8, 6 },
-    [DAV1D_PIXEL_LAYOUT_I444] = { 12, 8 },
+    [DAV2D_PIXEL_LAYOUT_I400] = {  4, 4 },
+    [DAV2D_PIXEL_LAYOUT_I420] = {  6, 5 },
+    [DAV2D_PIXEL_LAYOUT_I422] = {  8, 6 },
+    [DAV2D_PIXEL_LAYOUT_I444] = { 12, 8 },
 };
 
-static void setup_tile(Dav1dTileState *const ts,
-                       const Dav1dFrameContext *const f,
+static void setup_tile(Dav2dTileState *const ts,
+                       const Dav2dFrameContext *const f,
                        const uint8_t *const data, const size_t sz,
                        const int tile_row, const int tile_col,
                        const unsigned tile_start_off)
@@ -3996,10 +3996,10 @@ static void setup_tile(Dav1dTileState *const ts,
             NULL;
     }
 
-    dav1d_cdf_thread_copy(&ts->cdf, &f->in_cdf);
+    dav2d_cdf_thread_copy(&ts->cdf, &f->in_cdf);
     ts->last_qidx = f->frame_hdr->quant.yac;
 
-    dav1d_msac_init(&ts->msac, data, sz, f->frame_hdr->disable_cdf_update);
+    dav2d_msac_init(&ts->msac, data, sz, f->frame_hdr->disable_cdf_update);
 #if DEBUG_BLOCK_INFO
     struct { int by, bx; } tmem = {
         .by = row_sb_start << sb_shift, .bx = col_sb_start << sb_shift,
@@ -4021,12 +4021,12 @@ static void setup_tile(Dav1dTileState *const ts,
     ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
 
     for (int pl = 0; pl < 3; pl++) {
-        if (f->frame_hdr->restoration.p[pl].type == DAV1D_RESTORATION_NS_WIENER ||
-            f->frame_hdr->restoration.p[pl].type == DAV1D_RESTORATION_SWITCHABLE)
+        if (f->frame_hdr->restoration.p[pl].type == DAV2D_RESTORATION_NS_WIENER ||
+            f->frame_hdr->restoration.p[pl].type == DAV2D_RESTORATION_SWITCHABLE)
         {
             struct NsWienerBank *const bank = &ts->ns_wiener_bank[pl];
-            const int8_t (*const cf_range)[2] = pl ? dav1d_ns_wiener_coef_range_uv :
-                                                     dav1d_ns_wiener_coef_range_y;
+            const int8_t (*const cf_range)[2] = pl ? dav2d_ns_wiener_coef_range_uv :
+                                                     dav2d_ns_wiener_coef_range_y;
             memset(bank->bank_size, 0, sizeof(bank->bank_size));
             memset(bank->bank_idx, 0, sizeof(bank->bank_idx));
             const int n_classes = f->frame_hdr->restoration.p[pl].ns.num_classes;
@@ -4049,51 +4049,51 @@ static inline int decode_4way(MsacContext *const s, const int ref,
                               uint16_t *const cdf, int n_bits)
 {
     assert(n_bits >= 4);
-    const int bin = dav1d_msac_decode_symbol_adapt4(s, cdf, 3);
-    const int rem = dav1d_msac_decode_bools_bypass(s, n_bits + bin + !bin - 4);
+    const int bin = dav2d_msac_decode_symbol_adapt4(s, cdf, 3);
+    const int rem = dav2d_msac_decode_bools_bypass(s, n_bits + bin + !bin - 4);
     const int v = (bin ? (1 << (n_bits + bin - 4)) : 0) + rem;
     const int n = 1 << n_bits;
     return ref * 2 <= n ? inv_recenter(ref, v) :
                           n - 1 - inv_recenter(n - 1 - ref, v);
 }
 
-static void read_restoration_info(Dav1dTaskContext *const t,
+static void read_restoration_info(Dav2dTaskContext *const t,
                                   Av1RestorationUnit *const lr, const int p,
-                                  const enum Dav1dRestorationType frame_type)
+                                  const enum Dav2dRestorationType frame_type)
 {
-    const Dav1dFrameContext *const f = t->f;
-    Dav1dTileState *const ts = t->ts;
+    const Dav2dFrameContext *const f = t->f;
+    Dav2dTileState *const ts = t->ts;
 
-    if (frame_type == DAV1D_RESTORATION_SWITCHABLE) {
+    if (frame_type == DAV2D_RESTORATION_SWITCHABLE) {
         assert(!p);
-        if (dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.rst_switchable[0])) {
-            lr->type = DAV1D_RESTORATION_NONE;
+        if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.rst_switchable[0])) {
+            lr->type = DAV2D_RESTORATION_NONE;
         } else {
-            const int type = dav1d_msac_decode_bool_adapt(&ts->msac,
+            const int type = dav2d_msac_decode_bool_adapt(&ts->msac,
                                  ts->cdf.m.rst_switchable[1]);
-            lr->type = type ? DAV1D_RESTORATION_PC_WIENER :
-                              DAV1D_RESTORATION_NS_WIENER;
+            lr->type = type ? DAV2D_RESTORATION_PC_WIENER :
+                              DAV2D_RESTORATION_NS_WIENER;
         }
     } else {
-        assert(!p || frame_type == DAV1D_RESTORATION_NS_WIENER);
-        uint16_t *const cdf = frame_type == DAV1D_RESTORATION_NS_WIENER ?
+        assert(!p || frame_type == DAV2D_RESTORATION_NS_WIENER);
+        uint16_t *const cdf = frame_type == DAV2D_RESTORATION_NS_WIENER ?
                               ts->cdf.m.rst_ns_wiener : ts->cdf.m.rst_pc_wiener;
-        const int type = dav1d_msac_decode_bool_adapt(&ts->msac, cdf);
-        lr->type = type ? frame_type : DAV1D_RESTORATION_NONE;
+        const int type = dav2d_msac_decode_bool_adapt(&ts->msac, cdf);
+        lr->type = type ? frame_type : DAV2D_RESTORATION_NONE;
     }
 
-    const struct Dav1dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[p].ns;
-    if (lr->type == DAV1D_RESTORATION_NS_WIENER && !pd->frame_filters_on) {
+    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[p].ns;
+    if (lr->type == DAV2D_RESTORATION_NS_WIENER && !pd->frame_filters_on) {
         const int n_classes = pd->num_classes;
         unsigned exact_match_mask = 0;
         struct NsWienerBank *const bank = &ts->ns_wiener_bank[p];
         uint8_t bank_refs[16];
         for (int n = 0, mask = 1; n < n_classes; n++, mask <<= 1) {
-            const int exact_match = dav1d_msac_decode_bool_bypass(&ts->msac);
+            const int exact_match = dav2d_msac_decode_bool_bypass(&ts->msac);
             const int bank_size = bank->bank_size[n];
             int r;
             for (r = 0; r < bank_size - 1; r++) {
-                const int found = dav1d_msac_decode_bool_bypass(&ts->msac);
+                const int found = dav2d_msac_decode_bool_bypass(&ts->msac);
                 if (found) break;
             }
             r = (bank->bank_idx[n] - r) & 3;
@@ -4101,9 +4101,9 @@ static void read_restoration_info(Dav1dTaskContext *const t,
             bank_refs[n] = r;
         }
 
-        const unsigned *const masks = p ? dav1d_subset_masks_uv : dav1d_subset_masks_y;
-        const int8_t (*const cf_range)[2] = p ? dav1d_ns_wiener_coef_range_uv :
-                                                dav1d_ns_wiener_coef_range_y;
+        const unsigned *const masks = p ? dav2d_subset_masks_uv : dav2d_subset_masks_y;
+        const int8_t (*const cf_range)[2] = p ? dav2d_ns_wiener_coef_range_uv :
+                                                dav2d_ns_wiener_coef_range_y;
         for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
             const int r = bank_refs[n];
             int8_t *const filter = lr->ns_filter[n];
@@ -4117,13 +4117,13 @@ static void read_restoration_info(Dav1dTaskContext *const t,
             memset(filter, 0, 16 + !!p * 2);
             int s;
             for (s = 0; s < 3 - !!p; s++) {
-                const int found = dav1d_msac_decode_bool_adapt(&ts->msac,
+                const int found = dav2d_msac_decode_bool_adapt(&ts->msac,
                                       ts->cdf.m.wiener_ns_len[!!p]);
                 if (!found) break;
             }
             const unsigned mask = masks[s];
             const int asym = p && s &&
-                dav1d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
+                dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
             for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
                 if (!(m & 1)) continue;
                 filter[i] = decode_4way(&ts->msac, ref_filter[i] - cf_range[i][1],
@@ -4161,18 +4161,18 @@ static int check_trailing_bits_after_symbol_coder(const MsacContext *const msac)
     return 0;
 }
 
-int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
-    const Dav1dFrameContext *const f = t->f;
+int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
+    const Dav2dFrameContext *const f = t->f;
     const enum BlockSize root_bs = f->root_bs;
     const enum BlockSize c_root_bs =
-        f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I400 ? BS_INVALID : root_bs;
-    Dav1dTileState *const ts = t->ts;
-    const Dav1dContext *const c = f->c;
+        f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I400 ? BS_INVALID : root_bs;
+    Dav2dTileState *const ts = t->ts;
+    const Dav2dContext *const c = f->c;
     const int sb_step = f->sb_step;
     const int tile_row = ts->tiling.row, tile_col = ts->tiling.col;
 
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
-        dav1d_refmvs_tile_sbrow_init(&t->rt, &f->rf,
+        dav2d_refmvs_tile_sbrow_init(&t->rt, &f->rf,
                                      ts->tiling.col_start, ts->tiling.col_end,
                                      ts->tiling.row_start, ts->tiling.row_end,
                                      t->by >> f->sb_shift, ts->tiling.row,
@@ -4204,7 +4204,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     }
 
     if (f->c->n_tc > 1 && f->frame_hdr->use_ref_frame_mvs) {
-        dav1d_refmvs_load_tmvs(&f->rf, ts->tiling.row,
+        dav2d_refmvs_load_tmvs(&f->rf, ts->tiling.row,
                                ts->tiling.col_start >> 1, ts->tiling.col_end >> 1,
                                t->by >> 1, (t->by + sb_step) >> 1);
     }
@@ -4235,7 +4235,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
             break;
         }
         if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
-            dav1d_refmvs_reset_sb(&t->rt, t->by, t->bx);
+            dav2d_refmvs_reset_sb(&t->rt, t->by, t->bx);
         }
         if (f->frame_hdr->tip.frame_mode == 2) {
             Av1Block b = {
@@ -4255,7 +4255,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 .filter = f->frame_hdr->tip.subpel_filter,
                 .cwp_idx = 8,
             };
-            const uint8_t *const b_dim = dav1d_block_dimensions[root_bs];
+            const uint8_t *const b_dim = dav2d_block_dimensions[root_bs];
             splat_oneref_mv(DB_ONLY(0) f, t, root_bs, &b, t->by & 63,
                             b_dim[0], b_dim[1]);
             t->cbx = t->bx;
@@ -4285,7 +4285,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 if ((ty && fy + half_unit > th) || (tx && fx + half_unit > tw))
                     continue;
 
-                const enum Dav1dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
+                const enum Dav2dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
 
                 // FIXME many of these values can be pre-calculated at frame-level
                 const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
@@ -4326,7 +4326,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
                 return 1;
         }
         if ((IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc)) {
-            dav1d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
+            dav2d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
                                    t->bx >> 1, (t->bx + sb_step) >> 1,
                                    t->by >> 1, (t->by + sb_step) >> 1);
         }
@@ -4341,7 +4341,7 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
     int align_h = (f->bh + 63) & ~63;
     memcpy(&f->lf.tx_lpf_right_edge[0][align_h * tile_col + t->by],
            &t->l.tx_lpf_y[t->by & 0x30], sb_step);
-    const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
+    const int ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     align_h >>= ss_ver;
     memcpy(&f->lf.tx_lpf_right_edge[1][align_h * tile_col + (t->by >> ss_ver)],
            &t->l.tx_lpf_uv[(t->by & 0x30) >> ss_ver], sb_step >> ss_ver);
@@ -4354,13 +4354,13 @@ int dav1d_decode_tile_sbrow(Dav1dTaskContext *const t) {
            check_trailing_bits_after_symbol_coder(&ts->msac);
 }
 
-int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
-    const Dav1dContext *const c = f->c;
-    int retval = DAV1D_ERR(ENOMEM);
+int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
+    const Dav2dContext *const c = f->c;
+    int retval = DAV2D_ERR(ENOMEM);
 
     if (f->sbh > f->lf.start_of_tile_row_sz) {
-        dav1d_free(f->lf.start_of_tile_row);
-        f->lf.start_of_tile_row = dav1d_malloc(ALLOC_TILE, f->sbh * sizeof(uint8_t));
+        dav2d_free(f->lf.start_of_tile_row);
+        f->lf.start_of_tile_row = dav2d_malloc(ALLOC_TILE, f->sbh * sizeof(uint8_t));
         if (!f->lf.start_of_tile_row) {
             f->lf.start_of_tile_row_sz = 0;
             goto error;
@@ -4377,24 +4377,24 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     const int n_ts = f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows;
     if (n_ts != f->n_ts) {
         if (c->n_fc > 1) {
-            dav1d_free(f->frame_thread.tile_start_off);
+            dav2d_free(f->frame_thread.tile_start_off);
             f->frame_thread.tile_start_off =
-                dav1d_malloc(ALLOC_TILE, sizeof(*f->frame_thread.tile_start_off) * n_ts);
+                dav2d_malloc(ALLOC_TILE, sizeof(*f->frame_thread.tile_start_off) * n_ts);
             if (!f->frame_thread.tile_start_off) {
                 f->n_ts = 0;
                 goto error;
             }
         }
-        dav1d_free_aligned(f->ts);
-        f->ts = dav1d_alloc_aligned(ALLOC_TILE, sizeof(*f->ts) * n_ts, 32);
+        dav2d_free_aligned(f->ts);
+        f->ts = dav2d_alloc_aligned(ALLOC_TILE, sizeof(*f->ts) * n_ts, 32);
         if (!f->ts) goto error;
         f->n_ts = n_ts;
     }
 
     const int a_sz = f->sb256w * f->frame_hdr->tiling.t.rows * (1 + (c->n_fc > 1 && c->n_tc > 1));
     if (a_sz != f->a_sz) {
-        dav1d_free(f->a);
-        f->a = dav1d_malloc(ALLOC_TILE, sizeof(*f->a) * a_sz);
+        dav2d_free(f->a);
+        f->a = dav2d_malloc(ALLOC_TILE, sizeof(*f->a) * a_sz);
         if (!f->a) {
             f->a_sz = 0;
             goto error;
@@ -4421,9 +4421,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
         const int lowest_pixel_mem_sz = f->frame_hdr->tiling.t.cols * f->sbh;
         if (lowest_pixel_mem_sz != f->tile_thread.lowest_pixel_mem_sz) {
-            dav1d_free(f->tile_thread.lowest_pixel_mem);
+            dav2d_free(f->tile_thread.lowest_pixel_mem);
             f->tile_thread.lowest_pixel_mem =
-                dav1d_malloc(ALLOC_TILE, lowest_pixel_mem_sz *
+                dav2d_malloc(ALLOC_TILE, lowest_pixel_mem_sz *
                              sizeof(*f->tile_thread.lowest_pixel_mem));
             if (!f->tile_thread.lowest_pixel_mem) {
                 f->tile_thread.lowest_pixel_mem_sz = 0;
@@ -4445,9 +4445,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
         const int cbi_sz = num_sb256 * size_mul[0];
         if (cbi_sz != f->frame_thread.cbi_sz) {
-            dav1d_free_aligned(f->frame_thread.cbi);
+            dav2d_free_aligned(f->frame_thread.cbi);
             f->frame_thread.cbi =
-                dav1d_alloc_aligned(ALLOC_BLOCK, sizeof(*f->frame_thread.cbi) *
+                dav2d_alloc_aligned(ALLOC_BLOCK, sizeof(*f->frame_thread.cbi) *
                                     cbi_sz * 64 * 64 / 4, 64);
             if (!f->frame_thread.cbi) {
                 f->frame_thread.cbi_sz = 0;
@@ -4458,9 +4458,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
         const int cf_sz = (num_sb256 * size_mul[0]) << hbd;
         if (cf_sz != f->frame_thread.cf_sz) {
-            dav1d_free_aligned(f->frame_thread.cf);
+            dav2d_free_aligned(f->frame_thread.cf);
             f->frame_thread.cf =
-                dav1d_alloc_aligned(ALLOC_COEF, (size_t)cf_sz * 256 * 256 / 2, 64);
+                dav2d_alloc_aligned(ALLOC_COEF, (size_t)cf_sz * 256 * 256 / 2, 64);
             if (!f->frame_thread.cf) {
                 f->frame_thread.cf_sz = 0;
                 goto error;
@@ -4472,9 +4472,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         if (f->frame_hdr->allow_screen_content_tools) {
             const int pal_sz = num_sb256 << hbd;
             if (pal_sz != f->frame_thread.pal_sz) {
-                dav1d_free_aligned(f->frame_thread.pal);
+                dav2d_free_aligned(f->frame_thread.pal);
                 f->frame_thread.pal =
-                    dav1d_alloc_aligned(ALLOC_PAL, sizeof(*f->frame_thread.pal) *
+                    dav2d_alloc_aligned(ALLOC_PAL, sizeof(*f->frame_thread.pal) *
                                         pal_sz * 32 * 32, 64);
                 if (!f->frame_thread.pal) {
                     f->frame_thread.pal_sz = 0;
@@ -4485,9 +4485,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
             const int pal_idx_sz = num_sb256 * size_mul[1];
             if (pal_idx_sz != f->frame_thread.pal_idx_sz) {
-                dav1d_free_aligned(f->frame_thread.pal_idx);
+                dav2d_free_aligned(f->frame_thread.pal_idx);
                 f->frame_thread.pal_idx =
-                    dav1d_alloc_aligned(ALLOC_PAL, sizeof(*f->frame_thread.pal_idx) *
+                    dav2d_alloc_aligned(ALLOC_PAL, sizeof(*f->frame_thread.pal_idx) *
                                         pal_idx_sz * 256 * 256 / 8, 64);
                 if (!f->frame_thread.pal_idx) {
                     f->frame_thread.pal_idx_sz = 0;
@@ -4496,8 +4496,8 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
                 f->frame_thread.pal_idx_sz = pal_idx_sz;
             }
         } else if (f->frame_thread.pal) {
-            dav1d_freep_aligned(&f->frame_thread.pal);
-            dav1d_freep_aligned(&f->frame_thread.pal_idx);
+            dav2d_freep_aligned(&f->frame_thread.pal);
+            dav2d_freep_aligned(&f->frame_thread.pal_idx);
             f->frame_thread.pal_sz = f->frame_thread.pal_idx_sz = 0;
         }
     }
@@ -4508,11 +4508,11 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         uv_stride * f->sbh * 8 != f->lf.cdef_buf_plane_sz[1] ||
         f->sbh != f->lf.cdef_buf_sbh)
     {
-        dav1d_free_aligned(f->lf.cdef_line_buf);
+        dav2d_free_aligned(f->lf.cdef_line_buf);
         size_t alloc_sz = 64;
         alloc_sz += (size_t)llabs(y_stride) * 4 * f->sbh;
         alloc_sz += (size_t)llabs(uv_stride) * 8 * f->sbh;
-        uint8_t *ptr = f->lf.cdef_line_buf = dav1d_alloc_aligned(ALLOC_CDEF, alloc_sz, 32);
+        uint8_t *ptr = f->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, alloc_sz, 32);
         if (!ptr) {
             f->lf.cdef_buf_plane_sz[0] = f->lf.cdef_buf_plane_sz[1] = 0;
             goto error;
@@ -4550,12 +4550,12 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
         uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1])
     {
-        dav1d_free_aligned(f->lf.lr_line_buf);
+        dav2d_free_aligned(f->lf.lr_line_buf);
         // lr simd may overread the input, so slightly over-allocate the lpf buffer
         size_t alloc_sz = 128;
         alloc_sz += (size_t)llabs(y_stride) * num_lines;
         alloc_sz += (size_t)llabs(uv_stride) * num_lines * 2;
-        uint8_t *ptr = f->lf.lr_line_buf = dav1d_alloc_aligned(ALLOC_LR, alloc_sz, 64);
+        uint8_t *ptr = f->lf.lr_line_buf = dav2d_alloc_aligned(ALLOC_LR, alloc_sz, 64);
         if (!ptr) {
             f->lf.lr_buf_plane_sz[0] = f->lf.lr_buf_plane_sz[1] = 0;
             goto error;
@@ -4581,8 +4581,8 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
     // update allocation for loopfilter masks
     if (num_sb256 != f->lf.mask_sz) {
-        dav1d_free(f->lf.mask);
-        f->lf.mask = dav1d_malloc(ALLOC_LF, sizeof(*f->lf.mask) * num_sb256);
+        dav2d_free(f->lf.mask);
+        f->lf.mask = dav2d_malloc(ALLOC_LF, sizeof(*f->lf.mask) * num_sb256);
         // over-allocate by 3 bytes since some of the SIMD implementations
         // index this from the level type and can thus over-read by up to 3
         if (!f->lf.mask) {
@@ -4590,8 +4590,8 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
             goto error;
         }
         if (c->n_fc > 1) {
-            dav1d_free(f->frame_thread.b);
-            f->frame_thread.b = dav1d_malloc(ALLOC_BLOCK, sizeof(*f->frame_thread.b) *
+            dav2d_free(f->frame_thread.b);
+            f->frame_thread.b = dav2d_malloc(ALLOC_BLOCK, sizeof(*f->frame_thread.b) *
                                              num_sb256 * 64 * 64);
             if (!f->frame_thread.b) {
                 f->lf.mask_sz = 0;
@@ -4603,8 +4603,8 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
     const int lr_mask_sz = f->sb256w * f->sb256h;
     if (lr_mask_sz != f->lf.lr_mask_sz) {
-        dav1d_free(f->lf.lr_mask);
-        f->lf.lr_mask = dav1d_malloc(ALLOC_LR, sizeof(*f->lf.lr_mask) * lr_mask_sz);
+        dav2d_free(f->lf.lr_mask);
+        f->lf.lr_mask = dav2d_malloc(ALLOC_LR, sizeof(*f->lf.lr_mask) * lr_mask_sz);
         if (!f->lf.lr_mask) {
             f->lf.lr_mask_sz = 0;
             goto error;
@@ -4612,18 +4612,18 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
         f->lf.lr_mask_sz = lr_mask_sz;
     }
     f->lf.restore_planes =
-        ((f->frame_hdr->restoration.p[0].type != DAV1D_RESTORATION_NONE) << 0) +
-        ((f->frame_hdr->restoration.p[1].type != DAV1D_RESTORATION_NONE) << 1) +
-        ((f->frame_hdr->restoration.p[2].type != DAV1D_RESTORATION_NONE) << 2);
+        ((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE) << 0) +
+        ((f->frame_hdr->restoration.p[1].type != DAV2D_RESTORATION_NONE) << 1) +
+        ((f->frame_hdr->restoration.p[2].type != DAV2D_RESTORATION_NONE) << 2);
     if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
         init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
     }
 
     const int ipred_edge_sz = f->sbh * f->sb256w << hbd;
     if (ipred_edge_sz != f->ipred_edge_sz) {
-        dav1d_free_aligned(f->ipred_edge[0]);
+        dav2d_free_aligned(f->ipred_edge[0]);
         uint8_t *ptr = f->ipred_edge[0] =
-            dav1d_alloc_aligned(ALLOC_IPRED, ipred_edge_sz * 256 * 3, 64);
+            dav2d_alloc_aligned(ALLOC_IPRED, ipred_edge_sz * 256 * 3, 64);
         if (!ptr) {
             f->ipred_edge_sz = 0;
             goto error;
@@ -4635,8 +4635,8 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
 
     const int re_sz = f->sb256h * f->frame_hdr->tiling.t.cols;
     if (re_sz != f->lf.re_sz) {
-        dav1d_free(f->lf.tx_lpf_right_edge[0]);
-        f->lf.tx_lpf_right_edge[0] = dav1d_malloc(ALLOC_LF, re_sz * 64 * 2);
+        dav2d_free(f->lf.tx_lpf_right_edge[0]);
+        f->lf.tx_lpf_right_edge[0] = dav2d_malloc(ALLOC_LF, re_sz * 64 * 2);
         if (!f->lf.tx_lpf_right_edge[0]) {
             f->lf.re_sz = 0;
             goto error;
@@ -4648,7 +4648,7 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     // init ref mvs
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
         const int ret =
-            dav1d_refmvs_init_frame(&f->rf, f->seq_hdr, f->frame_hdr,
+            dav2d_refmvs_init_frame(&f->rf, f->seq_hdr, f->frame_hdr,
                                     f->refpoc, f->mvs, f->refrefpoc, f->refcnt,
                                     f->ref_mvs, f->c->n_tc, f->c->n_fc);
         if (ret < 0) goto error;
@@ -4658,9 +4658,9 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
     init_quant_tables(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, f->dq);
     if (f->frame_hdr->quant.qm.enabled)
         for (int i = 0; i < N_RECT_TX_SIZES; i++) {
-            f->qm[i][0] = dav1d_qm_tbl[f->frame_hdr->quant.qm.y[0]][0][i];
-            f->qm[i][1] = dav1d_qm_tbl[f->frame_hdr->quant.qm.u[0]][1][i];
-            f->qm[i][2] = dav1d_qm_tbl[f->frame_hdr->quant.qm.v[0]][1][i];
+            f->qm[i][0] = dav2d_qm_tbl[f->frame_hdr->quant.qm.y[0]][0][i];
+            f->qm[i][1] = dav2d_qm_tbl[f->frame_hdr->quant.qm.u[0]][1][i];
+            f->qm[i][2] = dav2d_qm_tbl[f->frame_hdr->quant.qm.v[0]][1][i];
         }
     else
         memset(f->qm, 0, sizeof(f->qm));
@@ -4670,7 +4670,7 @@ int dav1d_decode_frame_init(Dav1dFrameContext *const f) {
      * avoid having additional in-loop branches in various places. We never
      * dereference those pointers so it doesn't really matter what they
      * point at, as long as the pointers are valid. */
-    const int has_chroma = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400;
+    const int has_chroma = f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400;
     f->lf.p[0] = f->cur.data[0];
     f->lf.p[1] = f->cur.data[has_chroma ? 1 : 0];
     f->lf.p[2] = f->cur.data[has_chroma ? 2 : 0];
@@ -4683,16 +4683,16 @@ error:
     return retval;
 }
 
-int dav1d_decode_frame_init_cdf(Dav1dFrameContext *const f) {
-    const Dav1dContext *const c = f->c;
-    int retval = DAV1D_ERR(EINVAL);
+int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
+    const Dav2dContext *const c = f->c;
+    int retval = DAV2D_ERR(EINVAL);
 
     if (f->use_pri_sec_cdf) {
-        dav1d_cdf_pri_sec_average(f->in_cdf.data.cdf,
+        dav2d_cdf_pri_sec_average(f->in_cdf.data.cdf,
                                   &f->src_cdf[0], &f->src_cdf[1]);
     }
     if (!f->frame_hdr->disable_cdf_update)
-        dav1d_cdf_thread_copy(f->out_cdf.data.cdf, &f->in_cdf);
+        dav2d_cdf_thread_copy(f->out_cdf.data.cdf, &f->in_cdf);
 
     // parse individual tiles per tile group
     int tile_row = 0, tile_col = 0;
@@ -4741,13 +4741,13 @@ error:
     return retval;
 }
 
-int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
-    const Dav1dContext *const c = f->c;
-    int retval = DAV1D_ERR(EINVAL);
+int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
+    const Dav2dContext *const c = f->c;
+    int retval = DAV2D_ERR(EINVAL);
 
     assert(f->c->n_tc == 1);
 
-    Dav1dTaskContext *const t = &c->tc[f - c->fc];
+    Dav2dTaskContext *const t = &c->tc[f - c->fc];
     t->f = f;
     t->frame_thread.pass = 0;
 
@@ -4762,12 +4762,12 @@ int dav1d_decode_frame_main(Dav1dFrameContext *const f) {
             t->by = sby << (4 + f->frame_hdr->sb128);
             const int by_end = (t->by + f->sb_step) >> 1;
             if (f->frame_hdr->use_ref_frame_mvs) {
-                dav1d_refmvs_load_tmvs(&f->rf, tile_row,
+                dav2d_refmvs_load_tmvs(&f->rf, tile_row,
                                        0, f->bw >> 1, t->by >> 1, by_end);
             }
             for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {
                 t->ts = &f->ts[tile_row * f->frame_hdr->tiling.t.cols + tile_col];
-                if (dav1d_decode_tile_sbrow(t)) goto error;
+                if (dav2d_decode_tile_sbrow(t)) goto error;
             }
         }
         // post filters (deblock + cdef + ccso + ...)
@@ -4782,8 +4782,8 @@ error:
     return retval;
 }
 
-void dav1d_decode_frame_exit(Dav1dFrameContext *const f, int retval) {
-    const Dav1dContext *const c = f->c;
+void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
+    const Dav2dContext *const c = f->c;
 
     if (f->sr_cur.p.data[0])
         atomic_init(&f->task_thread.error, 0);
@@ -4797,48 +4797,48 @@ void dav1d_decode_frame_exit(Dav1dFrameContext *const f, int retval) {
             if (!retval && c->n_fc > 1 && c->strict_std_compliance &&
                 atomic_load(&f->refp[i].progress[1]) == FRAME_ERROR)
             {
-                retval = DAV1D_ERR(EINVAL);
+                retval = DAV2D_ERR(EINVAL);
                 atomic_store(&f->task_thread.error, 1);
                 atomic_store(&f->sr_cur.progress[1], FRAME_ERROR);
             }
-            dav1d_thread_picture_unref(&f->refp[i]);
+            dav2d_thread_picture_unref(&f->refp[i]);
         }
-        dav1d_ref_dec(&f->ref_mvs_ref[i]);
+        dav2d_ref_dec(&f->ref_mvs_ref[i]);
     }
 
-    dav1d_picture_unref_internal(&f->cur);
-    dav1d_thread_picture_unref(&f->sr_cur);
-    dav1d_cdf_thread_unref(&f->in_cdf);
+    dav2d_picture_unref_internal(&f->cur);
+    dav2d_thread_picture_unref(&f->sr_cur);
+    dav2d_cdf_thread_unref(&f->in_cdf);
     if (f->frame_hdr && f->use_pri_sec_cdf) {
-        dav1d_cdf_thread_unref(&f->src_cdf[0]);
-        dav1d_cdf_thread_unref(&f->src_cdf[1]);
+        dav2d_cdf_thread_unref(&f->src_cdf[0]);
+        dav2d_cdf_thread_unref(&f->src_cdf[1]);
     }
     if (f->frame_hdr && !f->frame_hdr->disable_cdf_update) {
         if (f->out_cdf.progress)
             atomic_store(f->out_cdf.progress, retval == 0 ? 1 : TILE_ERROR);
-        dav1d_cdf_thread_unref(&f->out_cdf);
+        dav2d_cdf_thread_unref(&f->out_cdf);
     }
-    dav1d_ref_dec(&f->cur_segmap_ref);
-    dav1d_ref_dec(&f->prev_segmap_ref);
-    dav1d_ref_dec(&f->mvs_ref);
-    dav1d_ref_dec(&f->seq_hdr_ref);
-    dav1d_ref_dec(&f->frame_hdr_ref);
+    dav2d_ref_dec(&f->cur_segmap_ref);
+    dav2d_ref_dec(&f->prev_segmap_ref);
+    dav2d_ref_dec(&f->mvs_ref);
+    dav2d_ref_dec(&f->seq_hdr_ref);
+    dav2d_ref_dec(&f->frame_hdr_ref);
 
     for (int i = 0; i < f->n_tile_data; i++)
-        dav1d_data_unref_internal(&f->tile[i].data);
+        dav2d_data_unref_internal(&f->tile[i].data);
     f->task_thread.retval = retval;
 }
 
-int dav1d_decode_frame(Dav1dFrameContext *const f) {
+int dav2d_decode_frame(Dav2dFrameContext *const f) {
     assert(f->c->n_fc == 1);
     // if n_tc > 1 (but n_fc == 1), we could run init/exit in the task
     // threads also. Not sure it makes a measurable difference.
-    int res = dav1d_decode_frame_init(f);
+    int res = dav2d_decode_frame_init(f);
     if (!res) {
         if (f->frame_hdr->tip.frame_mode != 2) {
-            res = dav1d_decode_frame_init_cdf(f);
+            res = dav2d_decode_frame_init_cdf(f);
         } else {
-            const struct Dav1dTileInfo *const ti = &f->frame_hdr->tiling.t;
+            const struct Dav2dTileInfo *const ti = &f->frame_hdr->tiling.t;
             const int sb_shift = f->sb_shift;
             for (int tile_row = 0, tile = 0; tile_row < ti->rows; tile_row++) {
                 for (int tile_col = 0; tile_col < ti->cols; tile_col++, tile++) {
@@ -4846,7 +4846,7 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
                     const int col_sb_end = ti->col_start_sb[tile_col + 1];
                     const int row_sb_start = ti->row_start_sb[tile_row];
                     const int row_sb_end = ti->row_start_sb[tile_row + 1];
-                    Dav1dTileState *const ts = &f->ts[tile];
+                    Dav2dTileState *const ts = &f->ts[tile];
                     ts->tiling.row = tile_row;
                     ts->tiling.col = tile_col;
                     ts->tiling.col_start = col_sb_start << sb_shift;
@@ -4860,7 +4860,7 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
     // wait until all threads have completed
     if (!res) {
         if (f->c->n_tc > 1) {
-            res = dav1d_task_create_tile_sbrow(f, 0, 1);
+            res = dav2d_task_create_tile_sbrow(f, 0, 1);
             pthread_mutex_lock(&f->task_thread.ttd->lock);
             pthread_cond_signal(&f->task_thread.ttd->cond);
             if (!res) {
@@ -4874,38 +4874,38 @@ int dav1d_decode_frame(Dav1dFrameContext *const f) {
             pthread_mutex_unlock(&f->task_thread.ttd->lock);
             res = f->task_thread.retval;
         } else {
-            res = dav1d_decode_frame_main(f);
+            res = dav2d_decode_frame_main(f);
             if (!res && !f->frame_hdr->disable_cdf_update && f->task_thread.update_set) {
                 const int shift = f->frame_hdr->tiling.t.log2_cols +
                                   f->frame_hdr->tiling.t.log2_rows;
                 if (shift && f->seq_hdr->avg_cdf_type) {
                     const int n_tiles = 1 << shift;
-                    dav1d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
+                    dav2d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
                     for (int n = 1; n < n_tiles; n++)
-                        dav1d_cdf_shift_accumulate(f->out_cdf.data.cdf,
+                        dav2d_cdf_shift_accumulate(f->out_cdf.data.cdf,
                                                    &f->ts[n].cdf, shift);
                 } else {
                     memcpy(f->out_cdf.data.cdf,
                            &f->ts[f->frame_hdr->tiling.update].cdf,
                            sizeof(CdfContext));
                 }
-                dav1d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
+                dav2d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
             }
         }
     }
-    dav1d_decode_frame_exit(f, res);
+    dav2d_decode_frame_exit(f, res);
     res = f->task_thread.retval;
     f->n_tile_data = 0;
     return res;
 }
 
-int dav1d_submit_frame(Dav1dContext *const c) {
-    Dav1dFrameContext *f;
+int dav2d_submit_frame(Dav2dContext *const c) {
+    Dav2dFrameContext *f;
     int res = -1;
 
 #if 0
     // wait for c->out_delayed[next] and move into c->out if visible
-    Dav1dThreadPicture *out_delayed;
+    Dav2dThreadPicture *out_delayed;
     if (c->n_fc > 1) {
         pthread_mutex_lock(&c->task_thread.lock);
         const unsigned next = c->frame_thread.next++;
@@ -4932,18 +4932,18 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         if (error) {
             f->task_thread.retval = 0;
             c->cached_error = error;
-            dav1d_data_props_copy(&c->cached_error_props, &out_delayed->p.m);
-            dav1d_thread_picture_unref(out_delayed);
+            dav2d_data_props_copy(&c->cached_error_props, &out_delayed->p.m);
+            dav2d_thread_picture_unref(out_delayed);
         } else if (out_delayed->p.data[0]) {
             const unsigned progress = atomic_load_explicit(&out_delayed->progress[1],
                                                            memory_order_relaxed);
             if ((out_delayed->visible || c->output_invisible_frames) &&
                 progress != FRAME_ERROR)
             {
-                dav1d_thread_picture_ref(&c->out, out_delayed);
-                c->event_flags |= dav1d_picture_get_event_flags(out_delayed);
+                dav2d_thread_picture_ref(&c->out, out_delayed);
+                c->event_flags |= dav2d_picture_get_event_flags(out_delayed);
             }
-            dav1d_thread_picture_unref(out_delayed);
+            dav2d_thread_picture_unref(out_delayed);
         }
     } else
 #endif
@@ -4953,7 +4953,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 
     f->seq_hdr = c->seq_hdr;
     f->seq_hdr_ref = c->seq_hdr_ref;
-    dav1d_ref_inc(f->seq_hdr_ref);
+    dav2d_ref_inc(f->seq_hdr_ref);
     f->frame_hdr = c->frame_hdr;
     f->frame_hdr_ref = c->frame_hdr_ref;
     c->frame_hdr = NULL;
@@ -4963,19 +4963,19 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     const int bpc = 8 + 2 * f->seq_hdr->hbd;
 
     if (!f->dsp->ipred.intra_pred[DC_PRED]) {
-        Dav1dDSPContext *const dsp = &c->dsp[f->seq_hdr->hbd];
+        Dav2dDSPContext *const dsp = &c->dsp[f->seq_hdr->hbd];
 
         switch (bpc) {
 #define assign_bitdepth_case(bd) \
-            dav1d_ccso_dsp_init_##bd##bpc(&dsp->ccso); \
-            dav1d_cdef_dsp_init_##bd##bpc(&dsp->cdef); \
-            dav1d_intra_pred_dsp_init_##bd##bpc(&dsp->ipred); \
-            dav1d_itx_dsp_init_##bd##bpc(&dsp->itx, bpc); \
-            dav1d_stx_dsp_init_##bd##bpc(&dsp->stx); \
-            dav1d_loop_filter_dsp_init_##bd##bpc(&dsp->lf); \
-            dav1d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr, bpc); \
-            dav1d_mc_dsp_init_##bd##bpc(&dsp->mc); \
-            dav1d_film_grain_dsp_init_##bd##bpc(&dsp->fg); \
+            dav2d_ccso_dsp_init_##bd##bpc(&dsp->ccso); \
+            dav2d_cdef_dsp_init_##bd##bpc(&dsp->cdef); \
+            dav2d_intra_pred_dsp_init_##bd##bpc(&dsp->ipred); \
+            dav2d_itx_dsp_init_##bd##bpc(&dsp->itx, bpc); \
+            dav2d_stx_dsp_init_##bd##bpc(&dsp->stx); \
+            dav2d_loop_filter_dsp_init_##bd##bpc(&dsp->lf); \
+            dav2d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr, bpc); \
+            dav2d_mc_dsp_init_##bd##bpc(&dsp->mc); \
+            dav2d_film_grain_dsp_init_##bd##bpc(&dsp->fg); \
             break
 #if CONFIG_8BPC
         case 8:
@@ -4988,24 +4988,24 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 #endif
 #undef assign_bitdepth_case
         default:
-            dav1d_log(c, "Compiled without support for %d-bit decoding\n",
+            dav2d_log(c, "Compiled without support for %d-bit decoding\n",
                     8 + 2 * f->seq_hdr->hbd);
-            res = DAV1D_ERR(ENOPROTOOPT);
+            res = DAV2D_ERR(ENOPROTOOPT);
             goto error;
         }
     }
 
 #define assign_bitdepth_case(bd) \
-        f->bd_fn.recon_b = dav1d_recon_b_##bd##bpc; \
-        f->bd_fn.filter_sbrow = dav1d_filter_sbrow_##bd##bpc; \
-        f->bd_fn.filter_sbrow_deblock_cols = dav1d_filter_sbrow_deblock_cols_##bd##bpc; \
-        f->bd_fn.filter_sbrow_deblock_rows = dav1d_filter_sbrow_deblock_rows_##bd##bpc; \
-        f->bd_fn.filter_sbrow_cdef = dav1d_filter_sbrow_cdef_##bd##bpc; \
-        f->bd_fn.filter_sbrow_lr = dav1d_filter_sbrow_lr_##bd##bpc; \
-        f->bd_fn.backup_ipred_edge = dav1d_backup_ipred_edge_##bd##bpc; \
-        f->bd_fn.read_coef_blocks = dav1d_read_coef_blocks_##bd##bpc; \
-        f->bd_fn.copy_pal_block_y = dav1d_copy_pal_block_y_##bd##bpc; \
-        f->bd_fn.read_pal_plane = dav1d_read_pal_plane_##bd##bpc
+        f->bd_fn.recon_b = dav2d_recon_b_##bd##bpc; \
+        f->bd_fn.filter_sbrow = dav2d_filter_sbrow_##bd##bpc; \
+        f->bd_fn.filter_sbrow_deblock_cols = dav2d_filter_sbrow_deblock_cols_##bd##bpc; \
+        f->bd_fn.filter_sbrow_deblock_rows = dav2d_filter_sbrow_deblock_rows_##bd##bpc; \
+        f->bd_fn.filter_sbrow_cdef = dav2d_filter_sbrow_cdef_##bd##bpc; \
+        f->bd_fn.filter_sbrow_lr = dav2d_filter_sbrow_lr_##bd##bpc; \
+        f->bd_fn.backup_ipred_edge = dav2d_backup_ipred_edge_##bd##bpc; \
+        f->bd_fn.read_coef_blocks = dav2d_read_coef_blocks_##bd##bpc; \
+        f->bd_fn.copy_pal_block_y = dav2d_copy_pal_block_y_##bd##bpc; \
+        f->bd_fn.read_pal_plane = dav2d_read_pal_plane_##bd##bpc
     if (!f->seq_hdr->hbd) {
 #if CONFIG_8BPC
         assign_bitdepth_case(8);
@@ -5030,11 +5030,11 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                 bpc != c->refs[refidx].p.p.p.bpc)
             {
                 for (int j = 0; j < i; j++)
-                    dav1d_thread_picture_unref(&f->refp[j]);
-                res = DAV1D_ERR(EINVAL);
+                    dav2d_thread_picture_unref(&f->refp[j]);
+                res = DAV2D_ERR(EINVAL);
                 goto error;
             }
-            dav1d_thread_picture_ref(&f->refp[i], &c->refs[refidx].p);
+            dav2d_thread_picture_ref(&f->refp[i], &c->refs[refidx].p);
             ref_coded_width[i] = c->refs[refidx].p.p.frame_hdr->width;
             if (f->frame_hdr->width != c->refs[refidx].p.p.p.w ||
                 f->frame_hdr->height != c->refs[refidx].p.p.p.h)
@@ -5050,48 +5050,48 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             } else {
                 f->svc[i][0].scale = f->svc[i][1].scale = 0;
             }
-            f->gmv_warp_allowed[i] = f->frame_hdr->gmv[i].type > DAV1D_WM_TYPE_TRANSLATION &&
+            f->gmv_warp_allowed[i] = f->frame_hdr->gmv[i].type > DAV2D_WM_TYPE_TRANSLATION &&
                                      !f->frame_hdr->force_integer_mv &&
-                                     !dav1d_get_shear_params(&f->frame_hdr->gmv[i]) &&
+                                     !dav2d_get_shear_params(&f->frame_hdr->gmv[i]) &&
                                      !f->svc[i][0].scale;
         }
     }
 
     // setup entropy
     const int p_ref_idx = f->frame_hdr->primary_ref_frame;
-    if (p_ref_idx == DAV1D_PRIMARY_REF_NONE) {
-        dav1d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac);
+    if (p_ref_idx == DAV2D_PRIMARY_REF_NONE) {
+        dav2d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac);
         f->use_pri_sec_cdf = 0;
     } else {
         const int s_ref_idx = f->frame_hdr->secondary_ref_frame;
         const int pri_ref = f->frame_hdr->refidx[p_ref_idx];
-        f->use_pri_sec_cdf = s_ref_idx != DAV1D_PRIMARY_REF_NONE &&
-                             f->frame_hdr->frame_type == DAV1D_FRAME_TYPE_INTER &&
+        f->use_pri_sec_cdf = s_ref_idx != DAV2D_PRIMARY_REF_NONE &&
+                             f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_INTER &&
                              f->seq_hdr->avg_cdf && !f->seq_hdr->avg_cdf_type &&
                              f->frame_hdr->tip.frame_mode != 2;
         if (!f->use_pri_sec_cdf) {
-            dav1d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
+            dav2d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
         } else {
             const int sec_ref = f->frame_hdr->refidx[s_ref_idx];
-            res = dav1d_cdf_thread_alloc(c, &f->in_cdf, c->n_fc > 1);
+            res = dav2d_cdf_thread_alloc(c, &f->in_cdf, c->n_fc > 1);
             if (res < 0) goto error;
-            dav1d_cdf_thread_ref(&f->src_cdf[0], &c->cdf[pri_ref]);
-            dav1d_cdf_thread_ref(&f->src_cdf[1], &c->cdf[sec_ref]);
+            dav2d_cdf_thread_ref(&f->src_cdf[0], &c->cdf[pri_ref]);
+            dav2d_cdf_thread_ref(&f->src_cdf[1], &c->cdf[sec_ref]);
         }
     }
     if (!f->frame_hdr->disable_cdf_update) {
-        res = dav1d_cdf_thread_alloc(c, &f->out_cdf, c->n_fc > 1);
+        res = dav2d_cdf_thread_alloc(c, &f->out_cdf, c->n_fc > 1);
         if (res < 0) goto error;
     }
 
     // FIXME qsort so tiles are in order (for frame threading)
     if (f->n_tile_data_alloc < c->n_tile_data) {
-        dav1d_free(f->tile);
+        dav2d_free(f->tile);
         assert(c->n_tile_data < INT_MAX / (int)sizeof(*f->tile));
-        f->tile = dav1d_malloc(ALLOC_TILE, c->n_tile_data * sizeof(*f->tile));
+        f->tile = dav2d_malloc(ALLOC_TILE, c->n_tile_data * sizeof(*f->tile));
         if (!f->tile) {
             f->n_tile_data_alloc = f->n_tile_data = 0;
-            res = DAV1D_ERR(ENOMEM);
+            res = DAV2D_ERR(ENOMEM);
             goto error;
         }
         f->n_tile_data_alloc = c->n_tile_data;
@@ -5102,22 +5102,22 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     c->n_tile_data = 0;
 
     // allocate frame
-    res = dav1d_thread_picture_alloc(c, f, bpc);
+    res = dav2d_thread_picture_alloc(c, f, bpc);
     if (res < 0) goto error;
-    dav1d_picture_ref(&f->cur, &f->sr_cur.p);
+    dav2d_picture_ref(&f->cur, &f->sr_cur.p);
 
     // move f->cur into output queue
     struct OutputQueue *q = NULL;
     if (f->frame_hdr->show_frame || c->output_invisible_frames) {
         q = queue_output(c, &f->sr_cur);
 #if 0
-        c->event_flags |= dav1d_picture_get_event_flags(&f->sr_cur);
+        c->event_flags |= dav2d_picture_get_event_flags(&f->sr_cur);
 #endif
     }
 
     // ss_ver is set for 4:2:0, and ss_hor for 4:2:0 & 4:2:2
-    f->ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
-    f->ss_hor = f->cur.p.layout - 1 < (unsigned) DAV1D_PIXEL_LAYOUT_I444 - 1;
+    f->ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    f->ss_hor = f->cur.p.layout - 1 < (unsigned) DAV2D_PIXEL_LAYOUT_I444 - 1;
     f->root_bs = (const uint8_t[]) { BS_64x64, BS_128x128,
                                      BS_256x256 }[f->frame_hdr->sb128];
     f->bw = ((f->frame_hdr->width + 7) >> 3) << 1;
@@ -5138,10 +5138,10 @@ int dav1d_submit_frame(Dav1dContext *const c) {
 
     // ref_mvs
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
-        f->mvs_ref = dav1d_ref_create_using_pool(c->refmvs_pool,
+        f->mvs_ref = dav2d_ref_create_using_pool(c->refmvs_pool,
             sizeof(*f->mvs) * f->sb256h * 32 * (f->b4_stride >> 1));
         if (!f->mvs_ref) {
-            res = DAV1D_ERR(ENOMEM);
+            res = DAV2D_ERR(ENOMEM);
             goto error;
         }
         f->mvs = f->mvs_ref->data;
@@ -5174,7 +5174,7 @@ int dav1d_submit_frame(Dav1dContext *const c) {
                     ref_w == f->bw && ref_h == f->bh)
                 {
                     f->ref_mvs_ref[i] = c->refs[refidx].refmvs;
-                    dav1d_ref_inc(f->ref_mvs_ref[i]);
+                    dav2d_ref_inc(f->ref_mvs_ref[i]);
                     f->ref_mvs[i] = c->refs[refidx].refmvs->data;
                 } else {
                     f->ref_mvs[i] = NULL;
@@ -5202,13 +5202,13 @@ int dav1d_submit_frame(Dav1dContext *const c) {
         // happens if there is either no update or a temporal update.
         if (f->frame_hdr->segmentation.temporal || !f->frame_hdr->segmentation.update_map) {
             const int pri_ref = f->frame_hdr->primary_ref_frame;
-            assert(pri_ref != DAV1D_PRIMARY_REF_NONE);
+            assert(pri_ref != DAV2D_PRIMARY_REF_NONE);
             const int ref_w = ((ref_coded_width[pri_ref] + 7) >> 3) << 1;
             const int ref_h = ((f->refp[pri_ref].p.p.h + 7) >> 3) << 1;
             if (ref_w == f->bw && ref_h == f->bh) {
                 f->prev_segmap_ref = c->refs[f->frame_hdr->refidx[pri_ref]].segmap;
                 if (f->prev_segmap_ref) {
-                    dav1d_ref_inc(f->prev_segmap_ref);
+                    dav2d_ref_inc(f->prev_segmap_ref);
                     f->prev_segmap = f->prev_segmap_ref->data;
                 }
             }
@@ -5218,11 +5218,11 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             // We're updating an existing map, but need somewhere to
             // put the new values. Allocate them here (the data
             // actually gets set elsewhere)
-            f->cur_segmap_ref = dav1d_ref_create_using_pool(c->segmap_pool,
+            f->cur_segmap_ref = dav2d_ref_create_using_pool(c->segmap_pool,
                 sizeof(*f->cur_segmap) * f->b4_stride * 64 * f->sb256h);
             if (!f->cur_segmap_ref) {
-                dav1d_ref_dec(&f->prev_segmap_ref);
-                res = DAV1D_ERR(ENOMEM);
+                dav2d_ref_dec(&f->prev_segmap_ref);
+                res = DAV2D_ERR(ENOMEM);
                 goto error;
             }
             f->cur_segmap = f->cur_segmap_ref->data;
@@ -5230,14 +5230,14 @@ int dav1d_submit_frame(Dav1dContext *const c) {
             // We're not updating an existing map, and we have a valid
             // reference. Use that.
             f->cur_segmap_ref = f->prev_segmap_ref;
-            dav1d_ref_inc(f->cur_segmap_ref);
+            dav2d_ref_inc(f->cur_segmap_ref);
             f->cur_segmap = f->prev_segmap_ref->data;
         } else {
             // We need to make a new map. Allocate one here and zero it out.
             const size_t segmap_size = sizeof(*f->cur_segmap) * f->b4_stride * 64 * f->sb256h;
-            f->cur_segmap_ref = dav1d_ref_create_using_pool(c->segmap_pool, segmap_size);
+            f->cur_segmap_ref = dav2d_ref_create_using_pool(c->segmap_pool, segmap_size);
             if (!f->cur_segmap_ref) {
-                res = DAV1D_ERR(ENOMEM);
+                res = DAV2D_ERR(ENOMEM);
                 goto error;
             }
             f->cur_segmap = f->cur_segmap_ref->data;
@@ -5260,46 +5260,46 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     for (int i = 0; i < 8; i++) {
         if (refresh_frame_flags & (1 << i)) {
             if (c->refs[i].p.p.frame_hdr)
-                dav1d_thread_picture_unref(&c->refs[i].p);
-            dav1d_thread_picture_ref(&c->refs[i].p, &f->sr_cur);
+                dav2d_thread_picture_unref(&c->refs[i].p);
+            dav2d_thread_picture_ref(&c->refs[i].p, &f->sr_cur);
 
-            dav1d_cdf_thread_unref(&c->cdf[i]);
+            dav2d_cdf_thread_unref(&c->cdf[i]);
             if (!f->frame_hdr->disable_cdf_update) {
-                dav1d_cdf_thread_ref(&c->cdf[i], &f->out_cdf);
+                dav2d_cdf_thread_ref(&c->cdf[i], &f->out_cdf);
             } else {
-                dav1d_cdf_thread_ref(&c->cdf[i], &f->in_cdf);
+                dav2d_cdf_thread_ref(&c->cdf[i], &f->in_cdf);
             }
 
-            dav1d_ref_dec(&c->refs[i].segmap);
+            dav2d_ref_dec(&c->refs[i].segmap);
             c->refs[i].segmap = f->cur_segmap_ref;
             if (f->cur_segmap_ref)
-                dav1d_ref_inc(f->cur_segmap_ref);
-            dav1d_ref_dec(&c->refs[i].refmvs);
+                dav2d_ref_inc(f->cur_segmap_ref);
+            dav2d_ref_dec(&c->refs[i].refmvs);
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
                 c->refs[i].refmvs = f->mvs_ref;
                 if (f->mvs_ref)
-                    dav1d_ref_inc(f->mvs_ref);
+                    dav2d_ref_inc(f->mvs_ref);
             }
             memcpy(c->refs[i].refpoc, f->refpoc, sizeof(f->refpoc));
         }
     }
 
     if (c->n_fc == 1) {
-        if ((res = dav1d_decode_frame(f)) < 0) {
+        if ((res = dav2d_decode_frame(f)) < 0) {
             for (int i = 0; i < 8; i++) {
                 if (refresh_frame_flags & (1 << i)) {
                     if (c->refs[i].p.p.frame_hdr)
-                        dav1d_thread_picture_unref(&c->refs[i].p);
-                    dav1d_cdf_thread_unref(&c->cdf[i]);
-                    dav1d_ref_dec(&c->refs[i].segmap);
-                    dav1d_ref_dec(&c->refs[i].refmvs);
+                        dav2d_thread_picture_unref(&c->refs[i].p);
+                    dav2d_cdf_thread_unref(&c->cdf[i]);
+                    dav2d_ref_dec(&c->refs[i].segmap);
+                    dav2d_ref_dec(&c->refs[i].refmvs);
                 }
             }
             goto error;
         }
 #if 0
     } else {
-        dav1d_task_frame_init(f);
+        dav2d_task_frame_init(f);
         pthread_mutex_unlock(&c->task_thread.lock);
 #endif
     }
@@ -5307,30 +5307,30 @@ int dav1d_submit_frame(Dav1dContext *const c) {
     return 0;
 error:
     atomic_init(&f->task_thread.error, 1);
-    dav1d_cdf_thread_unref(&f->in_cdf);
+    dav2d_cdf_thread_unref(&f->in_cdf);
     if (f->use_pri_sec_cdf) {
-        dav1d_cdf_thread_unref(&f->src_cdf[0]);
-        dav1d_cdf_thread_unref(&f->src_cdf[1]);
+        dav2d_cdf_thread_unref(&f->src_cdf[0]);
+        dav2d_cdf_thread_unref(&f->src_cdf[1]);
     }
     if (!f->frame_hdr->disable_cdf_update)
-        dav1d_cdf_thread_unref(&f->out_cdf);
+        dav2d_cdf_thread_unref(&f->out_cdf);
     for (int i = 0; i < 7; i++) {
         if (f->refp[i].p.frame_hdr)
-            dav1d_thread_picture_unref(&f->refp[i]);
-        dav1d_ref_dec(&f->ref_mvs_ref[i]);
+            dav2d_thread_picture_unref(&f->refp[i]);
+        dav2d_ref_dec(&f->ref_mvs_ref[i]);
     }
     if (q) q->res = res;
-    dav1d_picture_unref_internal(&f->cur);
-    dav1d_thread_picture_unref(&f->sr_cur);
-    dav1d_ref_dec(&f->mvs_ref);
-    dav1d_ref_dec(&f->seq_hdr_ref);
-    dav1d_ref_dec(&f->frame_hdr_ref);
+    dav2d_picture_unref_internal(&f->cur);
+    dav2d_thread_picture_unref(&f->sr_cur);
+    dav2d_ref_dec(&f->mvs_ref);
+    dav2d_ref_dec(&f->seq_hdr_ref);
+    dav2d_ref_dec(&f->frame_hdr_ref);
 #if 0
-    dav1d_data_props_copy(&c->cached_error_props, &c->in.m);
+    dav2d_data_props_copy(&c->cached_error_props, &c->in.m);
 #endif
 
     for (int i = 0; i < f->n_tile_data; i++)
-        dav1d_data_unref_internal(&f->tile[i].data);
+        dav2d_data_unref_internal(&f->tile[i].data);
     f->n_tile_data = 0;
 
     if (c->n_fc > 1)

@@ -1,4 +1,4 @@
-# Copyright © 2018-2019, VideoLAN and dav1d authors
+# Copyright © 2018-2019, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -23,11 +23,11 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #
-# Build definition for the dav1d library
+# Build definition for the dav2d library
 #
 
-# libdav1d source files
-libdav1d_sources = files(
+# libdav2d source files
+libdav2d_sources = files(
     'cdf.c',
     'cpu.c',
     'ctx.c',
@@ -56,10 +56,10 @@ libdav1d_sources = files(
     'wedge.c',
 )
 
-# libdav1d bitdepth source files
+# libdav2d bitdepth source files
 # These files are compiled for each bitdepth with
 # `BITDEPTH` defined to the currently built bitdepth.
-libdav1d_tmpl_sources = files(
+libdav2d_tmpl_sources = files(
     'ccso_tmpl.c',
     'cdef_apply_tmpl.c',
     'cdef_tmpl.c',
@@ -77,24 +77,24 @@ libdav1d_tmpl_sources = files(
     'stx_tmpl.c',
 )
 
-libdav1d_arch_tmpl_sources = {}
+libdav2d_arch_tmpl_sources = {}
 
-libdav1d_bitdepth_objs = []
+libdav2d_bitdepth_objs = []
 
 # ASM specific sources
-libdav1d_asm_objs = []
+libdav2d_asm_objs = []
 # Arch-specific flags
 arch_flags = {}
 if is_asm_enabled
     if (host_machine.cpu_family() == 'aarch64' or
         host_machine.cpu_family().startswith('arm'))
 
-        libdav1d_sources += files(
+        libdav2d_sources += files(
             'arm/cpu.c',
         )
         if (host_machine.cpu_family() == 'aarch64' or
             host_machine.cpu() == 'arm64')
-            libdav1d_sources_asm = files(
+            libdav2d_sources_asm = files(
                 # itx.S is used for both 8 and 16 bpc.
                 'arm/64/itx.S',
                 'arm/64/looprestoration_common.S',
@@ -102,8 +102,8 @@ if is_asm_enabled
                 'arm/64/refmvs.S',
             )
 
-            if dav1d_bitdepths.contains('8')
-                libdav1d_sources_asm += files(
+            if dav2d_bitdepths.contains('8')
+                libdav2d_sources_asm += files(
                     'arm/64/cdef.S',
                     'arm/64/filmgrain.S',
                     'arm/64/ipred.S',
@@ -114,8 +114,8 @@ if is_asm_enabled
                 )
             endif
 
-            if dav1d_bitdepths.contains('16')
-                libdav1d_sources_asm += files(
+            if dav2d_bitdepths.contains('16')
+                libdav2d_sources_asm += files(
                     'arm/64/cdef16.S',
                     'arm/64/filmgrain16.S',
                     'arm/64/ipred16.S',
@@ -127,7 +127,7 @@ if is_asm_enabled
                 )
             endif
         elif host_machine.cpu_family().startswith('arm')
-            libdav1d_sources_asm = files(
+            libdav2d_sources_asm = files(
                 # itx.S is used for both 8 and 16 bpc.
                 'arm/32/itx.S',
                 'arm/32/looprestoration_common.S',
@@ -135,8 +135,8 @@ if is_asm_enabled
                 'arm/32/refmvs.S',
             )
 
-            if dav1d_bitdepths.contains('8')
-                libdav1d_sources_asm += files(
+            if dav2d_bitdepths.contains('8')
+                libdav2d_sources_asm += files(
                     'arm/32/cdef.S',
                     'arm/32/filmgrain.S',
                     'arm/32/ipred.S',
@@ -146,8 +146,8 @@ if is_asm_enabled
                 )
             endif
 
-            if dav1d_bitdepths.contains('16')
-                libdav1d_sources_asm += files(
+            if dav2d_bitdepths.contains('16')
+                libdav2d_sources_asm += files(
                     'arm/32/cdef16.S',
                     'arm/32/filmgrain16.S',
                     'arm/32/ipred16.S',
@@ -160,18 +160,18 @@ if is_asm_enabled
         endif
 
         if use_gaspp
-            libdav1d_asm_objs = gaspp_gen.process(libdav1d_sources_asm)
+            libdav2d_asm_objs = gaspp_gen.process(libdav2d_sources_asm)
         else
-            libdav1d_sources += libdav1d_sources_asm
+            libdav2d_sources += libdav2d_sources_asm
         endif
     elif host_machine.cpu_family().startswith('x86')
 
-        libdav1d_sources += files(
+        libdav2d_sources += files(
             'x86/cpu.c',
         )
 
         # NASM source files
-        libdav1d_sources_asm = files(
+        libdav2d_sources_asm = files(
             'x86/cpuid.asm',
             'x86/msac.asm',
             'x86/pal.asm',
@@ -183,8 +183,8 @@ if is_asm_enabled
             'x86/itx_sse.asm',
         )
 
-        if dav1d_bitdepths.contains('8')
-            libdav1d_sources_asm += files(
+        if dav2d_bitdepths.contains('8')
+            libdav2d_sources_asm += files(
                 'x86/cdef_avx512.asm',
                 'x86/filmgrain_avx512.asm',
                 'x86/ipred_avx512.asm',
@@ -204,8 +204,8 @@ if is_asm_enabled
             )
         endif
 
-        if dav1d_bitdepths.contains('16')
-            libdav1d_sources_asm += files(
+        if dav2d_bitdepths.contains('16')
+            libdav2d_sources_asm += files(
                 'x86/cdef16_avx512.asm',
                 'x86/filmgrain16_avx512.asm',
                 'x86/ipred16_avx512.asm',
@@ -231,17 +231,17 @@ if is_asm_enabled
         endif
 
         # Compile the ASM sources with NASM
-        libdav1d_asm_objs = nasm_gen.process(libdav1d_sources_asm)
+        libdav2d_asm_objs = nasm_gen.process(libdav2d_sources_asm)
     elif host_machine.cpu_family().startswith('loongarch')
-        libdav1d_sources += files(
+        libdav2d_sources += files(
             'loongarch/cpu.c',
         )
 
-        libdav1d_arch_tmpl_sources += {'default': files(
+        libdav2d_arch_tmpl_sources += {'default': files(
             'loongarch/looprestoration_inner.c',
         )}
 
-        libdav1d_sources_asm = files(
+        libdav2d_sources_asm = files(
             'loongarch/cdef.S',
             'loongarch/ipred.S',
             'loongarch/mc.S',
@@ -251,34 +251,34 @@ if is_asm_enabled
             'loongarch/refmvs.S',
             'loongarch/itx.S',
         )
-        libdav1d_asm_objs += libdav1d_sources_asm
+        libdav2d_asm_objs += libdav2d_sources_asm
     elif host_machine.cpu() == 'ppc64le'
-        arch_flags += {'vsx': ['-maltivec', '-mvsx', '-DDAV1D_VSX']}
-        libdav1d_sources += files(
+        arch_flags += {'vsx': ['-maltivec', '-mvsx', '-DDAV2D_VSX']}
+        libdav2d_sources += files(
             'ppc/cpu.c',
         )
-        libdav1d_arch_tmpl_sources += {'vsx': files(
+        libdav2d_arch_tmpl_sources += {'vsx': files(
             'ppc/cdef_tmpl.c',
             'ppc/looprestoration_tmpl.c',
         )}
-        arch_flags += {'pwr9': ['-mcpu=power9', '-DDAV1D_PWR9']}
-        libdav1d_arch_tmpl_sources += {'pwr9': files(
+        arch_flags += {'pwr9': ['-mcpu=power9', '-DDAV2D_PWR9']}
+        libdav2d_arch_tmpl_sources += {'pwr9': files(
             'ppc/itx_tmpl.c',
             'ppc/loopfilter_tmpl.c',
             'ppc/mc_tmpl.c',
         )}
     elif host_machine.cpu_family().startswith('riscv')
-        libdav1d_sources += files(
+        libdav2d_sources += files(
             'riscv/cpu.c',
         )
         if host_machine.cpu_family() == 'riscv64'
-            libdav1d_sources += files(
+            libdav2d_sources += files(
                 'riscv/64/cpu.S',
                 'riscv/64/pal.S',
             )
 
-            if dav1d_bitdepths.contains('8')
-                libdav1d_sources += files(
+            if dav2d_bitdepths.contains('8')
+                libdav2d_sources += files(
                     'riscv/64/cdef.S',
                     'riscv/64/ipred.S',
                     'riscv/64/itx.S',
@@ -286,8 +286,8 @@ if is_asm_enabled
                 )
             endif
 
-            if dav1d_bitdepths.contains('16')
-                libdav1d_sources += files(
+            if dav2d_bitdepths.contains('16')
+                libdav2d_sources += files(
                     'riscv/64/cdef16.S',
                     'riscv/64/ipred16.S',
                     'riscv/64/mc16.S',
@@ -299,8 +299,8 @@ endif
 
 
 
-libdav1d_rc_obj = []
-libdav1d_flags = []
+libdav2d_rc_obj = []
+libdav2d_flags = []
 api_export_flags = []
 
 #
@@ -310,14 +310,14 @@ api_export_flags = []
 if host_machine.system() == 'windows'
     if get_option('default_library') != 'static'
         rc_file = configure_file(
-            input : 'dav1d.rc.in',
-            output : 'dav1d.rc',
+            input : 'dav2d.rc.in',
+            output : 'dav2d.rc',
             configuration : rc_data
         )
 
-        libdav1d_rc_obj = winmod.compile_resources(rc_file)
+        libdav2d_rc_obj = winmod.compile_resources(rc_file)
 
-        api_export_flags = ['-DDAV1D_BUILDING_DLL']
+        api_export_flags = ['-DDAV2D_BUILDING_DLL']
     endif
 
     if (host_machine.cpu_family() == 'x86_64' and cc.get_id() == 'gcc')
@@ -325,7 +325,7 @@ if host_machine.system() == 'windows'
         # dllimport attributes. Set the -mcmodel=small flag, which avoids
         # generating indirection via .refptr.<symname> for all potentially
         # dllimported variable references.
-        libdav1d_flags += '-mcmodel=small'
+        libdav2d_flags += '-mcmodel=small'
     endif
 endif
 
@@ -336,66 +336,66 @@ endif
 #
 
 # Helper library for each bitdepth
-libdav1d_bitdepth_objs = []
-foreach bitdepth : dav1d_bitdepths
-    libdav1d_bitdepth_objs += static_library(
-        'dav1d_bitdepth_@0@'.format(bitdepth),
-        libdav1d_tmpl_sources, config_h_target,
-        include_directories: dav1d_inc_dirs,
+libdav2d_bitdepth_objs = []
+foreach bitdepth : dav2d_bitdepths
+    libdav2d_bitdepth_objs += static_library(
+        'dav2d_bitdepth_@0@'.format(bitdepth),
+        libdav2d_tmpl_sources, config_h_target,
+        include_directories: dav2d_inc_dirs,
         dependencies : [stdatomic_dependencies],
-        c_args : ['-DBITDEPTH=@0@'.format(bitdepth)] + libdav1d_flags,
+        c_args : ['-DBITDEPTH=@0@'.format(bitdepth)] + libdav2d_flags,
         install : false,
         build_by_default : false,
     ).extract_all_objects(recursive: true)
 endforeach
 
 # Helper library for each bitdepth and architecture-specific flags
-foreach bitdepth : dav1d_bitdepths
-    foreach subarch : libdav1d_arch_tmpl_sources.keys()
-        libdav1d_bitdepth_objs += static_library(
-            'dav1d_arch_bitdepth_@0@_@1@'.format(bitdepth,subarch),
-            libdav1d_arch_tmpl_sources[subarch], config_h_target,
-            include_directories: dav1d_inc_dirs,
+foreach bitdepth : dav2d_bitdepths
+    foreach subarch : libdav2d_arch_tmpl_sources.keys()
+        libdav2d_bitdepth_objs += static_library(
+            'dav2d_arch_bitdepth_@0@_@1@'.format(bitdepth,subarch),
+            libdav2d_arch_tmpl_sources[subarch], config_h_target,
+            include_directories: dav2d_inc_dirs,
             dependencies : [stdatomic_dependencies],
-            c_args : ['-DBITDEPTH=@0@'.format(bitdepth)] + libdav1d_flags + arch_flags.get(subarch, []),
+            c_args : ['-DBITDEPTH=@0@'.format(bitdepth)] + libdav2d_flags + arch_flags.get(subarch, []),
             install : false,
             build_by_default : false,
         ).extract_all_objects(recursive: true)
     endforeach
 endforeach
 
-# The final dav1d library
+# The final dav2d library
 if host_machine.system() == 'windows'
-    dav1d_soversion = ''
+    dav2d_soversion = ''
 else
-    dav1d_soversion = dav1d_api_version_major
+    dav2d_soversion = dav2d_api_version_major
 endif
 
-libdav1d = library('dav1d',
-    libdav1d_sources,
-    libdav1d_asm_objs,
-    libdav1d_rc_obj,
+libdav2d = library('dav2d',
+    libdav2d_sources,
+    libdav2d_asm_objs,
+    libdav2d_rc_obj,
     rev_target,
     config_h_target,
 
     objects : [
-        libdav1d_bitdepth_objs,
+        libdav2d_bitdepth_objs,
         ],
 
-    include_directories : dav1d_inc_dirs,
+    include_directories : dav2d_inc_dirs,
     dependencies : [
         stdatomic_dependencies,
         thread_dependency,
         thread_compat_dep,
         libdl_dependency,
         ],
-    c_args : [libdav1d_flags, api_export_flags],
-    version : dav1d_soname_version,
-    soversion : dav1d_soversion,
+    c_args : [libdav2d_flags, api_export_flags],
+    version : dav2d_soname_version,
+    soversion : dav2d_soversion,
     install : true,
 )
 
-dav1d_dep = declare_dependency(link_with: libdav1d,
+dav2d_dep = declare_dependency(link_with: libdav2d,
     include_directories : include_directories('../include')
 )
 
@@ -403,9 +403,9 @@ dav1d_dep = declare_dependency(link_with: libdav1d,
 # Generate pkg-config .pc file
 #
 pkg_mod = import('pkgconfig')
-pkg_mod.generate(libraries: libdav1d,
+pkg_mod.generate(libraries: libdav2d,
     version: meson.project_version(),
-    name: 'libdav1d',
-    filebase: 'dav1d',
-    description: 'AV1 decoding library'
+    name: 'libdav2d',
+    filebase: 'dav2d',
+    description: 'AV2 decoding library'
 )

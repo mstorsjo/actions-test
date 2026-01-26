@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * Copyright © 2019, James Almer <jamrial@gmail.com>
  * All rights reserved.
@@ -35,7 +35,7 @@
 
 #include "common/intops.h"
 
-#include "dav1d/headers.h"
+#include "dav2d/headers.h"
 
 #include "input/demuxer.h"
 #include "input/parse.h"
@@ -73,10 +73,10 @@ static int annexb_probe(const uint8_t *data) {
 
     // Check that the first OBU is a Temporal Delimiter.
     size_t obu_size;
-    enum Dav1dObuType type;
+    enum Dav2dObuType type;
     ret = parse_obu_header(data + cnt, imin(PROBE_SIZE - cnt, (int) obu_unit_size),
                            &obu_size, &type);
-    if (ret < 0 || type != DAV1D_OBU_SEQ_HDR)
+    if (ret < 0 || type != DAV2D_OBU_SEQ_HDR)
         return 0;
     cnt += (int)obu_unit_size;
 
@@ -96,10 +96,10 @@ static int annexb_probe(const uint8_t *data) {
         cnt += (int)obu_unit_size;
 
         switch (type) {
-        case DAV1D_OBU_TILE_GRP:
+        case DAV2D_OBU_TILE_GRP:
             return 1;
-        case DAV1D_OBU_SEQ_HDR:
-        case DAV1D_OBU_TD:
+        case DAV2D_OBU_SEQ_HDR:
+        case DAV2D_OBU_TD:
             return 0;
         default:
             break;
@@ -147,7 +147,7 @@ static int annexb_open(AnnexbInputContext *const c, const char *const file,
     return 0;
 }
 
-static int annexb_read(AnnexbInputContext *const c, Dav1dData *const data) {
+static int annexb_read(AnnexbInputContext *const c, Dav2dData *const data) {
     size_t len;
     int res;
 
@@ -162,13 +162,13 @@ static int annexb_read(AnnexbInputContext *const c, Dav1dData *const data) {
     }
     res = leb128(c->f, &len);
     if (res < 0 || (len + res) > c->frame_unit_size) return -1;
-    uint8_t *ptr = dav1d_data_create(data, len);
+    uint8_t *ptr = dav2d_data_create(data, len);
     if (!ptr) return -1;
     c->temporal_unit_size -= len + res;
     c->frame_unit_size -= len + res;
     if (fread(ptr, len, 1, c->f) != 1) {
         fprintf(stderr, "Failed to read frame data: %s\n", strerror(errno));
-        dav1d_data_unref(data);
+        dav2d_data_unref(data);
         return -1;
     }
 

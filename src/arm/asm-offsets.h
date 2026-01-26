@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021, VideoLAN and dav1d authors
+ * Copyright © 2021, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

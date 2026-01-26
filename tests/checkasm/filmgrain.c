@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Two Orioles, LLC
  * All rights reserved.
  *
@@ -41,21 +41,21 @@
 #endif
 
 static const char ss_name[][4] = {
-    [DAV1D_PIXEL_LAYOUT_I420 - 1] = "420",
-    [DAV1D_PIXEL_LAYOUT_I422 - 1] = "422",
-    [DAV1D_PIXEL_LAYOUT_I444 - 1] = "444",
+    [DAV2D_PIXEL_LAYOUT_I420 - 1] = "420",
+    [DAV2D_PIXEL_LAYOUT_I422 - 1] = "422",
+    [DAV2D_PIXEL_LAYOUT_I444 - 1] = "444",
 };
 
-static void check_gen_grny(const Dav1dFilmGrainDSPContext *const dsp) {
+static void check_gen_grny(const Dav2dFilmGrainDSPContext *const dsp) {
     ALIGN_STK_16(entry, grain_lut_c, GRAIN_HEIGHT,[GRAIN_WIDTH]);
     ALIGN_STK_16(entry, grain_lut_a, GRAIN_HEIGHT + 1,[GRAIN_WIDTH]);
 
     declare_func(void, entry grain_lut[][GRAIN_WIDTH],
-                 const Dav1dFilmGrainData *data HIGHBD_DECL_SUFFIX);
+                 const Dav2dFilmGrainData *data HIGHBD_DECL_SUFFIX);
 
     for (int i = 0; i < 4; i++) {
         if (check_func(dsp->generate_grain_y, "gen_grain_y_ar%d_%dbpc", i, BITDEPTH)) {
-            ALIGN_STK_16(Dav1dFilmGrainData, fg_data, 1,);
+            ALIGN_STK_16(Dav2dFilmGrainData, fg_data, 1,);
             fg_data[0].seed = rnd() & 0xFFFF;
 
 #if BITDEPTH == 16
@@ -82,26 +82,26 @@ static void check_gen_grny(const Dav1dFilmGrainDSPContext *const dsp) {
     report("gen_grain_y");
 }
 
-static void check_gen_grnuv(const Dav1dFilmGrainDSPContext *const dsp) {
+static void check_gen_grnuv(const Dav2dFilmGrainDSPContext *const dsp) {
     ALIGN_STK_16(entry, grain_lut_y, GRAIN_HEIGHT + 1,[GRAIN_WIDTH]);
     ALIGN_STK_16(entry, grain_lut_c, GRAIN_HEIGHT,    [GRAIN_WIDTH]);
     ALIGN_STK_16(entry, grain_lut_a, GRAIN_HEIGHT + 1,[GRAIN_WIDTH]);
 
     declare_func(void, entry grain_lut[][GRAIN_WIDTH],
                  const entry grain_lut_y[][GRAIN_WIDTH],
-                 const Dav1dFilmGrainData *data, intptr_t uv HIGHBD_DECL_SUFFIX);
+                 const Dav2dFilmGrainData *data, intptr_t uv HIGHBD_DECL_SUFFIX);
 
     for (int layout_idx = 0; layout_idx < 3; layout_idx++) {
-        const enum Dav1dPixelLayout layout = layout_idx + 1;
-        const int ss_x = layout != DAV1D_PIXEL_LAYOUT_I444;
-        const int ss_y = layout == DAV1D_PIXEL_LAYOUT_I420;
+        const enum Dav2dPixelLayout layout = layout_idx + 1;
+        const int ss_x = layout != DAV2D_PIXEL_LAYOUT_I444;
+        const int ss_y = layout == DAV2D_PIXEL_LAYOUT_I420;
 
         for (int i = 0; i < 4; i++) {
             if (check_func(dsp->generate_grain_uv[layout_idx],
                            "gen_grain_uv_ar%d_%dbpc_%s",
                            i, BITDEPTH, ss_name[layout_idx]))
             {
-                ALIGN_STK_16(Dav1dFilmGrainData, fg_data, 1,);
+                ALIGN_STK_16(Dav2dFilmGrainData, fg_data, 1,);
                 fg_data[0].seed = rnd() & 0xFFFF;
 
 #if BITDEPTH == 16
@@ -141,20 +141,20 @@ static void check_gen_grnuv(const Dav1dFilmGrainDSPContext *const dsp) {
     report("gen_grain_uv");
 }
 
-static void check_fgy_sbrow(const Dav1dFilmGrainDSPContext *const dsp) {
+static void check_fgy_sbrow(const Dav2dFilmGrainDSPContext *const dsp) {
     PIXEL_RECT(c_dst, 128, 32);
     PIXEL_RECT(a_dst, 128, 32);
     PIXEL_RECT(src,   128, 32);
     const ptrdiff_t stride = c_dst_stride;
 
     declare_func(void, pixel *dst_row, const pixel *src_row, ptrdiff_t stride,
-                 const Dav1dFilmGrainData *data, size_t pw,
+                 const Dav2dFilmGrainData *data, size_t pw,
                  const uint8_t scaling[SCALING_SIZE],
                  const entry grain_lut[][GRAIN_WIDTH],
                  int bh, int row_num HIGHBD_DECL_SUFFIX);
 
     if (check_func(dsp->fgy_32x32xn, "fgy_32x32xn_%dbpc", BITDEPTH)) {
-        ALIGN_STK_16(Dav1dFilmGrainData, fg_data, 16,);
+        ALIGN_STK_16(Dav2dFilmGrainData, fg_data, 16,);
         ALIGN_STK_16(entry, grain_lut, GRAIN_HEIGHT + 1,[GRAIN_WIDTH]);
         ALIGN_STK_64(uint8_t, scaling, SCALING_SIZE,);
         fg_data[0].seed = rnd() & 0xFFFF;
@@ -241,7 +241,7 @@ static void check_fgy_sbrow(const Dav1dFilmGrainDSPContext *const dsp) {
     report("fgy_32x32xn");
 }
 
-static void check_fguv_sbrow(const Dav1dFilmGrainDSPContext *const dsp) {
+static void check_fguv_sbrow(const Dav2dFilmGrainDSPContext *const dsp) {
     PIXEL_RECT(c_dst,    128, 32);
     PIXEL_RECT(a_dst,    128, 32);
     PIXEL_RECT(src,      128, 32);
@@ -249,16 +249,16 @@ static void check_fguv_sbrow(const Dav1dFilmGrainDSPContext *const dsp) {
     const ptrdiff_t lstride = luma_src_stride;
 
     declare_func(void, pixel *dst_row, const pixel *src_row, ptrdiff_t stride,
-                 const Dav1dFilmGrainData *data, size_t pw,
+                 const Dav2dFilmGrainData *data, size_t pw,
                  const uint8_t scaling[SCALING_SIZE],
                  const entry grain_lut[][GRAIN_WIDTH], int bh, int row_num,
                  const pixel *luma_row, ptrdiff_t luma_stride, int uv_pl,
                  int is_identity HIGHBD_DECL_SUFFIX);
 
     for (int layout_idx = 0; layout_idx < 3; layout_idx++) {
-        const enum Dav1dPixelLayout layout = layout_idx + 1;
-        const int ss_x = layout != DAV1D_PIXEL_LAYOUT_I444;
-        const int ss_y = layout == DAV1D_PIXEL_LAYOUT_I420;
+        const enum Dav2dPixelLayout layout = layout_idx + 1;
+        const int ss_x = layout != DAV2D_PIXEL_LAYOUT_I444;
+        const int ss_y = layout == DAV2D_PIXEL_LAYOUT_I420;
         const ptrdiff_t stride = c_dst_stride;
 
         for (int csfl = 0; csfl <= 1; csfl++) {
@@ -266,7 +266,7 @@ static void check_fguv_sbrow(const Dav1dFilmGrainDSPContext *const dsp) {
                            "fguv_32x32xn_%dbpc_%s_csfl%d",
                            BITDEPTH, ss_name[layout_idx], csfl))
             {
-                ALIGN_STK_16(Dav1dFilmGrainData, fg_data, 1,);
+                ALIGN_STK_16(Dav2dFilmGrainData, fg_data, 1,);
                 ALIGN_STK_16(entry, grain_lut, 2,[GRAIN_HEIGHT + 1][GRAIN_WIDTH]);
                 ALIGN_STK_64(uint8_t, scaling, SCALING_SIZE,);
 
@@ -390,9 +390,9 @@ static void check_fguv_sbrow(const Dav1dFilmGrainDSPContext *const dsp) {
 }
 
 void bitfn(checkasm_check_filmgrain)(void) {
-    Dav1dFilmGrainDSPContext c;
+    Dav2dFilmGrainDSPContext c;
 
-    bitfn(dav1d_film_grain_dsp_init)(&c);
+    bitfn(dav2d_film_grain_dsp_init)(&c);
 
     check_gen_grny(&c);
     check_gen_grnuv(&c);

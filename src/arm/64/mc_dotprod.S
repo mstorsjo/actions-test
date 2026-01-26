@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Janne Grunau
  * Copyright © 2024, Martin Storsjo
  * Copyright © 2024, Arm Limited

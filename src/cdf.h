@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_CDF_H
-#define DAV1D_SRC_CDF_H
+#ifndef DAV2D_SRC_CDF_H
+#define DAV2D_SRC_CDF_H
 
 #include <stdint.h>
 
@@ -95,7 +95,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t stx_set_adst[4], 8);
     ALIGN(uint16_t stx_set[7+1], 16);
     ALIGN(uint16_t cctx[7+1], 16);
-    ALIGN(uint16_t seg_id[3][DAV1D_MAX_SEGMENTS], 16);
+    ALIGN(uint16_t seg_id[3][DAV2D_MAX_SEGMENTS], 16);
     ALIGN(uint16_t delta_q[4], 8);
 
     /* inter/switch */
@@ -198,7 +198,7 @@ typedef struct CdfContext {
 } CdfContext;
 
 typedef struct CdfThreadContext {
-    Dav1dRef *ref; ///< allocation origin
+    Dav2dRef *ref; ///< allocation origin
     union {
         CdfContext *cdf; // if ref != NULL
         unsigned qcat; // if ref == NULL, from static CDF tables
@@ -206,17 +206,17 @@ typedef struct CdfThreadContext {
     atomic_uint *progress;
 } CdfThreadContext;
 
-void dav1d_cdf_reset_count(const Dav1dFrameHeader *hdr, CdfContext *dst);
-void dav1d_cdf_shift(CdfContext *dst, const CdfContext *src, int n_tiles_log2);
-void dav1d_cdf_shift_accumulate(CdfContext *dst, const CdfContext *src,
+void dav2d_cdf_reset_count(const Dav2dFrameHeader *hdr, CdfContext *dst);
+void dav2d_cdf_shift(CdfContext *dst, const CdfContext *src, int n_tiles_log2);
+void dav2d_cdf_shift_accumulate(CdfContext *dst, const CdfContext *src,
                                 int n_tiles_log2);
-void dav1d_cdf_pri_sec_average(CdfContext *dst, const CdfThreadContext *src1,
+void dav2d_cdf_pri_sec_average(CdfContext *dst, const CdfThreadContext *src1,
                                const CdfThreadContext *src2);
-void dav1d_cdf_thread_init_static(CdfThreadContext *cdf, unsigned qidx);
-int dav1d_cdf_thread_alloc(Dav1dContext *c, CdfThreadContext *cdf,
+void dav2d_cdf_thread_init_static(CdfThreadContext *cdf, unsigned qidx);
+int dav2d_cdf_thread_alloc(Dav2dContext *c, CdfThreadContext *cdf,
                            const int have_frame_mt);
-void dav1d_cdf_thread_copy(CdfContext *dst, const CdfThreadContext *src);
-void dav1d_cdf_thread_ref(CdfThreadContext *dst, CdfThreadContext *src);
-void dav1d_cdf_thread_unref(CdfThreadContext *cdf);
+void dav2d_cdf_thread_copy(CdfContext *dst, const CdfThreadContext *src);
+void dav2d_cdf_thread_ref(CdfThreadContext *dst, CdfThreadContext *src);
+void dav2d_cdf_thread_unref(CdfThreadContext *cdf);
 
-#endif /* DAV1D_SRC_CDF_H */
+#endif /* DAV2D_SRC_CDF_H */

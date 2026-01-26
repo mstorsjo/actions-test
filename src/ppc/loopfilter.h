@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -28,20 +28,20 @@
 #include "src/cpu.h"
 #include "src/loopfilter.h"
 
-decl_loopfilter_sb_fn(BF(dav1d_lpf_h_sb_y, pwr9));
-decl_loopfilter_sb_fn(BF(dav1d_lpf_v_sb_y, pwr9));
-decl_loopfilter_sb_fn(BF(dav1d_lpf_h_sb_uv, pwr9));
-decl_loopfilter_sb_fn(BF(dav1d_lpf_v_sb_uv, pwr9));
+decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_y, pwr9));
+decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_y, pwr9));
+decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_uv, pwr9));
+decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_uv, pwr9));
 
-static ALWAYS_INLINE void loop_filter_dsp_init_ppc(Dav1dLoopFilterDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void loop_filter_dsp_init_ppc(Dav2dLoopFilterDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_PPC_CPU_FLAG_PWR9)) return;
+    if (!(flags & DAV2D_PPC_CPU_FLAG_PWR9)) return;
 
 #if BITDEPTH == 8
-    c->loop_filter_sb[0][0] = BF(dav1d_lpf_h_sb_y, pwr9);
-    c->loop_filter_sb[0][1] = BF(dav1d_lpf_v_sb_y, pwr9);
-    c->loop_filter_sb[1][0] = BF(dav1d_lpf_h_sb_uv, pwr9);
-    c->loop_filter_sb[1][1] = BF(dav1d_lpf_v_sb_uv, pwr9);
+    c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, pwr9);
+    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, pwr9);
+    c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, pwr9);
+    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, pwr9);
 #endif
 }

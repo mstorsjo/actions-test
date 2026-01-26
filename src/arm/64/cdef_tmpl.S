@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2020, Martin Storsjo
  * All rights reserved.
  *
@@ -100,7 +100,7 @@ endconst
         mla             v1.8h,  v22.8h, v19.8h      // sum += taps[k] * constrain()
 .endm
 
-// void dav1d_cdef_filterX_Ybpc_neon(pixel *dst, ptrdiff_t dst_stride,
+// void dav2d_cdef_filterX_Ybpc_neon(pixel *dst, ptrdiff_t dst_stride,
 //                                   const uint16_t *tmp, int pri_strength,
 //                                   int sec_strength, int dir, int damping,
 //                                   int h, size_t edges);
@@ -335,7 +335,7 @@ endconst
 .endif
 .endm
 
-// int dav1d_cdef_find_dir_Xbpc_neon(const pixel *img, const ptrdiff_t stride,
+// int dav2d_cdef_find_dir_Xbpc_neon(const pixel *img, const ptrdiff_t stride,
 //                                   unsigned *const var)
 .macro find_dir bpc
 function cdef_find_dir_\bpc\()bpc_neon, export=1

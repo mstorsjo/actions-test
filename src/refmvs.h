@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020, VideoLAN and dav1d authors
+ * Copyright © 2020, VideoLAN and dav2d authors
  * Copyright © 2020, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,12 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_REF_MVS_H
-#define DAV1D_SRC_REF_MVS_H
+#ifndef DAV2D_SRC_REF_MVS_H
+#define DAV2D_SRC_REF_MVS_H
 
 #include <stdint.h>
 
-#include "dav1d/headers.h"
+#include "dav2d/headers.h"
 
 #include "common/intops.h"
 
@@ -90,8 +90,8 @@ PACKED(typedef struct refmvs_block {
 CHECK_SIZE(refmvs_block, 68);
 
 typedef struct refmvs_frame {
-    const Dav1dSequenceHeader *seq_hdr;
-    const Dav1dFrameHeader *frm_hdr;
+    const Dav2dSequenceHeader *seq_hdr;
+    const Dav2dFrameHeader *frm_hdr;
     int iw4, ih4, iw8, ih8;
     int sbsz /* in 4px units */;
     int mfmv_sbsz8, mfmv_edge, mfmv_k_shift;
@@ -167,7 +167,7 @@ typedef decl_splat_mv_fn(*splat_mv_fn);
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, int64_t mvy, int64_t mvx, \
-            const Dav1dWarpedMotionParams *const matrix, int bw4, int bh4)
+            const Dav2dWarpedMotionParams *const matrix, int bw4, int bh4)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
 
 #define decl_splat_comp_warpmv_fn(name) \
@@ -175,7 +175,7 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, \
             int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
-            const Dav1dWarpedMotionParams *const matrix, \
+            const Dav2dWarpedMotionParams *const matrix, \
             int bw4, int bh4, int t_swap, const uint8_t *wedge, int w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
 
@@ -186,17 +186,17 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             const uint8_t *wedge, int w_mask)
 typedef decl_splat_comp_wedgemv_fn(*splat_comp_wedgemv_fn);
 
-typedef struct Dav1dRefmvsDSPContext {
+typedef struct Dav2dRefmvsDSPContext {
     splat_mv_fn splat_mv;
     splat_warpmv_fn splat_warpmv;
     splat_comp_warpmv_fn splat_comp_warpmv;
     splat_comp_wedgemv_fn splat_comp_wedgemv;
-} Dav1dRefmvsDSPContext;
+} Dav2dRefmvsDSPContext;
 
 // call once per frame
-int dav1d_refmvs_init_frame(refmvs_frame *rf,
-                            const Dav1dSequenceHeader *seq_hdr,
-                            const Dav1dFrameHeader *frm_hdr,
+int dav2d_refmvs_init_frame(refmvs_frame *rf,
+                            const Dav2dSequenceHeader *seq_hdr,
+                            const Dav2dFrameHeader *frm_hdr,
                             const uint8_t ref_poc[7],
                             refmvs_temporal_block *rp,
                             const uint8_t ref_ref_poc[7][7],
@@ -206,13 +206,13 @@ int dav1d_refmvs_init_frame(refmvs_frame *rf,
 
 // cache the current superblock's bottom spatial values into into a "top"
 // buffer to act as "top" across superblock boundaries for the next sbrow
-void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *dsp,
+void dav2d_refmvs_save_tmvs(const Dav2dRefmvsDSPContext *dsp,
                             refmvs_tile *rt,
                             int col_start8, int col_end8,
                             int row_start8, int row_end8);
 
 // load temporal MVs for current tile or frame's superblock-row
-void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
+void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8);
 
@@ -244,25 +244,25 @@ static ALWAYS_INLINE union qmv quantize_mv(const union mv mv) {
 }
 
 // initialize tile boundaries and refmvs_block pointers for one tile/sbrow
-void dav1d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,
+void dav2d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,
                                   int tile_col_start4, int tile_col_end4,
                                   int tile_row_start4, int tile_row_end4,
                                   int sby, int tile_row_idx, int pass);
-void dav1d_refmvs_reset_sb(refmvs_tile *rt, int by, int bx);
-void dav1d_refmvs_bank_update(refmvs_tile *rt, enum BlockSize bs, int by, int bx);
-void dav1d_refmvs_bank_add(refmvs_tile *rt, enum BlockSize bs, int by, int bx,
+void dav2d_refmvs_reset_sb(refmvs_tile *rt, int by, int bx);
+void dav2d_refmvs_bank_update(refmvs_tile *rt, enum BlockSize bs, int by, int bx);
+void dav2d_refmvs_bank_add(refmvs_tile *rt, enum BlockSize bs, int by, int bx,
                            const Av1Block *b);
-int dav1d_refmvs_warp_add(refmvs_tile *rt, const Dav1dWarpedMotionParams *const m,
+int dav2d_refmvs_warp_add(refmvs_tile *rt, const Dav2dWarpedMotionParams *const m,
                           DB_ONLY(int by4, int bx4) int ref);
 
 // call for each block
-void dav1d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],
+void dav2d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],
                        int32_t (*warp)[7], int *cnt, const refmvs_refpair ref,
                        enum BlockSize bs, int skip_mode, int by4, int bx4);
 
-void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *dsp);
-void dav1d_refmvs_dsp_init_arm(Dav1dRefmvsDSPContext *dsp);
-void dav1d_refmvs_dsp_init_loongarch(Dav1dRefmvsDSPContext *dsp);
-void dav1d_refmvs_dsp_init_x86(Dav1dRefmvsDSPContext *dsp);
+void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *dsp);
+void dav2d_refmvs_dsp_init_arm(Dav2dRefmvsDSPContext *dsp);
+void dav2d_refmvs_dsp_init_loongarch(Dav2dRefmvsDSPContext *dsp);
+void dav2d_refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *dsp);
 
-#endif /* DAV1D_SRC_REF_MVS_H */
+#endif /* DAV2D_SRC_REF_MVS_H */

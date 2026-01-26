@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Michail Alvanos
  * All rights reserved.
  *
@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "src/ppc/dav1d_types.h"
+#include "src/ppc/dav2d_types.h"
 #include "src/ppc/looprestoration.h"
 
 #if BITDEPTH == 8
@@ -300,7 +300,7 @@ static inline void padding(uint8_t *dst, const uint8_t *p,
 // (since first and last tops are always 0 for chroma)
 // FIXME Could implement a version that requires less temporary memory
 // (should be possible to implement with only 6 rows of temp storage)
-void dav1d_wiener_filter_vsx(uint8_t *p, const ptrdiff_t stride,
+void dav2d_wiener_filter_vsx(uint8_t *p, const ptrdiff_t stride,
                              const uint8_t (*const left)[4],
                              const uint8_t *lpf,
                              const int w, const int h,

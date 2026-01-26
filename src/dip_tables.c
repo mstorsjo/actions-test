@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -29,7 +29,7 @@
 
 #include "src/dip_tables.h"
 
-const uint16_t dav1d_dip_weights[6][64][11] = {
+const uint16_t dav2d_dip_weights[6][64][11] = {
     {
         { 3104, 6856, 4308, 3992, 4172, 5748, 4628, 4108, 4108, 4044, 4092 },
         { 3380, 6076, 6392, 3568, 4352, 3952, 4876, 4316, 4156, 4000, 4088 },

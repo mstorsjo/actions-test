@@ -1,11 +1,11 @@
-# dav1d contribution guide
+# dav2d contribution guide
 
 ## CoC
 The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies fully to this project.
 
 ## ToDo
 
-The todo list can be found [on the wiki](https://code.videolan.org/videolan/dav1d/wikis/task-list).
+The todo list can be found [on the wiki](https://code.videolan.org/videolan/dav2d/wikis/task-list).
 
 ## Codebase language
 
@@ -44,7 +44,7 @@ Please read [How to Write a Git Commit Message](https://chris.beams.io/posts/git
 
 - Code,
 - [Compile](https://xkcd.com/303/),
-- Check your [code style](https://code.videolan.org/videolan/dav1d/wikis/Coding-style),
+- Check your [code style](https://code.videolan.org/videolan/dav2d/wikis/Coding-style),
 - Test,
 - Try,
 - Submit patches through merge requests,
@@ -52,5 +52,5 @@ Please read [How to Write a Git Commit Message](https://chris.beams.io/posts/git
 
 ## Patent license
 
-You need to read, understand, and agree to the [AV1 patents license](doc/PATENTS), before committing.
+You need to read, understand, and agree to the [AOMedia patent license](doc/PATENTS), before committing.
 

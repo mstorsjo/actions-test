@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_DATA_H
-#define DAV1D_DATA_H
+#ifndef DAV2D_DATA_H
+#define DAV2D_DATA_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -37,12 +37,12 @@
 extern "C" {
 #endif
 
-typedef struct Dav1dData {
+typedef struct Dav2dData {
     const uint8_t *data; ///< data pointer
     size_t sz; ///< data size
-    struct Dav1dRef *ref; ///< allocation origin
-    Dav1dDataProps m; ///< user provided metadata passed to the output picture
-} Dav1dData;
+    struct Dav2dRef *ref; ///< allocation origin
+    Dav2dDataProps m; ///< user provided metadata passed to the output picture
+} Dav2dData;
 
 /**
  * Allocate data.
@@ -52,7 +52,7 @@ typedef struct Dav1dData {
  *
  * @return Pointer to the allocated buffer on success. NULL on error.
  */
-DAV1D_API uint8_t * dav1d_data_create(Dav1dData *data, size_t sz);
+DAV2D_API uint8_t * dav2d_data_create(Dav2dData *data, size_t sz);
 
 /**
  * Wrap an existing data array.
@@ -66,9 +66,9 @@ DAV1D_API uint8_t * dav1d_data_create(Dav1dData *data, size_t sz);
  *                      be the $cookie input argument to this function.
  * @param        cookie Opaque parameter passed to free_callback().
  *
- * @return 0 on success. A negative DAV1D_ERR value on error.
+ * @return 0 on success. A negative DAV2D_ERR value on error.
  */
-DAV1D_API int dav1d_data_wrap(Dav1dData *data, const uint8_t *buf, size_t sz,
+DAV2D_API int dav2d_data_wrap(Dav2dData *data, const uint8_t *buf, size_t sz,
                               void (*free_callback)(const uint8_t *buf, void *cookie),
                               void *cookie);
 
@@ -91,9 +91,9 @@ DAV1D_API int dav1d_data_wrap(Dav1dData *data, const uint8_t *buf, size_t sz,
  *                      function.
  * @param        cookie Opaque parameter passed to $free_callback.
  *
- * @return 0 on success. A negative DAV1D_ERR value on error.
+ * @return 0 on success. A negative DAV2D_ERR value on error.
  */
-DAV1D_API int dav1d_data_wrap_user_data(Dav1dData *data,
+DAV2D_API int dav2d_data_wrap_user_data(Dav2dData *data,
                                         const uint8_t *user_data,
                                         void (*free_callback)(const uint8_t *user_data,
                                                               void *cookie),
@@ -103,15 +103,15 @@ DAV1D_API int dav1d_data_wrap_user_data(Dav1dData *data,
  * Free the data reference.
  *
  * The reference count for data->m.user_data will be decremented (if it has been
- * initialized with dav1d_data_wrap_user_data). The $data object will be memset
+ * initialized with dav2d_data_wrap_user_data). The $data object will be memset
  * to 0.
  *
  * @param data Input context.
  */
-DAV1D_API void dav1d_data_unref(Dav1dData *data);
+DAV2D_API void dav2d_data_unref(Dav2dData *data);
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* DAV1D_DATA_H */
+#endif /* DAV2D_DATA_H */

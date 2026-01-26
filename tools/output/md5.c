@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -90,7 +90,7 @@ typedef struct MuxerPriv {
 } MD5Context;
 
 static int md5_open(MD5Context *const md5, const char *const file,
-                    const Dav1dPictureParameters *const p,
+                    const Dav2dPictureParameters *const p,
                     const unsigned fps[2])
 {
     if (!strcmp(file, "-")) {
@@ -191,7 +191,7 @@ static void md5_update(MD5Context *const md5, const uint8_t *data, unsigned len)
     }
 }
 
-static int md5_write(MD5Context *const md5, Dav1dPicture *const p) {
+static int md5_write(MD5Context *const md5, Dav2dPicture *const p) {
     const int hbd = p->p.bpc > 8;
     const int w = p->p.w, h = p->p.h;
     uint8_t *yptr = p->data[0];
@@ -220,9 +220,9 @@ static int md5_write(MD5Context *const md5, Dav1dPicture *const p) {
         yptr += p->stride[0];
     }
 
-    if (p->p.layout != DAV1D_PIXEL_LAYOUT_I400) {
-        const int ss_ver = p->p.layout == DAV1D_PIXEL_LAYOUT_I420;
-        const int ss_hor = p->p.layout != DAV1D_PIXEL_LAYOUT_I444;
+    if (p->p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+        const int ss_ver = p->p.layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = p->p.layout != DAV2D_PIXEL_LAYOUT_I444;
         const int cw = (w + ss_hor) >> ss_hor;
         const int ch = (h + ss_ver) >> ss_ver;
         for (int pl = 1; pl <= 2; pl++) {
@@ -244,7 +244,7 @@ static int md5_write(MD5Context *const md5, Dav1dPicture *const p) {
         }
     }
 
-    dav1d_picture_unref(p);
+    dav2d_picture_unref(p);
 
     return 0;
 }

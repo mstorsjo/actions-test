@@ -24,7 +24,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "src/ppc/dav1d_types.h"
+#include "src/ppc/dav2d_types.h"
 #include "src/ppc/cdef.h"
 
 #if BITDEPTH == 8
@@ -599,7 +599,7 @@ filter_8xN_sec(pixel *dst, const ptrdiff_t dst_stride,
 }
 
 #define cdef_fn(w, h, tmp_stride) \
-void dav1d_cdef_filter_##w##x##h##_vsx(pixel *const dst, \
+void dav2d_cdef_filter_##w##x##h##_vsx(pixel *const dst, \
                                        const ptrdiff_t dst_stride, \
                                        const pixel (*left)[2], \
                                        const pixel *const top, \

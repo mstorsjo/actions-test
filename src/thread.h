@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_THREAD_H
-#define DAV1D_SRC_THREAD_H
+#ifndef DAV2D_SRC_THREAD_H
+#define DAV2D_SRC_THREAD_H
 
 #if defined(_WIN32)
 
@@ -50,19 +50,19 @@ typedef SRWLOCK pthread_mutex_t;
 typedef CONDITION_VARIABLE pthread_cond_t;
 typedef INIT_ONCE pthread_once_t;
 
-void dav1d_init_thread(void);
-void dav1d_set_thread_name(const wchar_t *name);
-#define dav1d_set_thread_name(name) dav1d_set_thread_name(L##name)
+void dav2d_init_thread(void);
+void dav2d_set_thread_name(const wchar_t *name);
+#define dav2d_set_thread_name(name) dav2d_set_thread_name(L##name)
 
-int dav1d_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+int dav2d_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                          void *(*func)(void*), void *arg);
-int dav1d_pthread_join(pthread_t *thread, void **res);
-int dav1d_pthread_once(pthread_once_t *once_control,
+int dav2d_pthread_join(pthread_t *thread, void **res);
+int dav2d_pthread_once(pthread_once_t *once_control,
                        void (*init_routine)(void));
 
-#define pthread_create dav1d_pthread_create
-#define pthread_join(thread, res) dav1d_pthread_join(&(thread), res)
-#define pthread_once   dav1d_pthread_once
+#define pthread_create dav2d_pthread_create
+#define pthread_join(thread, res) dav2d_pthread_join(&(thread), res)
+#define pthread_once   dav2d_pthread_once
 
 static inline int pthread_attr_init(pthread_attr_t *const attr) {
     attr->stack_size = 0;
@@ -141,7 +141,7 @@ static inline int pthread_cond_broadcast(pthread_cond_t *const cond) {
 #include <pthread_np.h>
 #endif
 
-#define dav1d_init_thread() do {} while (0)
+#define dav2d_init_thread() do {} while (0)
 
 /* Thread naming support */
 
@@ -149,31 +149,31 @@ static inline int pthread_cond_broadcast(pthread_cond_t *const cond) {
 
 #include <sys/prctl.h>
 
-static inline void dav1d_set_thread_name(const char *const name) {
+static inline void dav2d_set_thread_name(const char *const name) {
     prctl(PR_SET_NAME, name);
 }
 
 #elif HAVE_PTHREAD_SETNAME_NP && defined(__APPLE__)
 
-static inline void dav1d_set_thread_name(const char *const name) {
+static inline void dav2d_set_thread_name(const char *const name) {
     pthread_setname_np(name);
 }
 
 #elif HAVE_PTHREAD_SETNAME_NP && defined(__NetBSD__)
 
-static inline void dav1d_set_thread_name(const char *const name) {
+static inline void dav2d_set_thread_name(const char *const name) {
     pthread_setname_np(pthread_self(), "%s", (void*)name);
 }
 
 #elif HAVE_PTHREAD_SETNAME_NP
 
-static inline void dav1d_set_thread_name(const char *const name) {
+static inline void dav2d_set_thread_name(const char *const name) {
     pthread_setname_np(pthread_self(), name);
 }
 
 #elif HAVE_PTHREAD_SET_NAME_NP
 
-static inline void dav1d_set_thread_name(const char *const name) {
+static inline void dav2d_set_thread_name(const char *const name) {
     pthread_set_name_np(pthread_self(), name);
 }
 
@@ -181,16 +181,16 @@ static inline void dav1d_set_thread_name(const char *const name) {
 
 #include <os/kernel/OS.h>
 
-static inline void dav1d_set_thread_name(const char *const name) {
+static inline void dav2d_set_thread_name(const char *const name) {
     rename_thread(find_thread(NULL), name);
 }
 
 #else
 
-#define dav1d_set_thread_name(name) do {} while (0)
+#define dav2d_set_thread_name(name) do {} while (0)
 
 #endif
 
 #endif
 
-#endif /* DAV1D_SRC_THREAD_H */
+#endif /* DAV2D_SRC_THREAD_H */

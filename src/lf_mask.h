@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LF_MASK_H
-#define DAV1D_SRC_LF_MASK_H
+#ifndef DAV2D_SRC_LF_MASK_H
+#define DAV2D_SRC_LF_MASK_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -38,7 +38,7 @@ typedef struct Av1FilterLUT {
 } Av1FilterLUT;
 
 typedef struct Av1RestorationUnit {
-    uint8_t /* enum Dav1dRestorationType */ type;
+    uint8_t /* enum Dav2dRestorationType */ type;
     int8_t ns_filter[16][32];
 } Av1RestorationUnit;
 
@@ -58,16 +58,16 @@ typedef struct Av1Restoration {
     Av1RestorationUnit lr[3][4];
 } Av1Restoration;
 
-void dav1d_create_lf_mask_intra(Av1Filter *lflvl, const Av1Block *b, int bx, int by,
-                                int iw, int ih, enum Dav1dPixelLayout layout, uint8_t *ay,
+void dav2d_create_lf_mask_intra(Av1Filter *lflvl, const Av1Block *b, int bx, int by,
+                                int iw, int ih, enum Dav2dPixelLayout layout, uint8_t *ay,
                                 uint8_t *ly, uint8_t *auv, uint8_t *luv);
-void dav1d_create_lf_mask_inter(Av1Filter *lflvl, int bx, int by,
+void dav2d_create_lf_mask_inter(Av1Filter *lflvl, int bx, int by,
                                 int iw, int ih, int skip_inter,
                                 enum BlockSize bs, enum RectTxfmSize max_ytx,
                                 const uint16_t *tx_mask, enum RectTxfmSize uvtx,
-                                enum Dav1dPixelLayout layout, uint8_t *ay,
+                                enum Dav2dPixelLayout layout, uint8_t *ay,
                                 uint8_t *ly, uint8_t *auv, uint8_t *luv);
-void dav1d_calc_lf_values(uint8_t (*values)[4][8][2], const Dav1dFrameHeader *hdr,
+void dav2d_calc_lf_values(uint8_t (*values)[4][8][2], const Dav2dFrameHeader *hdr,
                           const int8_t lf_delta[4]);
 
-#endif /* DAV1D_SRC_LF_MASK_H */
+#endif /* DAV2D_SRC_LF_MASK_H */

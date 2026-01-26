@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,9 +42,9 @@ struct dp_fifo
 };
 
 
-Dav1dPlayPtrFifo *dp_fifo_create(size_t capacity)
+Dav2dPlayPtrFifo *dp_fifo_create(size_t capacity)
 {
-    Dav1dPlayPtrFifo *fifo;
+    Dav2dPlayPtrFifo *fifo;
 
     assert(capacity > 0);
     if (capacity <= 0)
@@ -81,7 +81,7 @@ Dav1dPlayPtrFifo *dp_fifo_create(size_t capacity)
 }
 
 // Destroy FIFO
-void dp_fifo_destroy(Dav1dPlayPtrFifo *fifo)
+void dp_fifo_destroy(Dav2dPlayPtrFifo *fifo)
 {
     assert(fifo->count == 0);
     SDL_DestroyMutex(fifo->lock);
@@ -91,7 +91,7 @@ void dp_fifo_destroy(Dav1dPlayPtrFifo *fifo)
 }
 
 // Push to FIFO
-void dp_fifo_push(Dav1dPlayPtrFifo *fifo, void *element)
+void dp_fifo_push(Dav2dPlayPtrFifo *fifo, void *element)
 {
     SDL_LockMutex(fifo->lock);
     while (fifo->count == fifo->capacity) {
@@ -120,7 +120,7 @@ static void *dp_fifo_array_shift(void **arr, size_t len)
 }
 
 // Get item from FIFO
-void *dp_fifo_shift(Dav1dPlayPtrFifo *fifo)
+void *dp_fifo_shift(Dav2dPlayPtrFifo *fifo)
 {
     SDL_LockMutex(fifo->lock);
     while (fifo->count == 0)
@@ -132,7 +132,7 @@ void *dp_fifo_shift(Dav1dPlayPtrFifo *fifo)
     return res;
 }
 
-void dp_fifo_flush(Dav1dPlayPtrFifo *fifo, void (*destroy_elem)(void *))
+void dp_fifo_flush(Dav2dPlayPtrFifo *fifo, void (*destroy_elem)(void *))
 {
     SDL_LockMutex(fifo->lock);
     fifo->flush = 1;

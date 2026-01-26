@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -31,16 +31,16 @@
 
 static void default_free_callback(const uint8_t *const data, void *const user_data) {
     assert(data == user_data);
-    dav1d_free_aligned(user_data);
+    dav2d_free_aligned(user_data);
 }
 
-Dav1dRef *dav1d_ref_create(const enum AllocationType type, size_t size) {
+Dav2dRef *dav2d_ref_create(const enum AllocationType type, size_t size) {
     size = (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
 
-    uint8_t *const data = dav1d_alloc_aligned(type, size + sizeof(Dav1dRef), 64);
+    uint8_t *const data = dav2d_alloc_aligned(type, size + sizeof(Dav2dRef), 64);
     if (!data) return NULL;
 
-    Dav1dRef *const res = (Dav1dRef*)(data + size);
+    Dav2dRef *const res = (Dav2dRef*)(data + size);
     res->const_data = res->user_data = res->data = data;
     atomic_init(&res->ref_cnt, 1);
     res->free_ref = 0;
@@ -50,17 +50,17 @@ Dav1dRef *dav1d_ref_create(const enum AllocationType type, size_t size) {
 }
 
 static void pool_free_callback(const uint8_t *const data, void *const user_data) {
-    dav1d_mem_pool_push((Dav1dMemPool*)data, user_data);
+    dav2d_mem_pool_push((Dav2dMemPool*)data, user_data);
 }
 
-Dav1dRef *dav1d_ref_create_using_pool(Dav1dMemPool *const pool, size_t size) {
+Dav2dRef *dav2d_ref_create_using_pool(Dav2dMemPool *const pool, size_t size) {
     size = (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
 
-    Dav1dMemPoolBuffer *const buf =
-        dav1d_mem_pool_pop(pool, size + sizeof(Dav1dRef));
+    Dav2dMemPoolBuffer *const buf =
+        dav2d_mem_pool_pop(pool, size + sizeof(Dav2dRef));
     if (!buf) return NULL;
 
-    Dav1dRef *const res = &((Dav1dRef*)buf)[-1];
+    Dav2dRef *const res = &((Dav2dRef*)buf)[-1];
     res->data = buf->data;
     res->const_data = pool;
     atomic_init(&res->ref_cnt, 1);
@@ -71,16 +71,16 @@ Dav1dRef *dav1d_ref_create_using_pool(Dav1dMemPool *const pool, size_t size) {
     return res;
 }
 
-void dav1d_ref_dec(Dav1dRef **const pref) {
+void dav2d_ref_dec(Dav2dRef **const pref) {
     assert(pref != NULL);
 
-    Dav1dRef *const ref = *pref;
+    Dav2dRef *const ref = *pref;
     if (!ref) return;
 
     *pref = NULL;
     if (atomic_fetch_sub(&ref->ref_cnt, 1) == 1) {
         const int free_ref = ref->free_ref;
         ref->free_callback(ref->const_data, ref->user_data);
-        if (free_ref) dav1d_free(ref);
+        if (free_ref) dav2d_free(ref);
     }
 }

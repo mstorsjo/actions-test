@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Nathan Egge
  * All rights reserved.
  *
@@ -28,46 +28,46 @@
 #include "src/cpu.h"
 #include "src/mc.h"
 
-decl_blend_fn(BF(dav1d_blend, rvv));
-decl_blend_dir_fn(BF(dav1d_blend_h, rvv));
-decl_blend_dir_fn(BF(dav1d_blend_v, rvv));
+decl_blend_fn(BF(dav2d_blend, rvv));
+decl_blend_dir_fn(BF(dav2d_blend_h, rvv));
+decl_blend_dir_fn(BF(dav2d_blend_v, rvv));
 
-decl_blend_fn(BF(dav1d_blend_vl256, rvv));
-decl_blend_dir_fn(BF(dav1d_blend_h_vl256, rvv));
-decl_blend_dir_fn(BF(dav1d_blend_v_vl256, rvv));
+decl_blend_fn(BF(dav2d_blend_vl256, rvv));
+decl_blend_dir_fn(BF(dav2d_blend_h_vl256, rvv));
+decl_blend_dir_fn(BF(dav2d_blend_v_vl256, rvv));
 
-decl_avg_fn(BF(dav1d_avg, rvv));
-decl_w_avg_fn(BF(dav1d_w_avg, rvv));
-decl_mask_fn(BF(dav1d_mask, rvv));
+decl_avg_fn(BF(dav2d_avg, rvv));
+decl_w_avg_fn(BF(dav2d_w_avg, rvv));
+decl_mask_fn(BF(dav2d_mask, rvv));
 
-decl_warp8x8_fn(BF(dav1d_warp_8x8, rvv));
-decl_warp8x8t_fn(BF(dav1d_warp_8x8t, rvv));
+decl_warp8x8_fn(BF(dav2d_warp_8x8, rvv));
+decl_warp8x8t_fn(BF(dav2d_warp_8x8t, rvv));
 
-static ALWAYS_INLINE void mc_dsp_init_riscv(Dav1dMCDSPContext *const c) {
-  const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void mc_dsp_init_riscv(Dav2dMCDSPContext *const c) {
+  const unsigned flags = dav2d_get_cpu_flags();
 
-  if (!(flags & DAV1D_RISCV_CPU_FLAG_V)) return;
+  if (!(flags & DAV2D_RISCV_CPU_FLAG_V)) return;
 
-  c->blend = BF(dav1d_blend, rvv);
-  c->blend_v = BF(dav1d_blend_v, rvv);
+  c->blend = BF(dav2d_blend, rvv);
+  c->blend_v = BF(dav2d_blend_v, rvv);
 
-  if (dav1d_get_vlen() >= 256) {
-    c->blend = BF(dav1d_blend_vl256, rvv);
-    c->blend_v = BF(dav1d_blend_v_vl256, rvv);
+  if (dav2d_get_vlen() >= 256) {
+    c->blend = BF(dav2d_blend_vl256, rvv);
+    c->blend_v = BF(dav2d_blend_v_vl256, rvv);
   }
 
 #if BITDEPTH == 8
-  c->blend_h = BF(dav1d_blend_h, rvv);
+  c->blend_h = BF(dav2d_blend_h, rvv);
 
-  if (dav1d_get_vlen() >= 256) {
-    c->blend_h = BF(dav1d_blend_h_vl256, rvv);
+  if (dav2d_get_vlen() >= 256) {
+    c->blend_h = BF(dav2d_blend_h_vl256, rvv);
   }
 
-  c->avg     = BF(dav1d_avg, rvv);
-  c->w_avg   = BF(dav1d_w_avg, rvv);
-  c->mask    = BF(dav1d_mask, rvv);
+  c->avg     = BF(dav2d_avg, rvv);
+  c->w_avg   = BF(dav2d_w_avg, rvv);
+  c->mask    = BF(dav2d_mask, rvv);
 
-  c->warp8x8 = BF(dav1d_warp_8x8, rvv);
-  c->warp8x8t = BF(dav1d_warp_8x8t, rvv);
+  c->warp8x8 = BF(dav2d_warp_8x8, rvv);
+  c->warp8x8t = BF(dav2d_warp_8x8t, rvv);
 #endif
 }

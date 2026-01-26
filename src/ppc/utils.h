@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Luca Barbato
  * All rights reserved.
  *
@@ -25,10 +25,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_PPC_UTILS_H
-#define DAV1D_SRC_PPC_UTILS_H
+#ifndef DAV2D_SRC_PPC_UTILS_H
+#define DAV2D_SRC_PPC_UTILS_H
 
-#include "src/ppc/dav1d_types.h"
+#include "src/ppc/dav2d_types.h"
 
 #define assert_eq(a, b) \
     if ((a) != (b)) \
@@ -102,4 +102,4 @@
     MERGE_I32(mCEl, mDFl, cE, cF) \
 }
 
-#endif // DAV1D_SRC_PPC_UTILS_H
+#endif // DAV2D_SRC_PPC_UTILS_H

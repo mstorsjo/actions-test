@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2024, Bogdan Gligorijevic
  * All rights reserved.
  *
@@ -282,7 +282,7 @@ function cdef_filter_block_\w\()x\h\()_8bpc_rvv, export=1, ext="v,zba,zbb"
 
     li t0, \h
 
-    la t2, dav1d_cdef_directions
+    la t2, dav2d_cdef_directions
     addi t3, a7, 2
     sh1add t2, t3, t2
 
@@ -369,7 +369,7 @@ cdef_filter_sec_only_\w\()x\h:
 
     li t0, \h
 
-    la t2, dav1d_cdef_directions
+    la t2, dav2d_cdef_directions
     addi t3, a7, 4
     sh1add t3, t3, t2
     sh1add t2, a7, t2
@@ -483,7 +483,7 @@ cdef_filter_pri_sec_\w\()x\h:
 
     li t0, \h
 
-    la t3, dav1d_cdef_directions
+    la t3, dav2d_cdef_directions
 
     blt zero, t1, 3f
     mv t1, zero

@@ -1,4 +1,4 @@
-# The dav1d project and VideoLAN association would like to thank
+# The dav2d project and VideoLAN association would like to thank
 
 ## AOM
 The Alliance for Open Media (AOM) for partially funding this project.
@@ -14,7 +14,7 @@ The Alliance for Open Media (AOM) for partially funding this project.
 
 ## Individual
 
-And all the dav1d Authors (git shortlog -sn), including:
+And all the dav2d Authors (git shortlog -sn), including:
 
 Henrik Gramner, Martin Storsjö, Ronald S. Bultje, Janne Grunau, James Almer,
 Victorien Le Couviour--Tuffet, Matthias Dressel, Nathan E. Egge,

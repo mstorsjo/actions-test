@@ -1,4 +1,4 @@
-; Copyright © 2021, VideoLAN and dav1d authors
+; Copyright © 2021, VideoLAN and dav2d authors
 ; Copyright © 2021, Two Orioles, LLC
 ; Copyright © 2017-2021, The rav1e contributors
 ; Copyright © 2020, Nathan Egge

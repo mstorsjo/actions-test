@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
  * All rights reserved.
  *
@@ -117,7 +117,7 @@ endconst
 .endif
 .endm
 
-// unsigned dav1d_msac_decode_symbol_adapt4_neon(MsacContext *s, uint16_t *cdf,
+// unsigned dav2d_msac_decode_symbol_adapt4_neon(MsacContext *s, uint16_t *cdf,
 //                                               size_t n_symbols);
 
 function msac_decode_symbol_adapt4_neon, export=1

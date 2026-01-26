@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Luca Barbato
  * All rights reserved.
  *
@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "src/ppc/dav1d_types.h"
+#include "src/ppc/dav2d_types.h"
 #include "src/ppc/itx.h"
 #include "src/ppc/utils.h"
 
@@ -472,7 +472,7 @@ static void dc_only_16xN(uint8_t *dst, const ptrdiff_t stride, int16_t *const co
     }
 }
 
-void dav1d_inv_txfm_add_dct_dct_4x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_dct_dct_4x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
                                               int16_t *const coeff, const int eob)
 {
     assert(eob >= 0);
@@ -498,7 +498,7 @@ void dav1d_inv_txfm_add_dct_dct_4x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stri
     STORE_4(dst, stride, a, b, c, d)
 }
 
-void dav1d_inv_txfm_add_wht_wht_4x4_8bpc_pwr9(pixel *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_wht_wht_4x4_8bpc_pwr9(pixel *dst, const ptrdiff_t stride,
                                               coef *const coeff, const int eob)
 {
     LOAD_COEFF_4(coeff)
@@ -558,7 +558,7 @@ void dav1d_inv_txfm_add_wht_wht_4x4_8bpc_pwr9(pixel *dst, const ptrdiff_t stride
 }
 
 #define inv_txfm_fn4x4(type1, type2) \
-void dav1d_inv_txfm_add_##type1##_##type2##_4x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_##type1##_##type2##_4x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     LOAD_COEFF_4(coeff) \
@@ -1009,7 +1009,7 @@ inv_txfm_fn4x4(flipadst, flipadst)
            c0l, c1l, c2l, c3l, c4l, c5l, c6l, c7l) \
 }
 
-void dav1d_inv_txfm_add_dct_dct_4x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_dct_dct_4x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
                                               int16_t *const coeff, const int eob)
 {
     i16x8 v = vec_splats((int16_t)(2896*8));
@@ -1043,7 +1043,7 @@ void dav1d_inv_txfm_add_dct_dct_4x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stri
 
 
 #define inv_txfm_fn4x8(type1, type2) \
-void dav1d_inv_txfm_add_##type1##_##type2##_4x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_##type1##_##type2##_4x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     i16x8 v = vec_splats((int16_t)(2896*8)); \
@@ -1079,7 +1079,7 @@ inv_txfm_fn4x8(adst,     adst    )
 inv_txfm_fn4x8(flipadst, flipadst)
 
 
-void dav1d_inv_txfm_add_dct_dct_8x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_dct_dct_8x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
                                               int16_t *const coeff, const int eob)
 {
     i16x8 v = vec_splats((int16_t)(2896*8));
@@ -1115,7 +1115,7 @@ void dav1d_inv_txfm_add_dct_dct_8x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stri
 
 
 #define inv_txfm_fn8x4(type1, type2) \
-void dav1d_inv_txfm_add_##type1##_##type2##_8x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_##type1##_##type2##_8x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     i16x8 v = vec_splats((int16_t)(2896*8)); \
@@ -1151,7 +1151,7 @@ inv_txfm_fn8x4(identity, identity)
 inv_txfm_fn8x4(adst,     adst    )
 inv_txfm_fn8x4(flipadst, flipadst)
 
-void dav1d_inv_txfm_add_dct_dct_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_dct_dct_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
                                               int16_t *const coeff, const int eob)
 {
     if (eob < 1) {
@@ -1191,7 +1191,7 @@ void dav1d_inv_txfm_add_dct_dct_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stri
 }
 
 #define inv_txfm_fn8x8(type1, type2) \
-void dav1d_inv_txfm_add_##type1##_##type2##_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_##type1##_##type2##_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     LOAD_COEFF_8x8(coeff) \
@@ -1231,7 +1231,7 @@ inv_txfm_fn8x8(flipadst, flipadst)
 
 // identity + scale is a no op
 #define inv_txfm_fn8x8_identity(type2) \
-void dav1d_inv_txfm_add_identity_##type2##_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_identity_##type2##_8x8_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                          int16_t *const coeff, const int eob) \
 { \
     LOAD_COEFF_8x8(coeff) \
@@ -1773,7 +1773,7 @@ inv_txfm_fn8x8_identity(identity)
 }
 
 
-void dav1d_inv_txfm_add_dct_dct_4x16_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_dct_dct_4x16_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
                                                int16_t *const coeff, const int eob
                                                HIGHBD_DECL_SUFFIX)
 {
@@ -1817,7 +1817,7 @@ void dav1d_inv_txfm_add_dct_dct_4x16_8bpc_pwr9(uint8_t *dst, const ptrdiff_t str
 }
 
 #define inv_txfm_fn4x16(type1, type2) \
-void dav1d_inv_txfm_add_##type1##_##type2##_4x16_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_##type1##_##type2##_4x16_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     LOAD_COEFF_4x16(coeff) \
@@ -1863,7 +1863,7 @@ inv_txfm_fn4x16(identity, identity)
 inv_txfm_fn4x16(adst,     adst    )
 inv_txfm_fn4x16(flipadst, flipadst)
 
-void dav1d_inv_txfm_add_dct_dct_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
+void dav2d_inv_txfm_add_dct_dct_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride,
                                                int16_t *const coeff, const int eob)
 {
 
@@ -1911,7 +1911,7 @@ void dav1d_inv_txfm_add_dct_dct_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t str
 }
 
 #define inv_txfm_fn16x4(type1, type2) \
-void dav1d_inv_txfm_add_##type1##_##type2##_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_##type1##_##type2##_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     LOAD_DECLARE_2_I16(coeff, c00c01, c02c03) \
@@ -1961,7 +1961,7 @@ inv_txfm_fn16x4(adst,     adst    )
 inv_txfm_fn16x4(flipadst, flipadst)
 
 #define inv_txfm_fn16x4_identity(type2) \
-void dav1d_inv_txfm_add_identity_##type2##_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
+void dav2d_inv_txfm_add_identity_##type2##_16x4_8bpc_pwr9(uint8_t *dst, const ptrdiff_t stride, \
                                                           int16_t *const coeff, const int eob) \
 { \
     LOAD_DECLARE_2_I16(coeff, c00c01, c02c03) \

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
  * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
@@ -31,16 +31,16 @@
 #include "src/mc.h"
 
 static const char *const filter_names[] = {
-    [DAV1D_FILTER_8TAP_REGULAR] = "regular",
-    [DAV1D_FILTER_8TAP_SMOOTH]  = "smooth",
-    [DAV1D_FILTER_8TAP_SHARP]   = "sharp",
-    [DAV1D_FILTER_BILINEAR]     = "bilinear",
+    [DAV2D_FILTER_8TAP_REGULAR] = "regular",
+    [DAV2D_FILTER_8TAP_SMOOTH]  = "smooth",
+    [DAV2D_FILTER_8TAP_SHARP]   = "sharp",
+    [DAV2D_FILTER_BILINEAR]     = "bilinear",
 };
 
 static const char *const mxy_names[] = { "0", "h", "v", "hv" };
 static const char *const scaled_paths[] = { "", "_dy1", "_dy2" };
 
-static void check_mc(Dav1dMCDSPContext *const c) {
+static void check_mc(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, (64 + 7) * (64 + 7),);
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
@@ -51,7 +51,7 @@ static void check_mc(Dav1dMCDSPContext *const c) {
                  ptrdiff_t src_stride, int w, int h, int mx, int my
                  HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
+    for (int filter = 0; filter < DAV2D_N_FILTERS; filter++)
         for (int w = 2; w <= 64; w <<= 1) {
             pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
             for (int mxy = 0; mxy < 4; mxy++)
@@ -81,9 +81,9 @@ static void check_mc(Dav1dMCDSPContext *const c) {
                                                     u_dst, a_dst_stride,
                                                     w, h, "dst");
 
-                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
-                            filter == DAV1D_FILTER_8TAP_SHARP ||
-                            filter == DAV1D_FILTER_BILINEAR)
+                        if (filter == DAV2D_FILTER_8TAP_REGULAR ||
+                            filter == DAV2D_FILTER_8TAP_SHARP ||
+                            filter == DAV2D_FILTER_BILINEAR)
                         {
                             bench_new(a_dst, a_dst_stride, src, src_stride, w, h,
                                       mx, my HIGHBD_TAIL_SUFFIX);
@@ -105,7 +105,7 @@ static void generate_mct_input(pixel *buf, const int bitdepth_max) {
                                   : rnd()) & bitdepth_max;
 }
 
-static void check_mct(Dav1dMCDSPContext *const c) {
+static void check_mct(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, (64 + 7) * (64 + 7),);
     ALIGN_STK_64(int16_t, c_tmp, 64 * 64,);
     ALIGN_STK_64(int16_t, a_tmp, 64 * 64,);
@@ -116,7 +116,7 @@ static void check_mct(Dav1dMCDSPContext *const c) {
                  const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
+    for (int filter = 0; filter < DAV2D_N_FILTERS; filter++)
         for (int w = 4; w <= 64; w <<= 1)
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mct[filter], "mct_%s_w%d_%s_%dbpc",
@@ -140,9 +140,9 @@ static void check_mct(Dav1dMCDSPContext *const c) {
                                                 a_tmp, w * sizeof(*a_tmp),
                                                 w, h, "tmp");
 
-                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
-                            filter == DAV1D_FILTER_8TAP_SHARP ||
-                            filter == DAV1D_FILTER_BILINEAR)
+                        if (filter == DAV2D_FILTER_8TAP_REGULAR ||
+                            filter == DAV2D_FILTER_8TAP_SHARP ||
+                            filter == DAV2D_FILTER_BILINEAR)
                         {
                             bench_new(a_tmp, w, src, src_stride, w, h,
                                       mx, my HIGHBD_TAIL_SUFFIX);
@@ -151,7 +151,7 @@ static void check_mct(Dav1dMCDSPContext *const c) {
     report("mct");
 }
 
-static void check_mc_scaled(Dav1dMCDSPContext *const c) {
+static void check_mc_scaled(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, (128 + 7) * (128 + 7),);
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
@@ -167,7 +167,7 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
                  ptrdiff_t src_stride, int w, int h,
                  int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
+    for (int filter = 0; filter < DAV2D_N_FILTERS; filter++)
         for (int w = 2; w <= 64; w <<= 1) {
             pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
             for (int p = 0; p < 3; ++p) {
@@ -196,8 +196,8 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
                                                     u_dst, a_dst_stride,
                                                     w, h, "dst");
 
-                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
-                            filter == DAV1D_FILTER_BILINEAR)
+                        if (filter == DAV2D_FILTER_8TAP_REGULAR ||
+                            filter == DAV2D_FILTER_BILINEAR)
                             bench_new(a_dst, a_dst_stride, src, src_stride,
                                       w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
                     }
@@ -207,7 +207,7 @@ static void check_mc_scaled(Dav1dMCDSPContext *const c) {
     report("mc_scaled");
 }
 
-static void check_mct_scaled(Dav1dMCDSPContext *const c) {
+static void check_mct_scaled(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, (128 + 7) * (128 + 7),);
     ALIGN_STK_64(int16_t, c_tmp, 64 * 64,);
     ALIGN_STK_64(int16_t, a_tmp, 64 * 64,);
@@ -223,7 +223,7 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
                  const pixel *src, ptrdiff_t src_stride,
                  int w, int h, int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX);
 
-    for (int filter = 0; filter < DAV1D_N_FILTERS; filter++)
+    for (int filter = 0; filter < DAV2D_N_FILTERS; filter++)
         for (int w = 4; w <= 64; w <<= 1)
             for (int p = 0; p < 3; ++p) {
                 if (check_func(c->mct_scaled[filter], "mct_scaled_%s_w%d%s_%dbpc",
@@ -248,8 +248,8 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
                                                 a_tmp, w * sizeof(*a_tmp),
                                                 w, h, "tmp");
 
-                        if (filter == DAV1D_FILTER_8TAP_REGULAR ||
-                            filter == DAV1D_FILTER_BILINEAR)
+                        if (filter == DAV2D_FILTER_8TAP_REGULAR ||
+                            filter == DAV2D_FILTER_BILINEAR)
                             bench_new(a_tmp, w, src, src_stride,
                                       w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
                     }
@@ -258,18 +258,18 @@ static void check_mct_scaled(Dav1dMCDSPContext *const c) {
     report("mct_scaled");
 }
 
-static void init_tmp(Dav1dMCDSPContext *const c, pixel *const buf,
+static void init_tmp(Dav2dMCDSPContext *const c, pixel *const buf,
                      int16_t (*const tmp)[64 * 64], const int bitdepth_max)
 {
     for (int i = 0; i < 2; i++) {
         generate_mct_input(buf, bitdepth_max);
-        c->mct[DAV1D_FILTER_8TAP_SHARP](tmp[i], 64, buf + (64 + 7) * 3 + 3,
+        c->mct[DAV2D_FILTER_8TAP_SHARP](tmp[i], 64, buf + (64 + 7) * 3 + 3,
                                         (64 + 7) * sizeof(pixel), 64, 64,
                                         8, 8 HIGHBD_TAIL_SUFFIX);
     }
 }
 
-static void check_avg(Dav1dMCDSPContext *const c) {
+static void check_avg(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
     PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
     PIXEL_RECT(a_dst, 64, 64);
@@ -304,7 +304,7 @@ static void check_avg(Dav1dMCDSPContext *const c) {
     report("avg");
 }
 
-static void check_w_avg(Dav1dMCDSPContext *const c) {
+static void check_w_avg(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
     PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
     PIXEL_RECT(a_dst, 64, 64);
@@ -339,7 +339,7 @@ static void check_w_avg(Dav1dMCDSPContext *const c) {
     report("w_avg");
 }
 
-static void check_mask(Dav1dMCDSPContext *const c) {
+static void check_mask(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
     PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
     PIXEL_RECT(a_dst, 64, 64);
@@ -378,7 +378,7 @@ static void check_mask(Dav1dMCDSPContext *const c) {
     report("mask");
 }
 
-static void check_w_mask(Dav1dMCDSPContext *const c) {
+static void check_w_mask(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(int16_t, tmp, 2, [64 * 64]);
     PIXEL_RECT(c_dst, 64 + 7, 64 + 7);
     PIXEL_RECT(a_dst, 64, 64);
@@ -431,7 +431,7 @@ static void check_w_mask(Dav1dMCDSPContext *const c) {
     report("w_mask");
 }
 
-static void check_blend(Dav1dMCDSPContext *const c) {
+static void check_blend(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, tmp, 64 * 64,);
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
@@ -474,7 +474,7 @@ static void check_blend(Dav1dMCDSPContext *const c) {
     report("blend");
 }
 
-static void check_warp8x8(Dav1dMCDSPContext *const c) {
+static void check_warp8x8(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, 15 * 15,);
     PIXEL_RECT(c_dst, 8, 8);
     PIXEL_RECT(a_dst, 8, 8);
@@ -514,7 +514,7 @@ static void check_warp8x8(Dav1dMCDSPContext *const c) {
     report("warp8x8");
 }
 
-static void check_warp8x8t(Dav1dMCDSPContext *const c) {
+static void check_warp8x8t(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, 15 * 15,);
     ALIGN_STK_64(int16_t, c_tmp,  8 *  8,);
     ALIGN_STK_64(int16_t, a_tmp,  8 *  8,);
@@ -586,7 +586,7 @@ static void random_offset_for_edge(int *const x, int *const y,
     set_off(TOP, BOTTOM, y, h);
 }
 
-static void check_emuedge(Dav1dMCDSPContext *const c) {
+static void check_emuedge(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, c_dst, (64 + 7) * 128,);
     ALIGN_STK_64(pixel, a_dst, (64 + 7) * 128,);
     ALIGN_STK_64(pixel, src,   96 * 96,);
@@ -632,7 +632,7 @@ static int get_upscale_x0(const int in_w, const int out_w, const int step) {
     return x0 & 0x3fff;
 }
 
-static void check_resize(Dav1dMCDSPContext *const c) {
+static void check_resize(Dav2dMCDSPContext *const c) {
     PIXEL_RECT(c_dst, 1024, 64);
     PIXEL_RECT(a_dst, 1024, 64);
     ALIGN_STK_64(pixel, src, 512 * 64,);
@@ -683,8 +683,8 @@ static void check_resize(Dav1dMCDSPContext *const c) {
 }
 
 void bitfn(checkasm_check_mc)(void) {
-    Dav1dMCDSPContext c;
-    bitfn(dav1d_mc_dsp_init)(&c);
+    Dav2dMCDSPContext c;
+    bitfn(dav2d_mc_dsp_init)(&c);
 
     check_mc(&c);
     check_mct(&c);

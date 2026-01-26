@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_DEBUG_H
-#define DAV1D_SRC_DEBUG_H
+#ifndef DAV2D_SRC_DEBUG_H
+#define DAV2D_SRC_DEBUG_H
 
 #define DEBUG_BLOCK_INFO 0
 #if DEBUG_BLOCK_INFO
@@ -45,4 +45,4 @@
 #endif
 #define DEBUG_B_PIXELS 0
 
-#endif /* DAV1D_SRC_DEBUG_H */
+#endif /* DAV2D_SRC_DEBUG_H */

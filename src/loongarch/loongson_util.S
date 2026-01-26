@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
-#ifndef DAV1D_SRC_LOONGSON_UTIL_S
-#define DAV1D_SRC_LOONGSON_UTIL_S
+#ifndef DAV2D_SRC_LOONGSON_UTIL_S
+#define DAV2D_SRC_LOONGSON_UTIL_S
 
 #ifndef DEFAULT_ALIGN
 #define DEFAULT_ALIGN 5
@@ -189,4 +189,4 @@
     xvst           \in15,    \src,     \start+(\stride<<4)-(\stride)
 .endm
 
-#endif /* DAV1D_SRC_LOONGSON_UTIL_S */
+#endif /* DAV2D_SRC_LOONGSON_UTIL_S */

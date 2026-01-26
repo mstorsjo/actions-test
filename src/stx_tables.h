@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_STX_TABLES_H
-#define DAV1D_SRC_STX_TABLES_H
+#ifndef DAV2D_SRC_STX_TABLES_H
+#define DAV2D_SRC_STX_TABLES_H
 
 #include <stdint.h>
 
@@ -38,4 +38,4 @@ EXTERN const uint8_t coeff8x8_mapping[33][48];
 EXTERN const int8_t stx_4x4_kernel[14][3][8][16];
 EXTERN const int8_t stx_8x8_kernel[11][3][32][48];
 
-#endif  /* DAV1D_SRC_STX_TABLES_H */
+#endif  /* DAV2D_SRC_STX_TABLES_H */

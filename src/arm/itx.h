@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
  * All rights reserved.
  *
@@ -43,18 +43,18 @@ decl_itx2_fns (32,  8, neon);
 decl_itx2_fns (32, 16, neon);
 decl_itx2_fns (32, 32, neon);
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_16x64, neon));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_32x64, neon));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x16, neon));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x32, neon));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x64, neon));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x64, neon));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x64, neon));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x16, neon));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x32, neon));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x64, neon));
 
-static ALWAYS_INLINE void itx_dsp_init_arm(Dav1dInvTxfmDSPContext *const c, int bpc,
+static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c, int bpc,
                                            int *const all_simd)
 {
-    const unsigned flags = dav1d_get_cpu_flags();
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_ARM_CPU_FLAG_NEON)) return;
+    if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
     assign_itx_fn( , 4, 4, wht_wht,           WHT_WHT,           neon);
 

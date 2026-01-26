@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -102,27 +102,27 @@ static const struct {
     unsigned flag;
 } cpus[] = {
 #if ARCH_X86
-    { "SSE2",               "sse2",      DAV1D_X86_CPU_FLAG_SSE2 },
-    { "SSSE3",              "ssse3",     DAV1D_X86_CPU_FLAG_SSSE3 },
-    { "SSE4.1",             "sse4",      DAV1D_X86_CPU_FLAG_SSE41 },
-    { "AVX2",               "avx2",      DAV1D_X86_CPU_FLAG_AVX2 },
-    { "AVX-512 (Ice Lake)", "avx512icl", DAV1D_X86_CPU_FLAG_AVX512ICL },
+    { "SSE2",               "sse2",      DAV2D_X86_CPU_FLAG_SSE2 },
+    { "SSSE3",              "ssse3",     DAV2D_X86_CPU_FLAG_SSSE3 },
+    { "SSE4.1",             "sse4",      DAV2D_X86_CPU_FLAG_SSE41 },
+    { "AVX2",               "avx2",      DAV2D_X86_CPU_FLAG_AVX2 },
+    { "AVX-512 (Ice Lake)", "avx512icl", DAV2D_X86_CPU_FLAG_AVX512ICL },
 #elif ARCH_AARCH64 || ARCH_ARM
-    { "NEON",               "neon",      DAV1D_ARM_CPU_FLAG_NEON },
-    { "DOTPROD",            "dotprod",   DAV1D_ARM_CPU_FLAG_DOTPROD },
-    { "I8MM",               "i8mm",      DAV1D_ARM_CPU_FLAG_I8MM },
+    { "NEON",               "neon",      DAV2D_ARM_CPU_FLAG_NEON },
+    { "DOTPROD",            "dotprod",   DAV2D_ARM_CPU_FLAG_DOTPROD },
+    { "I8MM",               "i8mm",      DAV2D_ARM_CPU_FLAG_I8MM },
 #if ARCH_AARCH64
-    { "SVE",                "sve",       DAV1D_ARM_CPU_FLAG_SVE },
-    { "SVE2",               "sve2",      DAV1D_ARM_CPU_FLAG_SVE2 },
+    { "SVE",                "sve",       DAV2D_ARM_CPU_FLAG_SVE },
+    { "SVE2",               "sve2",      DAV2D_ARM_CPU_FLAG_SVE2 },
 #endif /* ARCH_AARCH64 */
 #elif ARCH_LOONGARCH
-    { "LSX",                "lsx",       DAV1D_LOONGARCH_CPU_FLAG_LSX },
-    { "LASX",               "lasx",      DAV1D_LOONGARCH_CPU_FLAG_LASX },
+    { "LSX",                "lsx",       DAV2D_LOONGARCH_CPU_FLAG_LSX },
+    { "LASX",               "lasx",      DAV2D_LOONGARCH_CPU_FLAG_LASX },
 #elif ARCH_PPC64LE
-    { "VSX",                "vsx",       DAV1D_PPC_CPU_FLAG_VSX },
-    { "PWR9",               "pwr9",      DAV1D_PPC_CPU_FLAG_PWR9 },
+    { "VSX",                "vsx",       DAV2D_PPC_CPU_FLAG_VSX },
+    { "PWR9",               "pwr9",      DAV2D_PPC_CPU_FLAG_PWR9 },
 #elif ARCH_RISCV
-    { "RVV",                "rvv",       DAV1D_RISCV_CPU_FLAG_V },
+    { "RVV",                "rvv",       DAV2D_RISCV_CPU_FLAG_V },
 #endif
     { 0 }
 };
@@ -611,8 +611,8 @@ static void check_cpu_flag(const char *const name, unsigned flag) {
     const unsigned old_cpu_flag = state.cpu_flag;
 
     flag |= old_cpu_flag;
-    dav1d_set_cpu_flags_mask(flag);
-    state.cpu_flag = dav1d_get_cpu_flags();
+    dav2d_set_cpu_flags_mask(flag);
+    state.cpu_flag = dav2d_get_cpu_flags();
 
     if (!flag || state.cpu_flag != old_cpu_flag) {
         state.cpu_flag_name = name;
@@ -767,7 +767,7 @@ int main(int argc, char *argv[]) {
     return 0;
 #endif
 
-    dav1d_init_cpu();
+    dav2d_init_cpu();
 
 #ifdef _WIN32
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
@@ -812,7 +812,7 @@ int main(int argc, char *argv[]) {
     int ret = 0;
 
     if (state.run_mode != RUN_FUNCTION_LISTING) {
-        const unsigned cpu_flags = dav1d_get_cpu_flags();
+        const unsigned cpu_flags = dav2d_get_cpu_flags();
         if (state.run_mode == RUN_CPUFLAG_LISTING) {
             const int last_i = (int)(sizeof(cpus) / sizeof(*cpus)) - 2;
             for (int i = 0; i <= last_i ; i++) {
@@ -827,16 +827,16 @@ int main(int argc, char *argv[]) {
 #if ARCH_X86_64
         void checkasm_warmup_avx2(void);
         void checkasm_warmup_avx512(void);
-        if (cpu_flags & DAV1D_X86_CPU_FLAG_AVX512ICL)
+        if (cpu_flags & DAV2D_X86_CPU_FLAG_AVX512ICL)
             state.simd_warmup = checkasm_warmup_avx512;
-        else if (cpu_flags & DAV1D_X86_CPU_FLAG_AVX2)
+        else if (cpu_flags & DAV2D_X86_CPU_FLAG_AVX2)
             state.simd_warmup = checkasm_warmup_avx2;
         checkasm_simd_warmup();
 #endif
 #if ARCH_ARM
         void checkasm_checked_call_vfp(void *func, int dummy, ...);
         void checkasm_checked_call_novfp(void *func, int dummy, ...);
-        if (cpu_flags & DAV1D_ARM_CPU_FLAG_NEON)
+        if (cpu_flags & DAV2D_ARM_CPU_FLAG_NEON)
             checkasm_checked_call_ptr = checkasm_checked_call_vfp;
         else
             checkasm_checked_call_ptr = checkasm_checked_call_novfp;
@@ -850,12 +850,12 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "checkasm: %s (%08X) using random seed %u\n", name, cpuid, state.seed);
 #elif ARCH_RISCV
         char buf[32] = "";
-        if (cpu_flags & DAV1D_RISCV_CPU_FLAG_V)
-            snprintf(buf, sizeof(buf), "VLEN=%i bits, ", dav1d_get_vlen());
+        if (cpu_flags & DAV2D_RISCV_CPU_FLAG_V)
+            snprintf(buf, sizeof(buf), "VLEN=%i bits, ", dav2d_get_vlen());
         fprintf(stderr, "checkasm: %susing random seed %u\n", buf, state.seed);
 #elif ARCH_AARCH64 && HAVE_SVE
         char buf[48] = "";
-        if (cpu_flags & DAV1D_ARM_CPU_FLAG_SVE)
+        if (cpu_flags & DAV2D_ARM_CPU_FLAG_SVE)
             snprintf(buf, sizeof(buf), "SVE %d bits, ", checkasm_sve_length());
         fprintf(stderr, "checkasm: %susing random seed %u\n", buf, state.seed);
 #else

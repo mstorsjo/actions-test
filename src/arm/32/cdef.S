@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
  * All rights reserved.
  *
@@ -149,7 +149,7 @@
 .endif
 .endm
 
-// void dav1d_cdef_paddingX_8bpc_neon(uint16_t *tmp, const pixel *src,
+// void dav2d_cdef_paddingX_8bpc_neon(uint16_t *tmp, const pixel *src,
 //                                    ptrdiff_t src_stride, const pixel (*left)[2],
 //                                    const pixel *const top,
 //                                    const pixel *const bottom, int h,

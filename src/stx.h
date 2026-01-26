@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_STX_H
-#define DAV1D_SRC_STX_H
+#ifndef DAV2D_SRC_STX_H
+#define DAV2D_SRC_STX_H
 
 #include "common/bitdepth.h"
 
@@ -35,10 +35,10 @@ void (name)(coef *cf_out, const coef *cf, const int8_t *kernel, int stride, \
             int eob HIGHBD_DECL_SUFFIX)
 typedef decl_stx_fn(*stx_fn);
 
-typedef struct Dav1dStxDSPContext {
+typedef struct Dav2dStxDSPContext {
     stx_fn stxfm;
-} Dav1dStxDSPContext;
+} Dav2dStxDSPContext;
 
-bitfn_decls(void dav1d_stx_dsp_init, Dav1dStxDSPContext *c);
+bitfn_decls(void dav2d_stx_dsp_init, Dav2dStxDSPContext *c);
 
-#endif  /* DAV1D_SRC_STX_H */
+#endif  /* DAV2D_SRC_STX_H */

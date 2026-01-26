@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -40,7 +40,7 @@ enum Backup2x8Flags {
 
 static void backup2lines(pixel *const dst[3], /*const*/ pixel *const src[3],
                          const ptrdiff_t stride[2],
-                         const enum Dav1dPixelLayout layout)
+                         const enum Dav2dPixelLayout layout)
 {
     const ptrdiff_t y_stride = PXSTRIDE(stride[0]);
     if (y_stride < 0)
@@ -48,14 +48,14 @@ static void backup2lines(pixel *const dst[3], /*const*/ pixel *const src[3],
     else
         pixel_copy(dst[0], src[0] + 6 * y_stride, 2 * y_stride);
 
-    if (layout != DAV1D_PIXEL_LAYOUT_I400) {
+    if (layout != DAV2D_PIXEL_LAYOUT_I400) {
         const ptrdiff_t uv_stride = PXSTRIDE(stride[1]);
         if (uv_stride < 0) {
-            const int uv_off = layout == DAV1D_PIXEL_LAYOUT_I420 ? 3 : 7;
+            const int uv_off = layout == DAV2D_PIXEL_LAYOUT_I420 ? 3 : 7;
             pixel_copy(dst[1] + uv_stride, src[1] + uv_off * uv_stride, -2 * uv_stride);
             pixel_copy(dst[2] + uv_stride, src[2] + uv_off * uv_stride, -2 * uv_stride);
         } else {
-            const int uv_off = layout == DAV1D_PIXEL_LAYOUT_I420 ? 2 : 6;
+            const int uv_off = layout == DAV2D_PIXEL_LAYOUT_I420 ? 2 : 6;
             pixel_copy(dst[1], src[1] + uv_off * uv_stride, 2 * uv_stride);
             pixel_copy(dst[2], src[2] + uv_off * uv_stride, 2 * uv_stride);
         }
@@ -65,7 +65,7 @@ static void backup2lines(pixel *const dst[3], /*const*/ pixel *const src[3],
 static void backup2x8(pixel dst[3][8][2],
                       /*const*/ pixel *const src[3],
                       const ptrdiff_t src_stride[2], int x_off,
-                      const enum Dav1dPixelLayout layout,
+                      const enum Dav2dPixelLayout layout,
                       const enum Backup2x8Flags flag)
 {
     ptrdiff_t y_off = 0;
@@ -74,11 +74,11 @@ static void backup2x8(pixel dst[3][8][2],
             pixel_copy(dst[0][y], &src[0][y_off + x_off - 2], 2);
     }
 
-    if (layout == DAV1D_PIXEL_LAYOUT_I400 || !(flag & BACKUP_2X8_UV))
+    if (layout == DAV2D_PIXEL_LAYOUT_I400 || !(flag & BACKUP_2X8_UV))
         return;
 
-    const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = layout != DAV1D_PIXEL_LAYOUT_I444;
+    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
 
     x_off >>= ss_hor;
     y_off = 0;
@@ -94,28 +94,28 @@ static int adjust_strength(const int strength, const unsigned var) {
     return (strength * (4 + i) + 8) >> 4;
 }
 
-void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
+void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                              pixel *const p[3],
                              const Av1Filter *const lflvl,
                              const int by_start, const int by_end,
                              const int sbrow_start, const int sby)
 {
-    Dav1dFrameContext *const f = (Dav1dFrameContext *)tc->f;
+    Dav2dFrameContext *const f = (Dav2dFrameContext *)tc->f;
     const int bitdepth_min_8 = BITDEPTH == 8 ? 0 : f->cur.p.bpc - 8;
-    const Dav1dDSPContext *const dsp = f->dsp;
+    const Dav2dDSPContext *const dsp = f->dsp;
     enum CdefEdgeFlags edges = CDEF_HAVE_BOTTOM | (by_start > 0 ? CDEF_HAVE_TOP : 0);
     pixel *ptrs[3] = { p[0], p[1], p[2] };
     const int sbsz = 16;
     const int sb64w = (f->bw + sbsz - 1) >> 4;
     const int damping = f->frame_hdr->cdef.damping + bitdepth_min_8;
     const int on_skip_tx = f->frame_hdr->cdef.on_skiptx;
-    const enum Dav1dPixelLayout layout = f->cur.p.layout;
-    const int uv_idx = DAV1D_PIXEL_LAYOUT_I444 - layout;
-    const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = layout != DAV1D_PIXEL_LAYOUT_I444;
+    const enum Dav2dPixelLayout layout = f->cur.p.layout;
+    const int uv_idx = DAV2D_PIXEL_LAYOUT_I444 - layout;
+    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
     static const uint8_t uv_dirs[2][8] = { { 0, 1, 2, 3, 4, 5, 6, 7 },
                                            { 7, 0, 2, 4, 5, 6, 6, 6 } };
-    const uint8_t *uv_dir = uv_dirs[layout == DAV1D_PIXEL_LAYOUT_I422];
+    const uint8_t *uv_dir = uv_dirs[layout == DAV2D_PIXEL_LAYOUT_I422];
     const int have_tt = f->c->n_tc > 1;
     const int sb128 = f->frame_hdr->sb128;
     const ptrdiff_t y_stride = PXSTRIDE(f->cur.stride[0]);
@@ -150,14 +150,14 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
             const int cdef_idx = lflvl[sb256x].cdef_idx[sb64_idx];
 
             if (lflvl[sb256x].ccso[0] &&
-                f->c->inloop_filters & DAV1D_INLOOPFILTER_CCSO)
+                f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO)
             {
-                const Dav1dFrameHeader *const hdr = f->frame_hdr;
+                const Dav2dFrameHeader *const hdr = f->frame_hdr;
                 const unsigned max_band = hdr->ccso.p[0].max_band_log2;
                 const unsigned ext_filter = hdr->ccso.p[0].ext_filter_support;
                 const unsigned scale_idx = hdr->ccso.p[0].scale_idx;
                 const unsigned quant =
-                    dav1d_ccso_quant_sz[scale_idx][hdr->ccso.p[0].quant_idx];
+                    dav2d_ccso_quant_sz[scale_idx][hdr->ccso.p[0].quant_idx];
                 const int edge_cfl = hdr->ccso.p[0].edge_clf;
                 const int bo_only = hdr->ccso.p[0].bo_only;
 
@@ -201,7 +201,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
             if (cdef_idx == -1 ||
                 (!f->frame_hdr->cdef.y_strength[cdef_idx] &&
                  !f->frame_hdr->cdef.uv_strength[cdef_idx]) ||
-                 !(f->c->inloop_filters & DAV1D_INLOOPFILTER_CDEF))
+                 !(f->c->inloop_filters & DAV2D_INLOOPFILTER_CDEF))
             {
                 prev_flag = 0;
                 goto next_sb;
@@ -293,7 +293,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
                                     edges HIGHBD_CALL_SUFFIX);
 
                 if (!uv_lvl) goto skip_uv;
-                assert(layout != DAV1D_PIXEL_LAYOUT_I400);
+                assert(layout != DAV2D_PIXEL_LAYOUT_I400);
 
                 const int uvdir = uv_pri_lvl ? uv_dir[dir] : 0;
                 for (int pl = 1; pl <= 2; pl++) {
@@ -333,7 +333,7 @@ void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *const tc,
 
         next_sb:
             if (lflvl[sb256x].ccso[0] &&
-                f->c->inloop_filters & DAV1D_INLOOPFILTER_CCSO)
+                f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO)
             {
                 if (!(prev_flag & BACKUP_2X8_Y) && (sbx + 1) * sbsz < f->bw) {
                     backup2x8(lr_bak[bit], iptrs, f->cur.stride, sbsz * 4, layout, BACKUP_2X8_Y);

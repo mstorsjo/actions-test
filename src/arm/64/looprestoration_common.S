@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Martin Storsjo
  * All rights reserved.
  *
@@ -90,7 +90,7 @@ const x_by_x_tables
 // return ref
 endconst
 
-// void dav1d_sgr_box3_vert_neon(int32_t **sumsq, int16_t **sum,
+// void dav2d_sgr_box3_vert_neon(int32_t **sumsq, int16_t **sum,
 //                               int32_t *AA, int16_t *BB,
 //                               const int w, const int s,
 //                               const int bitdepth_max);
@@ -218,7 +218,7 @@ function sgr_box3_vert_neon, export=1
         ret
 endfunc
 
-// void dav1d_sgr_box5_vert_neon(int32_t **sumsq, int16_t **sum,
+// void dav2d_sgr_box5_vert_neon(int32_t **sumsq, int16_t **sum,
 //                               int32_t *AA, int16_t *BB,
 //                               const int w, const int s,
 //                               const int bitdepth_max);

@@ -38,7 +38,7 @@
 
 /* Set prefix as needed. */
 #ifndef PRIVATE_PREFIX
-#define PRIVATE_PREFIX dav1d_
+#define PRIVATE_PREFIX dav2d_
 #endif
 
 #define PASTE(a,b) a ## b

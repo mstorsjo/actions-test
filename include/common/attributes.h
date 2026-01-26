@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_COMMON_ATTRIBUTES_H
-#define DAV1D_COMMON_ATTRIBUTES_H
+#ifndef DAV2D_COMMON_ATTRIBUTES_H
+#define DAV2D_COMMON_ATTRIBUTES_H
 
 #include "config.h"
 
@@ -146,9 +146,9 @@
 #endif
 
 #if defined(__GNUC__) && !defined(__INTEL_COMPILER) && !defined(__clang__)
-#    define dav1d_uninit(x) x=x
+#    define dav2d_uninit(x) x=x
 #else
-#    define dav1d_uninit(x) x
+#    define dav2d_uninit(x) x
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -212,4 +212,4 @@ static inline int clzll(const unsigned long long mask) {
 #define PACKED(...) __VA_ARGS__ __attribute__((__packed__))
 #endif
 
-#endif /* DAV1D_COMMON_ATTRIBUTES_H */
+#endif /* DAV2D_COMMON_ATTRIBUTES_H */

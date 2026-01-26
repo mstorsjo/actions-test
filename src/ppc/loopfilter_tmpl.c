@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * Copyright © 2024, Luca Barbato
  * All rights reserved.
@@ -36,7 +36,7 @@
 #include "common/attributes.h"
 #include "common/intops.h"
 
-#include "src/ppc/dav1d_types.h"
+#include "src/ppc/dav2d_types.h"
 #include "src/ppc/loopfilter.h"
 
 #if BITDEPTH == 8
@@ -1354,10 +1354,10 @@ loop_filter_v_16_all(uint8_t *dst, u8x16 E, u8x16 I, u8x16 H,
     vec_xst(q5, 0, q5d);
 }
 
-#if defined(DAV1D_VSX)
-#define LPF(fn) BF(dav1d_lpf_##fn, vsx)
-#elif defined(DAV1D_PWR9)
-#define LPF(fn) BF(dav1d_lpf_##fn, pwr9)
+#if defined(DAV2D_VSX)
+#define LPF(fn) BF(dav2d_lpf_##fn, vsx)
+#elif defined(DAV2D_PWR9)
+#define LPF(fn) BF(dav2d_lpf_##fn, pwr9)
 #endif
 
 void LPF(h_sb_y)(pixel *dst, const ptrdiff_t stride,

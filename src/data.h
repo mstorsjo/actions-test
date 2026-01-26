@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,32 +25,32 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_DATA_H
-#define DAV1D_SRC_DATA_H
+#ifndef DAV2D_SRC_DATA_H
+#define DAV2D_SRC_DATA_H
 
-#include "dav1d/data.h"
+#include "dav2d/data.h"
 
-void dav1d_data_ref(Dav1dData *dst, const Dav1dData *src);
+void dav2d_data_ref(Dav2dData *dst, const Dav2dData *src);
 
 /**
  * Copy the source properties to the destination and increase the
  * user_data's reference count (if it's not NULL).
  */
-void dav1d_data_props_copy(Dav1dDataProps *dst, const Dav1dDataProps *src);
+void dav2d_data_props_copy(Dav2dDataProps *dst, const Dav2dDataProps *src);
 
-void dav1d_data_props_set_defaults(Dav1dDataProps *props);
+void dav2d_data_props_set_defaults(Dav2dDataProps *props);
 
-uint8_t *dav1d_data_create_internal(Dav1dData *buf, size_t sz);
-int dav1d_data_wrap_internal(Dav1dData *buf, const uint8_t *ptr, size_t sz,
+uint8_t *dav2d_data_create_internal(Dav2dData *buf, size_t sz);
+int dav2d_data_wrap_internal(Dav2dData *buf, const uint8_t *ptr, size_t sz,
                              void (*free_callback)(const uint8_t *data,
                                                    void *user_data),
                              void *user_data);
-int dav1d_data_wrap_user_data_internal(Dav1dData *buf,
+int dav2d_data_wrap_user_data_internal(Dav2dData *buf,
                                        const uint8_t *user_data,
                                        void (*free_callback)(const uint8_t *user_data,
                                                              void *cookie),
                                        void *cookie);
-void dav1d_data_unref_internal(Dav1dData *buf);
-void dav1d_data_props_unref_internal(Dav1dDataProps *props);
+void dav2d_data_unref_internal(Dav2dData *buf);
+void dav2d_data_props_unref_internal(Dav2dDataProps *props);
 
-#endif /* DAV1D_SRC_DATA_H */
+#endif /* DAV2D_SRC_DATA_H */

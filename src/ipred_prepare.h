@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_IPRED_PREPARE_H
-#define DAV1D_SRC_IPRED_PREPARE_H
+#ifndef DAV2D_SRC_IPRED_PREPARE_H
+#define DAV2D_SRC_IPRED_PREPARE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -80,7 +80,7 @@
  * edge use, MRL mode, IBP, and edge filtering options (see ipred.h).
  */
 enum IntraPredMode
-    bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
+    bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                       int x, int y, int w, int h,
                                       int n_tr, int n_bl,
                                       const pixel *dst, ptrdiff_t stride,
@@ -89,4 +89,4 @@ enum IntraPredMode
                                       int tw, int th, int intra_flags,
                                       pixel *topleft_out HIGHBD_DECL_SUFFIX);
 
-#endif /* DAV1D_SRC_IPRED_PREPARE_H */
+#endif /* DAV2D_SRC_IPRED_PREPARE_H */

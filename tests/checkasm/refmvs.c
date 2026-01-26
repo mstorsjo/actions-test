@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021, VideoLAN and dav1d authors
+ * Copyright © 2021, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -146,7 +146,7 @@ static inline void init_rp_ref(refmvs_frame const *const rf,
     }
 }
 
-static void check_load_tmvs(const Dav1dRefmvsDSPContext *const c) {
+static void check_load_tmvs(const Dav2dRefmvsDSPContext *const c) {
     refmvs_temporal_block *rp_ref[7] = {0};
     refmvs_temporal_block c_rp_proj[240 * 63];
     refmvs_temporal_block a_rp_proj[240 * 63];
@@ -224,7 +224,7 @@ static void check_load_tmvs(const Dav1dRefmvsDSPContext *const c) {
     report("load_tmvs");
 }
 
-static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
+static void check_save_tmvs(const Dav2dRefmvsDSPContext *const c) {
     refmvs_block *rr[31];
     refmvs_block r[31 * 256];
     ALIGN_STK_64(refmvs_temporal_block, c_rp, 128 * 16,);
@@ -250,7 +250,7 @@ static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
         for (int i = row_start8; i < row_end8; i++)
             for (int j = col_start8; j < col_end8;) {
                 int bs = rnd() % N_BS_SIZES;
-                while (j + ((dav1d_block_dimensions[bs][0] + 1) >> 1) > col_end8)
+                while (j + ((dav2d_block_dimensions[bs][0] + 1) >> 1) > col_end8)
                     bs++;
                 rr[i * 2][j * 2 + 1] = (refmvs_block) {
                     .mv.mv[0].x = gen_mv(14, 10),
@@ -260,7 +260,7 @@ static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
                     .ref.ref = { (rnd() % 9) - 1, (rnd() % 9) - 1 },
                     .bs = bs
                 };
-                for (int k = 0; k < (dav1d_block_dimensions[bs][0] + 1) >> 1; k++, j++) {
+                for (int k = 0; k < (dav2d_block_dimensions[bs][0] + 1) >> 1; k++, j++) {
                     c_rp[i * 128 + j].mv.n = 0xdeadbeef;
                     c_rp[i * 128 + j].ref.pair = 0xdead;
                 }
@@ -289,7 +289,7 @@ static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
                 }
 
         for (int bs = BS_4x4; bs < N_BS_SIZES; bs++) {
-            const int bw8 = (dav1d_block_dimensions[bs][0] + 1) >> 1;
+            const int bw8 = (dav2d_block_dimensions[bs][0] + 1) >> 1;
             for (int i = 0; i < 16; i++)
                 for (int j = 0; j < 128; j += bw8) {
                     rr[i * 2][j * 2 + 1].ref.ref[0] = (rnd() % 9) - 1;
@@ -303,7 +303,7 @@ static void check_save_tmvs(const Dav1dRefmvsDSPContext *const c) {
     report("save_tmvs");
 }
 
-static void check_splat_mv(const Dav1dRefmvsDSPContext *const c) {
+static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
     ALIGN_STK_64(refmvs_block, c_buf, 32 * 32,);
     ALIGN_STK_64(refmvs_block, a_buf, 32 * 32,);
     refmvs_block *c_dst[32];
@@ -348,8 +348,8 @@ static void check_splat_mv(const Dav1dRefmvsDSPContext *const c) {
 #endif
 
 void checkasm_check_refmvs(void) {
-    Dav1dRefmvsDSPContext c;
-    dav1d_refmvs_dsp_init(&c);
+    Dav2dRefmvsDSPContext c;
+    dav2d_refmvs_dsp_init(&c);
 
 #if 0
     //check_load_tmvs(&c); // FIME: causes integer overflows, disable until investigated

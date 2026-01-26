@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Two Orioles, LLC
  * All rights reserved.
  *
@@ -113,7 +113,7 @@ static void msac_dump(unsigned c_res, unsigned a_res,
     {                                                                      \
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {          \
             for (int ns = 1; ns < n; ns++) {                               \
-                dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);         \
+                dav2d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);         \
                 s_a = s_c;                                                 \
                 randomize_cdf(cdf[0], ns);                                 \
                 memcpy(cdf[1], cdf[0], sizeof(*cdf));                      \
@@ -155,7 +155,7 @@ static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf)
     if (check_func(c->decode_bool_adapt, "msac_decode_bool_adapt")) {
         uint16_t cdf[2][2];
         for (int cdf_update = 0; cdf_update <= 1; cdf_update++) {
-            dav1d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);
+            dav2d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);
             s_a = s_c;
             cdf[0][0] = cdf[1][0] = rnd() % 32767 + 1;
             cdf[0][1] = cdf[1][1] = (rnd() % 125) << 8;
@@ -190,7 +190,7 @@ static void check_decode_bool_bypass(MsacDSPContext *const c, uint8_t *const buf
 
     declare_func(unsigned, MsacContext *s);
     if (check_func(c->decode_bool_bypass, "msac_decode_bool_bypass")) {
-        dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
+        dav2d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
             s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
@@ -214,7 +214,7 @@ static void check_decode_bools_bypass(MsacDSPContext *const c, uint8_t *const bu
 
     declare_func(unsigned, MsacContext *s, unsigned n_bits);
     if (check_func(c->decode_bools_bypass, "msac_decode_bools_bypass")) {
-        dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
+        dav2d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
             s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
@@ -241,7 +241,7 @@ static void check_decode_unary_bypass6(MsacDSPContext *const c, uint8_t *const b
 
     declare_func(unsigned, MsacContext *s, unsigned max_bits);
     if (check_func(c->decode_unary_bypass6, "msac_decode_unary_bypass6")) {
-        dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
+        dav2d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
             s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
@@ -268,7 +268,7 @@ static void check_decode_unary_bypass21(MsacDSPContext *const c, uint8_t *const 
 
     declare_func(unsigned, MsacContext *s);
     if (check_func(c->decode_unary_bypass21, "msac_decode_unary_bypass21")) {
-        dav1d_msac_init(&s_c, buf, BUF_SIZE, 1);
+        dav2d_msac_init(&s_c, buf, BUF_SIZE, 1);
         s_a = s_c;
         while (s_c.cnt >= 0) {
             s_a.rng = s_c.rng = generate_bypass_rng(&s_c);
@@ -306,33 +306,33 @@ void checkasm_check_msac(void) {
      * instead of through function pointers. For testing purposes however we
      * do want to use functions pointers . */
     MsacDSPContext c;
-    c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt_c;
-    c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt_c;
-    c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_c;
-    c.decode_bool_bypass    = dav1d_msac_decode_bool_bypass_c;
-    c.decode_bools_bypass   = dav1d_msac_decode_bools_bypass_c;
-    c.decode_unary_bypass6  = dav1d_msac_decode_unary_bypass_c;
-    c.decode_unary_bypass21 = dav1d_msac_decode_unary_bypass21_c;
+    c.decode_symbol_adapt4  = dav2d_msac_decode_symbol_adapt_c;
+    c.decode_symbol_adapt8  = dav2d_msac_decode_symbol_adapt_c;
+    c.decode_bool_adapt     = dav2d_msac_decode_bool_adapt_c;
+    c.decode_bool_bypass    = dav2d_msac_decode_bool_bypass_c;
+    c.decode_bools_bypass   = dav2d_msac_decode_bools_bypass_c;
+    c.decode_unary_bypass6  = dav2d_msac_decode_unary_bypass_c;
+    c.decode_unary_bypass21 = dav2d_msac_decode_unary_bypass21_c;
 
 #if HAVE_ASM
 #if ARCH_AARCH64
-    if (dav1d_get_cpu_flags() & DAV1D_ARM_CPU_FLAG_NEON) {
+    if (dav2d_get_cpu_flags() & DAV2D_ARM_CPU_FLAG_NEON) {
 
     }
 #elif ARCH_X86_64
-    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_SSE2) {
-        c.decode_symbol_adapt4  = dav1d_msac_decode_symbol_adapt4_sse2;
-        c.decode_symbol_adapt8  = dav1d_msac_decode_symbol_adapt8_sse2;
-        c.decode_bool_adapt     = dav1d_msac_decode_bool_adapt_sse2;
-        c.decode_bool_bypass    = dav1d_msac_decode_bool_bypass_sse2;
-        c.decode_bools_bypass   = dav1d_msac_decode_bools_bypass_sse2;
+    if (dav2d_get_cpu_flags() & DAV2D_X86_CPU_FLAG_SSE2) {
+        c.decode_symbol_adapt4  = dav2d_msac_decode_symbol_adapt4_sse2;
+        c.decode_symbol_adapt8  = dav2d_msac_decode_symbol_adapt8_sse2;
+        c.decode_bool_adapt     = dav2d_msac_decode_bool_adapt_sse2;
+        c.decode_bool_bypass    = dav2d_msac_decode_bool_bypass_sse2;
+        c.decode_bools_bypass   = dav2d_msac_decode_bools_bypass_sse2;
     }
-    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_AVX2) {
-        c.decode_unary_bypass6  = dav1d_msac_decode_unary_bypass6_avx2;
-        c.decode_unary_bypass21 = dav1d_msac_decode_unary_bypass21_avx2;
+    if (dav2d_get_cpu_flags() & DAV2D_X86_CPU_FLAG_AVX2) {
+        c.decode_unary_bypass6  = dav2d_msac_decode_unary_bypass6_avx2;
+        c.decode_unary_bypass21 = dav2d_msac_decode_unary_bypass21_avx2;
     }
-    if (dav1d_get_cpu_flags() & DAV1D_X86_CPU_FLAG_AVX512ICL) {
-        c.decode_unary_bypass21 = dav1d_msac_decode_unary_bypass21_avx512icl;
+    if (dav2d_get_cpu_flags() & DAV2D_X86_CPU_FLAG_AVX512ICL) {
+        c.decode_unary_bypass21 = dav2d_msac_decode_unary_bypass21_avx512icl;
     }
 #endif
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,12 +37,12 @@
 #define LA_HWCAP_LASX   ( 1 << 5 )
 #endif
 
-COLD unsigned dav1d_get_cpu_flags_loongarch(void) {
-    unsigned flags = dav1d_get_default_cpu_flags();
+COLD unsigned dav2d_get_cpu_flags_loongarch(void) {
+    unsigned flags = dav2d_get_default_cpu_flags();
 #if HAVE_GETAUXVAL
-    unsigned long hw_cap = dav1d_getauxval(AT_HWCAP);
-    flags |= (hw_cap & LA_HWCAP_LSX) ? DAV1D_LOONGARCH_CPU_FLAG_LSX : 0;
-    flags |= (hw_cap & LA_HWCAP_LASX) ? DAV1D_LOONGARCH_CPU_FLAG_LASX : 0;
+    unsigned long hw_cap = dav2d_getauxval(AT_HWCAP);
+    flags |= (hw_cap & LA_HWCAP_LSX) ? DAV2D_LOONGARCH_CPU_FLAG_LSX : 0;
+    flags |= (hw_cap & LA_HWCAP_LASX) ? DAV2D_LOONGARCH_CPU_FLAG_LASX : 0;
 #endif
 
     return flags;

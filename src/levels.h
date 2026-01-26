@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,12 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LEVELS_H
-#define DAV1D_SRC_LEVELS_H
+#ifndef DAV2D_SRC_LEVELS_H
+#define DAV2D_SRC_LEVELS_H
 
 #include <stdint.h>
 
-#include "dav1d/headers.h"
+#include "dav2d/headers.h"
 #include "common/attributes.h"
 
 enum ObuMetaType {
@@ -334,4 +334,4 @@ typedef struct Av1Block {
     };
 } Av1Block;
 
-#endif /* DAV1D_SRC_LEVELS_H */
+#endif /* DAV2D_SRC_LEVELS_H */

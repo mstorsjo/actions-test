@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020, VideoLAN and dav1d authors
+ * Copyright © 2020, VideoLAN and dav2d authors
  * Copyright © 2020, Two Orioles, LLC
  * All rights reserved.
  *
@@ -33,7 +33,7 @@
 #include <string.h>
 #include <strings.h>
 
-#include "dav1d/common.h"
+#include "dav2d/common.h"
 
 #include "common/frame.h"
 #include "common/intops.h"
@@ -201,10 +201,10 @@ static void add_spatial_candidate(const int y_off, const int x_off,
     if (b->ref.ref[0] - 1 == TIP_FRAME) {
         const int tip16 = rf->frm_hdr->tip.frame_mode == 2 ?
             !rf->seq_hdr->tip_refine_mv ||
-                rf->frm_hdr->tip.subpel_filter != DAV1D_FILTER_8TAP_SHARP :
+                rf->frm_hdr->tip.subpel_filter != DAV2D_FILTER_8TAP_SHARP :
             (!rf->seq_hdr->tip_refine_mv &&
-             imin(dav1d_block_dimensions[b->bs][0],
-                  dav1d_block_dimensions[b->bs][1]) >= 4) || b->bs == BS_256x256;
+             imin(dav2d_block_dimensions[b->bs][0],
+                  dav2d_block_dimensions[b->bs][1]) >= 4) || b->bs == BS_256x256;
         const int tip16m = ~tip16;
         // FIXME this should be relative to the block's top/left position
         off_y_8x8 &= tip16m;
@@ -514,7 +514,7 @@ static int model_from_corners(DB_ARGS(const refmvs_frame *const rf, const int by
 #undef reduce
     mat[2] += 0x10000;
     mat[5] += 0x10000;
-    mat[6] = DAV1D_WM_TYPE_AFFINE;
+    mat[6] = DAV2D_WM_TYPE_AFFINE;
 
     DEBUG_REFMV_printf("MFC[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d "
                        "from tl=y:%d,x:%d,bl=y:%d,x:%d,tr=y:%d,x:%d\n",
@@ -547,10 +547,10 @@ static ALWAYS_INLINE mv get_warpmv_proj(const int32_t *const matrix,
  * wide) of 4x4-resolution refmvs_block entries for spatial MV referencing.
  * mvrefs_tile[] keeps a list of 35 (32 + 3 above) pointers into this memory,
  * and each sbrow, the bottom entries (y=27/29/31) are exchanged with the top
- * (-5/-3/-1) pointers by calling dav1d_refmvs_tile_sbrow_init() at the start
+ * (-5/-3/-1) pointers by calling dav2d_refmvs_tile_sbrow_init() at the start
  * of each tile/sbrow.
  *
- * For temporal MV referencing, we call dav1d_refmvs_save_tmvs() at the end of
+ * For temporal MV referencing, we call dav2d_refmvs_save_tmvs() at the end of
  * each tile/sbrow (when tile column threading is enabled), or at the start of
  * each interleaved sbrow (i.e. once for all tile columns together, when tile
  * column threading is disabled). This will copy the 4x4-resolution spatial MVs
@@ -561,14 +561,14 @@ static ALWAYS_INLINE mv get_warpmv_proj(const int32_t *const matrix,
  * their respective position in the current frame.
  */
 
-void dav1d_refmvs_find(const refmvs_tile *const rt,
+void dav2d_refmvs_find(const refmvs_tile *const rt,
                        refmvs_candidate mvstack[6], int32_t (*const warp)[7],
                        int *const cnt, const union refmvs_refpair ref,
                        const enum BlockSize bs, const int skip_mode,
                        const int by4, const int bx4)
 {
     const refmvs_frame *const rf = rt->rf;
-    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = b_dim[0], w4 = imin(bw4, rt->tile_col.end - bx4);
     const int bh4 = b_dim[1], h4 = imin(bh4, rt->tile_row.end - by4);
     mv gmv[2];
@@ -699,7 +699,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     const ptrdiff_t left_8x8x = (bx4 - 1) >> 1;
     if (bml) {
         if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0] &&
-            bml->m[6] != DAV1D_WM_TYPE_INVALID)
+            bml->m[6] != DAV2D_WM_TYPE_INVALID)
         {
 #define add_matrix(var) do { \
             DEBUG_REFMV_printf("Spatial[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d from %s\n", \
@@ -719,7 +719,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         ((by4 - 1) & (rf->sbsz - 1)) >> 1 : -1;
     if (rmt) {
         if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0] &&
-            rmt->m[6] != DAV1D_WM_TYPE_INVALID)
+            rmt->m[6] != DAV2D_WM_TYPE_INVALID)
         {
             add_matrix(rmt);
         }
@@ -734,7 +734,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     if (have_left && bh4 > 1) {
         tml = &rt->r[(by4 & 63) * 128 + ((bx4 - 1) & 127)];
         if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0] &&
-            tml->m[6] != DAV1D_WM_TYPE_INVALID)
+            tml->m[6] != DAV2D_WM_TYPE_INVALID)
         {
             add_matrix(tml);
         }
@@ -745,7 +745,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     // left-most top
     if (lmt) {
         if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0] &&
-            lmt->m[6] != DAV1D_WM_TYPE_INVALID)
+            lmt->m[6] != DAV2D_WM_TYPE_INVALID)
         {
             add_matrix(lmt);
         }
@@ -760,7 +760,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     {
         const refmvs_block *const bl = &rt->r[((by4 + bh4) & 63) * 128 + ((bx4 - 1) & 127)];
         if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0] &&
-            bl->m[6] != DAV1D_WM_TYPE_INVALID)
+            bl->m[6] != DAV2D_WM_TYPE_INVALID)
         {
             add_matrix(bl);
         }
@@ -773,7 +773,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     // top-right
     if (tr) {
         if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0] &&
-            tr->m[6] != DAV1D_WM_TYPE_INVALID)
+            tr->m[6] != DAV2D_WM_TYPE_INVALID)
         {
             add_matrix(tr);
         }
@@ -809,7 +809,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     DEBUG_REFMV_printf("Extra Spatial MVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
     if (tl) {
         if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0] &&
-            tl->m[6] != DAV1D_WM_TYPE_INVALID)
+            tl->m[6] != DAV2D_WM_TYPE_INVALID)
         {
             add_matrix(tl);
         }
@@ -829,7 +829,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 const int pos = ((by4 + bh4 - 1) & 63) * 128 + ((bx4 - adj) & 127);
                 const refmvs_block *const ext_bml = &rt->r[pos];
                 assert(bml);
-                if (dav1d_block_dimensions[ext_bml->bs][0] < adj ||
+                if (dav2d_block_dimensions[ext_bml->bs][0] < adj ||
                     ext_bml->bs != bml->bs)
                 {
                     if (warp && cnt[1] < 4 && ext_bml->mf & 2 &&
@@ -848,7 +848,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
                 const int pos = (by4 & 63) * 128 + ((bx4 - adj) & 127);
                 const refmvs_block *const ext_tml = &rt->r[pos];
                 assert(tml);
-                if (dav1d_block_dimensions[ext_tml->bs][0] < adj ||
+                if (dav2d_block_dimensions[ext_tml->bs][0] < adj ||
                     ext_tml->bs != tml->bs)
                 {
                     if (warp && cnt[1] < 4 && ext_tml->mf & 2 &&
@@ -1042,8 +1042,8 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
         DEBUG_REFMV_printf("Warp defaults [%d|%d]\n", *cnt, cnt[1]);
         for (int n = 0; n < 2; n++) {
             if (cnt[1] >= 4) break;
-            warp[cnt[1]][6] = dav1d_default_wm_params.type;
-            const int32_t *const mat = dav1d_default_wm_params.matrix;
+            warp[cnt[1]][6] = dav2d_default_wm_params.type;
+            const int32_t *const mat = dav2d_default_wm_params.matrix;
             DEBUG_REFMV_printf("Defaults[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
                                cnt[1], mat[0], mat[1], mat[2],
                                mat[3], mat[4], mat[5], warp[cnt[1]][6]);
@@ -1096,7 +1096,7 @@ void dav1d_refmvs_find(const refmvs_tile *const rt,
     DEBUG_REFMV_printf("Final [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
 }
 
-void dav1d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
+void dav2d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
                                   const refmvs_frame *const rf,
                                   const int tile_col_start4, const int tile_col_end4,
                                   const int tile_row_start4, const int tile_row_end4,
@@ -1121,20 +1121,20 @@ void dav1d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
     memset(rt->warp.idx, 0, sizeof(rt->warp.idx));
 }
 
-void dav1d_refmvs_bank_update(refmvs_tile *const rt, const enum BlockSize bs,
+void dav2d_refmvs_bank_update(refmvs_tile *const rt, const enum BlockSize bs,
                               const int by4, const int bx4)
 {
     const refmvs_frame *const rf = rt->rf;
     const int bsh = 1 + rf->frm_hdr->sb128, bsz = 1 << bsh;
     if (!((by4 | bx4) & (rf->sbsz - 1))) {
-        const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+        const uint8_t *const b_dim = dav2d_block_dimensions[bs];
         const int w = imax(1, b_dim[0] >> bsh) * imax(1, b_dim[1] >> bsh);
         rt->bank.hits[1] = 0;
         rt->bank.avail = imax(w, 4);
         DEBUG_REFMV_printf("Resetting refbank: remain=%d|hits=%d|%d\n",
                            rt->bank.avail, rt->bank.hits[1], rt->bank.hits[0]);
     } else if (!((by4 | bx4) & (bsz - 1))) {
-        const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+        const uint8_t *const b_dim = dav2d_block_dimensions[bs];
         const int w = imax(1, b_dim[0] >> bsh) * imax(1, b_dim[1] >> bsh);
         rt->bank.hits[1] = 0;
         rt->bank.avail += w;
@@ -1160,8 +1160,8 @@ static void debug_warpbank(const refmvs_tile *const rt, const int ref,
 #define debug_warpbank(...)
 #endif
 
-int dav1d_refmvs_warp_add(refmvs_tile *const rt,
-                          const Dav1dWarpedMotionParams *const mat,
+int dav2d_refmvs_warp_add(refmvs_tile *const rt,
+                          const Dav2dWarpedMotionParams *const mat,
                           DB_ONLY(const int by4, const int bx4)
                           const int ref)
 {
@@ -1303,14 +1303,14 @@ static void refmvs_bank_add(refmvs_tile *const rt,
     debug_refbank(rt, c, by4, bx4);
 }
 
-void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
+void dav2d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
                            const int by4, const int bx4, const Av1Block *const b)
 {
     RDB_ONLY(const refmvs_frame *const rf = rt->rf);
 
     assert(rt->rf->seq_hdr->refmv_bank);
     assert(!b->intra || b->intrabc);
-    dav1d_refmvs_bank_update(rt, bs, by4, bx4);
+    dav2d_refmvs_bank_update(rt, bs, by4, bx4);
     if (rt->bank.hits[0] >= 64 ||
         rt->bank.hits[1] >= 16 ||
         !rt->bank.avail)
@@ -1327,7 +1327,7 @@ void dav1d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
                     b->ref[1] == -1 ? 0 : b->cwp_idx);
 }
 
-void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
+void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     // FIXME should (eventually) be able to re-use is_coded
     for (int y = by & 63; y < (by & 63) + rt->rf->sbsz; y++) {
         for (int x = bx & 127; x < (bx & 127) + rt->rf->sbsz; x++) {
@@ -1354,7 +1354,7 @@ void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     const int end_x4 = imin(bx + rf->sbsz, rt->tile_col.end);
     for (int x = bx, sz4, hits = 0; x < end_x4; x += sz4) {
         const refmvs_block *const r = &rt->ra[x >> 1];
-        sz4 = dav1d_block_dimensions[r->bs][0];
+        sz4 = dav2d_block_dimensions[r->bs][0];
         if (r->ref.ref[0] == -1) continue;
         if (rf->seq_hdr->refmv_bank) {
             int8_t ref[2];
@@ -1364,11 +1364,11 @@ void dav1d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
                             r->mf & 2 ? r->lmv : r->mv, r->mf >> 2);
         }
         if (r->mf & 2) {
-            Dav1dWarpedMotionParams wmp;
+            Dav2dWarpedMotionParams wmp;
             wmp.type = r->m[6];
-            if (wmp.type != DAV1D_WM_TYPE_INVALID) {
+            if (wmp.type != DAV2D_WM_TYPE_INVALID) {
                 memcpy(wmp.matrix, r->m, sizeof(int32_t) * 6);
-                dav1d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0] - 1);
+                dav2d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0] - 1);
             }
         }
         if (++hits == 4) break;
@@ -1778,7 +1778,7 @@ static void check_traj_intersect(const refmvs_frame *const rf,
 }
 
 // FIXME split this up in smaller DSP'able functions
-void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
+void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8)
 {
@@ -1933,7 +1933,7 @@ void dav1d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
 
 // cache the current tile/sbrow (or frame/sbrow)'s projectable motion vectors
 // into buffers for use in future frame's temporal MV prediction
-void dav1d_refmvs_save_tmvs(const Dav1dRefmvsDSPContext *const dsp,
+void dav2d_refmvs_save_tmvs(const Dav2dRefmvsDSPContext *const dsp,
                             refmvs_tile *const rt,
                             const int col_start8, int col_end8,
                             const int row_start8, int row_end8)
@@ -1986,9 +1986,9 @@ static int topo_insert(int cnt, const int idx, int8_t *const order,
     return cnt + 1;
 }
 
-int dav1d_refmvs_init_frame(refmvs_frame *const rf,
-                            const Dav1dSequenceHeader *const seq_hdr,
-                            const Dav1dFrameHeader *const frm_hdr,
+int dav2d_refmvs_init_frame(refmvs_frame *const rf,
+                            const Dav2dSequenceHeader *const seq_hdr,
+                            const Dav2dFrameHeader *const frm_hdr,
                             const uint8_t ref_poc[7],
                             refmvs_temporal_block *const rp,
                             const uint8_t ref_ref_poc[7][7],
@@ -2023,14 +2023,14 @@ int dav1d_refmvs_init_frame(refmvs_frame *const rf,
         const size_t rp_traj_sz = sizeof(mv) * sbsz8 * n_blocks;
         const size_t rp_map_sz = sizeof(**rf->rp_map) * sbsz8 * n_blocks;
         const size_t r_above_sz = sizeof(*rf->ra) * n_blocks;
-        dav1d_free_aligned(rf->rp_proj);
+        dav2d_free_aligned(rf->rp_proj);
         uint8_t *mem =
-            dav1d_alloc_aligned(ALLOC_REFMVS, 7 * 3 * rp_map_sz +
+            dav2d_alloc_aligned(ALLOC_REFMVS, 7 * 3 * rp_map_sz +
                                 rp_proj_sz + 7 * rp_traj_sz + r_above_sz, 64);
         if (!mem) {
             rf->rp_proj = NULL;
             rf->n_blocks = 0;
-            return DAV1D_ERR(ENOMEM);
+            return DAV2D_ERR(ENOMEM);
         }
         rf->rp_proj = (refmvs_sngl_mv_block *) mem;
         mem += rp_proj_sz;
@@ -2303,11 +2303,11 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                            refmvs_temporal_block *const t_src,
                            int64_t mvy, int64_t mvx,
-                           const Dav1dWarpedMotionParams *const mat,
+                           const Dav2dWarpedMotionParams *const mat,
                            const int bw4, int bh4)
 {
     assert(bw4 > 1 && bh4 > 1);
-    if (mat->type == DAV1D_WM_TYPE_INVALID) {
+    if (mat->type == DAV2D_WM_TYPE_INVALID) {
         // FIXME this condition is probably incomplete, AVM's code suggests
         // we should only use this behaviour for MM_WARP_{CAUSAL/EXTEND},
         // not for MM_WARP_DELTA
@@ -2317,7 +2317,7 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
-            if (mat->type != DAV1D_WM_TYPE_INVALID) {
+            if (mat->type != DAV2D_WM_TYPE_INVALID) {
                 s_src->mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
                                        -0xffff, 0xffff);
                 s_src->mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
@@ -2343,21 +2343,21 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                                 refmvs_temporal_block *t_src, int64_t mvy1, int64_t mvx1,
                                 int64_t mvy2, int64_t mvx2,
-                                const Dav1dWarpedMotionParams *const mat,
+                                const Dav2dWarpedMotionParams *const mat,
                                 const int bw4, int bh4, const int t_swap,
                                 const uint8_t *mask, const int w_swap)
 {
     assert(bw4 > 1 && bh4 > 1);
-    if (mat[0].type == DAV1D_WM_TYPE_INVALID) {
+    if (mat[0].type == DAV2D_WM_TYPE_INVALID) {
         s_src->mv[0].n = 0;
     }
-    if (mat[1].type == DAV1D_WM_TYPE_INVALID) {
+    if (mat[1].type == DAV2D_WM_TYPE_INVALID) {
         s_src->mv[1].n = 0;
     }
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         for (int x = 0; x < bw4; x += 2) {
-            if (mat[0].type != DAV1D_WM_TYPE_INVALID) {
+            if (mat[0].type != DAV2D_WM_TYPE_INVALID) {
                 s_src->mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
                                        -0xffff, 0xffff);
                 s_src->mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
@@ -2366,7 +2366,7 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             } else {
                 t_src->mv.mv[t_swap] = quantize_mv(s_src->lmv[0]);
             }
-            if (mat[1].type != DAV1D_WM_TYPE_INVALID) {
+            if (mat[1].type != DAV2D_WM_TYPE_INVALID) {
                 s_src->mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
                                        -0xffff, 0xffff);
                 s_src->mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
@@ -2463,7 +2463,7 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 #endif
 #endif
 
-COLD void dav1d_refmvs_dsp_init(Dav1dRefmvsDSPContext *const c)
+COLD void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *const c)
 {
     c->splat_mv = splat_mv_c;
     c->splat_warpmv = splat_warpmv_c;

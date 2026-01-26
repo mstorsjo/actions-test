@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020, VideoLAN and dav1d authors
+ * Copyright © 2020, VideoLAN and dav2d authors
  * Copyright © 2020, Two Orioles, LLC
  * All rights reserved.
  *
@@ -34,10 +34,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "dav1d/dav1d.h"
+#include "dav2d/dav2d.h"
 #include "input/input.h"
 #include "input/demuxer.h"
-#include "dav1d_cli_parse.h"
+#include "dav2d_cli_parse.h"
 
 #define NUM_RAND_SEEK 3
 #define NUM_REL_SEEK  4
@@ -95,33 +95,33 @@ static int xor128_rand(void) {
     return w >> 1;
 }
 
-static inline int decode_frame(Dav1dPicture *const p,
-                               Dav1dContext *const c, Dav1dData *const data)
+static inline int decode_frame(Dav2dPicture *const p,
+                               Dav2dContext *const c, Dav2dData *const data)
 {
     int res;
     memset(p, 0, sizeof(*p));
-    if ((res = dav1d_send_data(c, data)) < 0) {
-        if (res != DAV1D_ERR(EAGAIN)) {
+    if ((res = dav2d_send_data(c, data)) < 0) {
+        if (res != DAV2D_ERR(EAGAIN)) {
             fprintf(stderr, "Error decoding frame: %s\n",
-                    strerror(DAV1D_ERR(res)));
+                    strerror(DAV2D_ERR(res)));
             return res;
         }
     }
-    if ((res = dav1d_get_picture(c, p)) < 0) {
-        if (res != DAV1D_ERR(EAGAIN)) {
+    if ((res = dav2d_get_picture(c, p)) < 0) {
+        if (res != DAV2D_ERR(EAGAIN)) {
             fprintf(stderr, "Error decoding frame: %s\n",
-                    strerror(DAV1D_ERR(res)));
+                    strerror(DAV2D_ERR(res)));
             return res;
         }
-    } else dav1d_picture_unref(p);
+    } else dav2d_picture_unref(p);
     return 0;
 }
 
-static int decode_rand(DemuxerContext *const in, Dav1dContext *const c,
-                       Dav1dData *const data, const double fps)
+static int decode_rand(DemuxerContext *const in, Dav2dContext *const c,
+                       Dav2dData *const data, const double fps)
 {
     int res = 0;
-    Dav1dPicture p;
+    Dav2dPicture p;
     const int num_frames = xor128_rand() % (int)(fps * 5);
     for (int i = 0; i < num_frames; i++) {
         if ((res = decode_frame(&p, c, data))) break;
@@ -131,40 +131,40 @@ static int decode_rand(DemuxerContext *const in, Dav1dContext *const c,
 }
 
 static int decode_all(DemuxerContext *const in,
-                      Dav1dContext *const c, Dav1dData *const data)
+                      Dav2dContext *const c, Dav2dData *const data)
 {
     int res = 0;
-    Dav1dPicture p;
+    Dav2dPicture p;
     do { if ((res = decode_frame(&p, c, data))) break;
     } while (!input_read(in, data) && data->sz > 0);
     return res;
 }
 
-static int seek(DemuxerContext *const in, Dav1dContext *const c,
-                const uint64_t pts, Dav1dData *const data)
+static int seek(DemuxerContext *const in, Dav2dContext *const c,
+                const uint64_t pts, Dav2dData *const data)
 {
     int res;
     if ((res = input_seek(in, pts))) return res;
-    Dav1dSequenceHeader seq;
+    Dav2dSequenceHeader seq;
     do { if ((res = input_read(in, data))) break;
-    } while (dav1d_parse_sequence_header(&seq, data->data, data->sz));
-    dav1d_flush(c);
+    } while (dav2d_parse_sequence_header(&seq, data->data, data->sz));
+    dav2d_flush(c);
     return res;
 }
 
 int main(const int argc, char *const *const argv) {
-    const char *version = dav1d_version();
-    if (strcmp(version, DAV1D_VERSION)) {
+    const char *version = dav2d_version();
+    if (strcmp(version, DAV2D_VERSION)) {
         fprintf(stderr, "Version mismatch (library: %s, executable: %s)\n",
-                version, DAV1D_VERSION);
+                version, DAV2D_VERSION);
         return EXIT_FAILURE;
     }
 
     CLISettings cli_settings;
-    Dav1dSettings lib_settings;
+    Dav2dSettings lib_settings;
     DemuxerContext *in;
-    Dav1dContext *c;
-    Dav1dData data;
+    Dav2dContext *c;
+    Dav2dData data;
     unsigned total, i_fps[2], i_timebase[2];
     double timebase, spf, fps;
     uint64_t pts;
@@ -178,7 +178,7 @@ int main(const int argc, char *const *const argv) {
     {
         return EXIT_SUCCESS;
     }
-    if (dav1d_open(&c, &lib_settings))
+    if (dav2d_open(&c, &lib_settings))
         return EXIT_FAILURE;
 
     timebase = (double)i_timebase[1] / i_timebase[0];
@@ -233,11 +233,11 @@ int main(const int argc, char *const *const argv) {
         if (seek(in, c, FRAME_OFFSET_TO_PTS(total - shift), &data)) goto end;
         if (decode_all(in, c, &data)) goto end;
         int num_flush = 1 + 64 + xor128_rand() % 64;
-        while (num_flush--) dav1d_flush(c);
+        while (num_flush--) dav2d_flush(c);
     }
 
 end:
     input_close(in);
-    dav1d_close(&c);
+    dav2d_close(&c);
     return EXIT_SUCCESS;
 }

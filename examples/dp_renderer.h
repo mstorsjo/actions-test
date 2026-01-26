@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020, VideoLAN and dav1d authors
+ * Copyright © 2020, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include "dav1d/dav1d.h"
+#include "dav2d/dav2d.h"
 
 #include <SDL.h>
 #if HAVE_PLACEBO
@@ -72,15 +72,15 @@ typedef struct {
     int zerocopy;
     int gpugrain;
     int fullscreen;
-} Dav1dPlaySettings;
+} Dav2dPlaySettings;
 
 #define WINDOW_WIDTH  910
 #define WINDOW_HEIGHT 512
 
 enum {
-    DAV1D_EVENT_NEW_FRAME,
-    DAV1D_EVENT_SEEK_FRAME,
-    DAV1D_EVENT_DEC_QUIT
+    DAV2D_EVENT_NEW_FRAME,
+    DAV2D_EVENT_SEEK_FRAME,
+    DAV2D_EVENT_DEC_QUIT
 };
 
 /**
@@ -93,33 +93,33 @@ typedef struct rdr_info
     // Cookie passed to the renderer implementation callbacks
     void *cookie;
     // Callback to create the renderer
-    void* (*create_renderer)(const Dav1dPlaySettings *settings);
+    void* (*create_renderer)(const Dav2dPlaySettings *settings);
     // Callback to destroy the renderer
     void (*destroy_renderer)(void *cookie);
     // Callback to the render function that renders a prevously sent frame
-    void (*render)(void *cookie, const Dav1dPlaySettings *settings);
-    // Callback to the send frame function, _may_ also unref dav1d_pic!
-    int (*update_frame)(void *cookie, Dav1dPicture *dav1d_pic,
-                        const Dav1dPlaySettings *settings);
+    void (*render)(void *cookie, const Dav2dPlaySettings *settings);
+    // Callback to the send frame function, _may_ also unref dav2d_pic!
+    int (*update_frame)(void *cookie, Dav2dPicture *dav2d_pic,
+                        const Dav2dPlaySettings *settings);
     // Callback for alloc/release pictures (optional)
-    int (*alloc_pic)(Dav1dPicture *pic, void *cookie);
-    void (*release_pic)(Dav1dPicture *pic, void *cookie);
+    int (*alloc_pic)(Dav2dPicture *pic, void *cookie);
+    void (*release_pic)(Dav2dPicture *pic, void *cookie);
     // Whether or not this renderer can apply on-GPU film grain synthesis
     int supports_gpu_grain;
-} Dav1dPlayRenderInfo;
+} Dav2dPlayRenderInfo;
 
-extern const Dav1dPlayRenderInfo rdr_placebo_vk;
-extern const Dav1dPlayRenderInfo rdr_placebo_gl;
-extern const Dav1dPlayRenderInfo rdr_sdl;
+extern const Dav2dPlayRenderInfo rdr_placebo_vk;
+extern const Dav2dPlayRenderInfo rdr_placebo_gl;
+extern const Dav2dPlayRenderInfo rdr_sdl;
 
 // Available renderes ordered by priority
-static const Dav1dPlayRenderInfo* const dp_renderers[] = {
+static const Dav2dPlayRenderInfo* const dp_renderers[] = {
     &rdr_placebo_vk,
     &rdr_placebo_gl,
     &rdr_sdl,
 };
 
-static inline const Dav1dPlayRenderInfo *dp_get_renderer(const char *name)
+static inline const Dav2dPlayRenderInfo *dp_get_renderer(const char *name)
 {
     for (size_t i = 0; i < (sizeof(dp_renderers)/sizeof(*dp_renderers)); ++i)
     {
@@ -138,7 +138,7 @@ static inline SDL_Window *dp_create_sdl_window(int window_flags)
     SDL_Window *win;
     window_flags |= SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
 
-    win = SDL_CreateWindow("Dav1dPlay", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    win = SDL_CreateWindow("Dav2dPlay", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
     SDL_SetWindowResizable(win, SDL_TRUE);
 

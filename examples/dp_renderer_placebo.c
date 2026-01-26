@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020, VideoLAN and dav1d authors
+ * Copyright © 2020, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
 #include <assert.h>
 
 #include <libplacebo/renderer.h>
-#include <libplacebo/utils/dav1d.h>
+#include <libplacebo/utils/dav2d.h>
 
 #if HAVE_PLACEBO_VULKAN
 # include <libplacebo/vulkan.h>
@@ -76,10 +76,10 @@ typedef struct renderer_priv_ctx
     // Image to render, and planes backing them
     struct pl_frame image;
     pl_tex plane_tex[3];
-} Dav1dPlayRendererPrivateContext;
+} Dav2dPlayRendererPrivateContext;
 
-static Dav1dPlayRendererPrivateContext*
-    placebo_renderer_create_common(const Dav1dPlaySettings *settings, int window_flags)
+static Dav2dPlayRendererPrivateContext*
+    placebo_renderer_create_common(const Dav2dPlaySettings *settings, int window_flags)
 {
     if (settings->fullscreen)
         window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -92,8 +92,8 @@ static Dav1dPlayRendererPrivateContext*
     SDL_ShowCursor(0);
 
     // Alloc
-    Dav1dPlayRendererPrivateContext *const rd_priv_ctx =
-        calloc(1, sizeof(Dav1dPlayRendererPrivateContext));
+    Dav2dPlayRendererPrivateContext *const rd_priv_ctx =
+        calloc(1, sizeof(Dav2dPlayRendererPrivateContext));
     if (rd_priv_ctx == NULL)
         return NULL;
 
@@ -126,13 +126,13 @@ static Dav1dPlayRendererPrivateContext*
 }
 
 #if HAVE_PLACEBO_OPENGL
-static void *placebo_renderer_create_gl(const Dav1dPlaySettings *settings)
+static void *placebo_renderer_create_gl(const Dav2dPlaySettings *settings)
 {
     SDL_Window *sdlwin = NULL;
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
     // Common init
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx =
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx =
         placebo_renderer_create_common(settings, SDL_WINDOW_OPENGL);
 
     if (rd_priv_ctx == NULL)
@@ -182,12 +182,12 @@ static void *placebo_renderer_create_gl(const Dav1dPlaySettings *settings)
 #endif
 
 #if HAVE_PLACEBO_VULKAN
-static void *placebo_renderer_create_vk(const Dav1dPlaySettings *settings)
+static void *placebo_renderer_create_vk(const Dav2dPlaySettings *settings)
 {
     SDL_Window *sdlwin = NULL;
 
     // Common init
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx =
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx =
         placebo_renderer_create_common(settings, SDL_WINDOW_VULKAN);
 
     if (rd_priv_ctx == NULL)
@@ -270,7 +270,7 @@ static void *placebo_renderer_create_vk(const Dav1dPlaySettings *settings)
 
 static void placebo_renderer_destroy(void *cookie)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     pl_renderer_destroy(&(rd_priv_ctx->renderer));
@@ -297,9 +297,9 @@ static void placebo_renderer_destroy(void *cookie)
     pl_log_destroy(&rd_priv_ctx->log);
 }
 
-static void placebo_render(void *cookie, const Dav1dPlaySettings *settings)
+static void placebo_render(void *cookie, const Dav2dPlaySettings *settings)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     SDL_LockMutex(rd_priv_ctx->lock);
@@ -345,19 +345,19 @@ static void placebo_render(void *cookie, const Dav1dPlaySettings *settings)
     SDL_UnlockMutex(rd_priv_ctx->lock);
 }
 
-static int placebo_upload_image(void *cookie, Dav1dPicture *dav1d_pic,
-                                const Dav1dPlaySettings *settings)
+static int placebo_upload_image(void *cookie, Dav2dPicture *dav2d_pic,
+                                const Dav2dPlaySettings *settings)
 {
-    Dav1dPlayRendererPrivateContext *p = cookie;
+    Dav2dPlayRendererPrivateContext *p = cookie;
     assert(p != NULL);
     int ret = 0;
 
-    if (!dav1d_pic)
+    if (!dav2d_pic)
         return ret;
 
     SDL_LockMutex(p->lock);
-    if (!pl_upload_dav1dpicture(p->gpu, &p->image, p->plane_tex, pl_dav1d_upload_params(
-        .picture = dav1d_pic,
+    if (!pl_upload_dav2dpicture(p->gpu, &p->image, p->plane_tex, pl_dav2d_upload_params(
+        .picture = dav2d_pic,
         .film_grain = settings->gpugrain,
         .gpu_allocated = settings->zerocopy,
         .asynchronous = true,
@@ -371,29 +371,29 @@ static int placebo_upload_image(void *cookie, Dav1dPicture *dav1d_pic,
     return ret;
 }
 
-static int placebo_alloc_pic(Dav1dPicture *const pic, void *cookie)
+static int placebo_alloc_pic(Dav2dPicture *const pic, void *cookie)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     SDL_LockMutex(rd_priv_ctx->lock);
-    int ret = pl_allocate_dav1dpicture(pic, (void *) rd_priv_ctx->gpu);
+    int ret = pl_allocate_dav2dpicture(pic, (void *) rd_priv_ctx->gpu);
     SDL_UnlockMutex(rd_priv_ctx->lock);
     return ret;
 }
 
-static void placebo_release_pic(Dav1dPicture *pic, void *cookie)
+static void placebo_release_pic(Dav2dPicture *pic, void *cookie)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     SDL_LockMutex(rd_priv_ctx->lock);
-    pl_release_dav1dpicture(pic, (void *) rd_priv_ctx->gpu);
+    pl_release_dav2dpicture(pic, (void *) rd_priv_ctx->gpu);
     SDL_UnlockMutex(rd_priv_ctx->lock);
 }
 
 #if HAVE_PLACEBO_VULKAN
-const Dav1dPlayRenderInfo rdr_placebo_vk = {
+const Dav2dPlayRenderInfo rdr_placebo_vk = {
     .name = "placebo-vk",
     .create_renderer = placebo_renderer_create_vk,
     .destroy_renderer = placebo_renderer_destroy,
@@ -404,11 +404,11 @@ const Dav1dPlayRenderInfo rdr_placebo_vk = {
     .supports_gpu_grain = 1,
 };
 #else
-const Dav1dPlayRenderInfo rdr_placebo_vk = { NULL };
+const Dav2dPlayRenderInfo rdr_placebo_vk = { NULL };
 #endif
 
 #if HAVE_PLACEBO_OPENGL
-const Dav1dPlayRenderInfo rdr_placebo_gl = {
+const Dav2dPlayRenderInfo rdr_placebo_gl = {
     .name = "placebo-gl",
     .create_renderer = placebo_renderer_create_gl,
     .destroy_renderer = placebo_renderer_destroy,
@@ -417,10 +417,10 @@ const Dav1dPlayRenderInfo rdr_placebo_gl = {
     .supports_gpu_grain = 1,
 };
 #else
-const Dav1dPlayRenderInfo rdr_placebo_gl = { NULL };
+const Dav2dPlayRenderInfo rdr_placebo_gl = { NULL };
 #endif
 
 #else
-const Dav1dPlayRenderInfo rdr_placebo_vk = { NULL };
-const Dav1dPlayRenderInfo rdr_placebo_gl = { NULL };
+const Dav2dPlayRenderInfo rdr_placebo_vk = { NULL };
+const Dav2dPlayRenderInfo rdr_placebo_gl = { NULL };
 #endif

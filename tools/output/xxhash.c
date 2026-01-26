@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018-2021, Two Orioles, LLC
  * All rights reserved.
  *
@@ -43,16 +43,16 @@ typedef struct MuxerPriv {
 } xxh3Context;
 
 static int xxh3_open(xxh3Context *const xxh3, const char *const file,
-                    const Dav1dPictureParameters *const p,
+                    const Dav2dPictureParameters *const p,
                     const unsigned fps[2])
 {
     xxh3->state = XXH3_createState();
-    if (!xxh3->state) return DAV1D_ERR(ENOMEM);
+    if (!xxh3->state) return DAV2D_ERR(ENOMEM);
     XXH_errorcode err = XXH3_128bits_reset(xxh3->state);
     if (err != XXH_OK) {
         XXH3_freeState(xxh3->state);
         xxh3->state = NULL;
-        return DAV1D_ERR(ENOMEM);
+        return DAV2D_ERR(ENOMEM);
     }
 
     if (!strcmp(file, "-")) {
@@ -67,7 +67,7 @@ static int xxh3_open(xxh3Context *const xxh3, const char *const file,
     return 0;
 }
 
-static int xxh3_write(xxh3Context *const xxh3, Dav1dPicture *const p) {
+static int xxh3_write(xxh3Context *const xxh3, Dav2dPicture *const p) {
     const int hbd = p->p.bpc > 8;
     const int w = p->p.w, h = p->p.h;
     uint8_t *yptr = p->data[0];
@@ -77,9 +77,9 @@ static int xxh3_write(xxh3Context *const xxh3, Dav1dPicture *const p) {
         yptr += p->stride[0];
     }
 
-    if (p->p.layout != DAV1D_PIXEL_LAYOUT_I400) {
-        const int ss_ver = p->p.layout == DAV1D_PIXEL_LAYOUT_I420;
-        const int ss_hor = p->p.layout != DAV1D_PIXEL_LAYOUT_I444;
+    if (p->p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+        const int ss_ver = p->p.layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = p->p.layout != DAV2D_PIXEL_LAYOUT_I444;
         const int cw = (w + ss_hor) >> ss_hor;
         const int ch = (h + ss_ver) >> ss_ver;
         for (int pl = 1; pl <= 2; pl++) {
@@ -92,7 +92,7 @@ static int xxh3_write(xxh3Context *const xxh3, Dav1dPicture *const p) {
         }
     }
 
-    dav1d_picture_unref(p);
+    dav2d_picture_unref(p);
 
     return 0;
 }

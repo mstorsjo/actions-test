@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2020, VideoLAN and dav1d authors
+ * Copyright © 2018-2020, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_PICTURE_H
-#define DAV1D_PICTURE_H
+#ifndef DAV2D_PICTURE_H
+#define DAV2D_PICTURE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -41,18 +41,18 @@ extern "C" {
 /* Number of bytes to align AND pad picture memory buffers by, so that SIMD
  * implementations can over-read by a few bytes, and use aligned read/write
  * instructions. */
-#define DAV1D_PICTURE_ALIGNMENT 64
+#define DAV2D_PICTURE_ALIGNMENT 64
 
-typedef struct Dav1dPictureParameters {
+typedef struct Dav2dPictureParameters {
     int w; ///< width (in pixels)
     int h; ///< height (in pixels)
-    enum Dav1dPixelLayout layout; ///< format of the picture
+    enum Dav2dPixelLayout layout; ///< format of the picture
     int bpc; ///< bits per pixel component (8 or 10)
-} Dav1dPictureParameters;
+} Dav2dPictureParameters;
 
-typedef struct Dav1dPicture {
-    Dav1dSequenceHeader *seq_hdr;
-    Dav1dFrameHeader *frame_hdr;
+typedef struct Dav2dPicture {
+    Dav2dSequenceHeader *seq_hdr;
+    Dav2dFrameHeader *frame_hdr;
 
     /**
      * Pointers to planar image data (Y is [0], U is [1], V is [2]). The data
@@ -68,23 +68,23 @@ typedef struct Dav1dPicture {
      */
     ptrdiff_t stride[2];
 
-    Dav1dPictureParameters p;
-    Dav1dDataProps m;
+    Dav2dPictureParameters p;
+    Dav2dDataProps m;
 
     /**
      * High Dynamic Range Content Light Level metadata applying to this picture,
      * as defined in section 5.8.3 and 6.7.3
      */
-    Dav1dContentLightLevel *content_light;
+    Dav2dContentLightLevel *content_light;
     /**
      * High Dynamic Range Mastering Display Color Volume metadata applying to
      * this picture, as defined in section 5.8.4 and 6.7.4
      */
-    Dav1dMasteringDisplay *mastering_display;
+    Dav2dMasteringDisplay *mastering_display;
     /**
      * Array of ITU-T T.35 metadata as defined in section 5.8.2 and 6.7.2
      */
-    Dav1dITUTT35 *itut_t35;
+    Dav2dITUTT35 *itut_t35;
 
     /**
      * Number of ITU-T T35 metadata entries in the array
@@ -93,30 +93,30 @@ typedef struct Dav1dPicture {
 
     uintptr_t reserved[4]; ///< reserved for future use
 
-    struct Dav1dRef *frame_hdr_ref; ///< Dav1dFrameHeader allocation origin
-    struct Dav1dRef *seq_hdr_ref; ///< Dav1dSequenceHeader allocation origin
-    struct Dav1dRef *content_light_ref; ///< Dav1dContentLightLevel allocation origin
-    struct Dav1dRef *mastering_display_ref; ///< Dav1dMasteringDisplay allocation origin
-    struct Dav1dRef *itut_t35_ref; ///< Dav1dITUTT35 allocation origin
+    struct Dav2dRef *frame_hdr_ref; ///< Dav2dFrameHeader allocation origin
+    struct Dav2dRef *seq_hdr_ref; ///< Dav2dSequenceHeader allocation origin
+    struct Dav2dRef *content_light_ref; ///< Dav2dContentLightLevel allocation origin
+    struct Dav2dRef *mastering_display_ref; ///< Dav2dMasteringDisplay allocation origin
+    struct Dav2dRef *itut_t35_ref; ///< Dav2dITUTT35 allocation origin
     uintptr_t reserved_ref[4]; ///< reserved for future use
-    struct Dav1dRef *ref; ///< Frame data allocation origin
+    struct Dav2dRef *ref; ///< Frame data allocation origin
 
     void *allocator_data; ///< pointer managed by the allocator
-} Dav1dPicture;
+} Dav2dPicture;
 
-typedef struct Dav1dPicAllocator {
+typedef struct Dav2dPicAllocator {
     void *cookie; ///< custom data to pass to the allocator callbacks.
     /**
-     * Allocate the picture buffer based on the Dav1dPictureParameters.
+     * Allocate the picture buffer based on the Dav2dPictureParameters.
      *
-     * The data[0], data[1] and data[2] must be DAV1D_PICTURE_ALIGNMENT byte
+     * The data[0], data[1] and data[2] must be DAV2D_PICTURE_ALIGNMENT byte
      * aligned and with a pixel width/height multiple of 128 pixels. Any
-     * allocated memory area should also be padded by DAV1D_PICTURE_ALIGNMENT
+     * allocated memory area should also be padded by DAV2D_PICTURE_ALIGNMENT
      * bytes.
      * data[1] and data[2] must share the same stride[1].
      *
      * This function will be called on the main thread (the thread which calls
-     * dav1d_get_picture()).
+     * dav2d_get_picture()).
      *
      * @param  pic The picture to allocate the buffer for. The callback needs to
      *             fill the picture data[0], data[1], data[2], stride[0] and
@@ -128,30 +128,30 @@ typedef struct Dav1dPicAllocator {
      *
      * @note No fields other than data, stride and allocator_data must be filled
      *       by this callback.
-     * @return 0 on success. A negative DAV1D_ERR value on error.
+     * @return 0 on success. A negative DAV2D_ERR value on error.
      */
-    int (*alloc_picture_callback)(Dav1dPicture *pic, void *cookie);
+    int (*alloc_picture_callback)(Dav2dPicture *pic, void *cookie);
     /**
      * Release the picture buffer.
      *
      * If frame threading is used, this function may be called by the main
-     * thread (the thread which calls dav1d_get_picture()) or any of the frame
+     * thread (the thread which calls dav2d_get_picture()) or any of the frame
      * threads and thus must be thread-safe. If frame threading is not used,
      * this function will only be called on the main thread.
      *
      * @param pic    The picture that was filled by alloc_picture_callback().
      * @param cookie Custom pointer passed to all calls.
      */
-    void (*release_picture_callback)(Dav1dPicture *pic, void *cookie);
-} Dav1dPicAllocator;
+    void (*release_picture_callback)(Dav2dPicture *pic, void *cookie);
+} Dav2dPicAllocator;
 
 /**
  * Release reference to a picture.
  */
-DAV1D_API void dav1d_picture_unref(Dav1dPicture *p);
+DAV2D_API void dav2d_picture_unref(Dav2dPicture *p);
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* DAV1D_PICTURE_H */
+#endif /* DAV2D_PICTURE_H */

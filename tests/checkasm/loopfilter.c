@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -196,9 +196,9 @@ static void check_lpf_sb(loopfilter_sb_fn fn, const char *const name,
 }
 
 void bitfn(checkasm_check_loopfilter)(void) {
-    Dav1dLoopFilterDSPContext c;
+    Dav2dLoopFilterDSPContext c;
 
-    bitfn(dav1d_loop_filter_dsp_init)(&c);
+    bitfn(dav2d_loop_filter_dsp_init)(&c);
 
     check_lpf_sb(c.loop_filter_sb[0][0], "lpf_h_sb_y", 32, 0, 0, 0);
     check_lpf_sb(c.loop_filter_sb[0][1], "lpf_v_sb_y", 32, 1, 0, 1);

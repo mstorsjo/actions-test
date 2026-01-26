@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -1014,7 +1014,7 @@ endfunc
 700:
 .endm
 
-const dav1d_cdef_directions
+const dav2d_cdef_directions
 .byte   1 * 12 + 0,  2 * 12 + 0
 .byte   1 * 12 + 0,  2 * 12 - 1
 .byte   -1 * 12 + 1, -2 * 12 + 2
@@ -1249,7 +1249,7 @@ endconst
     slli.d         s2,    s2,    1   //directions dir+4
     slli.d         s3,    a7,    1   //directions dir+0
 
-    la.local       t0,    dav1d_cdef_directions
+    la.local       t0,    dav2d_cdef_directions
     add.d          s1,    t0,    s1
     ld.b           a2,    s1,    0  //off01
     ld.b           a3,    s1,    1  //off11
@@ -1277,7 +1277,7 @@ endconst
     addi.d         s1,    a7,    2
     slli.d         s1,    s1,    1   //directions dir+2
 
-    la.local       t0,    dav1d_cdef_directions
+    la.local       t0,    dav2d_cdef_directions
     add.d          s1,    t0,    s1
     ld.b           a2,    s1,    0  //off01
     ld.b           a3,    s1,    1  //off11
@@ -1300,7 +1300,7 @@ endconst
     slli.d         s2,    s2,    1   //directions dir+4
     slli.d         s3,    a7,    1   //directions dir+0
 
-    la.local       t0,    dav1d_cdef_directions
+    la.local       t0,    dav2d_cdef_directions
     add.d          s1,    t0,    s1
     add.d          s2,    t0,    s2
     ld.b           s1,    s2,    0  //off02

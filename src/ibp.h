@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,11 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_IBP_H
-#define DAV1D_SRC_IBP_H
+#ifndef DAV2D_SRC_IBP_H
+#define DAV2D_SRC_IBP_H
 
-EXTERN uint8_t dav1d_ibp_weights[7][16][16];
+EXTERN uint8_t dav2d_ibp_weights[7][16][16];
 
-void dav1d_init_ibp_weights(void);
+void dav2d_init_ibp_weights(void);
 
-#endif /* DAV1D_SRC_IBP_H */
+#endif /* DAV2D_SRC_IBP_H */

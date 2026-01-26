@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2023, Nathan Egge
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_RISCV_ASM_S
-#define DAV1D_SRC_RISCV_ASM_S
+#ifndef DAV2D_SRC_RISCV_ASM_S
+#define DAV2D_SRC_RISCV_ASM_S
 
 #include "config.h"
 
@@ -39,7 +39,7 @@
 #endif
 
 #ifndef PRIVATE_PREFIX
-#define PRIVATE_PREFIX dav1d_
+#define PRIVATE_PREFIX dav2d_
 #endif
 
 #define PASTE(a,b) a ## b
@@ -146,4 +146,4 @@ EXTERN\name:
 #define MF4     6
 #define MF8     5
 
-#endif /* DAV1D_SRC_RISCV_ASM_S */
+#endif /* DAV2D_SRC_RISCV_ASM_S */

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -46,10 +46,10 @@ int resolve_divisor_32(const unsigned d, int *const shift) {
     assert(f <= 128);
     *shift += 9;
     // Use f as lookup into the precomputed table of multipliers
-    return dav1d_div_recip[f];
+    return dav2d_div_recip[f];
 }
 
-int dav1d_get_shear_params(Dav1dWarpedMotionParams *const wm) {
+int dav2d_get_shear_params(Dav2dWarpedMotionParams *const wm) {
     const int32_t *const mat = wm->matrix;
 
     if (mat[2] <= 0) return 1;
@@ -80,7 +80,7 @@ static int resolve_divisor_64(const uint64_t d, int *const shift) {
     assert(f <= 128);
     *shift += 9;
     // Use f as lookup into the precomputed table of multipliers
-    return dav1d_div_recip[f];
+    return dav2d_div_recip[f];
 }
 
 static int get_mult_shift_ndiag(const int64_t px, const int idet,
@@ -101,8 +101,8 @@ static int get_mult_shift_diag(const int64_t px, const int idet,
     return iclip(v3, 0x8040, 0x17fc0);
 }
 
-void dav1d_set_affine_mv2d(const int bw4, const int bh4,
-                           const mv mv, Dav1dWarpedMotionParams *const wm,
+void dav2d_set_affine_mv2d(const int bw4, const int bh4,
+                           const mv mv, Dav2dWarpedMotionParams *const wm,
                            const int bx4, const int by4)
 {
     int32_t *const mat = wm->matrix;
@@ -117,9 +117,9 @@ void dav1d_set_affine_mv2d(const int bw4, const int bh4,
                          (int64_t) isuy * (mat[5] - 0x10000), -0x8000000, 0x7ffffc0);
 }
 
-int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
+int dav2d_find_affine_int(const int (*pts)[2][2], const int np,
                           const int bw4, const int bh4,
-                          const mv mv, Dav1dWarpedMotionParams *const wm,
+                          const mv mv, Dav2dWarpedMotionParams *const wm,
                           const int bx4, const int by4)
 {
     int32_t *const mat = wm->matrix;
@@ -154,7 +154,7 @@ int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
     if (det == 0) {
         mat[2] = mat[5] = 0x10000;
         mat[3] = mat[4] = 0;
-        dav1d_set_affine_mv2d(bw4, bh4, mv, wm, bx4, by4);
+        dav2d_set_affine_mv2d(bw4, bh4, mv, wm, bx4, by4);
         return 0;
     }
     int shift, idet = apply_sign64(resolve_divisor_64(llabs(det), &shift), det);
@@ -175,7 +175,7 @@ int dav1d_find_affine_int(const int (*pts)[2][2], const int np,
     mat[5] = get_mult_shift_diag((int64_t) a[0][0] * by[1] -
                                  (int64_t) a[0][1] * by[0], idet, r, shift);
 
-    dav1d_set_affine_mv2d(bw4, bh4, mv, wm, bx4, by4);
+    dav2d_set_affine_mv2d(bw4, bh4, mv, wm, bx4, by4);
 
     return 0;
 }

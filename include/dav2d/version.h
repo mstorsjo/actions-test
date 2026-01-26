@@ -1,6 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
- * Copyright © 2019, Luca Barbato
+ * Copyright © 2019-2024, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,34 +24,27 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_PPC_TYPES_H
-#define DAV1D_SRC_PPC_TYPES_H
+#ifndef DAV2D_VERSION_H
+#define DAV2D_VERSION_H
 
-#include <altivec.h>
-#undef pixel
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define u8x16 vector unsigned char
-#define i8x16 vector signed char
-#define b8x16 vector bool char
-#define u16x8 vector unsigned short
-#define i16x8 vector signed short
-#define b16x8 vector bool short
-#define u32x4 vector unsigned int
-#define i32x4 vector signed int
-#define b32x4 vector bool int
-#define u64x2 vector unsigned long long
-#define i64x2 vector signed long long
-#define b64x2 vector bool long long
+#define DAV2D_API_VERSION_MAJOR 7
+#define DAV2D_API_VERSION_MINOR 0
+#define DAV2D_API_VERSION_PATCH 0
 
-#define i8h_to_i16(v) ((i16x8) vec_unpackh((i8x16)v))
-#define i8l_to_i16(v) ((i16x8) vec_unpackl((i8x16)v))
-#define u8h_to_i16(v) ((i16x8) vec_mergeh((u8x16) v, vec_splat_u8(0)))
-#define u8l_to_i16(v) ((i16x8) vec_mergel((u8x16) v, vec_splat_u8(0)))
-#define u8h_to_u16(v) ((u16x8) vec_mergeh((u8x16) v, vec_splat_u8(0)))
-#define u8l_to_u16(v) ((u16x8) vec_mergel((u8x16) v, vec_splat_u8(0)))
-#define u16h_to_i32(v) ((i32x4) vec_mergeh((u16x8) v, vec_splat_u16(0)))
-#define i16h_to_i32(v) ((i32x4) vec_unpackh((i16x8)v))
-#define u16l_to_i32(v) ((i32x4) vec_mergel((u16x8) v, vec_splat_u16(0)))
-#define i16l_to_i32(v) ((i32x4) vec_unpackl((i16x8)v))
+/**
+ * Extract version components from the value returned by
+ * dav2d_version_int()
+ */
+#define DAV2D_API_MAJOR(v) (((v) >> 16) & 0xFF)
+#define DAV2D_API_MINOR(v) (((v) >>  8) & 0xFF)
+#define DAV2D_API_PATCH(v) (((v) >>  0) & 0xFF)
 
-#endif /* DAV1D_SRC_PPC_TYPES_H */
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* DAV2D_VERSION_H */

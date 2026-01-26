@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -25,23 +25,23 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LOONGARCH_MSAC_H
-#define DAV1D_SRC_LOONGARCH_MSAC_H
+#ifndef DAV2D_SRC_LOONGARCH_MSAC_H
+#define DAV2D_SRC_LOONGARCH_MSAC_H
 
-unsigned dav1d_msac_decode_symbol_adapt4_lsx(MsacContext *s, uint16_t *cdf,
+unsigned dav2d_msac_decode_symbol_adapt4_lsx(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
-unsigned dav1d_msac_decode_symbol_adapt8_lsx(MsacContext *s, uint16_t *cdf,
+unsigned dav2d_msac_decode_symbol_adapt8_lsx(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
-unsigned dav1d_msac_decode_bool_adapt_lsx(MsacContext *s, uint16_t *cdf);
-unsigned dav1d_msac_decode_bool_lsx(MsacContext *s, unsigned f);
-unsigned dav1d_msac_decode_bool_equi_lsx(MsacContext *s);
-unsigned dav1d_msac_decode_hi_tok_lsx(MsacContext *s, uint16_t *cdf);
+unsigned dav2d_msac_decode_bool_adapt_lsx(MsacContext *s, uint16_t *cdf);
+unsigned dav2d_msac_decode_bool_lsx(MsacContext *s, unsigned f);
+unsigned dav2d_msac_decode_bool_equi_lsx(MsacContext *s);
+unsigned dav2d_msac_decode_hi_tok_lsx(MsacContext *s, uint16_t *cdf);
 
-#define dav1d_msac_decode_symbol_adapt4  dav1d_msac_decode_symbol_adapt4_lsx
-#define dav1d_msac_decode_symbol_adapt8  dav1d_msac_decode_symbol_adapt8_lsx
-#define dav1d_msac_decode_bool_adapt     dav1d_msac_decode_bool_adapt_lsx
-#define dav1d_msac_decode_bool           dav1d_msac_decode_bool_lsx
-#define dav1d_msac_decode_bool_equi      dav1d_msac_decode_bool_equi_lsx
-#define dav1d_msac_decode_hi_tok         dav1d_msac_decode_hi_tok_lsx
+#define dav2d_msac_decode_symbol_adapt4  dav2d_msac_decode_symbol_adapt4_lsx
+#define dav2d_msac_decode_symbol_adapt8  dav2d_msac_decode_symbol_adapt8_lsx
+#define dav2d_msac_decode_bool_adapt     dav2d_msac_decode_bool_adapt_lsx
+#define dav2d_msac_decode_bool           dav2d_msac_decode_bool_lsx
+#define dav2d_msac_decode_bool_equi      dav2d_msac_decode_bool_equi_lsx
+#define dav2d_msac_decode_hi_tok         dav2d_msac_decode_hi_tok_lsx
 
-#endif /* DAV1D_SRC_LOONGARCH_MSAC_H */
+#endif /* DAV2D_SRC_LOONGARCH_MSAC_H */

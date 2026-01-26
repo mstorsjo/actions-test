@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -227,7 +227,7 @@ static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
 #endif
 #endif
 
-COLD void bitfn(dav1d_loop_filter_dsp_init)(Dav1dLoopFilterDSPContext *const c) {
+COLD void bitfn(dav2d_loop_filter_dsp_init)(Dav2dLoopFilterDSPContext *const c) {
     c->loop_filter_sb[0][0] = loop_filter_h_sb128y_c;
     c->loop_filter_sb[0][1] = loop_filter_v_sb128y_c;
     c->loop_filter_sb[1][0] = loop_filter_h_sb128uv_c;

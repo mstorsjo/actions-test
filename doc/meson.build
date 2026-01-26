@@ -1,4 +1,4 @@
-# Copyright © 2018-2022, VideoLAN and dav1d authors
+# Copyright © 2018-2022, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -30,15 +30,15 @@ doxygen = find_program('doxygen')
 dot = find_program('dot')
 
 conf_data = configuration_data()
-conf_data.set('DOXYGEN_INPUT', dav1d_src_root / 'include/dav1d')
-conf_data.set('DOXYGEN_STRIP', dav1d_src_root / 'include')
+conf_data.set('DOXYGEN_INPUT', dav2d_src_root / 'include/dav2d')
+conf_data.set('DOXYGEN_STRIP', dav2d_src_root / 'include')
 conf_data.set('DOXYGEN_OUTPUT', meson.current_build_dir())
 doxyfile = configure_file(input: 'Doxyfile.in.in',
                           output: 'Doxyfile.in',
                           configuration: conf_data)
 
 doxyfile_rev_target = vcs_tag(command: [
-        'git', '--git-dir', dav1d_git_dir, 'describe', '--long', '--always'
+        'git', '--git-dir', dav2d_git_dir, 'describe', '--long', '--always'
     ],
     input: doxyfile,
     output: 'Doxyfile'

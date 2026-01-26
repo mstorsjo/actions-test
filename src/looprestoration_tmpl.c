@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -514,7 +514,7 @@ static NOINLINE void sgr_calc_row_ab(int32_t *AA, coef *BB, int w, int s,
 
         const unsigned p = imax(a * n - b * b, 0);
         const unsigned z = (p * s + (1 << 19)) >> 20;
-        const unsigned x = dav1d_sgr_x_by_x[umin(z, 255)];
+        const unsigned x = dav2d_sgr_x_by_x[umin(z, 255)];
 
         // This is where we invert A and B, so that B is of size coef.
         AA[i] = (x * BB[i] * sgr_one_by_x + (1 << 11)) >> 12;
@@ -1362,7 +1362,7 @@ vert_1:
 #endif
 #endif
 
-COLD void bitfn(dav1d_loop_restoration_dsp_init)(Dav1dLoopRestorationDSPContext *const c,
+COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext *const c,
                                                  const int bpc)
 {
     c->wiener[0] = c->wiener[1] = wiener_c;

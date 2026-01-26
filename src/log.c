@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include "dav1d/dav1d.h"
+#include "dav2d/dav2d.h"
 
 #include "common/validate.h"
 
@@ -37,13 +37,13 @@
 #include "src/log.h"
 
 #if CONFIG_LOG
-COLD void dav1d_log_default_callback(void *const cookie,
+COLD void dav2d_log_default_callback(void *const cookie,
                                      const char *const format, va_list ap)
 {
     vfprintf(stderr, format, ap);
 }
 
-COLD void dav1d_log(Dav1dContext *const c, const char *const format, ...) {
+COLD void dav2d_log(Dav2dContext *const c, const char *const format, ...) {
     assert(c != NULL);
 
     if (!c->logger.callback)

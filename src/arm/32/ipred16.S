@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, B Krishnan Iyer
  * Copyright © 2020, Martin Storsjo
  * All rights reserved.

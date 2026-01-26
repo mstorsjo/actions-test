@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LOOPFILTER_H
-#define DAV1D_SRC_LOOPFILTER_H
+#ifndef DAV2D_SRC_LOOPFILTER_H
+#define DAV2D_SRC_LOOPFILTER_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -44,7 +44,7 @@ void (name)(pixel *dst, ptrdiff_t stride, const uint64_t *mask, \
             const Av1FilterLUT *lut, int w HIGHBD_DECL_SUFFIX)
 typedef decl_loopfilter_sb_fn(*loopfilter_sb_fn);
 
-typedef struct Dav1dLoopFilterDSPContext {
+typedef struct Dav2dLoopFilterDSPContext {
     /*
      * dimension 1: plane (0=luma, 1=chroma)
      * dimension 2: 0=col-edge filter (h), 1=row-edge filter (v)
@@ -52,8 +52,8 @@ typedef struct Dav1dLoopFilterDSPContext {
      * dst/stride are aligned by 32
      */
     loopfilter_sb_fn loop_filter_sb[2][2];
-} Dav1dLoopFilterDSPContext;
+} Dav2dLoopFilterDSPContext;
 
-bitfn_decls(void dav1d_loop_filter_dsp_init, Dav1dLoopFilterDSPContext *c);
+bitfn_decls(void dav2d_loop_filter_dsp_init, Dav2dLoopFilterDSPContext *c);
 
-#endif /* DAV1D_SRC_LOOPFILTER_H */
+#endif /* DAV2D_SRC_LOOPFILTER_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,62 +25,62 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_RECON_H
-#define DAV1D_SRC_RECON_H
+#ifndef DAV2D_SRC_RECON_H
+#define DAV2D_SRC_RECON_H
 
 #include "src/debug.h"
 #include "src/internal.h"
 #include "src/levels.h"
 
 #define decl_recon_b_fn(name) \
-int (name)(Dav1dTaskContext *t, DB_ONLY(int depth) \
+int (name)(Dav2dTaskContext *t, DB_ONLY(int depth) \
            enum BlockSize bs, enum BlockSize cbs, Av1Block *b)
 typedef decl_recon_b_fn(*recon_b_fn);
 
 #define decl_filter_sbrow_fn(name) \
-void (name)(Dav1dFrameContext *f, int sby)
+void (name)(Dav2dFrameContext *f, int sby)
 typedef decl_filter_sbrow_fn(*filter_sbrow_fn);
 
 #define decl_backup_ipred_edge_fn(name) \
-void (name)(Dav1dTaskContext *t)
+void (name)(Dav2dTaskContext *t)
 typedef decl_backup_ipred_edge_fn(*backup_ipred_edge_fn);
 
 #define decl_read_coef_blocks_fn(name) \
-void (name)(Dav1dTaskContext *t, enum BlockSize bs, const Av1Block *b)
+void (name)(Dav2dTaskContext *t, enum BlockSize bs, const Av1Block *b)
 typedef decl_read_coef_blocks_fn(*read_coef_blocks_fn);
 
 #define decl_copy_pal_block_fn(name) \
-void (name)(Dav1dTaskContext *t, int bx4, int by4, int bw4, int bh4)
+void (name)(Dav2dTaskContext *t, int bx4, int by4, int bw4, int bh4)
 typedef decl_copy_pal_block_fn(*copy_pal_block_fn);
 
 #define decl_read_pal_plane_fn(name) \
-void (name)(DB_ONLY(const int depth) Dav1dTaskContext *t, \
+void (name)(DB_ONLY(const int depth) Dav2dTaskContext *t, \
                     Av1Block *b, int bx4, int by4)
 typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 
-decl_recon_b_fn(dav1d_recon_b_8bpc);
-decl_recon_b_fn(dav1d_recon_b_16bpc);
+decl_recon_b_fn(dav2d_recon_b_8bpc);
+decl_recon_b_fn(dav2d_recon_b_16bpc);
 
-decl_filter_sbrow_fn(dav1d_filter_sbrow_8bpc);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_16bpc);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_deblock_cols_8bpc);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_deblock_cols_16bpc);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_deblock_rows_8bpc);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_deblock_rows_16bpc);
-void dav1d_filter_sbrow_cdef_8bpc(Dav1dTaskContext *tc, int sby);
-void dav1d_filter_sbrow_cdef_16bpc(Dav1dTaskContext *tc, int sby);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_lr_8bpc);
-decl_filter_sbrow_fn(dav1d_filter_sbrow_lr_16bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_8bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_16bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_cols_8bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_cols_16bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_rows_8bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_rows_16bpc);
+void dav2d_filter_sbrow_cdef_8bpc(Dav2dTaskContext *tc, int sby);
+void dav2d_filter_sbrow_cdef_16bpc(Dav2dTaskContext *tc, int sby);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_8bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_16bpc);
 
-decl_backup_ipred_edge_fn(dav1d_backup_ipred_edge_8bpc);
-decl_backup_ipred_edge_fn(dav1d_backup_ipred_edge_16bpc);
+decl_backup_ipred_edge_fn(dav2d_backup_ipred_edge_8bpc);
+decl_backup_ipred_edge_fn(dav2d_backup_ipred_edge_16bpc);
 
-decl_read_coef_blocks_fn(dav1d_read_coef_blocks_8bpc);
-decl_read_coef_blocks_fn(dav1d_read_coef_blocks_16bpc);
+decl_read_coef_blocks_fn(dav2d_read_coef_blocks_8bpc);
+decl_read_coef_blocks_fn(dav2d_read_coef_blocks_16bpc);
 
-decl_copy_pal_block_fn(dav1d_copy_pal_block_y_8bpc);
-decl_copy_pal_block_fn(dav1d_copy_pal_block_y_16bpc);
-decl_read_pal_plane_fn(dav1d_read_pal_plane_8bpc);
-decl_read_pal_plane_fn(dav1d_read_pal_plane_16bpc);
+decl_copy_pal_block_fn(dav2d_copy_pal_block_y_8bpc);
+decl_copy_pal_block_fn(dav2d_copy_pal_block_y_16bpc);
+decl_read_pal_plane_fn(dav2d_read_pal_plane_8bpc);
+decl_read_pal_plane_fn(dav2d_read_pal_plane_16bpc);
 
-#endif /* DAV1D_SRC_RECON_H */
+#endif /* DAV2D_SRC_RECON_H */

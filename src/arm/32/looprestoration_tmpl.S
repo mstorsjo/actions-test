@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
  * All rights reserved.
  *
@@ -30,7 +30,7 @@
 #define FILTER_OUT_STRIDE 384
 
 .macro sgr_funcs bpc
-// void dav1d_sgr_finish_filter_row1_Xbpc_neon(int16_t *tmp,
+// void dav2d_sgr_finish_filter_row1_Xbpc_neon(int16_t *tmp,
 //                                             const pixel *src,
 //                                             const int32_t **a, const int16_t **b,
 //                                             const int w);
@@ -117,7 +117,7 @@ function sgr_finish_filter_row1_\bpc\()bpc_neon, export=1
         pop             {r4-r11,pc}
 endfunc
 
-// void dav1d_sgr_finish_filter2_2rows_Xbpc_neon(int16_t *tmp,
+// void dav2d_sgr_finish_filter2_2rows_Xbpc_neon(int16_t *tmp,
 //                                               const pixel *src, const ptrdiff_t stride,
 //                                               const int32_t **a, const int16_t **b,
 //                                               const int w, const int h);
@@ -269,7 +269,7 @@ function sgr_finish_filter2_2rows_\bpc\()bpc_neon, export=1
         pop             {r4-r11,pc}
 endfunc
 
-// void dav1d_sgr_weighted_row1_Xbpc_neon(pixel *dst,
+// void dav2d_sgr_weighted_row1_Xbpc_neon(pixel *dst,
 //                                        const int16_t *t1, const int w,
 //                                        const int w1, const int bitdepth_max);
 function sgr_weighted_row1_\bpc\()bpc_neon, export=1
@@ -310,7 +310,7 @@ function sgr_weighted_row1_\bpc\()bpc_neon, export=1
         pop             {pc}
 endfunc
 
-// void dav1d_sgr_weighted2_Xbpc_neon(pixel *dst, const ptrdiff_t stride,
+// void dav2d_sgr_weighted2_Xbpc_neon(pixel *dst, const ptrdiff_t stride,
 //                                    const int16_t *t1, const int16_t *t2,
 //                                    const int w, const int h,
 //                                    const int16_t wt[2], const int bitdepth_max);

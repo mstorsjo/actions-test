@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Janne Grunau
  * All rights reserved.
  *
@@ -42,15 +42,15 @@
 #define HWCAP2_AARCH64_SVE2   (1 << 1)
 #define HWCAP2_AARCH64_I8MM   (1 << 13)
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-    unsigned long hw_cap = dav1d_getauxval(AT_HWCAP);
-    unsigned long hw_cap2 = dav1d_getauxval(AT_HWCAP2);
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+    unsigned long hw_cap = dav2d_getauxval(AT_HWCAP);
+    unsigned long hw_cap2 = dav2d_getauxval(AT_HWCAP2);
 
-    unsigned flags = dav1d_get_default_cpu_flags();
-    flags |= (hw_cap & HWCAP_AARCH64_ASIMDDP) ? DAV1D_ARM_CPU_FLAG_DOTPROD : 0;
-    flags |= (hw_cap2 & HWCAP2_AARCH64_I8MM) ? DAV1D_ARM_CPU_FLAG_I8MM : 0;
-    flags |= (hw_cap & HWCAP_AARCH64_SVE) ? DAV1D_ARM_CPU_FLAG_SVE : 0;
-    flags |= (hw_cap2 & HWCAP2_AARCH64_SVE2) ? DAV1D_ARM_CPU_FLAG_SVE2 : 0;
+    unsigned flags = dav2d_get_default_cpu_flags();
+    flags |= (hw_cap & HWCAP_AARCH64_ASIMDDP) ? DAV2D_ARM_CPU_FLAG_DOTPROD : 0;
+    flags |= (hw_cap2 & HWCAP2_AARCH64_I8MM) ? DAV2D_ARM_CPU_FLAG_I8MM : 0;
+    flags |= (hw_cap & HWCAP_AARCH64_SVE) ? DAV2D_ARM_CPU_FLAG_SVE : 0;
+    flags |= (hw_cap2 & HWCAP2_AARCH64_SVE2) ? DAV2D_ARM_CPU_FLAG_SVE2 : 0;
     return flags;
 }
 #else  /* !ARCH_AARCH64 */
@@ -61,13 +61,13 @@ COLD unsigned dav1d_get_cpu_flags_arm(void) {
 #define HWCAP_ARM_ASIMDDP (1 << 24)
 #define HWCAP_ARM_I8MM    (1 << 27)
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-    unsigned long hw_cap = dav1d_getauxval(AT_HWCAP);
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+    unsigned long hw_cap = dav2d_getauxval(AT_HWCAP);
 
-    unsigned flags = dav1d_get_default_cpu_flags();
-    flags |= (hw_cap & HWCAP_ARM_NEON) ? DAV1D_ARM_CPU_FLAG_NEON : 0;
-    flags |= (hw_cap & HWCAP_ARM_ASIMDDP) ? DAV1D_ARM_CPU_FLAG_DOTPROD : 0;
-    flags |= (hw_cap & HWCAP_ARM_I8MM) ? DAV1D_ARM_CPU_FLAG_I8MM : 0;
+    unsigned flags = dav2d_get_default_cpu_flags();
+    flags |= (hw_cap & HWCAP_ARM_NEON) ? DAV2D_ARM_CPU_FLAG_NEON : 0;
+    flags |= (hw_cap & HWCAP_ARM_ASIMDDP) ? DAV2D_ARM_CPU_FLAG_DOTPROD : 0;
+    flags |= (hw_cap & HWCAP_ARM_I8MM) ? DAV2D_ARM_CPU_FLAG_I8MM : 0;
     return flags;
 }
 #endif /* ARCH_AARCH64 */
@@ -84,12 +84,12 @@ static int have_feature(const char *feature) {
     return supported;
 }
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-    unsigned flags = dav1d_get_default_cpu_flags();
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+    unsigned flags = dav2d_get_default_cpu_flags();
     if (have_feature("hw.optional.arm.FEAT_DotProd"))
-        flags |= DAV1D_ARM_CPU_FLAG_DOTPROD;
+        flags |= DAV2D_ARM_CPU_FLAG_DOTPROD;
     if (have_feature("hw.optional.arm.FEAT_I8MM"))
-        flags |= DAV1D_ARM_CPU_FLAG_I8MM;
+        flags |= DAV2D_ARM_CPU_FLAG_I8MM;
     /* No SVE and SVE2 feature detection available on Apple platforms. */
     return flags;
 }
@@ -100,8 +100,8 @@ COLD unsigned dav1d_get_cpu_flags_arm(void) {
 #include <sys/types.h>
 #include <sys/sysctl.h>
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-     unsigned flags = dav1d_get_default_cpu_flags();
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+     unsigned flags = dav2d_get_default_cpu_flags();
 
 #ifdef CPU_ID_AA64ISAR0
      int mib[2];
@@ -114,7 +114,7 @@ COLD unsigned dav1d_get_cpu_flags_arm(void) {
      len = sizeof(isar0);
      if (sysctl(mib, 2, &isar0, &len, NULL, 0) != -1) {
          if (ID_AA64ISAR0_DP(isar0) >= ID_AA64ISAR0_DP_IMPL)
-             flags |= DAV1D_ARM_CPU_FLAG_DOTPROD;
+             flags |= DAV2D_ARM_CPU_FLAG_DOTPROD;
      }
 
      mib[0] = CTL_MACHDEP;
@@ -123,7 +123,7 @@ COLD unsigned dav1d_get_cpu_flags_arm(void) {
      if (sysctl(mib, 2, &isar1, &len, NULL, 0) != -1) {
 #ifdef ID_AA64ISAR1_I8MM_IMPL
          if (ID_AA64ISAR1_I8MM(isar1) >= ID_AA64ISAR1_I8MM_IMPL)
-             flags |= DAV1D_ARM_CPU_FLAG_I8MM;
+             flags |= DAV2D_ARM_CPU_FLAG_I8MM;
 #endif
      }
 #endif
@@ -134,26 +134,26 @@ COLD unsigned dav1d_get_cpu_flags_arm(void) {
 #elif defined(_WIN32)
 #include <windows.h>
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-    unsigned flags = dav1d_get_default_cpu_flags();
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+    unsigned flags = dav2d_get_default_cpu_flags();
 #ifdef PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE
     if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE))
-        flags |= DAV1D_ARM_CPU_FLAG_DOTPROD;
+        flags |= DAV2D_ARM_CPU_FLAG_DOTPROD;
 #endif
 #ifdef PF_ARM_SVE_INSTRUCTIONS_AVAILABLE
     if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE))
-        flags |= DAV1D_ARM_CPU_FLAG_SVE;
+        flags |= DAV2D_ARM_CPU_FLAG_SVE;
 #endif
 #ifdef PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE
     if (IsProcessorFeaturePresent(PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE))
-        flags |= DAV1D_ARM_CPU_FLAG_SVE2;
+        flags |= DAV2D_ARM_CPU_FLAG_SVE2;
 #endif
 #ifdef PF_ARM_SVE_I8MM_INSTRUCTIONS_AVAILABLE
     /* There's no PF_* flag that indicates whether plain I8MM is available
      * or not. But if SVE_I8MM is available, that also implies that
      * regular I8MM is available. */
     if (IsProcessorFeaturePresent(PF_ARM_SVE_I8MM_INSTRUCTIONS_AVAILABLE))
-        flags |= DAV1D_ARM_CPU_FLAG_I8MM;
+        flags |= DAV2D_ARM_CPU_FLAG_I8MM;
 #endif
     return flags;
 }
@@ -199,23 +199,23 @@ static unsigned parse_proc_cpuinfo(const char *flag) {
     return 0;
 }
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-    unsigned flags = dav1d_get_default_cpu_flags();
-    flags |= parse_proc_cpuinfo("neon") ? DAV1D_ARM_CPU_FLAG_NEON : 0;
-    flags |= parse_proc_cpuinfo("asimd") ? DAV1D_ARM_CPU_FLAG_NEON : 0;
-    flags |= parse_proc_cpuinfo("asimddp") ? DAV1D_ARM_CPU_FLAG_DOTPROD : 0;
-    flags |= parse_proc_cpuinfo("i8mm") ? DAV1D_ARM_CPU_FLAG_I8MM : 0;
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+    unsigned flags = dav2d_get_default_cpu_flags();
+    flags |= parse_proc_cpuinfo("neon") ? DAV2D_ARM_CPU_FLAG_NEON : 0;
+    flags |= parse_proc_cpuinfo("asimd") ? DAV2D_ARM_CPU_FLAG_NEON : 0;
+    flags |= parse_proc_cpuinfo("asimddp") ? DAV2D_ARM_CPU_FLAG_DOTPROD : 0;
+    flags |= parse_proc_cpuinfo("i8mm") ? DAV2D_ARM_CPU_FLAG_I8MM : 0;
 #if ARCH_AARCH64
-    flags |= parse_proc_cpuinfo("sve") ? DAV1D_ARM_CPU_FLAG_SVE : 0;
-    flags |= parse_proc_cpuinfo("sve2") ? DAV1D_ARM_CPU_FLAG_SVE2 : 0;
+    flags |= parse_proc_cpuinfo("sve") ? DAV2D_ARM_CPU_FLAG_SVE : 0;
+    flags |= parse_proc_cpuinfo("sve2") ? DAV2D_ARM_CPU_FLAG_SVE2 : 0;
 #endif /* ARCH_AARCH64 */
     return flags;
 }
 
 #else  /* Unsupported OS */
 
-COLD unsigned dav1d_get_cpu_flags_arm(void) {
-    return dav1d_get_default_cpu_flags();
+COLD unsigned dav2d_get_cpu_flags_arm(void) {
+    return dav2d_get_default_cpu_flags();
 }
 
 #endif

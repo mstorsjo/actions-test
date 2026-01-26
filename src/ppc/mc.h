@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Luca Barbato
  * All rights reserved.
  *
@@ -28,19 +28,19 @@
 #include "src/cpu.h"
 #include "src/mc.h"
 
-decl_blend_fn(BF(dav1d_blend, pwr9));
-decl_blend_dir_fn(BF(dav1d_blend_h, pwr9));
-decl_blend_dir_fn(BF(dav1d_blend_v, pwr9));
+decl_blend_fn(BF(dav2d_blend, pwr9));
+decl_blend_dir_fn(BF(dav2d_blend_h, pwr9));
+decl_blend_dir_fn(BF(dav2d_blend_v, pwr9));
 
-static ALWAYS_INLINE void mc_dsp_init_ppc(Dav1dMCDSPContext *const c) {
-  const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void mc_dsp_init_ppc(Dav2dMCDSPContext *const c) {
+  const unsigned flags = dav2d_get_cpu_flags();
 
-  if (!(flags & DAV1D_PPC_CPU_FLAG_PWR9)) return;
+  if (!(flags & DAV2D_PPC_CPU_FLAG_PWR9)) return;
 
 #if BITDEPTH == 8
-  c->blend = BF(dav1d_blend, pwr9);
-  c->blend_h = BF(dav1d_blend_h, pwr9);
-  c->blend_v = BF(dav1d_blend_v, pwr9);
+  c->blend = BF(dav2d_blend, pwr9);
+  c->blend_h = BF(dav2d_blend_h, pwr9);
+  c->blend_v = BF(dav2d_blend_v, pwr9);
 #endif
 
 }

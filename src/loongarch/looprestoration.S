@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -434,7 +434,7 @@ function boxsum3_sgf_h_8bpc_lsx
     addi.d        a0,       a0,        12   // AA
     addi.d        a1,       a1,        REST_UNIT_STRIDE<<1
     addi.d        a1,       a1,        6    // BB
-    la.local      t8,       dav1d_sgr_x_by_x
+    la.local      t8,       dav2d_sgr_x_by_x
     li.w          t6,       455
     vreplgr2vr.w  vr20,     t6
     li.w          t6,       255
@@ -1104,7 +1104,7 @@ function boxsum5_sgf_h_8bpc_lsx
     addi.d        a0,       a0,        12   // AA
     addi.d        a1,       a1,        REST_UNIT_STRIDE<<1
     addi.d        a1,       a1,        6    // BB
-    la.local      t8,       dav1d_sgr_x_by_x
+    la.local      t8,       dav2d_sgr_x_by_x
     li.w          t6,       164
     vreplgr2vr.w  vr20,     t6
     li.w          t6,       255
@@ -1391,7 +1391,7 @@ function boxsum5_sgf_v_8bpc_lsx
 endfunc
 
 /*
-void dav1d_sgr_mix_finish_lsx(uint8_t *p, const ptrdiff_t stride,
+void dav2d_sgr_mix_finish_lsx(uint8_t *p, const ptrdiff_t stride,
                               const int16_t *dst0, const int16_t *dst1,
                               const int w0, const int w1,
                               const int w, const int h);
@@ -1770,7 +1770,7 @@ function boxsum3_sgf_h_8bpc_lasx
     //addi.d        a0,       a0,        12   // AA
     addi.d         a1,       a1,        (REST_UNIT_STRIDE<<1)+6   // BB
     //addi.d        a1,       a1,        6    // BB
-    la.local       t8,       dav1d_sgr_x_by_x
+    la.local       t8,       dav2d_sgr_x_by_x
     li.w           t6,       455
     xvreplgr2vr.w  xr20,     t6
     li.w           t6,       255

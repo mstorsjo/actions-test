@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -81,7 +81,7 @@ static int ivf_open(IvfInputContext *const c, const char *const file,
         fclose(c->f);
         return -1;
     } else if (memcmp(&hdr[8], "AV01", 4)) {
-        fprintf(stderr, "%s is not an AV1 file [tag=%.4s|0x%02x%02x%02x%02x]\n",
+        fprintf(stderr, "%s is not an AV2 file [tag=%.4s|0x%02x%02x%02x%02x]\n",
                 file, &hdr[8], hdr[8], hdr[9], hdr[10], hdr[11]);
         fclose(c->f);
         return -1;
@@ -150,16 +150,16 @@ static inline int ivf_read_header(IvfInputContext *const c, ptrdiff_t *const sz,
     return 0;
 }
 
-static int ivf_read(IvfInputContext *const c, Dav1dData *const buf) {
+static int ivf_read(IvfInputContext *const c, Dav2dData *const buf) {
     uint8_t *ptr;
     ptrdiff_t sz;
     int64_t off;
     uint64_t ts;
     if (ivf_read_header(c, &sz, &off, &ts)) return -1;
-    if (!(ptr = dav1d_data_create(buf, sz))) return -1;
+    if (!(ptr = dav2d_data_create(buf, sz))) return -1;
     if (fread(ptr, sz, 1, c->f) != 1) {
         fprintf(stderr, "Failed to read frame data: %s\n", strerror(errno));
-        dav1d_data_unref(buf);
+        dav2d_data_unref(buf);
         return -1;
     }
     buf->m.offset = off;

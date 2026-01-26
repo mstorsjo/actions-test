@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -33,7 +33,7 @@
 #include "src/levels.h"
 #include "src/tables.h"
 
-uint8_t dav1d_ibp_weights[7][16][16];
+uint8_t dav2d_ibp_weights[7][16][16];
 
 static inline unsigned fast_div32(const unsigned num, const unsigned den) {
     unsigned shift = ulog2(den);
@@ -42,12 +42,12 @@ static inline unsigned fast_div32(const unsigned num, const unsigned den) {
     const unsigned idx = ((rem << 7) + (1 << (shift - 1))) >> shift;
     assert(idx <= 128);
     shift += 2;
-    const unsigned res = ((num * dav1d_div_recip[idx]) + ((1 << shift) >> 1)) >> shift;
+    const unsigned res = ((num * dav2d_div_recip[idx]) + ((1 << shift) >> 1)) >> shift;
     assert(res < 256);
     return res;
 }
 
-COLD void dav1d_init_ibp_weights(void) {
+COLD void dav2d_init_ibp_weights(void) {
     static const int dr_dy_q6[7] = { 682, 256, 170, 128, 81, 64, 50 };
     for (int m = 0; m < 7; m++) {
         const int dy = dr_dy_q6[m];
@@ -55,7 +55,7 @@ COLD void dav1d_init_ibp_weights(void) {
             const int yy = (y + 1) << 6;
             int y_pos = dy;
             for (int x = 0; x < 16; x++, y_pos += dy) {
-                dav1d_ibp_weights[m][y][x] = fast_div32(y_pos, yy + y_pos);
+                dav2d_ibp_weights[m][y][x] = fast_div32(y_pos, yy + y_pos);
             }
         }
     }

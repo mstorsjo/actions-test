@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2023, VideoLAN and dav1d authors
+ * Copyright © 2018-2023, VideoLAN and dav2d authors
  * Copyright © 2018-2023, Two Orioles, LLC
  * All rights reserved.
  *
@@ -45,36 +45,36 @@ decl_itx2_fns (16, 32, ext); \
 decl_itx2_fns (32,  8, ext); \
 decl_itx2_fns (32, 16, ext); \
 decl_itx2_fns (32, 32, ext); \
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_16x64, ext)); \
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_32x64, ext)); \
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x16, ext)); \
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x32, ext)); \
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x64, ext))
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x64, ext)); \
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x64, ext)); \
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x16, ext)); \
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x32, ext)); \
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x64, ext))
 
 
 #define decl_itx2_bpc_fns(w, h, bpc, opt) \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_dct_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_identity_identity_##w##x##h, bpc, opt))
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_dct_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_identity_identity_##w##x##h, bpc, opt))
 
 #define decl_itx12_bpc_fns(w, h, bpc, opt) \
 decl_itx2_bpc_fns(w, h, bpc, opt); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_adst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_flipadst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_identity_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_adst_dct_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_adst_adst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_adst_flipadst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_flipadst_dct_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_flipadst_adst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_flipadst_flipadst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_identity_dct_##w##x##h, bpc, opt))
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_adst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_flipadst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_identity_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_adst_dct_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_adst_adst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_adst_flipadst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_flipadst_dct_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_flipadst_adst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_flipadst_flipadst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_identity_dct_##w##x##h, bpc, opt))
 
 #define decl_itx16_bpc_fns(w, h, bpc, opt) \
 decl_itx12_bpc_fns(w, h, bpc, opt); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_adst_identity_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_flipadst_identity_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_identity_adst_##w##x##h, bpc, opt)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_identity_flipadst_##w##x##h, bpc, opt))
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_adst_identity_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_flipadst_identity_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_identity_adst_##w##x##h, bpc, opt)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_identity_flipadst_##w##x##h, bpc, opt))
 
 #define decl_itx_bpc_fns(bpc, ext) \
 decl_itx16_bpc_fns( 4,  4, bpc, ext); \
@@ -91,11 +91,11 @@ decl_itx2_bpc_fns (16, 32, bpc, ext); \
 decl_itx2_bpc_fns (32,  8, bpc, ext); \
 decl_itx2_bpc_fns (32, 16, bpc, ext); \
 decl_itx2_bpc_fns (32, 32, bpc, ext); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_dct_16x64, bpc, ext)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_dct_32x64, bpc, ext)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_dct_64x16, bpc, ext)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_dct_64x32, bpc, ext)); \
-decl_itx_fn(BF_BPC(dav1d_inv_txfm_add_dct_dct_64x64, bpc, ext))
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_dct_16x64, bpc, ext)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_dct_32x64, bpc, ext)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_dct_64x16, bpc, ext)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_dct_64x32, bpc, ext)); \
+decl_itx_fn(BF_BPC(dav2d_inv_txfm_add_dct_dct_64x64, bpc, ext))
 
 decl_itx_fns(avx512icl);
 decl_itx_bpc_fns(10, avx512icl);
@@ -104,15 +104,15 @@ decl_itx_bpc_fns(10, avx2);
 decl_itx_bpc_fns(12, avx2);
 decl_itx_fns(sse4);
 decl_itx_fns(ssse3);
-decl_itx_fn(dav1d_inv_txfm_add_wht_wht_4x4_16bpc_avx2);
-decl_itx_fn(BF(dav1d_inv_txfm_add_wht_wht_4x4, sse2));
+decl_itx_fn(dav2d_inv_txfm_add_wht_wht_4x4_16bpc_avx2);
+decl_itx_fn(BF(dav2d_inv_txfm_add_wht_wht_4x4, sse2));
 
-static ALWAYS_INLINE void itx_dsp_init_x86(Dav1dInvTxfmDSPContext *const c,
+static ALWAYS_INLINE void itx_dsp_init_x86(Dav2dInvTxfmDSPContext *const c,
                                            const int bpc, int *const all_simd)
 {
 #define assign_itx_bpc_fn(pfx, w, h, type, type_enum, bpc, ext) \
     c->itxfm_add[pfx##TX_##w##X##h][type_enum] = \
-        BF_BPC(dav1d_inv_txfm_add_##type##_##w##x##h, bpc, ext)
+        BF_BPC(dav2d_inv_txfm_add_##type##_##w##x##h, bpc, ext)
 
 #define assign_itx1_bpc_fn(pfx, w, h, bpc, ext) \
     assign_itx_bpc_fn(pfx, w, h, dct_dct,           DCT_DCT,           bpc, ext)
@@ -141,13 +141,13 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav1dInvTxfmDSPContext *const c,
     assign_itx_bpc_fn(pfx, w, h, identity_adst,     V_ADST,            bpc, ext); \
     assign_itx_bpc_fn(pfx, w, h, identity_flipadst, V_FLIPADST,        bpc, ext)
 
-    const unsigned flags = dav1d_get_cpu_flags();
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSE2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSE2)) return;
 
     assign_itx_fn(, 4, 4, wht_wht, WHT_WHT, sse2);
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSSE3)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
 
 #if BITDEPTH == 8
     assign_itx16_fn(,   4,  4, ssse3);
@@ -172,7 +172,7 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav1dInvTxfmDSPContext *const c,
     *all_simd = 1;
 #endif
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSE41)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSE41)) return;
 
 #if BITDEPTH == 16
     if (bpc == 10) {
@@ -200,7 +200,7 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav1dInvTxfmDSPContext *const c,
 #endif
 
 #if ARCH_X86_64
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
     assign_itx_fn(, 4, 4, wht_wht, WHT_WHT, avx2);
 
@@ -263,7 +263,7 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav1dInvTxfmDSPContext *const c,
     }
 #endif
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX512ICL)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
 #if BITDEPTH == 8
     assign_itx16_fn( ,  4,  4, avx512icl); // no wht

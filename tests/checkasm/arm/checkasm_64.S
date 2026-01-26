@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2015 Martin Storsjo
  * Copyright © 2015 Janne Grunau
  * All rights reserved.

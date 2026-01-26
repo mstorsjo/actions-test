@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2023, Luca Barbato
  * All rights reserved.
  *
@@ -43,16 +43,16 @@ decl_itx2_fns (32,  8, pwr9);
 decl_itx2_fns (32, 16, pwr9);
 decl_itx2_fns (32, 32, pwr9);
 
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_16x64, pwr9));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_32x64, pwr9));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x16, pwr9));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x32, pwr9));
-decl_itx_fn(BF(dav1d_inv_txfm_add_dct_dct_64x64, pwr9));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x64, pwr9));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x64, pwr9));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x16, pwr9));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x32, pwr9));
+decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x64, pwr9));
 
-static ALWAYS_INLINE void itx_dsp_init_ppc(Dav1dInvTxfmDSPContext *const c, const int bpc) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void itx_dsp_init_ppc(Dav2dInvTxfmDSPContext *const c, const int bpc) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_PPC_CPU_FLAG_PWR9)) return;
+    if (!(flags & DAV2D_PPC_CPU_FLAG_PWR9)) return;
 
 #if BITDEPTH == 8
     assign_itx17_fn( ,  4,  4, pwr9);

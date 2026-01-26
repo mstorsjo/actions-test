@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -31,23 +31,23 @@
 
 #define REST_UNIT_STRIDE (400)
 
-void BF(dav1d_wiener_filter_h, lsx)(int32_t *hor_ptr,
+void BF(dav2d_wiener_filter_h, lsx)(int32_t *hor_ptr,
                                     uint8_t *tmp_ptr,
                                     const int16_t filterh[8],
                                     const int w, const int h);
 
-void BF(dav1d_wiener_filter_h, lasx)(int32_t *hor_ptr,
+void BF(dav2d_wiener_filter_h, lasx)(int32_t *hor_ptr,
                                      uint8_t *tmp_ptr,
                                      const int16_t filterh[8],
                                      const int w, const int h);
 
-void BF(dav1d_wiener_filter_v, lsx)(uint8_t *p,
+void BF(dav2d_wiener_filter_v, lsx)(uint8_t *p,
                                     const ptrdiff_t p_stride,
                                     const int32_t *hor,
                                     const int16_t filterv[8],
                                     const int w, const int h);
 
-void BF(dav1d_wiener_filter_v, lasx)(uint8_t *p,
+void BF(dav2d_wiener_filter_v, lasx)(uint8_t *p,
                                      const ptrdiff_t p_stride,
                                      const int32_t *hor,
                                      const int16_t filterv[8],
@@ -148,7 +148,7 @@ static inline void padding(uint8_t *dst, const uint8_t *p,
 // (since first and last tops are always 0 for chroma)
 // FIXME Could implement a version that requires less temporary memory
 // (should be possible to implement with only 6 rows of temp storage)
-void dav1d_wiener_filter_lsx(uint8_t *p, const ptrdiff_t p_stride,
+void dav2d_wiener_filter_lsx(uint8_t *p, const ptrdiff_t p_stride,
                               const uint8_t (*const left)[4],
                               const uint8_t *lpf,
                               const int w, const int h,
@@ -163,11 +163,11 @@ void dav1d_wiener_filter_lsx(uint8_t *p, const ptrdiff_t p_stride,
     padding(tmp, p, p_stride, left, lpf, w, h, edges);
     ALIGN_STK_16(int32_t, hor, 70 /*(64 + 3 + 3)*/ * REST_UNIT_STRIDE + 64,);
 
-    BF(dav1d_wiener_filter_h, lsx)(hor, tmp, filter[0], w, h + 6);
-    BF(dav1d_wiener_filter_v, lsx)(p, p_stride, hor, filter[1], w, h);
+    BF(dav2d_wiener_filter_h, lsx)(hor, tmp, filter[0], w, h + 6);
+    BF(dav2d_wiener_filter_v, lsx)(p, p_stride, hor, filter[1], w, h);
 }
 
-void dav1d_wiener_filter_lasx(uint8_t *p, const ptrdiff_t p_stride,
+void dav2d_wiener_filter_lasx(uint8_t *p, const ptrdiff_t p_stride,
                               const uint8_t (*const left)[4],
                               const uint8_t *lpf,
                               const int w, const int h,
@@ -182,47 +182,47 @@ void dav1d_wiener_filter_lasx(uint8_t *p, const ptrdiff_t p_stride,
     padding(tmp, p, p_stride, left, lpf, w, h, edges);
     ALIGN_STK_16(int32_t, hor, 70 /*(64 + 3 + 3)*/ * REST_UNIT_STRIDE + 64,);
 
-    BF(dav1d_wiener_filter_h, lasx)(hor, tmp, filter[0], w, h + 6);
-    BF(dav1d_wiener_filter_v, lasx)(p, p_stride, hor, filter[1], w, h);
+    BF(dav2d_wiener_filter_h, lasx)(hor, tmp, filter[0], w, h + 6);
+    BF(dav2d_wiener_filter_v, lasx)(p, p_stride, hor, filter[1], w, h);
 }
 
-void BF(dav1d_boxsum3_h, lsx)(int32_t *sumsq, int16_t *sum, pixel *src,
+void BF(dav2d_boxsum3_h, lsx)(int32_t *sumsq, int16_t *sum, pixel *src,
                               const int w, const int h);
-void BF(dav1d_boxsum3_v, lsx)(int32_t *sumsq, int16_t *sum,
+void BF(dav2d_boxsum3_v, lsx)(int32_t *sumsq, int16_t *sum,
                               const int w, const int h);
 
-void BF(dav1d_boxsum3_sgf_h, lsx)(int32_t *sumsq, int16_t *sum,
+void BF(dav2d_boxsum3_sgf_h, lsx)(int32_t *sumsq, int16_t *sum,
                                   const int w, const int h, const int w1);
-void BF(dav1d_boxsum3_sgf_v, lsx)(int16_t *dst, uint8_t *tmp,
+void BF(dav2d_boxsum3_sgf_v, lsx)(int16_t *dst, uint8_t *tmp,
                                   int32_t *sumsq, int16_t *sum,
                                   const int w, const int h);
-void BF(dav1d_sgr_3x3_finish, lsx)(pixel *p, const ptrdiff_t p_stride,
+void BF(dav2d_sgr_3x3_finish, lsx)(pixel *p, const ptrdiff_t p_stride,
                                    int16_t *dst, int w1,
                                    const int w, const int h);
 
-void BF(dav1d_boxsum3_h, lasx)(int32_t *sumsq, int16_t *sum, pixel *src,
+void BF(dav2d_boxsum3_h, lasx)(int32_t *sumsq, int16_t *sum, pixel *src,
                                const int w, const int h);
-void BF(dav1d_boxsum3_sgf_h, lasx)(int32_t *sumsq, int16_t *sum,
+void BF(dav2d_boxsum3_sgf_h, lasx)(int32_t *sumsq, int16_t *sum,
                                    const int w, const int h, const int w1);
-void BF(dav1d_boxsum3_sgf_v, lasx)(int16_t *dst, uint8_t *tmp,
+void BF(dav2d_boxsum3_sgf_v, lasx)(int16_t *dst, uint8_t *tmp,
                                    int32_t *sumsq, int16_t *sum,
                                    const int w, const int h);
 
 static inline void boxsum3_lsx(int32_t *sumsq, coef *sum, pixel *src,
                                const int w, const int h)
 {
-    BF(dav1d_boxsum3_h, lsx)(sumsq, sum, src, w + 6, h + 6);
-    BF(dav1d_boxsum3_v, lsx)(sumsq, sum, w + 6, h + 6);
+    BF(dav2d_boxsum3_h, lsx)(sumsq, sum, src, w + 6, h + 6);
+    BF(dav2d_boxsum3_v, lsx)(sumsq, sum, w + 6, h + 6);
 }
 
 static inline void boxsum3_lasx(int32_t *sumsq, coef *sum, pixel *src,
                                const int w, const int h)
 {
-    BF(dav1d_boxsum3_h, lasx)(sumsq, sum, src, w + 6, h + 6);
-    BF(dav1d_boxsum3_v, lsx)(sumsq, sum, w + 6, h + 6);
+    BF(dav2d_boxsum3_h, lasx)(sumsq, sum, src, w + 6, h + 6);
+    BF(dav2d_boxsum3_v, lsx)(sumsq, sum, w + 6, h + 6);
 }
 
-void dav1d_sgr_filter_3x3_lsx(pixel *p, const ptrdiff_t p_stride,
+void dav2d_sgr_filter_3x3_lsx(pixel *p, const ptrdiff_t p_stride,
                               const pixel (*const left)[4],
                               const pixel *lpf,
                               const int w, const int h,
@@ -237,12 +237,12 @@ void dav1d_sgr_filter_3x3_lsx(pixel *p, const ptrdiff_t p_stride,
     ALIGN_STK_16(int16_t, sum, 68 * REST_UNIT_STRIDE + 16, );
 
     boxsum3_lsx(sumsq, sum, tmp, w, h);
-    BF(dav1d_boxsum3_sgf_h, lsx)(sumsq, sum, w, h, params->sgr.s1);
-    BF(dav1d_boxsum3_sgf_v, lsx)(dst, tmp, sumsq, sum, w, h);
-    BF(dav1d_sgr_3x3_finish, lsx)(p, p_stride, dst, params->sgr.w1, w, h);
+    BF(dav2d_boxsum3_sgf_h, lsx)(sumsq, sum, w, h, params->sgr.s1);
+    BF(dav2d_boxsum3_sgf_v, lsx)(dst, tmp, sumsq, sum, w, h);
+    BF(dav2d_sgr_3x3_finish, lsx)(p, p_stride, dst, params->sgr.w1, w, h);
 }
 
-void dav1d_sgr_filter_3x3_lasx(pixel *p, const ptrdiff_t p_stride,
+void dav2d_sgr_filter_3x3_lasx(pixel *p, const ptrdiff_t p_stride,
                               const pixel (*const left)[4],
                               const pixel *lpf,
                               const int w, const int h,
@@ -257,27 +257,27 @@ void dav1d_sgr_filter_3x3_lasx(pixel *p, const ptrdiff_t p_stride,
     ALIGN_STK_16(int16_t, sum, 68 * REST_UNIT_STRIDE + 16, );
 
     boxsum3_lasx(sumsq, sum, tmp, w, h);
-    BF(dav1d_boxsum3_sgf_h, lasx)(sumsq, sum, w, h, params->sgr.s1);
-    BF(dav1d_boxsum3_sgf_v, lasx)(dst, tmp, sumsq, sum, w, h);
-    BF(dav1d_sgr_3x3_finish, lsx)(p, p_stride, dst, params->sgr.w1, w, h);
+    BF(dav2d_boxsum3_sgf_h, lasx)(sumsq, sum, w, h, params->sgr.s1);
+    BF(dav2d_boxsum3_sgf_v, lasx)(dst, tmp, sumsq, sum, w, h);
+    BF(dav2d_sgr_3x3_finish, lsx)(p, p_stride, dst, params->sgr.w1, w, h);
 }
 
-void BF(dav1d_boxsum5_h, lsx)(int32_t *sumsq, int16_t *sum,
+void BF(dav2d_boxsum5_h, lsx)(int32_t *sumsq, int16_t *sum,
                               const uint8_t *const src,
                               const int w, const int h);
 
-void BF(dav1d_boxsum5_v, lsx)(int32_t *sumsq, int16_t *sum,
+void BF(dav2d_boxsum5_v, lsx)(int32_t *sumsq, int16_t *sum,
                               const int w, const int h);
 
-void BF(dav1d_boxsum5_sgf_h, lsx)(int32_t *sumsq, int16_t *sum,
+void BF(dav2d_boxsum5_sgf_h, lsx)(int32_t *sumsq, int16_t *sum,
                                   const int w, const int h,
                                   const unsigned s);
 
-void BF(dav1d_boxsum5_sgf_v, lsx)(int16_t *dst, uint8_t *src,
+void BF(dav2d_boxsum5_sgf_v, lsx)(int16_t *dst, uint8_t *src,
                                   int32_t *sumsq, int16_t *sum,
                                   const int w, const int h);
 
-void BF(dav1d_sgr_mix_finish, lsx)(uint8_t *p, const ptrdiff_t stride,
+void BF(dav2d_sgr_mix_finish, lsx)(uint8_t *p, const ptrdiff_t stride,
                                    const int16_t *dst0, const int16_t *dst1,
                                    const int w0, const int w1,
                                    const int w, const int h);
@@ -285,11 +285,11 @@ void BF(dav1d_sgr_mix_finish, lsx)(uint8_t *p, const ptrdiff_t stride,
 static inline void boxsum5_lsx(int32_t *sumsq, coef *sum, pixel *src,
                                const int w, const int h)
 {
-    BF(dav1d_boxsum5_h, lsx)(sumsq, sum, src, w + 6, h + 6);
-    BF(dav1d_boxsum5_v, lsx)(sumsq, sum, w + 6, h + 6);
+    BF(dav2d_boxsum5_h, lsx)(sumsq, sum, src, w + 6, h + 6);
+    BF(dav2d_boxsum5_v, lsx)(sumsq, sum, w + 6, h + 6);
 }
 
-void dav1d_sgr_filter_5x5_lsx(pixel *p, const ptrdiff_t p_stride,
+void dav2d_sgr_filter_5x5_lsx(pixel *p, const ptrdiff_t p_stride,
                               const pixel (*const left)[4],
                               const pixel *lpf,
                               const int w, const int h,
@@ -304,12 +304,12 @@ void dav1d_sgr_filter_5x5_lsx(pixel *p, const ptrdiff_t p_stride,
     ALIGN_STK_16(int16_t, sum, 68 * REST_UNIT_STRIDE + 16, );
 
     boxsum5_lsx(sumsq, sum, tmp, w, h);
-    BF(dav1d_boxsum5_sgf_h, lsx)(sumsq, sum, w, h, params->sgr.s0);
-    BF(dav1d_boxsum5_sgf_v, lsx)(dst, tmp, sumsq, sum, w, h);
-    BF(dav1d_sgr_3x3_finish, lsx)(p, p_stride, dst, params->sgr.w0, w, h);
+    BF(dav2d_boxsum5_sgf_h, lsx)(sumsq, sum, w, h, params->sgr.s0);
+    BF(dav2d_boxsum5_sgf_v, lsx)(dst, tmp, sumsq, sum, w, h);
+    BF(dav2d_sgr_3x3_finish, lsx)(p, p_stride, dst, params->sgr.w0, w, h);
 }
 
-void dav1d_sgr_filter_mix_lsx(pixel *p, const ptrdiff_t p_stride,
+void dav2d_sgr_filter_mix_lsx(pixel *p, const ptrdiff_t p_stride,
                               const pixel (*const left)[4],
                               const pixel *lpf,
                               const int w, const int h,
@@ -325,14 +325,14 @@ void dav1d_sgr_filter_mix_lsx(pixel *p, const ptrdiff_t p_stride,
     ALIGN_STK_16(int16_t, sum0, 68 * REST_UNIT_STRIDE + 16, );
 
     boxsum5_lsx(sumsq0, sum0, tmp, w, h);
-    BF(dav1d_boxsum5_sgf_h, lsx)(sumsq0, sum0, w, h, params->sgr.s0);
-    BF(dav1d_boxsum5_sgf_v, lsx)(dst0, tmp, sumsq0, sum0, w, h);
+    BF(dav2d_boxsum5_sgf_h, lsx)(sumsq0, sum0, w, h, params->sgr.s0);
+    BF(dav2d_boxsum5_sgf_v, lsx)(dst0, tmp, sumsq0, sum0, w, h);
 
     boxsum3_lsx(sumsq0, sum0, tmp, w, h);
-    BF(dav1d_boxsum3_sgf_h, lsx)(sumsq0, sum0, w, h, params->sgr.s1);
-    BF(dav1d_boxsum3_sgf_v, lsx)(dst1, tmp, sumsq0, sum0, w, h);
+    BF(dav2d_boxsum3_sgf_h, lsx)(sumsq0, sum0, w, h, params->sgr.s1);
+    BF(dav2d_boxsum3_sgf_v, lsx)(dst1, tmp, sumsq0, sum0, w, h);
 
-    BF(dav1d_sgr_mix_finish, lsx)(p, p_stride, dst0, dst1, params->sgr.w0,
+    BF(dav2d_sgr_mix_finish, lsx)(p, p_stride, dst0, dst1, params->sgr.w0,
                                    params->sgr.w1, w, h);
 }
 #endif

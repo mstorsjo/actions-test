@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2024, Bogdan Gligorijevic
  * All rights reserved.
  *
@@ -28,7 +28,7 @@
 #include "src/riscv/asm.S"
 
 function dc_gen_16bpc_rvv, export=1, ext="v,zba,zbb"
-    .variant_cc dav1d_dc_gen_16bpc_rvv
+    .variant_cc dav2d_dc_gen_16bpc_rvv
     add t1, a1, a2
     srli t5, t1, 1
     mv t1, a1
@@ -94,7 +94,7 @@ function dc_gen_16bpc_rvv, export=1, ext="v,zba,zbb"
 endfunc
 
 function dc_gen_top_16bpc_rvv, export=1, ext="v,zba,zbb"
-    .variant_cc dav1d_dc_gen_top_16bpc_rvv
+    .variant_cc dav2d_dc_gen_top_16bpc_rvv
     mv t1, a1
     srli t5, a1, 1
     addi a0, a0, 2
@@ -113,7 +113,7 @@ function dc_gen_top_16bpc_rvv, export=1, ext="v,zba,zbb"
 endfunc
 
 function dc_gen_left_16bpc_rvv, export=1, ext="v,zba,zbb"
-    .variant_cc dav1d_dc_gen_left_16bpc_rvv
+    .variant_cc dav2d_dc_gen_left_16bpc_rvv
     mv t1, a1
     srli t5, a1, 1
     vsetvli zero, t1, e32, m2, ta, ma
@@ -132,7 +132,7 @@ function dc_gen_left_16bpc_rvv, export=1, ext="v,zba,zbb"
 endfunc
 
 function dc_gen_sum_up_16bpc_rvv, export=1, ext="v,zba,zbb"
-    .variant_cc dav1d_dc_gen_sum_up_16bpc_rvv
+    .variant_cc dav2d_dc_gen_sum_up_16bpc_rvv
 
     vsetvli zero, a1, e32, m2, ta, ma
     vmv.s.x v4, t5
@@ -288,7 +288,7 @@ endfunc
 
 function ipred_smooth_16bpc_rvv, export=1, ext="v,zba"
     csrw vxrm, zero
-    la t0, dav1d_sm_weights
+    la t0, dav2d_sm_weights
     add t1, t0, a3
     sh1add t2, a3, a2
     slli t3, a4, 1
@@ -350,7 +350,7 @@ endfunc
 
 function ipred_smooth_v_16bpc_rvv, export=1, ext="v,zba"
     csrw vxrm, zero
-    la t0, dav1d_sm_weights
+    la t0, dav2d_sm_weights
     slli t3, a4, 1
     add t0, t0, a4
     sub t3, a2, t3
@@ -395,7 +395,7 @@ endfunc
 
 function ipred_smooth_h_16bpc_rvv, export=1, ext="v,zba"
     csrw vxrm, zero
-    la t0, dav1d_sm_weights
+    la t0, dav2d_sm_weights
     add t1, t0, a3
     sh1add t2, a3, a2
     lhu t2, (t2)

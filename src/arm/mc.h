@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -35,62 +35,62 @@ decl_8tap_fns(neon_dotprod);
 decl_8tap_fns(neon_i8mm);
 decl_8tap_fns(sve2);
 
-decl_mc_fn(BF(dav1d_put_bilin, neon));
-decl_mct_fn(BF(dav1d_prep_bilin, neon));
+decl_mc_fn(BF(dav2d_put_bilin, neon));
+decl_mct_fn(BF(dav2d_prep_bilin, neon));
 
-decl_avg_fn(BF(dav1d_avg, neon));
-decl_w_avg_fn(BF(dav1d_w_avg, neon));
-decl_mask_fn(BF(dav1d_mask, neon));
-decl_blend_fn(BF(dav1d_blend, neon));
-decl_blend_dir_fn(BF(dav1d_blend_h, neon));
-decl_blend_dir_fn(BF(dav1d_blend_v, neon));
+decl_avg_fn(BF(dav2d_avg, neon));
+decl_w_avg_fn(BF(dav2d_w_avg, neon));
+decl_mask_fn(BF(dav2d_mask, neon));
+decl_blend_fn(BF(dav2d_blend, neon));
+decl_blend_dir_fn(BF(dav2d_blend_h, neon));
+decl_blend_dir_fn(BF(dav2d_blend_v, neon));
 
-decl_w_mask_fn(BF(dav1d_w_mask_444, neon));
-decl_w_mask_fn(BF(dav1d_w_mask_422, neon));
-decl_w_mask_fn(BF(dav1d_w_mask_420, neon));
+decl_w_mask_fn(BF(dav2d_w_mask_444, neon));
+decl_w_mask_fn(BF(dav2d_w_mask_422, neon));
+decl_w_mask_fn(BF(dav2d_w_mask_420, neon));
 
-decl_warp8x8_fn(BF(dav1d_warp_affine_8x8, neon));
-decl_warp8x8t_fn(BF(dav1d_warp_affine_8x8t, neon));
+decl_warp8x8_fn(BF(dav2d_warp_affine_8x8, neon));
+decl_warp8x8t_fn(BF(dav2d_warp_affine_8x8t, neon));
 
-decl_emu_edge_fn(BF(dav1d_emu_edge, neon));
+decl_emu_edge_fn(BF(dav2d_emu_edge, neon));
 
-static ALWAYS_INLINE void mc_dsp_init_arm(Dav1dMCDSPContext *const c) {
+static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
 #define init_mc_fn(type, name, suffix) \
-    c->mc[type] = BF(dav1d_put_##name, suffix)
+    c->mc[type] = BF(dav2d_put_##name, suffix)
 #define init_mct_fn(type, name, suffix) \
-    c->mct[type] = BF(dav1d_prep_##name, suffix)
-    const unsigned flags = dav1d_get_cpu_flags();
+    c->mct[type] = BF(dav2d_prep_##name, suffix)
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_ARM_CPU_FLAG_NEON)) return;
+    if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
     init_8tap_fns(neon);
 
     init_mc_fn (FILTER_2D_BILINEAR, bilin, neon);
     init_mct_fn(FILTER_2D_BILINEAR, bilin, neon);
 
-    c->avg = BF(dav1d_avg, neon);
-    c->w_avg = BF(dav1d_w_avg, neon);
-    c->mask = BF(dav1d_mask, neon);
-    c->blend = BF(dav1d_blend, neon);
-    c->blend_h = BF(dav1d_blend_h, neon);
-    c->blend_v = BF(dav1d_blend_v, neon);
-    c->w_mask[0] = BF(dav1d_w_mask_444, neon);
-    c->w_mask[1] = BF(dav1d_w_mask_422, neon);
-    c->w_mask[2] = BF(dav1d_w_mask_420, neon);
-    c->warp8x8 = BF(dav1d_warp_affine_8x8, neon);
-    c->warp8x8t = BF(dav1d_warp_affine_8x8t, neon);
-    c->emu_edge = BF(dav1d_emu_edge, neon);
+    c->avg = BF(dav2d_avg, neon);
+    c->w_avg = BF(dav2d_w_avg, neon);
+    c->mask = BF(dav2d_mask, neon);
+    c->blend = BF(dav2d_blend, neon);
+    c->blend_h = BF(dav2d_blend_h, neon);
+    c->blend_v = BF(dav2d_blend_v, neon);
+    c->w_mask[0] = BF(dav2d_w_mask_444, neon);
+    c->w_mask[1] = BF(dav2d_w_mask_422, neon);
+    c->w_mask[2] = BF(dav2d_w_mask_420, neon);
+    c->warp8x8 = BF(dav2d_warp_affine_8x8, neon);
+    c->warp8x8t = BF(dav2d_warp_affine_8x8t, neon);
+    c->emu_edge = BF(dav2d_emu_edge, neon);
 
 #if ARCH_AARCH64
 #if BITDEPTH == 8
 #if HAVE_DOTPROD
-    if (flags & DAV1D_ARM_CPU_FLAG_DOTPROD) {
+    if (flags & DAV2D_ARM_CPU_FLAG_DOTPROD) {
         init_8tap_fns(neon_dotprod);
     }
 #endif  // HAVE_DOTPROD
 
 #if HAVE_I8MM
-    if (flags & DAV1D_ARM_CPU_FLAG_I8MM) {
+    if (flags & DAV2D_ARM_CPU_FLAG_I8MM) {
         init_8tap_fns(neon_i8mm);
     }
 #endif  // HAVE_I8MM
@@ -98,7 +98,7 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav1dMCDSPContext *const c) {
 
 #if BITDEPTH == 16
 #if HAVE_SVE2
-    if (flags & DAV1D_ARM_CPU_FLAG_SVE2) {
+    if (flags & DAV2D_ARM_CPU_FLAG_SVE2) {
         init_8tap_fns(sve2);
     }
 #endif  // HAVE_SVE2

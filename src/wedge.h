@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_WEDGE_H
-#define DAV1D_SRC_WEDGE_H
+#ifndef DAV2D_SRC_WEDGE_H
+#define DAV2D_SRC_WEDGE_H
 
 #include "src/levels.h"
 
@@ -41,23 +41,23 @@ typedef struct {
     uint8_t ALIGN(ii_dc[64 * 64], 64);
     uint8_t ALIGN(ii_nondc[((64 + 32 + 16 + 8 + 4) * (64 + 32 + 16 + 8 + 4) -
                             (4 * 4 + 8 * 4 + 4 * 8)) * 3], 64);
-} Dav1dMasks;
+} Dav2dMasks;
 
 #define II_MASK(bs, bw4, bh4, ii_mode) \
-    (ii_mode == II_DC_PRED ? dav1d_masks.ii_dc : \
-     &dav1d_masks.ii_nondc[dav1d_masks.offsets.ii_nondc[bs - BS_64x64] * 0xc0 + \
+    (ii_mode == II_DC_PRED ? dav2d_masks.ii_dc : \
+     &dav2d_masks.ii_nondc[dav2d_masks.offsets.ii_nondc[bs - BS_64x64] * 0xc0 + \
                            16 * bw4 * bh4 * (ii_mode - 1)])
 
 #define WEDGE_MASK(bs, bw4, bh4, widx) \
-    &dav1d_masks.wedge[dav1d_masks.offsets.wedge[bs - BS_64x64] * 0x1100 + \
+    &dav2d_masks.wedge[dav2d_masks.offsets.wedge[bs - BS_64x64] * 0x1100 + \
                        16 * bw4 * bh4 * widx]
 
 #define WEDGE_TMVP(bs, bw4, bh4, widx) \
-    &dav1d_masks.wedge_tmvp[dav1d_masks.offsets.wedge[bs - BS_64x64] * 68 + \
+    &dav2d_masks.wedge_tmvp[dav2d_masks.offsets.wedge[bs - BS_64x64] * 68 + \
                             (bw4 * bh4 >> 2) * widx]
 
-EXTERN Dav1dMasks dav1d_masks;
+EXTERN Dav2dMasks dav2d_masks;
 
-void dav1d_init_ii_wedge_masks(void);
+void dav2d_init_ii_wedge_masks(void);
 
-#endif /* DAV1D_SRC_WEDGE_H */
+#endif /* DAV2D_SRC_WEDGE_H */

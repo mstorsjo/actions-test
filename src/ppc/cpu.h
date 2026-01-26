@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Janne Grunau
  * All rights reserved.
  *
@@ -25,14 +25,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_PPC_CPU_H
-#define DAV1D_SRC_PPC_CPU_H
+#ifndef DAV2D_SRC_PPC_CPU_H
+#define DAV2D_SRC_PPC_CPU_H
 
 enum CpuFlags {
-    DAV1D_PPC_CPU_FLAG_VSX = 1 << 0,
-    DAV1D_PPC_CPU_FLAG_PWR9 = 1 << 1,
+    DAV2D_PPC_CPU_FLAG_VSX = 1 << 0,
+    DAV2D_PPC_CPU_FLAG_PWR9 = 1 << 1,
 };
 
-unsigned dav1d_get_cpu_flags_ppc(void);
+unsigned dav2d_get_cpu_flags_ppc(void);
 
-#endif /* DAV1D_SRC_PPC_CPU_H */
+#endif /* DAV2D_SRC_PPC_CPU_H */

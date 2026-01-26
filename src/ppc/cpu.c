@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Janne Grunau
  * All rights reserved.
  *
@@ -37,13 +37,13 @@
 #include <sys/auxv.h>
 #endif
 
-COLD unsigned dav1d_get_cpu_flags_ppc(void) {
-    unsigned flags = dav1d_get_default_cpu_flags();
+COLD unsigned dav2d_get_cpu_flags_ppc(void) {
+    unsigned flags = dav2d_get_default_cpu_flags();
 #if HAVE_AUX
-    unsigned long hw_cap = dav1d_getauxval(AT_HWCAP);
-    unsigned long hw_cap2 = dav1d_getauxval(AT_HWCAP2);
-    flags |= (hw_cap & PPC_FEATURE_HAS_VSX) ? DAV1D_PPC_CPU_FLAG_VSX : 0;
-    flags |= (hw_cap2 & PPC_FEATURE2_ARCH_3_00) ? DAV1D_PPC_CPU_FLAG_PWR9 : 0;
+    unsigned long hw_cap = dav2d_getauxval(AT_HWCAP);
+    unsigned long hw_cap2 = dav2d_getauxval(AT_HWCAP2);
+    flags |= (hw_cap & PPC_FEATURE_HAS_VSX) ? DAV2D_PPC_CPU_FLAG_VSX : 0;
+    flags |= (hw_cap2 & PPC_FEATURE2_ARCH_3_00) ? DAV2D_PPC_CPU_FLAG_PWR9 : 0;
 #endif
     return flags;
 }

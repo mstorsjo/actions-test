@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -39,7 +39,7 @@
 
 static HRESULT (WINAPI *set_thread_description)(HANDLE, PCWSTR);
 
-COLD void dav1d_init_thread(void) {
+COLD void dav2d_init_thread(void) {
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
     HANDLE kernel32 = GetModuleHandleW(L"kernel32.dll");
     if (kernel32)
@@ -48,8 +48,8 @@ COLD void dav1d_init_thread(void) {
 #endif
 }
 
-#undef dav1d_set_thread_name
-COLD void dav1d_set_thread_name(const wchar_t *const name) {
+#undef dav2d_set_thread_name
+COLD void dav2d_set_thread_name(const wchar_t *const name) {
     if (set_thread_description) /* Only available since Windows 10 1607 */
         set_thread_description(GetCurrentThread(), name);
 }
@@ -60,7 +60,7 @@ static COLD unsigned __stdcall thread_entrypoint(void *const data) {
     return 0;
 }
 
-COLD int dav1d_pthread_create(pthread_t *const thread,
+COLD int dav2d_pthread_create(pthread_t *const thread,
                               const pthread_attr_t *const attr,
                               void *(*const func)(void*), void *const arg)
 {
@@ -72,7 +72,7 @@ COLD int dav1d_pthread_create(pthread_t *const thread,
     return !thread->h;
 }
 
-COLD int dav1d_pthread_join(pthread_t *const thread, void **const res) {
+COLD int dav2d_pthread_join(pthread_t *const thread, void **const res) {
     if (WaitForSingleObject(thread->h, INFINITE))
         return 1;
 
@@ -82,7 +82,7 @@ COLD int dav1d_pthread_join(pthread_t *const thread, void **const res) {
     return !CloseHandle(thread->h);
 }
 
-COLD int dav1d_pthread_once(pthread_once_t *const once_control,
+COLD int dav2d_pthread_once(pthread_once_t *const once_control,
                             void (*const init_routine)(void))
 {
     BOOL pending = FALSE;

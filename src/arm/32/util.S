@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2015 Martin Storsjo
  * Copyright © 2015 Janne Grunau
  * All rights reserved.
@@ -26,8 +26,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
-#ifndef DAV1D_SRC_ARM_32_UTIL_S
-#define DAV1D_SRC_ARM_32_UTIL_S
+#ifndef DAV2D_SRC_ARM_32_UTIL_S
+#define DAV2D_SRC_ARM_32_UTIL_S
 
 #include "config.h"
 #include "src/arm/asm.S"
@@ -199,4 +199,4 @@
         vtrn.16         \r2,  \r3
 .endm
 
-#endif /* DAV1D_SRC_ARM_32_UTIL_S */
+#endif /* DAV2D_SRC_ARM_32_UTIL_S */

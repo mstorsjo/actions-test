@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,15 +25,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_CDEF_APPLY_H
-#define DAV1D_SRC_CDEF_APPLY_H
+#ifndef DAV2D_SRC_CDEF_APPLY_H
+#define DAV2D_SRC_CDEF_APPLY_H
 
 #include "common/bitdepth.h"
 
 #include "src/internal.h"
 
-void bytefn(dav1d_cdef_brow)(Dav1dTaskContext *tc, pixel *const p[3],
+void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *tc, pixel *const p[3],
                              const Av1Filter *lflvl, int by_start, int by_end,
                              int sbrow_start, int sby);
 
-#endif /* DAV1D_SRC_CDEF_APPLY_H */
+#endif /* DAV2D_SRC_CDEF_APPLY_H */

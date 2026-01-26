@@ -1,6 +1,6 @@
 /*
  * Copyright © 2018, Niklas Haas
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -48,7 +48,7 @@ static inline int round2(const int x, const uint64_t shift) {
 }
 
 static void generate_grain_y_c(entry buf[][GRAIN_WIDTH],
-                               const Dav1dFilmGrainData *const data
+                               const Dav2dFilmGrainData *const data
                                HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
@@ -60,7 +60,7 @@ static void generate_grain_y_c(entry buf[][GRAIN_WIDTH],
     for (int y = 0; y < GRAIN_HEIGHT; y++) {
         for (int x = 0; x < GRAIN_WIDTH; x++) {
             const int value = get_random_number(11, &seed);
-            buf[y][x] = round2(dav1d_gaussian_sequence[ value ], shift);
+            buf[y][x] = round2(dav2d_gaussian_sequence[ value ], shift);
         }
     }
 
@@ -88,7 +88,7 @@ static void generate_grain_y_c(entry buf[][GRAIN_WIDTH],
 static NOINLINE void
 generate_grain_uv_c(entry buf[][GRAIN_WIDTH],
                     const entry buf_y[][GRAIN_WIDTH],
-                    const Dav1dFilmGrainData *const data, const intptr_t uv,
+                    const Dav2dFilmGrainData *const data, const intptr_t uv,
                     const int subx, const int suby HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
@@ -103,7 +103,7 @@ generate_grain_uv_c(entry buf[][GRAIN_WIDTH],
     for (int y = 0; y < chromaH; y++) {
         for (int x = 0; x < chromaW; x++) {
             const int value = get_random_number(11, &seed);
-            buf[y][x] = round2(dav1d_gaussian_sequence[ value ], shift);
+            buf[y][x] = round2(dav2d_gaussian_sequence[ value ], shift);
         }
     }
 
@@ -168,7 +168,7 @@ static inline entry sample_lut(const entry grain_lut[][GRAIN_WIDTH],
 
 static void fgy_32x32xn_c(pixel *const dst_row, const pixel *const src_row,
                           const ptrdiff_t stride,
-                          const Dav1dFilmGrainData *const data, const size_t pw,
+                          const Dav2dFilmGrainData *const data, const size_t pw,
                           const uint8_t scaling[SCALING_SIZE],
                           const entry grain_lut[][GRAIN_WIDTH],
                           const int bh, const int row_num HIGHBD_DECL_SUFFIX)
@@ -277,7 +277,7 @@ static void fgy_32x32xn_c(pixel *const dst_row, const pixel *const src_row,
 
 static NOINLINE void
 fguv_32x32xn_c(pixel *const dst_row, const pixel *const src_row,
-               const ptrdiff_t stride, const Dav1dFilmGrainData *const data,
+               const ptrdiff_t stride, const Dav2dFilmGrainData *const data,
                const size_t pw, const uint8_t scaling[SCALING_SIZE],
                const entry grain_lut[][GRAIN_WIDTH], const int bh,
                const int row_num, const pixel *const luma_row,
@@ -420,16 +420,16 @@ fguv_ss_fn(444, 0, 0);
 #endif
 #endif
 
-COLD void bitfn(dav1d_film_grain_dsp_init)(Dav1dFilmGrainDSPContext *const c) {
+COLD void bitfn(dav2d_film_grain_dsp_init)(Dav2dFilmGrainDSPContext *const c) {
     c->generate_grain_y = generate_grain_y_c;
-    c->generate_grain_uv[DAV1D_PIXEL_LAYOUT_I420 - 1] = generate_grain_uv_420_c;
-    c->generate_grain_uv[DAV1D_PIXEL_LAYOUT_I422 - 1] = generate_grain_uv_422_c;
-    c->generate_grain_uv[DAV1D_PIXEL_LAYOUT_I444 - 1] = generate_grain_uv_444_c;
+    c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I420 - 1] = generate_grain_uv_420_c;
+    c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I422 - 1] = generate_grain_uv_422_c;
+    c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I444 - 1] = generate_grain_uv_444_c;
 
     c->fgy_32x32xn = fgy_32x32xn_c;
-    c->fguv_32x32xn[DAV1D_PIXEL_LAYOUT_I420 - 1] = fguv_32x32xn_420_c;
-    c->fguv_32x32xn[DAV1D_PIXEL_LAYOUT_I422 - 1] = fguv_32x32xn_422_c;
-    c->fguv_32x32xn[DAV1D_PIXEL_LAYOUT_I444 - 1] = fguv_32x32xn_444_c;
+    c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I420 - 1] = fguv_32x32xn_420_c;
+    c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I422 - 1] = fguv_32x32xn_422_c;
+    c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I444 - 1] = fguv_32x32xn_444_c;
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM

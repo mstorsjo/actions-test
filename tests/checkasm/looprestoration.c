@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -53,7 +53,7 @@ static void init_tmp(pixel *buf, const ptrdiff_t stride,
     }
 }
 
-static void check_wiener(Dav1dLoopRestorationDSPContext *const c, const int bpc) {
+static void check_wiener(Dav2dLoopRestorationDSPContext *const c, const int bpc) {
     PIXEL_RECT(c_dst, 384, 64);
     PIXEL_RECT(a_dst, 384, 64);
     PIXEL_RECT(h_edge, 384, 8);
@@ -124,7 +124,7 @@ static void check_wiener(Dav1dLoopRestorationDSPContext *const c, const int bpc)
     }
 }
 
-static void check_sgr(Dav1dLoopRestorationDSPContext *const c, const int bpc) {
+static void check_sgr(Dav2dLoopRestorationDSPContext *const c, const int bpc) {
     PIXEL_RECT(c_dst, 384, 64);
     PIXEL_RECT(a_dst, 384, 64);
     PIXEL_RECT(h_edge, 384, 8);
@@ -145,7 +145,7 @@ static void check_sgr(Dav1dLoopRestorationDSPContext *const c, const int bpc) {
 
     for (int i = 0; i < 3; i++) {
         if (check_func(c->sgr[i], "sgr_%s_%dbpc", sgr_data[i].name, bpc)) {
-            const uint16_t *const sgr_params = dav1d_sgr_params[sgr_data[i].idx];
+            const uint16_t *const sgr_params = dav2d_sgr_params[sgr_data[i].idx];
             params.sgr.s0 = sgr_params[0];
             params.sgr.s1 = sgr_params[1];
             params.sgr.w0 = sgr_params[0] ? (rnd() & 127) - 96 : 0;
@@ -200,14 +200,14 @@ void bitfn(checkasm_check_looprestoration)(void) {
     const int bpc_min = 8, bpc_max = 8;
 #endif
     for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
-        Dav1dLoopRestorationDSPContext c;
-        bitfn(dav1d_loop_restoration_dsp_init)(&c, bpc);
+        Dav2dLoopRestorationDSPContext c;
+        bitfn(dav2d_loop_restoration_dsp_init)(&c, bpc);
         check_wiener(&c, bpc);
     }
     report("wiener");
     for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
-        Dav1dLoopRestorationDSPContext c;
-        bitfn(dav1d_loop_restoration_dsp_init)(&c, bpc);
+        Dav2dLoopRestorationDSPContext c;
+        bitfn(dav2d_loop_restoration_dsp_init)(&c, bpc);
         check_sgr(&c, bpc);
     }
     report("sgr");

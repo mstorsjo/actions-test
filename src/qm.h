@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,13 +25,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_QM_H
-#define DAV1D_SRC_QM_H
+#ifndef DAV2D_SRC_QM_H
+#define DAV2D_SRC_QM_H
 
 #include "src/levels.h"
 
-EXTERN const uint8_t *dav1d_qm_tbl[16][2][N_RECT_TX_SIZES];
+EXTERN const uint8_t *dav2d_qm_tbl[16][2][N_RECT_TX_SIZES];
 
-void dav1d_init_qm_tables(void);
+void dav2d_init_qm_tables(void);
 
-#endif /* DAV1D_SRC_QM_H */
+#endif /* DAV2D_SRC_QM_H */

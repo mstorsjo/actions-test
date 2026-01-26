@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
  * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
@@ -30,13 +30,13 @@
 
 #include "src/levels.h"
 
-#ifndef DAV1D_SRC_ITX_1D_H
-#define DAV1D_SRC_ITX_1D_H
+#ifndef DAV2D_SRC_ITX_1D_H
+#define DAV2D_SRC_ITX_1D_H
 
 typedef void (*itx_1d_fn)(int32_t *c, ptrdiff_t stride);
 
-EXTERN const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1];
+EXTERN const itx_1d_fn dav2d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1];
 
-void dav1d_inv_wht4_1d_c(int32_t *c, ptrdiff_t stride);
+void dav2d_inv_wht4_1d_c(int32_t *c, ptrdiff_t stride);
 
-#endif /* DAV1D_SRC_ITX_1D_H */
+#endif /* DAV2D_SRC_ITX_1D_H */

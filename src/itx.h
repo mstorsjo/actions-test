@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
  * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_ITX_H
-#define DAV1D_SRC_ITX_H
+#ifndef DAV2D_SRC_ITX_H
+#define DAV2D_SRC_ITX_H
 
 #include <stddef.h>
 
@@ -45,11 +45,11 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, coef *coeff, \
 typedef decl_itxfm_fn(*itxfm_fn);
 
 #define decl_itx_w_fns(w, ext) \
-decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x4,  ext)); \
-decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x8,  ext)); \
-decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x16, ext)); \
-decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x32, ext)); \
-decl_itxfm_fn(BF(dav1d_inv_txfm_add_##w##x64, ext))
+decl_itxfm_fn(BF(dav2d_inv_txfm_add_##w##x4,  ext)); \
+decl_itxfm_fn(BF(dav2d_inv_txfm_add_##w##x8,  ext)); \
+decl_itxfm_fn(BF(dav2d_inv_txfm_add_##w##x16, ext)); \
+decl_itxfm_fn(BF(dav2d_inv_txfm_add_##w##x32, ext)); \
+decl_itxfm_fn(BF(dav2d_inv_txfm_add_##w##x64, ext))
 
 #define decl_itx_fns(ext) \
 decl_itx_w_fns( 4, ext); \
@@ -58,15 +58,15 @@ decl_itx_w_fns(16, ext); \
 decl_itx_w_fns(32, ext); \
 decl_itx_w_fns(64, ext)
 
-typedef struct Dav1dInvTxfmDSPContext {
+typedef struct Dav2dInvTxfmDSPContext {
     cctx_fn cctx;
     itxfm_fn itxfm_add[N_RECT_TX_SIZES];
     itxfm_fn iwht_add_4x4;
-} Dav1dInvTxfmDSPContext;
+} Dav2dInvTxfmDSPContext;
 
-bitfn_decls(void dav1d_itx_dsp_init, Dav1dInvTxfmDSPContext *c, int bpc);
+bitfn_decls(void dav2d_itx_dsp_init, Dav2dInvTxfmDSPContext *c, int bpc);
 
 #define assign_itx_fn(pfx, w, h, ext) \
-    c->itxfm_add[pfx##TX_##w##X##h] = BF(dav1d_inv_txfm_add_##w##x##h, ext)
+    c->itxfm_add[pfx##TX_##w##X##h] = BF(dav2d_inv_txfm_add_##w##x##h, ext)
 
-#endif /* DAV1D_SRC_ITX_H */
+#endif /* DAV2D_SRC_ITX_H */

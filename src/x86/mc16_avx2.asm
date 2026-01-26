@@ -1,4 +1,4 @@
-; Copyright © 2021-2026, VideoLAN and dav1d authors
+; Copyright © 2021-2026, VideoLAN and dav2d authors
 ; Copyright © 2021-2026, Two Orioles, LLC
 ; All rights reserved.
 ;
@@ -28,7 +28,7 @@
 
 SECTION_RODATA 64
 
-; dav1d_obmc_masks[] * -512
+; dav2d_obmc_masks[] * -512
 const obmc_masks_avx2
             dw      0,      0,  -9728,      0, -12800,  -7168,  -2560,      0
             dw -14336, -11264,  -8192,  -5632,  -3584,  -1536,      0,      0

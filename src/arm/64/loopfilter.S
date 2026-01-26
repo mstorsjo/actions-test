@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
  * All rights reserved.
  *
@@ -987,7 +987,7 @@ function lpf_h_16_16_neon
         ret             x15
 endfunc
 
-// void dav1d_lpf_v_sb_y_8bpc_neon(pixel *dst, const ptrdiff_t stride,
+// void dav2d_lpf_v_sb_y_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                                 const uint32_t *const vmask,
 //                                 const uint8_t (*l)[4], ptrdiff_t b4_stride,
 //                                 const Av1FilterLUT *lut, const int w)

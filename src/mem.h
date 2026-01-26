@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_MEM_H
-#define DAV1D_SRC_MEM_H
+#ifndef DAV2D_SRC_MEM_H
+#define DAV2D_SRC_MEM_H
 
 #define TRACK_HEAP_ALLOCATIONS 0
 
@@ -36,7 +36,7 @@
 #include <malloc.h>
 #endif
 
-#include "dav1d/dav1d.h"
+#include "dav2d/dav2d.h"
 
 #include "common/attributes.h"
 
@@ -48,7 +48,7 @@ enum AllocationType {
     ALLOC_CDF,
     ALLOC_COEF,
     ALLOC_COMMON_CTX,
-    ALLOC_DAV1DDATA,
+    ALLOC_DAV2DDATA,
     ALLOC_IPRED,
     ALLOC_LF,
     ALLOC_LR,
@@ -64,29 +64,29 @@ enum AllocationType {
     N_ALLOC_TYPES,
 };
 
-typedef struct Dav1dMemPoolBuffer {
+typedef struct Dav2dMemPoolBuffer {
     void *data;
-    struct Dav1dMemPoolBuffer *next;
-} Dav1dMemPoolBuffer;
+    struct Dav2dMemPoolBuffer *next;
+} Dav2dMemPoolBuffer;
 
-typedef struct Dav1dMemPool {
+typedef struct Dav2dMemPool {
     pthread_mutex_t lock;
-    Dav1dMemPoolBuffer *buf;
+    Dav2dMemPoolBuffer *buf;
     int ref_cnt;
     int end;
 #if TRACK_HEAP_ALLOCATIONS
     enum AllocationType type;
 #endif
-} Dav1dMemPool;
+} Dav2dMemPool;
 
 // TODO: Move this to a common location?
 #define ROUND_UP(x,a) (((x)+((a)-1)) & ~((a)-1))
 
 /*
  * Allocate align-byte aligned memory. The return value can be released
- * by calling the dav1d_free_aligned() function.
+ * by calling the dav2d_free_aligned() function.
  */
-static inline void *dav1d_alloc_aligned_internal(const size_t sz, const size_t align) {
+static inline void *dav2d_alloc_aligned_internal(const size_t sz, const size_t align) {
     assert(!(align & (align - 1)));
 #ifdef _WIN32
     return _aligned_malloc(sz, align);
@@ -105,7 +105,7 @@ static inline void *dav1d_alloc_aligned_internal(const size_t sz, const size_t a
 #endif
 }
 
-static inline void dav1d_free_aligned_internal(void *ptr) {
+static inline void dav2d_free_aligned_internal(void *ptr) {
 #ifdef _WIN32
     _aligned_free(ptr);
 #else
@@ -114,32 +114,32 @@ static inline void dav1d_free_aligned_internal(void *ptr) {
 }
 
 #if TRACK_HEAP_ALLOCATIONS
-void *dav1d_malloc(enum AllocationType type, size_t sz);
-void *dav1d_realloc(enum AllocationType type, void *ptr, size_t sz);
-void *dav1d_alloc_aligned(enum AllocationType type, size_t sz, size_t align);
-void dav1d_free(void *ptr);
-void dav1d_free_aligned(void *ptr);
-void dav1d_log_alloc_stats(Dav1dContext *c);
+void *dav2d_malloc(enum AllocationType type, size_t sz);
+void *dav2d_realloc(enum AllocationType type, void *ptr, size_t sz);
+void *dav2d_alloc_aligned(enum AllocationType type, size_t sz, size_t align);
+void dav2d_free(void *ptr);
+void dav2d_free_aligned(void *ptr);
+void dav2d_log_alloc_stats(Dav2dContext *c);
 #else
-#define dav1d_mem_pool_init(type, pool) dav1d_mem_pool_init(pool)
-#define dav1d_malloc(type, sz) malloc(sz)
-#define dav1d_realloc(type, ptr, sz) realloc(ptr, sz)
-#define dav1d_alloc_aligned(type, sz, align) dav1d_alloc_aligned_internal(sz, align)
-#define dav1d_free(ptr) free(ptr)
-#define dav1d_free_aligned(ptr) dav1d_free_aligned_internal(ptr)
+#define dav2d_mem_pool_init(type, pool) dav2d_mem_pool_init(pool)
+#define dav2d_malloc(type, sz) malloc(sz)
+#define dav2d_realloc(type, ptr, sz) realloc(ptr, sz)
+#define dav2d_alloc_aligned(type, sz, align) dav2d_alloc_aligned_internal(sz, align)
+#define dav2d_free(ptr) free(ptr)
+#define dav2d_free_aligned(ptr) dav2d_free_aligned_internal(ptr)
 #endif /* TRACK_HEAP_ALLOCATIONS */
 
-void dav1d_mem_pool_push(Dav1dMemPool *pool, Dav1dMemPoolBuffer *buf);
-Dav1dMemPoolBuffer *dav1d_mem_pool_pop(Dav1dMemPool *pool, size_t size);
-int dav1d_mem_pool_init(enum AllocationType type, Dav1dMemPool **pool);
-void dav1d_mem_pool_end(Dav1dMemPool *pool);
+void dav2d_mem_pool_push(Dav2dMemPool *pool, Dav2dMemPoolBuffer *buf);
+Dav2dMemPoolBuffer *dav2d_mem_pool_pop(Dav2dMemPool *pool, size_t size);
+int dav2d_mem_pool_init(enum AllocationType type, Dav2dMemPool **pool);
+void dav2d_mem_pool_end(Dav2dMemPool *pool);
 
-static inline void dav1d_freep_aligned(void *ptr) {
+static inline void dav2d_freep_aligned(void *ptr) {
     void **mem = (void **) ptr;
     if (*mem) {
-        dav1d_free_aligned(*mem);
+        dav2d_free_aligned(*mem);
         *mem = NULL;
     }
 }
 
-#endif /* DAV1D_SRC_MEM_H */
+#endif /* DAV2D_SRC_MEM_H */

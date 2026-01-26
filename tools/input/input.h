@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_INPUT_INPUT_H
-#define DAV1D_INPUT_INPUT_H
+#ifndef DAV2D_INPUT_INPUT_H
+#define DAV2D_INPUT_INPUT_H
 
 #include "data.h"
 
@@ -35,8 +35,8 @@ typedef struct DemuxerContext DemuxerContext;
 int input_open(DemuxerContext **const c_out,
                const char *const name, const char *const filename,
                unsigned fps[2], unsigned *num_frames, unsigned timebase[2]);
-int input_read(DemuxerContext *ctx, Dav1dData *data);
+int input_read(DemuxerContext *ctx, Dav2dData *data);
 int input_seek(DemuxerContext *ctx, uint64_t pts);
 void input_close(DemuxerContext *ctx);
 
-#endif /* DAV1D_INPUT_INPUT_H */
+#endif /* DAV2D_INPUT_INPUT_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -75,7 +75,7 @@ static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
 };
 
 enum IntraPredMode
-bytefn(dav1d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
+bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                   const int x, const int y,
                                   const int w, const int h,
                                   const int n_tr, const int n_bl,

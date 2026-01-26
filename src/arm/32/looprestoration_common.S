@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
  * All rights reserved.
  *
@@ -28,7 +28,7 @@
 #include "src/arm/asm.S"
 #include "util.S"
 
-// void dav1d_sgr_box3_row_v_neon(int32_t **sumsq, int16_t **sum,
+// void dav2d_sgr_box3_row_v_neon(int32_t **sumsq, int16_t **sum,
 //                                int32_t *sumsq_out, int16_t *sum_out,
 //                                const int w);
 function sgr_box3_row_v_neon, export=1
@@ -66,7 +66,7 @@ function sgr_box3_row_v_neon, export=1
         pop             {r4-r9,pc}
 endfunc
 
-// void dav1d_sgr_box5_row_v_neon(int32_t **sumsq, int16_t **sum,
+// void dav2d_sgr_box5_row_v_neon(int32_t **sumsq, int16_t **sum,
 //                                int32_t *sumsq_out, int16_t *sum_out,
 //                                const int w);
 function sgr_box5_row_v_neon, export=1
@@ -118,10 +118,10 @@ function sgr_box5_row_v_neon, export=1
         pop             {r4-r11,pc}
 endfunc
 
-// void dav1d_sgr_calc_row_ab1_neon(int32_t *a, int16_t *b,
+// void dav2d_sgr_calc_row_ab1_neon(int32_t *a, int16_t *b,
 //                                  const int w, const int strength,
 //                                  const int bitdepth_max);
-// void dav1d_sgr_calc_row_ab2_neon(int32_t *a, int16_t *b,
+// void dav2d_sgr_calc_row_ab2_neon(int32_t *a, int16_t *b,
 //                                  const int w, const int strength,
 //                                  const int bitdepth_max);
 function sgr_calc_row_ab1_neon, export=1

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -35,7 +35,7 @@
 #include "src/tables.h"
 #include "src/wedge.h"
 
-Dav1dMasks dav1d_masks;
+Dav2dMasks dav2d_masks;
 
 enum WedgeDirectionType {
     WEDGE_0,
@@ -151,12 +151,12 @@ static void gen_master(uint8_t *master, const int mul,
 static COLD void init_wedge_masks(void) {
     int o = 0;
     for (enum BlockSize bs = BS_64x64; bs < N_BS_SIZES; bs++) {
-        const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+        const uint8_t *const b_dim = dav2d_block_dimensions[bs];
         if (b_dim[0] == 1 || b_dim[1] == 1) continue;
-        dav1d_masks.offsets.wedge[bs - BS_64x64] = o;
+        dav2d_masks.offsets.wedge[bs - BS_64x64] = o;
         o += b_dim[0] * b_dim[1] >> 2;
     }
-    assert(o * 0x1100 == sizeof(dav1d_masks.wedge) && o < 256);
+    assert(o * 0x1100 == sizeof(dav2d_masks.wedge) && o < 256);
 
     uint8_t master[128 * 128];
     enum WedgeDirectionType wd = N_WEDGE_DIRECTIONS;
@@ -220,16 +220,16 @@ static COLD void build_nondc_ii_masks(uint8_t *const mask_v, const int w,
 }
 
 static COLD void init_ii_masks(void) {
-    memset(dav1d_masks.ii_dc, 32, 64 * 64);
+    memset(dav2d_masks.ii_dc, 32, 64 * 64);
 
     int o = 0;
     for (enum BlockSize bs = BS_64x64; bs < N_BS_SIZES; bs++) {
-        const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+        const uint8_t *const b_dim = dav2d_block_dimensions[bs];
         if (b_dim[0] * b_dim[1] <= 2) continue;
-        dav1d_masks.offsets.ii_nondc[bs - BS_64x64] = o;
+        dav2d_masks.offsets.ii_nondc[bs - BS_64x64] = o;
         o += b_dim[0] * b_dim[1] >> 2;
     }
-    assert(o * 0xc0 == sizeof(dav1d_masks.ii_nondc) && o < 256);
+    assert(o * 0xc0 == sizeof(dav2d_masks.ii_nondc) && o < 256);
 
 #define fill(w, h, s) \
     build_nondc_ii_masks(II_MASK(BS_##w##x##h, 0, 0, 1), w, h, s)
@@ -258,7 +258,7 @@ static COLD void init_ii_masks(void) {
 #undef fill
 }
 
-COLD void dav1d_init_ii_wedge_masks(void) {
+COLD void dav2d_init_ii_wedge_masks(void) {
     // This function is guaranteed to be called only once
     init_wedge_masks();
     init_ii_masks();

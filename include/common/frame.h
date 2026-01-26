@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021, VideoLAN and dav1d authors
+ * Copyright © 2021, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,11 +24,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_COMMON_FRAME_H
-#define DAV1D_COMMON_FRAME_H
+#ifndef DAV2D_COMMON_FRAME_H
+#define DAV2D_COMMON_FRAME_H
 
 /*
- * Checks whether Dav1dFrameType == INTER || == SWITCH
+ * Checks whether Dav2dFrameType == INTER || == SWITCH
  * Both are defined as odd numbers {1, 3} and therefore have the LSB set.
  * See also: AV1 spec 6.8.2
  */
@@ -36,10 +36,10 @@
     ((frame_header)->frame_type & 1)
 
 /*
- * Checks whether Dav1dFrameType == KEY || == INTRA
+ * Checks whether Dav2dFrameType == KEY || == INTRA
  * See also: AV1 spec 6.8.2
  */
 #define IS_KEY_OR_INTRA(frame_header) \
     (!IS_INTER_OR_SWITCH(frame_header))
 
-#endif /* DAV1D_COMMON_FRAME_H */
+#endif /* DAV2D_COMMON_FRAME_H */

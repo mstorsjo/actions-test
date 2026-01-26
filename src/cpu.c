@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -57,31 +57,31 @@
 #include <sys/auxv.h>
 #endif
 
-unsigned dav1d_cpu_flags = 0U;
-unsigned dav1d_cpu_flags_mask = ~0U;
+unsigned dav2d_cpu_flags = 0U;
+unsigned dav2d_cpu_flags_mask = ~0U;
 
-COLD void dav1d_init_cpu(void) {
+COLD void dav2d_init_cpu(void) {
 #if HAVE_ASM && !__has_feature(memory_sanitizer)
 // memory sanitizer is inherently incompatible with asm
 #if ARCH_AARCH64 || ARCH_ARM
-    dav1d_cpu_flags = dav1d_get_cpu_flags_arm();
+    dav2d_cpu_flags = dav2d_get_cpu_flags_arm();
 #elif ARCH_LOONGARCH
-    dav1d_cpu_flags = dav1d_get_cpu_flags_loongarch();
+    dav2d_cpu_flags = dav2d_get_cpu_flags_loongarch();
 #elif ARCH_PPC64LE
-    dav1d_cpu_flags = dav1d_get_cpu_flags_ppc();
+    dav2d_cpu_flags = dav2d_get_cpu_flags_ppc();
 #elif ARCH_RISCV
-    dav1d_cpu_flags = dav1d_get_cpu_flags_riscv();
+    dav2d_cpu_flags = dav2d_get_cpu_flags_riscv();
 #elif ARCH_X86
-    dav1d_cpu_flags = dav1d_get_cpu_flags_x86();
+    dav2d_cpu_flags = dav2d_get_cpu_flags_x86();
 #endif
 #endif
 }
 
-COLD void dav1d_set_cpu_flags_mask(const unsigned mask) {
-    dav1d_cpu_flags_mask = mask;
+COLD void dav2d_set_cpu_flags_mask(const unsigned mask) {
+    dav2d_cpu_flags_mask = mask;
 }
 
-COLD int dav1d_num_logical_processors(Dav1dContext *const c) {
+COLD int dav2d_num_logical_processors(Dav2dContext *const c) {
 #ifdef _WIN32
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
     GROUP_AFFINITY affinity;
@@ -109,11 +109,11 @@ COLD int dav1d_num_logical_processors(Dav1dContext *const c) {
     return (int)sysconf(_SC_NPROCESSORS_ONLN);
 #endif
     if (c)
-        dav1d_log(c, "Unable to detect thread count, defaulting to single-threaded mode\n");
+        dav2d_log(c, "Unable to detect thread count, defaulting to single-threaded mode\n");
     return 1;
 }
 
-COLD unsigned long dav1d_getauxval(unsigned long type) {
+COLD unsigned long dav2d_getauxval(unsigned long type) {
 #if HAVE_GETAUXVAL
     return getauxval(type);
 #elif HAVE_ELF_AUX_INFO

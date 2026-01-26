@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020, VideoLAN and dav1d authors
+ * Copyright © 2020, VideoLAN and dav2d authors
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,9 +41,9 @@ typedef struct renderer_priv_ctx
     SDL_mutex *lock;
     // Texture to render
     SDL_Texture *tex;
-} Dav1dPlayRendererPrivateContext;
+} Dav2dPlayRendererPrivateContext;
 
-static void *sdl_renderer_create(const Dav1dPlaySettings *settings)
+static void *sdl_renderer_create(const Dav2dPlaySettings *settings)
 {
     int window_flags = 0;
     if (settings->fullscreen)
@@ -56,7 +56,7 @@ static void *sdl_renderer_create(const Dav1dPlaySettings *settings)
     SDL_ShowCursor(0);
 
     // Alloc
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = malloc(sizeof(Dav1dPlayRendererPrivateContext));
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = malloc(sizeof(Dav2dPlayRendererPrivateContext));
     if (rd_priv_ctx == NULL) {
         return NULL;
     }
@@ -82,7 +82,7 @@ static void *sdl_renderer_create(const Dav1dPlaySettings *settings)
 
 static void sdl_renderer_destroy(void *cookie)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     SDL_DestroyTexture(rd_priv_ctx->tex);
@@ -92,9 +92,9 @@ static void sdl_renderer_destroy(void *cookie)
     free(rd_priv_ctx);
 }
 
-static void sdl_render(void *cookie, const Dav1dPlaySettings *settings)
+static void sdl_render(void *cookie, const Dav2dPlaySettings *settings)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     SDL_LockMutex(rd_priv_ctx->lock);
@@ -112,28 +112,28 @@ static void sdl_render(void *cookie, const Dav1dPlaySettings *settings)
     SDL_UnlockMutex(rd_priv_ctx->lock);
 }
 
-static int sdl_update_texture(void *cookie, Dav1dPicture *dav1d_pic,
-                              const Dav1dPlaySettings *settings)
+static int sdl_update_texture(void *cookie, Dav2dPicture *dav2d_pic,
+                              const Dav2dPlaySettings *settings)
 {
-    Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
+    Dav2dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
     SDL_LockMutex(rd_priv_ctx->lock);
 
-    if (dav1d_pic == NULL) {
+    if (dav2d_pic == NULL) {
         rd_priv_ctx->tex = NULL;
         SDL_UnlockMutex(rd_priv_ctx->lock);
         return 0;
     }
 
-    int width = dav1d_pic->p.w;
-    int height = dav1d_pic->p.h;
+    int width = dav2d_pic->p.w;
+    int height = dav2d_pic->p.h;
     int tex_w = width;
     int tex_h = height;
 
-    enum Dav1dPixelLayout dav1d_layout = dav1d_pic->p.layout;
+    enum Dav2dPixelLayout dav2d_layout = dav2d_pic->p.layout;
 
-    if (DAV1D_PIXEL_LAYOUT_I420 != dav1d_layout || dav1d_pic->p.bpc != 8) {
+    if (DAV2D_PIXEL_LAYOUT_I420 != dav2d_layout || dav2d_pic->p.bpc != 8) {
         fprintf(stderr, "Unsupported pixel format, only 8bit 420 supported so far.\n");
         exit(50);
     }
@@ -154,9 +154,9 @@ static int sdl_update_texture(void *cookie, Dav1dPicture *dav1d_pic,
     }
 
     SDL_UpdateYUVTexture(texture, NULL,
-        dav1d_pic->data[0], (int)dav1d_pic->stride[0], // Y
-        dav1d_pic->data[1], (int)dav1d_pic->stride[1], // U
-        dav1d_pic->data[2], (int)dav1d_pic->stride[1]  // V
+        dav2d_pic->data[0], (int)dav2d_pic->stride[0], // Y
+        dav2d_pic->data[1], (int)dav2d_pic->stride[1], // U
+        dav2d_pic->data[2], (int)dav2d_pic->stride[1]  // V
         );
 
     rd_priv_ctx->tex = texture;
@@ -164,7 +164,7 @@ static int sdl_update_texture(void *cookie, Dav1dPicture *dav1d_pic,
     return 0;
 }
 
-const Dav1dPlayRenderInfo rdr_sdl = {
+const Dav2dPlayRenderInfo rdr_sdl = {
     .name = "sdl",
     .create_renderer = sdl_renderer_create,
     .destroy_renderer = sdl_renderer_destroy,

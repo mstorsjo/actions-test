@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Two Orioles, LLC
  * All rights reserved.
  *
@@ -59,7 +59,7 @@ static void memset_w64(void *const ptr, const int value) {
     set_ctx64((uint8_t *) ptr, 0, value);
 }
 
-const dav1d_memset_pow2_fn dav1d_memset_pow2[7] = {
+const dav2d_memset_pow2_fn dav2d_memset_pow2[7] = {
     memset_w1,
     memset_w2,
     memset_w4,

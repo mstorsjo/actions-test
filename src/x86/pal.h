@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Two Orioles, LLC
  * All rights reserved.
  *
@@ -27,24 +27,24 @@
 
 #include "src/cpu.h"
 
-decl_pal_idx_finish_fn(dav1d_pal_idx_finish_ssse3);
-decl_pal_idx_finish_fn(dav1d_pal_idx_finish_avx2);
-decl_pal_idx_finish_fn(dav1d_pal_idx_finish_avx512icl);
+decl_pal_idx_finish_fn(dav2d_pal_idx_finish_ssse3);
+decl_pal_idx_finish_fn(dav2d_pal_idx_finish_avx2);
+decl_pal_idx_finish_fn(dav2d_pal_idx_finish_avx512icl);
 
-static ALWAYS_INLINE void pal_dsp_init_x86(Dav1dPalDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void pal_dsp_init_x86(Dav2dPalDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSSE3)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
 
-    c->pal_idx_finish = dav1d_pal_idx_finish_ssse3;
+    c->pal_idx_finish = dav2d_pal_idx_finish_ssse3;
 
 #if ARCH_X86_64
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
-    c->pal_idx_finish = dav1d_pal_idx_finish_avx2;
+    c->pal_idx_finish = dav2d_pal_idx_finish_avx2;
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX512ICL)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
-    c->pal_idx_finish = dav1d_pal_idx_finish_avx512icl;
+    c->pal_idx_finish = dav2d_pal_idx_finish_avx512icl;
 #endif
 }

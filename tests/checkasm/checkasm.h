@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_TESTS_CHECKASM_CHECKASM_H
-#define DAV1D_TESTS_CHECKASM_CHECKASM_H
+#ifndef DAV2D_TESTS_CHECKASM_CHECKASM_H
+#define DAV2D_TESTS_CHECKASM_CHECKASM_H
 
 #include "config.h"
 
@@ -455,4 +455,4 @@ DECL_CHECKASM_CHECK_FUNC(uint32_t);
 #define checkasm_check_coef(...)  checkasm_check(COEF_TYPE,  __VA_ARGS__)
 #endif
 
-#endif /* DAV1D_TESTS_CHECKASM_CHECKASM_H */
+#endif /* DAV2D_TESTS_CHECKASM_CHECKASM_H */

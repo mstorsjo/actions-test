@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_PAL_H
-#define DAV1D_SRC_PAL_H
+#ifndef DAV2D_SRC_PAL_H
+#define DAV2D_SRC_PAL_H
 
 #include <stdint.h>
 
@@ -34,10 +34,10 @@
 void (name)(uint8_t *dst, const uint8_t *src, int bw, int bh, int w, int h)
 typedef decl_pal_idx_finish_fn(*pal_idx_finish_fn);
 
-typedef struct Dav1dPalDSPContext {
+typedef struct Dav2dPalDSPContext {
     pal_idx_finish_fn pal_idx_finish;
-} Dav1dPalDSPContext;
+} Dav2dPalDSPContext;
 
-void dav1d_pal_dsp_init(Dav1dPalDSPContext *dsp);
+void dav2d_pal_dsp_init(Dav2dPalDSPContext *dsp);
 
-#endif /* DAV1D_SRC_PAL_H */
+#endif /* DAV2D_SRC_PAL_H */

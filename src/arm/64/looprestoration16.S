@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2020, Martin Storsjo
  * All rights reserved.
  *
@@ -44,7 +44,7 @@ right_ext_mask:
         .byte 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 endconst
 
-// void dav1d_wiener_filter7_16bpc_neon(pixel *p, const ptrdiff_t p_stride,
+// void dav2d_wiener_filter7_16bpc_neon(pixel *p, const ptrdiff_t p_stride,
 //                                      const pixel (*left)[4], const pixel *lpf,
 //                                      const int w, int h,
 //                                      const int16_t filter[2][8],
@@ -589,7 +589,7 @@ function wiener_filter7_hv_16bpc_neon
         ret
 endfunc
 
-// void dav1d_wiener_filter5_16bpc_neon(pixel *p, const ptrdiff_t p_stride,
+// void dav2d_wiener_filter5_16bpc_neon(pixel *p, const ptrdiff_t p_stride,
 //                                      const pixel (*left)[4], const pixel *lpf,
 //                                      const int w, int h,
 //                                      const int16_t filter[2][8],
@@ -1072,7 +1072,7 @@ endfunc
 
 #include "looprestoration_tmpl.S"
 
-// void dav1d_sgr_box3_row_h_16bpc_neon(int32_t *sumsq, int16_t *sum,
+// void dav2d_sgr_box3_row_h_16bpc_neon(int32_t *sumsq, int16_t *sum,
 //                                      const pixel (*left)[4],
 //                                      const pixel *src, const int w,
 //                                      const enum LrEdgeFlags edges);
@@ -1167,7 +1167,7 @@ function sgr_box3_row_h_16bpc_neon, export=1
         ret
 endfunc
 
-// void dav1d_sgr_box5_row_h_16bpc_neon(int32_t *sumsq, int16_t *sum,
+// void dav2d_sgr_box5_row_h_16bpc_neon(int32_t *sumsq, int16_t *sum,
 //                                      const pixel (*left)[4],
 //                                      const pixel *src, const int w,
 //                                      const enum LrEdgeFlags edges);
@@ -1273,7 +1273,7 @@ function sgr_box5_row_h_16bpc_neon, export=1
         ret
 endfunc
 
-// void dav1d_sgr_box35_row_h_16bpc_neon(int32_t *sumsq3, int16_t *sum3,
+// void dav2d_sgr_box35_row_h_16bpc_neon(int32_t *sumsq3, int16_t *sum3,
 //                                       int32_t *sumsq5, int16_t *sum5,
 //                                       const pixel (*left)[4],
 //                                       const pixel *src, const int w,

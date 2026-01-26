@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,16 +25,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_WARPMV_H
-#define DAV1D_SRC_WARPMV_H
+#ifndef DAV2D_SRC_WARPMV_H
+#define DAV2D_SRC_WARPMV_H
 
 #include "src/levels.h"
 
 int resolve_divisor_32(unsigned d, int *shift);
-int dav1d_get_shear_params(Dav1dWarpedMotionParams *wm);
-int dav1d_find_affine_int(const int (*pts)[2][2], int np, int bw4, int bh4,
-                          mv mv, Dav1dWarpedMotionParams *wm, int bx, int by);
-void dav1d_set_affine_mv2d(int bw4, int bh4,
-                           mv mv, Dav1dWarpedMotionParams *wm, int bx, int by);
+int dav2d_get_shear_params(Dav2dWarpedMotionParams *wm);
+int dav2d_find_affine_int(const int (*pts)[2][2], int np, int bw4, int bh4,
+                          mv mv, Dav2dWarpedMotionParams *wm, int bx, int by);
+void dav2d_set_affine_mv2d(int bw4, int bh4,
+                           mv mv, Dav2dWarpedMotionParams *wm, int bx, int by);
 
-#endif /* DAV1D_SRC_WARPMV_H */
+#endif /* DAV2D_SRC_WARPMV_H */

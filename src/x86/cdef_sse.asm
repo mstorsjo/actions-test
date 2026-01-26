@@ -1,4 +1,4 @@
-; Copyright © 2018, VideoLAN and dav1d authors
+; Copyright © 2018, VideoLAN and dav2d authors
 ; Copyright © 2018, Two Orioles, LLC
 ; Copyright © 2019, VideoLabs
 ; All rights reserved.

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_FILM_GRAIN_H
-#define DAV1D_SRC_FILM_GRAIN_H
+#ifndef DAV2D_SRC_FILM_GRAIN_H
+#define DAV2D_SRC_FILM_GRAIN_H
 
 #include "common/bitdepth.h"
 
@@ -45,18 +45,18 @@ typedef int16_t entry;
 
 #define decl_generate_grain_y_fn(name) \
 void (name)(entry buf[][GRAIN_WIDTH], \
-            const Dav1dFilmGrainData *const data HIGHBD_DECL_SUFFIX)
+            const Dav2dFilmGrainData *const data HIGHBD_DECL_SUFFIX)
 typedef decl_generate_grain_y_fn(*generate_grain_y_fn);
 
 #define decl_generate_grain_uv_fn(name) \
 void (name)(entry buf[][GRAIN_WIDTH], \
             const entry buf_y[][GRAIN_WIDTH], \
-            const Dav1dFilmGrainData *const data, const intptr_t uv HIGHBD_DECL_SUFFIX)
+            const Dav2dFilmGrainData *const data, const intptr_t uv HIGHBD_DECL_SUFFIX)
 typedef decl_generate_grain_uv_fn(*generate_grain_uv_fn);
 
 #define decl_fgy_32x32xn_fn(name) \
 void (name)(pixel *dst_row, const pixel *src_row, ptrdiff_t stride, \
-            const Dav1dFilmGrainData *data, \
+            const Dav2dFilmGrainData *data, \
             size_t pw, const uint8_t scaling[SCALING_SIZE], \
             const entry grain_lut[][GRAIN_WIDTH], \
             int bh, int row_num HIGHBD_DECL_SUFFIX)
@@ -64,21 +64,21 @@ typedef decl_fgy_32x32xn_fn(*fgy_32x32xn_fn);
 
 #define decl_fguv_32x32xn_fn(name) \
 void (name)(pixel *dst_row, const pixel *src_row, ptrdiff_t stride, \
-            const Dav1dFilmGrainData *data, size_t pw, \
+            const Dav2dFilmGrainData *data, size_t pw, \
             const uint8_t scaling[SCALING_SIZE], \
             const entry grain_lut[][GRAIN_WIDTH], int bh, int row_num, \
             const pixel *luma_row, ptrdiff_t luma_stride, \
             int uv_pl, int is_id HIGHBD_DECL_SUFFIX)
 typedef decl_fguv_32x32xn_fn(*fguv_32x32xn_fn);
 
-typedef struct Dav1dFilmGrainDSPContext {
+typedef struct Dav2dFilmGrainDSPContext {
     generate_grain_y_fn generate_grain_y;
     generate_grain_uv_fn generate_grain_uv[3];
 
     fgy_32x32xn_fn fgy_32x32xn;
     fguv_32x32xn_fn fguv_32x32xn[3];
-} Dav1dFilmGrainDSPContext;
+} Dav2dFilmGrainDSPContext;
 
-bitfn_decls(void dav1d_film_grain_dsp_init, Dav1dFilmGrainDSPContext *c);
+bitfn_decls(void dav2d_film_grain_dsp_init, Dav2dFilmGrainDSPContext *c);
 
-#endif /* DAV1D_SRC_FILM_GRAIN_H */
+#endif /* DAV2D_SRC_FILM_GRAIN_H */

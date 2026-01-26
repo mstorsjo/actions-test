@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -25,24 +25,24 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LOONGARCH_REFMVS_H
-#define DAV1D_SRC_LOONGARCH_REFMVS_H
+#ifndef DAV2D_SRC_LOONGARCH_REFMVS_H
+#define DAV2D_SRC_LOONGARCH_REFMVS_H
 
 #include "src/cpu.h"
 #include "src/refmvs.h"
 
-decl_splat_mv_fn(dav1d_splat_mv_lsx);
-decl_load_tmvs_fn(dav1d_load_tmvs_lsx);
-decl_save_tmvs_fn(dav1d_save_tmvs_lsx);
+decl_splat_mv_fn(dav2d_splat_mv_lsx);
+decl_load_tmvs_fn(dav2d_load_tmvs_lsx);
+decl_save_tmvs_fn(dav2d_save_tmvs_lsx);
 
-static ALWAYS_INLINE void refmvs_dsp_init_loongarch(Dav1dRefmvsDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void refmvs_dsp_init_loongarch(Dav2dRefmvsDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_LOONGARCH_CPU_FLAG_LSX)) return;
+    if (!(flags & DAV2D_LOONGARCH_CPU_FLAG_LSX)) return;
 
-    c->splat_mv = dav1d_splat_mv_lsx;
-    c->load_tmvs = dav1d_load_tmvs_lsx;
-    c->save_tmvs = dav1d_save_tmvs_lsx;
+    c->splat_mv = dav2d_splat_mv_lsx;
+    c->load_tmvs = dav2d_load_tmvs_lsx;
+    c->save_tmvs = dav2d_save_tmvs_lsx;
 }
 
-#endif /* DAV1D_SRC_LOONGARCH_REFMVS_H */
+#endif /* DAV2D_SRC_LOONGARCH_REFMVS_H */

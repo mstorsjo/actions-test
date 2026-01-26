@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_THREAD_TASK_H
-#define DAV1D_SRC_THREAD_TASK_H
+#ifndef DAV2D_SRC_THREAD_TASK_H
+#define DAV2D_SRC_THREAD_TASK_H
 
 #include <limits.h>
 
@@ -36,18 +36,18 @@
 #define TILE_ERROR (INT_MAX - 1)
 
 // these functions assume the task scheduling lock is already taken
-int dav1d_task_create_tile_sbrow(Dav1dFrameContext *f, int pass, int cond_signal);
-void dav1d_task_frame_init(Dav1dFrameContext *f);
+int dav2d_task_create_tile_sbrow(Dav2dFrameContext *f, int pass, int cond_signal);
+void dav2d_task_frame_init(Dav2dFrameContext *f);
 
-void dav1d_task_delayed_fg(Dav1dContext *c, Dav1dPicture *out, const Dav1dPicture *in);
+void dav2d_task_delayed_fg(Dav2dContext *c, Dav2dPicture *out, const Dav2dPicture *in);
 
-void *dav1d_worker_task(void *data);
+void *dav2d_worker_task(void *data);
 
-int dav1d_decode_frame_init(Dav1dFrameContext *f);
-int dav1d_decode_frame_init_cdf(Dav1dFrameContext *f);
-int dav1d_decode_frame_main(Dav1dFrameContext *f);
-void dav1d_decode_frame_exit(Dav1dFrameContext *f, int retval);
-int dav1d_decode_frame(Dav1dFrameContext *f);
-int dav1d_decode_tile_sbrow(Dav1dTaskContext *t);
+int dav2d_decode_frame_init(Dav2dFrameContext *f);
+int dav2d_decode_frame_init_cdf(Dav2dFrameContext *f);
+int dav2d_decode_frame_main(Dav2dFrameContext *f);
+void dav2d_decode_frame_exit(Dav2dFrameContext *f, int retval);
+int dav2d_decode_frame(Dav2dFrameContext *f);
+int dav2d_decode_tile_sbrow(Dav2dTaskContext *t);
 
-#endif /* DAV1D_SRC_THREAD_TASK_H */
+#endif /* DAV2D_SRC_THREAD_TASK_H */

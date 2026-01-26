@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -29,9 +29,9 @@
 #include "src/cdef.h"
 
 #define decl_cdef_fns(ext) \
-    decl_cdef_fn(BF(dav1d_cdef_filter_4x4, ext)); \
-    decl_cdef_fn(BF(dav1d_cdef_filter_4x8, ext)); \
-    decl_cdef_fn(BF(dav1d_cdef_filter_8x8, ext))
+    decl_cdef_fn(BF(dav2d_cdef_filter_4x4, ext)); \
+    decl_cdef_fn(BF(dav2d_cdef_filter_4x8, ext)); \
+    decl_cdef_fn(BF(dav2d_cdef_filter_8x8, ext))
 
 decl_cdef_fns(avx512icl);
 decl_cdef_fns(avx2);
@@ -39,49 +39,49 @@ decl_cdef_fns(sse4);
 decl_cdef_fns(ssse3);
 decl_cdef_fns(sse2);
 
-decl_cdef_dir_fn(BF(dav1d_cdef_dir, avx2));
-decl_cdef_dir_fn(BF(dav1d_cdef_dir, sse4));
-decl_cdef_dir_fn(BF(dav1d_cdef_dir, ssse3));
+decl_cdef_dir_fn(BF(dav2d_cdef_dir, avx2));
+decl_cdef_dir_fn(BF(dav2d_cdef_dir, sse4));
+decl_cdef_dir_fn(BF(dav2d_cdef_dir, ssse3));
 
-static ALWAYS_INLINE void cdef_dsp_init_x86(Dav1dCdefDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void cdef_dsp_init_x86(Dav2dCdefDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
 #if BITDEPTH == 8
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSE2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSE2)) return;
 
-    c->fb[0] = BF(dav1d_cdef_filter_8x8, sse2);
-    c->fb[1] = BF(dav1d_cdef_filter_4x8, sse2);
-    c->fb[2] = BF(dav1d_cdef_filter_4x4, sse2);
+    c->fb[0] = BF(dav2d_cdef_filter_8x8, sse2);
+    c->fb[1] = BF(dav2d_cdef_filter_4x8, sse2);
+    c->fb[2] = BF(dav2d_cdef_filter_4x4, sse2);
 #endif
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSSE3)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
 
-    c->dir = BF(dav1d_cdef_dir, ssse3);
-    c->fb[0] = BF(dav1d_cdef_filter_8x8, ssse3);
-    c->fb[1] = BF(dav1d_cdef_filter_4x8, ssse3);
-    c->fb[2] = BF(dav1d_cdef_filter_4x4, ssse3);
+    c->dir = BF(dav2d_cdef_dir, ssse3);
+    c->fb[0] = BF(dav2d_cdef_filter_8x8, ssse3);
+    c->fb[1] = BF(dav2d_cdef_filter_4x8, ssse3);
+    c->fb[2] = BF(dav2d_cdef_filter_4x4, ssse3);
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_SSE41)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSE41)) return;
 
-    c->dir = BF(dav1d_cdef_dir, sse4);
+    c->dir = BF(dav2d_cdef_dir, sse4);
 #if BITDEPTH == 8
-    c->fb[0] = BF(dav1d_cdef_filter_8x8, sse4);
-    c->fb[1] = BF(dav1d_cdef_filter_4x8, sse4);
-    c->fb[2] = BF(dav1d_cdef_filter_4x4, sse4);
+    c->fb[0] = BF(dav2d_cdef_filter_8x8, sse4);
+    c->fb[1] = BF(dav2d_cdef_filter_4x8, sse4);
+    c->fb[2] = BF(dav2d_cdef_filter_4x4, sse4);
 #endif
 
 #if ARCH_X86_64
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
-    c->dir = BF(dav1d_cdef_dir, avx2);
-    c->fb[0] = BF(dav1d_cdef_filter_8x8, avx2);
-    c->fb[1] = BF(dav1d_cdef_filter_4x8, avx2);
-    c->fb[2] = BF(dav1d_cdef_filter_4x4, avx2);
+    c->dir = BF(dav2d_cdef_dir, avx2);
+    c->fb[0] = BF(dav2d_cdef_filter_8x8, avx2);
+    c->fb[1] = BF(dav2d_cdef_filter_4x8, avx2);
+    c->fb[2] = BF(dav2d_cdef_filter_4x4, avx2);
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX512ICL)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
-    c->fb[0] = BF(dav1d_cdef_filter_8x8, avx512icl);
-    c->fb[1] = BF(dav1d_cdef_filter_4x8, avx512icl);
-    c->fb[2] = BF(dav1d_cdef_filter_4x4, avx512icl);
+    c->fb[0] = BF(dav2d_cdef_filter_8x8, avx512icl);
+    c->fb[1] = BF(dav2d_cdef_filter_4x8, avx512icl);
+    c->fb[2] = BF(dav2d_cdef_filter_4x4, avx512icl);
 #endif
 }

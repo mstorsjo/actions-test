@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -40,7 +40,7 @@
 // contain at most 2 stripes. Each stripe requires 4 rows pixels (2 above
 // and 2 below) the final 4 rows are used to swap the bottom of the last
 // stripe with the top of the next super block row.
-static void backup_lpf(const Dav1dFrameContext *const f,
+static void backup_lpf(const Dav2dFrameContext *const f,
                        pixel *dst, const ptrdiff_t dst_stride,
                        const pixel *src, const ptrdiff_t src_stride,
                        const int ss_ver, const int sb128,
@@ -84,7 +84,7 @@ static void backup_lpf(const Dav1dFrameContext *const f,
     }
 }
 
-void bytefn(dav1d_copy_lpf)(Dav1dFrameContext *const f,
+void bytefn(dav2d_copy_lpf)(Dav2dFrameContext *const f,
                             /*const*/ pixel *const src[3], const int sby)
 {
     const int have_tt = f->c->n_tc > 1;
@@ -111,10 +111,10 @@ void bytefn(dav1d_copy_lpf)(Dav1dFrameContext *const f,
                    0, f->frame_hdr->sb128, y_stripe, row_h, w, h, 0, 1);
     }
     if ((f->seq_hdr->cdef || restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) &&
-        f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400)
+        f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400)
     {
-        const int ss_ver = f->sr_cur.p.p.layout == DAV1D_PIXEL_LAYOUT_I420;
-        const int ss_hor = f->sr_cur.p.p.layout != DAV1D_PIXEL_LAYOUT_I444;
+        const int ss_ver = f->sr_cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = f->sr_cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
         const int h = (f->cur.p.h + ss_ver) >> ss_ver;
         const int w = f->bw << (2 - ss_hor);
         const int row_h = imin((sby + 1) << ((6 - ss_ver) + f->frame_hdr->sb128), h - 1);
@@ -135,7 +135,7 @@ void bytefn(dav1d_copy_lpf)(Dav1dFrameContext *const f,
     }
 }
 
-static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
+static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
                                        const int have_left,
                                        const uint16_t (*const mask)[4][4],
                                        pixel *dst, const ptrdiff_t ls,
@@ -143,7 +143,7 @@ static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
                                        const int starty4, const int endy4,
                                        const int tile_end)
 {
-    const Dav1dDSPContext *const dsp = f->dsp;
+    const Dav2dDSPContext *const dsp = f->dsp;
     const int starty64 = starty4 >> 4;
     const int endy64 = (endy4 + 15) >> 4;
 
@@ -165,14 +165,14 @@ static inline void filter_plane_cols_y(const Dav1dFrameContext *const f,
     }
 }
 
-static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
+static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
                                        const int have_top,
                                        const uint16_t (*const mask)[4][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
                                        const int starty4, const int endy4)
 {
-    const Dav1dDSPContext *const dsp = f->dsp;
+    const Dav2dDSPContext *const dsp = f->dsp;
 
     const unsigned q_thr = f->lf.thr_lut.thr[1][0][0];
     const unsigned side_thr = f->lf.thr_lut.thr[1][1][0];
@@ -192,7 +192,7 @@ static inline void filter_plane_rows_y(const Dav1dFrameContext *const f,
     }
 }
 
-static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
+static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
                                         const int have_left,
                                         const uint16_t (*const mask)[2][4],
                                         pixel *const u, pixel *const v,
@@ -201,7 +201,7 @@ static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
                                         const int ss_ver)
 {
 #if 0
-    const Dav1dDSPContext *const dsp = f->dsp;
+    const Dav2dDSPContext *const dsp = f->dsp;
 
     // filter edges between columns (e.g. block1 | block2)
     for (int x = 0; x < w; x++) {
@@ -229,7 +229,7 @@ static inline void filter_plane_cols_uv(const Dav1dFrameContext *const f,
 #endif
 }
 
-static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
+static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
                                         const int have_top,
                                         const uint16_t (*const mask)[2][4],
                                         pixel *const u, pixel *const v,
@@ -238,7 +238,7 @@ static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
                                         const int ss_hor)
 {
 #if 0
-    const Dav1dDSPContext *const dsp = f->dsp;
+    const Dav2dDSPContext *const dsp = f->dsp;
     ptrdiff_t off_l = 0;
 
     //                                 block1
@@ -263,7 +263,7 @@ static inline void filter_plane_rows_uv(const Dav1dFrameContext *const f,
 #endif
 }
 
-void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
+void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
                                          pixel *const p[3], Av1Filter *const lflvl,
                                          int sby, const int start_of_tile_row)
 {
@@ -274,8 +274,8 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     const int starty4 = (sby * sbsz) & 0x30;
     const int sbl2 = 4 + f->frame_hdr->sb128;
     const int halign = (f->bh + 63) & ~63;
-    const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
+    const int ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
 #if 0
     const int vmask = 16 >> ss_ver, hmask = 16 >> ss_hor;
     const unsigned vmax = 1U << vmask, hmax = 1U << hmask;
@@ -314,7 +314,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
 
         lpf_y += halign;
 #if 0
-        if (f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400) {
+        if (f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
             uint16_t (*const uv_hmask)[4] = lflvl[x].filter_uv[0][cbx4];
             for (unsigned y = starty4 >> ss_ver, uv_mask = 1 << y; y < uv_endy4;
                  y++, uv_mask <<= 1)
@@ -353,7 +353,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
             }
 
 #if 0
-            if (f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I400) {
+            if (f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
                 const unsigned cw = (w + ss_hor) >> ss_hor;
                 uint16_t (*const uv_vmask)[4] = lflvl[x].filter_uv[1][starty4 >> ss_ver];
                 for (unsigned uv_mask = 1, i = 0; i < cw; uv_mask <<= 1, i++) {
@@ -417,7 +417,7 @@ void bytefn(dav1d_loopfilter_sbrow_cols)(const Dav1dFrameContext *const f,
     }
 }
 
-void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *const f,
+void bytefn(dav2d_loopfilter_sbrow_rows)(const Dav2dFrameContext *const f,
                                          pixel *const p[3], Av1Filter *const lflvl,
                                          int sby)
 {
@@ -426,8 +426,8 @@ void bytefn(dav1d_loopfilter_sbrow_rows)(const Dav1dFrameContext *const f,
     const int have_top = sby > 0;
     const int sbsz = 64 >> (2 - f->frame_hdr->sb128);
     const int starty4 = (sby * sbsz) & 0x30;
-    const int ss_ver = f->cur.p.layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = f->cur.p.layout != DAV1D_PIXEL_LAYOUT_I444;
+    const int ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
     const unsigned endy4 = starty4 + imin(f->bh - sby * sbsz, sbsz);
     const unsigned uv_endy4 = (endy4 + ss_ver) >> ss_ver;
 

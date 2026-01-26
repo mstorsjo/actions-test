@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2020, VideoLAN and dav1d authors
+ * Copyright © 2018-2020, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_HEADERS_H
-#define DAV1D_HEADERS_H
+#ifndef DAV2D_HEADERS_H
+#define DAV2D_HEADERS_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -36,84 +36,84 @@ extern "C" {
 #endif
 
 // Constants from Section 3. "Symbols and abbreviated terms"
-#define DAV1D_MAX_CDEF_STRENGTHS 8
-#define DAV1D_MAX_OPERATING_POINTS 64
-#define DAV1D_MAX_TILE_COLS 64
-#define DAV1D_MAX_TILE_ROWS 64
-#define DAV1D_MAX_SEGMENTS 16
-#define DAV1D_NUM_REF_FRAMES 8
-#define DAV1D_PRIMARY_REF_NONE 7
-#define DAV1D_REFS_PER_FRAME 7
-#define DAV1D_TOTAL_REFS_PER_FRAME (DAV1D_REFS_PER_FRAME + 1)
+#define DAV2D_MAX_CDEF_STRENGTHS 8
+#define DAV2D_MAX_OPERATING_POINTS 64
+#define DAV2D_MAX_TILE_COLS 64
+#define DAV2D_MAX_TILE_ROWS 64
+#define DAV2D_MAX_SEGMENTS 16
+#define DAV2D_NUM_REF_FRAMES 8
+#define DAV2D_PRIMARY_REF_NONE 7
+#define DAV2D_REFS_PER_FRAME 7
+#define DAV2D_TOTAL_REFS_PER_FRAME (DAV2D_REFS_PER_FRAME + 1)
 
-enum Dav1dObuType {
-    DAV1D_OBU_SEQ_HDR          = 1,
-    DAV1D_OBU_TD               = 2,
-    DAV1D_OBU_MULTI_FRAME_HDR  = 3,
-    DAV1D_OBU_CLOSED_LOOP_KF   = 4,
-    DAV1D_OBU_OPEN_LOOP_KF     = 5,
-    DAV1D_OBU_LEADING_TILE_GRP = 6,
-    DAV1D_OBU_TILE_GRP         = 7,
-    DAV1D_OBU_METADATA         = 8,
-    DAV1D_OBU_METADATA_GRP     = 9,
-    DAV1D_OBU_SWITCH           = 10,
-    DAV1D_OBU_LEADING_SEF      = 11,
-    DAV1D_OBU_SEF              = 12,
-    DAV1D_OBU_LEADING_TIP      = 13,
-    DAV1D_OBU_TIP              = 14,
-    DAV1D_OBU_BUF_RM_TIMING    = 15,
-    DAV1D_OBU_LAYER_CFG_REC    = 16,
-    DAV1D_OBU_ATLAS_SEG        = 17,
-    DAV1D_OBU_OP_PT_SET        = 18,
-    DAV1D_OBU_BRIDGE           = 19,
-    DAV1D_OBU_MSDO             = 20,
-    DAV1D_OBU_RAS              = 21,
-    DAV1D_OBU_QM               = 22,
-    DAV1D_OBU_FGM              = 23,
-    DAV1D_OBU_CONTENT_INTERP   = 24,
-    DAV1D_OBU_PADDING          = 25,
+enum Dav2dObuType {
+    DAV2D_OBU_SEQ_HDR          = 1,
+    DAV2D_OBU_TD               = 2,
+    DAV2D_OBU_MULTI_FRAME_HDR  = 3,
+    DAV2D_OBU_CLOSED_LOOP_KF   = 4,
+    DAV2D_OBU_OPEN_LOOP_KF     = 5,
+    DAV2D_OBU_LEADING_TILE_GRP = 6,
+    DAV2D_OBU_TILE_GRP         = 7,
+    DAV2D_OBU_METADATA         = 8,
+    DAV2D_OBU_METADATA_GRP     = 9,
+    DAV2D_OBU_SWITCH           = 10,
+    DAV2D_OBU_LEADING_SEF      = 11,
+    DAV2D_OBU_SEF              = 12,
+    DAV2D_OBU_LEADING_TIP      = 13,
+    DAV2D_OBU_TIP              = 14,
+    DAV2D_OBU_BUF_RM_TIMING    = 15,
+    DAV2D_OBU_LAYER_CFG_REC    = 16,
+    DAV2D_OBU_ATLAS_SEG        = 17,
+    DAV2D_OBU_OP_PT_SET        = 18,
+    DAV2D_OBU_BRIDGE           = 19,
+    DAV2D_OBU_MSDO             = 20,
+    DAV2D_OBU_RAS              = 21,
+    DAV2D_OBU_QM               = 22,
+    DAV2D_OBU_FGM              = 23,
+    DAV2D_OBU_CONTENT_INTERP   = 24,
+    DAV2D_OBU_PADDING          = 25,
 };
 
-enum Dav1dTxfmMode {
-    DAV1D_TX_4X4_ONLY,
-    DAV1D_TX_LARGEST,
-    DAV1D_TX_SWITCHABLE,
-    DAV1D_N_TX_MODES,
+enum Dav2dTxfmMode {
+    DAV2D_TX_4X4_ONLY,
+    DAV2D_TX_LARGEST,
+    DAV2D_TX_SWITCHABLE,
+    DAV2D_N_TX_MODES,
 };
 
-enum Dav1dFilterMode {
-    DAV1D_FILTER_8TAP_REGULAR,
-    DAV1D_FILTER_8TAP_SMOOTH,
-    DAV1D_FILTER_8TAP_SHARP,
-    DAV1D_N_SWITCHABLE_FILTERS,
-    DAV1D_FILTER_BILINEAR = DAV1D_N_SWITCHABLE_FILTERS,
-    DAV1D_N_FILTERS,
-    DAV1D_FILTER_SWITCHABLE = DAV1D_N_FILTERS,
+enum Dav2dFilterMode {
+    DAV2D_FILTER_8TAP_REGULAR,
+    DAV2D_FILTER_8TAP_SMOOTH,
+    DAV2D_FILTER_8TAP_SHARP,
+    DAV2D_N_SWITCHABLE_FILTERS,
+    DAV2D_FILTER_BILINEAR = DAV2D_N_SWITCHABLE_FILTERS,
+    DAV2D_N_FILTERS,
+    DAV2D_FILTER_SWITCHABLE = DAV2D_N_FILTERS,
 };
 
-enum Dav1dAdaptiveBoolean {
-    DAV1D_OFF = 0,
-    DAV1D_ON = 1,
-    DAV1D_ADAPTIVE = 2,
+enum Dav2dAdaptiveBoolean {
+    DAV2D_OFF = 0,
+    DAV2D_ON = 1,
+    DAV2D_ADAPTIVE = 2,
 };
 
-enum Dav1dRestorationType {
-    DAV1D_RESTORATION_NONE,
-    DAV1D_RESTORATION_PC_WIENER,
-    DAV1D_RESTORATION_NS_WIENER,
-    DAV1D_RESTORATION_SWITCHABLE,
+enum Dav2dRestorationType {
+    DAV2D_RESTORATION_NONE,
+    DAV2D_RESTORATION_PC_WIENER,
+    DAV2D_RESTORATION_NS_WIENER,
+    DAV2D_RESTORATION_SWITCHABLE,
 };
 
-enum Dav1dWarpedMotionType {
-    DAV1D_WM_TYPE_INVALID = -1,
-    DAV1D_WM_TYPE_IDENTITY,
-    DAV1D_WM_TYPE_TRANSLATION,
-    DAV1D_WM_TYPE_ROT_ZOOM,
-    DAV1D_WM_TYPE_AFFINE,
+enum Dav2dWarpedMotionType {
+    DAV2D_WM_TYPE_INVALID = -1,
+    DAV2D_WM_TYPE_IDENTITY,
+    DAV2D_WM_TYPE_TRANSLATION,
+    DAV2D_WM_TYPE_ROT_ZOOM,
+    DAV2D_WM_TYPE_AFFINE,
 };
 
-typedef struct Dav1dWarpedMotionParams {
-    enum Dav1dWarpedMotionType type;
+typedef struct Dav2dWarpedMotionParams {
+    enum Dav2dWarpedMotionType type;
     int32_t matrix[6];
     union {
         struct {
@@ -122,112 +122,112 @@ typedef struct Dav1dWarpedMotionParams {
         int16_t abcd[4];
     } u;
     int affine;
-} Dav1dWarpedMotionParams;
+} Dav2dWarpedMotionParams;
 
-enum Dav1dPixelLayout {
-    DAV1D_PIXEL_LAYOUT_I400, ///< monochrome
-    DAV1D_PIXEL_LAYOUT_I420, ///< 4:2:0 planar
-    DAV1D_PIXEL_LAYOUT_I422, ///< 4:2:2 planar
-    DAV1D_PIXEL_LAYOUT_I444, ///< 4:4:4 planar
+enum Dav2dPixelLayout {
+    DAV2D_PIXEL_LAYOUT_I400, ///< monochrome
+    DAV2D_PIXEL_LAYOUT_I420, ///< 4:2:0 planar
+    DAV2D_PIXEL_LAYOUT_I422, ///< 4:2:2 planar
+    DAV2D_PIXEL_LAYOUT_I444, ///< 4:4:4 planar
 };
 
-enum Dav1dFrameType {
-    DAV1D_FRAME_TYPE_KEY = 0,    ///< Key Intra frame
-    DAV1D_FRAME_TYPE_INTER = 1,  ///< Inter frame
-    DAV1D_FRAME_TYPE_INTRA = 2,  ///< Non key Intra frame
-    DAV1D_FRAME_TYPE_SWITCH = 3, ///< Switch Inter frame
+enum Dav2dFrameType {
+    DAV2D_FRAME_TYPE_KEY = 0,    ///< Key Intra frame
+    DAV2D_FRAME_TYPE_INTER = 1,  ///< Inter frame
+    DAV2D_FRAME_TYPE_INTRA = 2,  ///< Non key Intra frame
+    DAV2D_FRAME_TYPE_SWITCH = 3, ///< Switch Inter frame
 };
 
-enum Dav1dColorPrimaries {
-    DAV1D_COLOR_PRI_BT709 = 1,
-    DAV1D_COLOR_PRI_UNKNOWN = 2,
-    DAV1D_COLOR_PRI_BT470M = 4,
-    DAV1D_COLOR_PRI_BT470BG = 5,
-    DAV1D_COLOR_PRI_BT601 = 6,
-    DAV1D_COLOR_PRI_SMPTE240 = 7,
-    DAV1D_COLOR_PRI_FILM = 8,
-    DAV1D_COLOR_PRI_BT2020 = 9,
-    DAV1D_COLOR_PRI_XYZ = 10,
-    DAV1D_COLOR_PRI_SMPTE431 = 11,
-    DAV1D_COLOR_PRI_SMPTE432 = 12,
-    DAV1D_COLOR_PRI_EBU3213 = 22,
-    DAV1D_COLOR_PRI_RESERVED = 255,
+enum Dav2dColorPrimaries {
+    DAV2D_COLOR_PRI_BT709 = 1,
+    DAV2D_COLOR_PRI_UNKNOWN = 2,
+    DAV2D_COLOR_PRI_BT470M = 4,
+    DAV2D_COLOR_PRI_BT470BG = 5,
+    DAV2D_COLOR_PRI_BT601 = 6,
+    DAV2D_COLOR_PRI_SMPTE240 = 7,
+    DAV2D_COLOR_PRI_FILM = 8,
+    DAV2D_COLOR_PRI_BT2020 = 9,
+    DAV2D_COLOR_PRI_XYZ = 10,
+    DAV2D_COLOR_PRI_SMPTE431 = 11,
+    DAV2D_COLOR_PRI_SMPTE432 = 12,
+    DAV2D_COLOR_PRI_EBU3213 = 22,
+    DAV2D_COLOR_PRI_RESERVED = 255,
 };
 
-enum Dav1dTransferCharacteristics {
-    DAV1D_TRC_BT709 = 1,
-    DAV1D_TRC_UNKNOWN = 2,
-    DAV1D_TRC_BT470M = 4,
-    DAV1D_TRC_BT470BG = 5,
-    DAV1D_TRC_BT601 = 6,
-    DAV1D_TRC_SMPTE240 = 7,
-    DAV1D_TRC_LINEAR = 8,
-    DAV1D_TRC_LOG100 = 9,         ///< logarithmic (100:1 range)
-    DAV1D_TRC_LOG100_SQRT10 = 10, ///< lograithmic (100*sqrt(10):1 range)
-    DAV1D_TRC_IEC61966 = 11,
-    DAV1D_TRC_BT1361 = 12,
-    DAV1D_TRC_SRGB = 13,
-    DAV1D_TRC_BT2020_10BIT = 14,
-    DAV1D_TRC_BT2020_12BIT = 15,
-    DAV1D_TRC_SMPTE2084 = 16,     ///< PQ
-    DAV1D_TRC_SMPTE428 = 17,
-    DAV1D_TRC_HLG = 18,           ///< hybrid log/gamma (BT.2100 / ARIB STD-B67)
-    DAV1D_TRC_RESERVED = 255,
+enum Dav2dTransferCharacteristics {
+    DAV2D_TRC_BT709 = 1,
+    DAV2D_TRC_UNKNOWN = 2,
+    DAV2D_TRC_BT470M = 4,
+    DAV2D_TRC_BT470BG = 5,
+    DAV2D_TRC_BT601 = 6,
+    DAV2D_TRC_SMPTE240 = 7,
+    DAV2D_TRC_LINEAR = 8,
+    DAV2D_TRC_LOG100 = 9,         ///< logarithmic (100:1 range)
+    DAV2D_TRC_LOG100_SQRT10 = 10, ///< lograithmic (100*sqrt(10):1 range)
+    DAV2D_TRC_IEC61966 = 11,
+    DAV2D_TRC_BT1361 = 12,
+    DAV2D_TRC_SRGB = 13,
+    DAV2D_TRC_BT2020_10BIT = 14,
+    DAV2D_TRC_BT2020_12BIT = 15,
+    DAV2D_TRC_SMPTE2084 = 16,     ///< PQ
+    DAV2D_TRC_SMPTE428 = 17,
+    DAV2D_TRC_HLG = 18,           ///< hybrid log/gamma (BT.2100 / ARIB STD-B67)
+    DAV2D_TRC_RESERVED = 255,
 };
 
-enum Dav1dMatrixCoefficients {
-    DAV1D_MC_IDENTITY = 0,
-    DAV1D_MC_BT709 = 1,
-    DAV1D_MC_UNKNOWN = 2,
-    DAV1D_MC_FCC = 4,
-    DAV1D_MC_BT470BG = 5,
-    DAV1D_MC_BT601 = 6,
-    DAV1D_MC_SMPTE240 = 7,
-    DAV1D_MC_SMPTE_YCGCO = 8,
-    DAV1D_MC_BT2020_NCL = 9,
-    DAV1D_MC_BT2020_CL = 10,
-    DAV1D_MC_SMPTE2085 = 11,
-    DAV1D_MC_CHROMAT_NCL = 12, ///< Chromaticity-derived
-    DAV1D_MC_CHROMAT_CL = 13,
-    DAV1D_MC_ICTCP = 14,
-    DAV1D_MC_RESERVED = 255,
+enum Dav2dMatrixCoefficients {
+    DAV2D_MC_IDENTITY = 0,
+    DAV2D_MC_BT709 = 1,
+    DAV2D_MC_UNKNOWN = 2,
+    DAV2D_MC_FCC = 4,
+    DAV2D_MC_BT470BG = 5,
+    DAV2D_MC_BT601 = 6,
+    DAV2D_MC_SMPTE240 = 7,
+    DAV2D_MC_SMPTE_YCGCO = 8,
+    DAV2D_MC_BT2020_NCL = 9,
+    DAV2D_MC_BT2020_CL = 10,
+    DAV2D_MC_SMPTE2085 = 11,
+    DAV2D_MC_CHROMAT_NCL = 12, ///< Chromaticity-derived
+    DAV2D_MC_CHROMAT_CL = 13,
+    DAV2D_MC_ICTCP = 14,
+    DAV2D_MC_RESERVED = 255,
 };
 
-enum Dav1dChromaSamplePosition {
-    DAV1D_CHR_LEFT = 0,
-    DAV1D_CHR_CENTER = 1,
-    DAV1D_CHR_TOPLEFT = 2,
-    DAV1D_CHR_TOP = 3,
-    DAV1D_CHR_BOTTOMLEFT = 4,
-    DAV1D_CHR_BOTTOM = 5,
-    DAV1D_CHR_UNKNOWN = 6,
+enum Dav2dChromaSamplePosition {
+    DAV2D_CHR_LEFT = 0,
+    DAV2D_CHR_CENTER = 1,
+    DAV2D_CHR_TOPLEFT = 2,
+    DAV2D_CHR_TOP = 3,
+    DAV2D_CHR_BOTTOMLEFT = 4,
+    DAV2D_CHR_BOTTOM = 5,
+    DAV2D_CHR_UNKNOWN = 6,
 };
 
-typedef struct Dav1dContentLightLevel {
+typedef struct Dav2dContentLightLevel {
     uint16_t max_content_light_level;
     uint16_t max_frame_average_light_level;
-} Dav1dContentLightLevel;
+} Dav2dContentLightLevel;
 
-typedef struct Dav1dMasteringDisplay {
+typedef struct Dav2dMasteringDisplay {
     uint16_t primaries[3][2]; ///< 0.16 fixed point
     uint16_t white_point[2]; ///< 0.16 fixed point
     uint32_t max_luminance; ///< 24.8 fixed point
     uint32_t min_luminance; ///< 18.14 fixed point
-} Dav1dMasteringDisplay;
+} Dav2dMasteringDisplay;
 
-typedef struct Dav1dITUTT35 {
+typedef struct Dav2dITUTT35 {
     uint8_t  country_code;
     uint8_t  country_code_extension_byte;
     size_t   payload_size;
     uint8_t *payload;
-} Dav1dITUTT35;
+} Dav2dITUTT35;
 
-typedef struct Dav1dSegmentationDataSet {
-    int16_t delta_q[DAV1D_MAX_SEGMENTS];
+typedef struct Dav2dSegmentationDataSet {
+    int16_t delta_q[DAV2D_MAX_SEGMENTS];
     uint16_t delta_q_mask, skip_mask, globalmv_mask;
-} Dav1dSegmentationDataSet;
+} Dav2dSegmentationDataSet;
 
-typedef struct Dav1dSequenceHeader {
+typedef struct Dav2dSequenceHeader {
     uint8_t id;
     /**
      * Stream profile, 0 for 8-10 bits/component 4:2:0 or monochrome;
@@ -251,7 +251,7 @@ typedef struct Dav1dSequenceHeader {
         uint8_t enabled;
         unsigned left, right, top, bottom;
     } crop;
-    uint8_t /*enum Dav1dPixelLayout*/ layout; ///< format of the picture
+    uint8_t /*enum Dav2dPixelLayout*/ layout; ///< format of the picture
     uint8_t ss_hor, ss_ver;
 
     /**
@@ -286,7 +286,7 @@ typedef struct Dav1dSequenceHeader {
     // segmentation
     struct {
         uint8_t ext, info_present, adaptive;
-        Dav1dSegmentationDataSet d;
+        Dav2dSegmentationDataSet d;
     } segmentation;
 
     // intra tools
@@ -318,8 +318,8 @@ typedef struct Dav1dSequenceHeader {
     uint8_t global_motion, short_refresh_frame_flags;
 
     // screen content flags
-    uint8_t /*enum Dav1dAdaptiveBoolean*/ screen_content_tools;
-    uint8_t /*enum Dav1dAdaptiveBoolean*/ force_integer_mv;
+    uint8_t /*enum Dav2dAdaptiveBoolean*/ screen_content_tools;
+    uint8_t /*enum Dav2dAdaptiveBoolean*/ force_integer_mv;
 
     // tx group tools
     uint8_t fsc, idtx_intra;
@@ -328,7 +328,7 @@ typedef struct Dav1dSequenceHeader {
     uint8_t cctx;
 
     // coef flags
-    uint8_t /*enum Dav1dAdaptiveBoolean*/ tcq;
+    uint8_t /*enum Dav2dAdaptiveBoolean*/ tcq;
     uint8_t parity_hiding;
 
     uint8_t avg_cdf, avg_cdf_type;
@@ -340,7 +340,7 @@ typedef struct Dav1dSequenceHeader {
     uint8_t restoration;
     uint8_t rst_disable_mask[2];
     uint8_t ccso;
-    uint8_t /*enum Dav1dAdaptiveBoolean*/ cdef_on_skiptx;
+    uint8_t /*enum Dav2dAdaptiveBoolean*/ cdef_on_skiptx;
     uint8_t df_par_bits;
 
     // quant tools
@@ -351,20 +351,20 @@ typedef struct Dav1dSequenceHeader {
     uint8_t base_uvac_dq, uvac_dq_enabled;
 
     struct {
-        uint8_t /*enum Dav1dAdaptiveBoolean*/ present;
-        struct Dav1dTileInfo {
+        uint8_t /*enum Dav2dAdaptiveBoolean*/ present;
+        struct Dav2dTileInfo {
             uint8_t uniform;
             uint8_t min_log2_cols, max_log2_cols, log2_cols, cols;
             uint8_t min_log2_rows, max_log2_rows, log2_rows, rows;
-            uint16_t col_start_sb[DAV1D_MAX_TILE_COLS + 1];
-            uint16_t row_start_sb[DAV1D_MAX_TILE_ROWS + 1];
+            uint16_t col_start_sb[DAV2D_MAX_TILE_COLS + 1];
+            uint16_t row_start_sb[DAV2D_MAX_TILE_ROWS + 1];
         } t;
     } tiling;
 
     uint8_t film_grain_present;
-} Dav1dSequenceHeader;
+} Dav2dSequenceHeader;
 
-typedef struct Dav1dFilmGrainData {
+typedef struct Dav2dFilmGrainData {
     unsigned seed;
     int num_y_points;
     uint8_t y_points[14][2 /* value, scaling */];
@@ -382,15 +382,15 @@ typedef struct Dav1dFilmGrainData {
     int uv_offset[2];
     int overlap_flag;
     int clip_to_restricted_range;
-} Dav1dFilmGrainData;
+} Dav2dFilmGrainData;
 
-typedef struct Dav1dFrameHeader {
+typedef struct Dav2dFrameHeader {
     uint8_t id;
     struct {
-        Dav1dFilmGrainData data;
+        Dav2dFilmGrainData data;
         uint8_t present, update;
     } film_grain; ///< film grain parameters
-    enum Dav1dFrameType frame_type; ///< type of the picture
+    enum Dav2dFrameType frame_type; ///< type of the picture
     int width, height;
     uint8_t frame_offset; ///< frame number
     uint8_t tlayer_id, mlayer_id, xlayer_id;
@@ -411,9 +411,9 @@ typedef struct Dav1dFrameHeader {
     uint8_t refresh_frame_flags;
     uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
     uint8_t max_bvp_drl_bits, max_drl_bits;
-    int8_t refidx[DAV1D_REFS_PER_FRAME];
+    int8_t refidx[DAV2D_REFS_PER_FRAME];
     uint8_t mv_precision; // 0-3 for {f,h,q,e}pel
-    enum Dav1dFilterMode subpel_filter_mode;
+    enum Dav2dFilterMode subpel_filter_mode;
     uint8_t motion_modes;
     uint8_t use_ref_frame_mvs;
     uint8_t tmvp_sample_step;
@@ -431,7 +431,7 @@ typedef struct Dav1dFrameHeader {
     } tip;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {
-        struct Dav1dTileInfo t;
+        struct Dav2dTileInfo t;
         uint8_t n_bytes;
         uint16_t update;
     } tiling;
@@ -445,10 +445,10 @@ typedef struct Dav1dFrameHeader {
     } quant;
     struct {
         uint8_t enabled, update_map, temporal;
-        Dav1dSegmentationDataSet d;
+        Dav2dSegmentationDataSet d;
         uint8_t preskip;
         int8_t last_active_segid;
-        uint8_t lossless[DAV1D_MAX_SEGMENTS], qidx[DAV1D_MAX_SEGMENTS];
+        uint8_t lossless[DAV2D_MAX_SEGMENTS], qidx[DAV2D_MAX_SEGMENTS];
     } segmentation;
     struct {
         struct {
@@ -465,7 +465,7 @@ typedef struct Dav1dFrameHeader {
         int8_t delta_q_y[2], delta_q_u, delta_q_v;
     } loopfilter;
     struct {
-        enum Dav1dAdaptiveBoolean enabled;
+        enum Dav2dAdaptiveBoolean enabled;
         uint8_t qp_idx, scale_idx;
     } gdf;
     struct {
@@ -473,13 +473,13 @@ typedef struct Dav1dFrameHeader {
         uint8_t damping;
         uint8_t n_strengths;
         uint8_t on_skiptx;
-        uint8_t y_strength[DAV1D_MAX_CDEF_STRENGTHS];
-        uint8_t uv_strength[DAV1D_MAX_CDEF_STRENGTHS];
+        uint8_t y_strength[DAV2D_MAX_CDEF_STRENGTHS];
+        uint8_t uv_strength[DAV2D_MAX_CDEF_STRENGTHS];
     } cdef;
     struct {
         struct {
-            uint8_t /*enum Dav1dRestorationType*/ type;
-            struct Dav1dNSWienerPlane {
+            uint8_t /*enum Dav2dRestorationType*/ type;
+            struct Dav2dNSWienerPlane {
                 uint8_t frame_filters_on;
                 uint8_t num_classes, temporal, refidx;
                 int8_t filter[16][18];
@@ -497,17 +497,17 @@ typedef struct Dav1dFrameHeader {
             int8_t filter_off[128 /* if bo_only { [band:128] } else { [d0:4][d1:4][band:8] } */];
         } p[3];
     } ccso;
-    enum Dav1dTxfmMode txfm_mode;
+    enum Dav2dTxfmMode txfm_mode;
     uint8_t switchable_comp_refs;
     uint8_t skip_mode_enabled;
     uint8_t bawp;
     uint8_t warp_motion;
     uint8_t reduced_txtp_set;
-    Dav1dWarpedMotionParams gmv[DAV1D_REFS_PER_FRAME];
-} Dav1dFrameHeader;
+    Dav2dWarpedMotionParams gmv[DAV2D_REFS_PER_FRAME];
+} Dav2dFrameHeader;
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* DAV1D_HEADERS_H */
+#endif /* DAV2D_HEADERS_H */

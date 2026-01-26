@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2023, Nathan Egge
  * All rights reserved.
  *
@@ -100,8 +100,8 @@ function checked_call, export=1, ext=v
 .endr
 
   /* Check for vector extension */
-  call dav1d_get_cpu_flags_riscv
-  and a0, a0, 1 # DAV1D_RISCV_CPU_FLAG_RVV
+  call dav2d_get_cpu_flags_riscv
+  and a0, a0, 1 # DAV2D_RISCV_CPU_FLAG_RVV
   beqz a0, 0f
 
   /* Clobber vector configuration */

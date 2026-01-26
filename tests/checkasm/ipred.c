@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -75,7 +75,7 @@ static int gen_z_max_wh(const int sz) {
     return (n & 65535) + 1;
 }
 
-static void check_intra_pred(Dav1dIntraPredDSPContext *const c) {
+static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     ALIGN_STK_64(pixel, topleft_buf, 644 + 1 + 644 + 32 + 1,);
@@ -141,7 +141,7 @@ static void check_intra_pred(Dav1dIntraPredDSPContext *const c) {
     report("intra_pred");
 }
 
-static void check_cfl_ac(Dav1dIntraPredDSPContext *const c) {
+static void check_cfl_ac(Dav2dIntraPredDSPContext *const c) {
     ALIGN_STK_64(int16_t, c_dst, 32 * 32,);
     ALIGN_STK_64(int16_t, a_dst, 32 * 32,);
     ALIGN_STK_64(pixel, luma, 32 * 32,);
@@ -149,9 +149,9 @@ static void check_cfl_ac(Dav1dIntraPredDSPContext *const c) {
     declare_func(void, int16_t *ac, int dc, const pixel *y, ptrdiff_t stride,
                  int w_pad, int h_pad, int cw, int ch, int filter_type);
 
-    for (int layout = 1; layout <= DAV1D_PIXEL_LAYOUT_I444; layout++) {
-        const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
-        const int ss_hor = layout != DAV1D_PIXEL_LAYOUT_I444;
+    for (int layout = 1; layout <= DAV2D_PIXEL_LAYOUT_I444; layout++) {
+        const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
         const int h_step = 2 >> ss_hor, v_step = 2 >> ss_ver;
         for (int w = 4; w <= (32 >> ss_hor); w <<= 1)
             if (check_func(c->cfl_ac[layout - 1], "cfl_ac_%s_w%d_%dbpc",
@@ -194,7 +194,7 @@ static void check_cfl_ac(Dav1dIntraPredDSPContext *const c) {
     report("cfl_ac");
 }
 
-static void check_cfl_pred(Dav1dIntraPredDSPContext *const c) {
+static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 32, 32);
     PIXEL_RECT(a_dst, 32, 32);
     ALIGN_STK_64(int16_t, ac, 32 * 32,);
@@ -247,7 +247,7 @@ static void check_cfl_pred(Dav1dIntraPredDSPContext *const c) {
     report("cfl_pred");
 }
 
-static void check_pal_pred(Dav1dIntraPredDSPContext *const c) {
+static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     ALIGN_STK_64(uint8_t, idx, 32 * 64,);
@@ -286,8 +286,8 @@ static void check_pal_pred(Dav1dIntraPredDSPContext *const c) {
 }
 
 void bitfn(checkasm_check_ipred)(void) {
-    Dav1dIntraPredDSPContext c;
-    bitfn(dav1d_intra_pred_dsp_init)(&c);
+    Dav2dIntraPredDSPContext c;
+    bitfn(dav2d_intra_pred_dsp_init)(&c);
 
     check_intra_pred(&c);
     check_cfl_ac(&c);

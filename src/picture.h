@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,13 +25,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_PICTURE_H
-#define DAV1D_SRC_PICTURE_H
+#ifndef DAV2D_SRC_PICTURE_H
+#define DAV2D_SRC_PICTURE_H
 
 #include <stdatomic.h>
 
 #include "src/thread.h"
-#include "dav1d/picture.h"
+#include "dav2d/picture.h"
 
 #include "src/thread_data.h"
 #include "src/ref.h"
@@ -49,8 +49,8 @@ enum PictureFlags {
     PICTURE_FLAG_NEW_TEMPORAL_UNIT  = 1 << 2,
 };
 
-typedef struct Dav1dThreadPicture {
-    Dav1dPicture p;
+typedef struct Dav2dThreadPicture {
+    Dav2dPicture p;
     int visible;
     // This can be set for inter frames, non-key intra frames, or for invisible
     // keyframes that have not yet been made visible using the show-existing-frame
@@ -60,17 +60,17 @@ typedef struct Dav1dThreadPicture {
     // [0] block data (including segmentation map and motion vectors)
     // [1] pixel data
     atomic_uint *progress;
-} Dav1dThreadPicture;
+} Dav2dThreadPicture;
 
-typedef struct Dav1dPictureBuffer {
+typedef struct Dav2dPictureBuffer {
     void *data;
-    struct Dav1dPictureBuffer *next;
-} Dav1dPictureBuffer;
+    struct Dav2dPictureBuffer *next;
+} Dav2dPictureBuffer;
 
 /*
  * Allocate a picture with custom border size.
  */
-int dav1d_thread_picture_alloc(Dav1dContext *c, Dav1dFrameContext *f, const int bpc);
+int dav2d_thread_picture_alloc(Dav2dContext *c, Dav2dFrameContext *f, const int bpc);
 
 /**
  * Allocate a picture with identical metadata to an existing picture.
@@ -79,44 +79,44 @@ int dav1d_thread_picture_alloc(Dav1dContext *c, Dav1dFrameContext *f, const int 
  * For the more typical use case of allocating a new image of the same
  * dimensions, use src->p.w as width.
  */
-int dav1d_picture_alloc_copy(Dav1dContext *c, Dav1dPicture *dst, const int w,
-                             const Dav1dPicture *src);
+int dav2d_picture_alloc_copy(Dav2dContext *c, Dav2dPicture *dst, const int w,
+                             const Dav2dPicture *src);
 
 /**
  * Create a copy of a picture.
  */
-void dav1d_picture_ref(Dav1dPicture *dst, const Dav1dPicture *src);
-void dav1d_thread_picture_ref(Dav1dThreadPicture *dst,
-                              const Dav1dThreadPicture *src);
-void dav1d_thread_picture_move_ref(Dav1dThreadPicture *dst,
-                                   Dav1dThreadPicture *src);
-void dav1d_thread_picture_unref(Dav1dThreadPicture *p);
+void dav2d_picture_ref(Dav2dPicture *dst, const Dav2dPicture *src);
+void dav2d_thread_picture_ref(Dav2dThreadPicture *dst,
+                              const Dav2dThreadPicture *src);
+void dav2d_thread_picture_move_ref(Dav2dThreadPicture *dst,
+                                   Dav2dThreadPicture *src);
+void dav2d_thread_picture_unref(Dav2dThreadPicture *p);
 
 /**
  * Move a picture reference.
  */
-void dav1d_picture_move_ref(Dav1dPicture *dst, Dav1dPicture *src);
+void dav2d_picture_move_ref(Dav2dPicture *dst, Dav2dPicture *src);
 
-int dav1d_default_picture_alloc(Dav1dPicture *p, void *cookie);
-void dav1d_default_picture_release(Dav1dPicture *p, void *cookie);
-void dav1d_picture_unref_internal(Dav1dPicture *p);
+int dav2d_default_picture_alloc(Dav2dPicture *p, void *cookie);
+void dav2d_default_picture_release(Dav2dPicture *p, void *cookie);
+void dav2d_picture_unref_internal(Dav2dPicture *p);
 
 struct itut_t35_ctx_context {
-    Dav1dITUTT35 *itut_t35;
+    Dav2dITUTT35 *itut_t35;
     size_t n_itut_t35;
-    Dav1dRef ref;
+    Dav2dRef ref;
 };
 
-void dav1d_picture_free_itut_t35(const uint8_t *data, void *user_data);
-void dav1d_picture_copy_props(Dav1dPicture *p,
-                              Dav1dContentLightLevel *content_light, Dav1dRef *content_light_ref,
-                              Dav1dMasteringDisplay *mastering_display, Dav1dRef *mastering_display_ref,
-                              Dav1dITUTT35 *itut_t35, Dav1dRef *itut_t35_ref, size_t n_itut_t35,
-                              const Dav1dDataProps *props);
+void dav2d_picture_free_itut_t35(const uint8_t *data, void *user_data);
+void dav2d_picture_copy_props(Dav2dPicture *p,
+                              Dav2dContentLightLevel *content_light, Dav2dRef *content_light_ref,
+                              Dav2dMasteringDisplay *mastering_display, Dav2dRef *mastering_display_ref,
+                              Dav2dITUTT35 *itut_t35, Dav2dRef *itut_t35_ref, size_t n_itut_t35,
+                              const Dav2dDataProps *props);
 
 /**
  * Get event flags from picture flags.
  */
-enum Dav1dEventFlags dav1d_picture_get_event_flags(const Dav1dThreadPicture *p);
+enum Dav2dEventFlags dav2d_picture_get_event_flags(const Dav2dThreadPicture *p);
 
-#endif /* DAV1D_SRC_PICTURE_H */
+#endif /* DAV2D_SRC_PICTURE_H */

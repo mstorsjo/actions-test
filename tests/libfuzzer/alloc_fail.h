@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Janne Grunau
  * All rights reserved.
  *
@@ -25,11 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_TESTS_LIBFUZZER_ALLOC_FAIL_H
-#define DAV1D_TESTS_LIBFUZZER_ALLOC_FAIL_H
+#ifndef DAV2D_TESTS_LIBFUZZER_ALLOC_FAIL_H
+#define DAV2D_TESTS_LIBFUZZER_ALLOC_FAIL_H
 
-#include <dav1d/common.h>
+#include <dav2d/common.h>
 
-DAV1D_API void dav1d_setup_alloc_fail(unsigned seed, unsigned probability);
+DAV2D_API void dav2d_setup_alloc_fail(unsigned seed, unsigned probability);
 
-#endif /* DAV1D_TESTS_LIBFUZZER_ALLOC_FAIL_H */
+#endif /* DAV2D_TESTS_LIBFUZZER_ALLOC_FAIL_H */

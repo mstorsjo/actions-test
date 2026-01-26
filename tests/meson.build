@@ -1,4 +1,4 @@
-# Copyright © 2018, VideoLAN and dav1d authors
+# Copyright © 2018, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #
-# Build definition for the dav1d tests
+# Build definition for the dav2d tests
 #
 
 # Leave subdir if tests are disabled
@@ -50,11 +50,11 @@ if is_asm_enabled
     )
 
     checkasm_bitdepth_objs = []
-    foreach bitdepth : dav1d_bitdepths
+    foreach bitdepth : dav2d_bitdepths
         checkasm_bitdepth_lib = static_library(
             'checkasm_bitdepth_@0@'.format(bitdepth),
             checkasm_tmpl_sources,
-            include_directories: dav1d_inc_dirs,
+            include_directories: dav2d_inc_dirs,
             dependencies : [stdatomic_dependencies],
             c_args: ['-DBITDEPTH=@0@'.format(bitdepth)],
             install: false,
@@ -89,10 +89,10 @@ if is_asm_enabled
 
         objects: [
             checkasm_bitdepth_objs,
-            libdav1d.extract_all_objects(recursive: true),
+            libdav2d.extract_all_objects(recursive: true),
             ],
 
-        include_directories: dav1d_inc_dirs,
+        include_directories: dav2d_inc_dirs,
         build_by_default: false,
         dependencies : [
             thread_dependency,
@@ -113,14 +113,14 @@ c99_extension_flag = cc.first_supported_argument(
     '-Wc99-c11-compat',
 )
 
-# dav1d_api_headers
-foreach header : dav1d_api_headers
+# dav2d_api_headers
+foreach header : dav2d_api_headers
     target = header + '_test'
 
     header_test_exe = executable(target,
         'header_test.c',
-        include_directories: dav1d_inc_dirs,
-        c_args: ['-DDAV1D_TEST_HEADER="@0@"'.format(header), c99_extension_flag],
+        include_directories: dav2d_inc_dirs,
+        c_args: ['-DDAV2D_TEST_HEADER="@0@"'.format(header), c99_extension_flag],
         build_by_default: true
     )
 
@@ -131,17 +131,17 @@ endforeach
 # fuzzing binaries
 subdir('libfuzzer')
 
-# seek stress test binary, depends on dav1d cli tool
+# seek stress test binary, depends on dav2d cli tool
 if (get_option('enable_tools') and get_option('enable_seek_stress'))
     seek_stress_sources = files('seek_stress.c')
     seek_stress = executable('seek_stress',
         seek_stress_sources, rev_target,
         objects: [
-            dav1d.extract_objects('dav1d_cli_parse.c'),
-            dav1d_input_objs.extract_objects('input/input.c', 'input/ivf.c'),
+            dav2d.extract_objects('dav2d_cli_parse.c'),
+            dav2d_input_objs.extract_objects('input/input.c', 'input/ivf.c'),
         ],
-        include_directories: [dav1d_inc_dirs, include_directories('../tools')],
-        link_with: libdav1d,
+        include_directories: [dav2d_inc_dirs, include_directories('../tools')],
+        link_with: libdav2d,
         dependencies: [
             thread_dependency,
             rt_dependency,
@@ -151,7 +151,7 @@ if (get_option('enable_tools') and get_option('enable_seek_stress'))
     )
 endif
 
-# Include dav1d test data repository with additional tests
+# Include dav2d test data repository with additional tests
 if get_option('testdata_tests')
-    subdir('dav1d-test-data')
+    subdir('dav2d-test-data')
 endif

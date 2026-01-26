@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021, VideoLAN and dav1d authors
+ * Copyright © 2021, VideoLAN and dav2d authors
  * Copyright © 2021, Martin Storsjo
  * All rights reserved.
  *
@@ -64,7 +64,7 @@
 
 // special calling convention:
 // r2 holds seed
-// r3 holds dav1d_gaussian_sequence
+// r3 holds dav2d_gaussian_sequence
 // clobbers r11-r12
 // returns in d0-d1
 function get_gaussian_neon
@@ -1292,7 +1292,7 @@ endconst
         add             \dst, \dst, \offx, lsl #1  // grain_lut += offx
 .endm
 
-// void dav1d_fgy_32x32_16bpc_neon(pixel *const dst, const pixel *const src,
+// void dav2d_fgy_32x32_16bpc_neon(pixel *const dst, const pixel *const src,
 //                                 const ptrdiff_t stride,
 //                                 const uint8_t scaling[SCALING_SIZE],
 //                                 const int scaling_shift,
@@ -1548,11 +1548,11 @@ L(loop_\ox\oy):
         fgy             1, 1
 endfunc
 
-// void dav1d_fguv_32x32_420_16bpc_neon(pixel *const dst,
+// void dav2d_fguv_32x32_420_16bpc_neon(pixel *const dst,
 //                                      const pixel *const src,
 //                                      const ptrdiff_t stride,
 //                                      const uint8_t scaling[SCALING_SIZE],
-//                                      const Dav1dFilmGrainData *const data,
+//                                      const Dav2dFilmGrainData *const data,
 //                                      const entry grain_lut[][GRAIN_WIDTH],
 //                                      const pixel *const luma_row,
 //                                      const ptrdiff_t luma_stride,

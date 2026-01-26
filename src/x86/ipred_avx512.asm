@@ -1,4 +1,4 @@
-; Copyright © 2020, VideoLAN and dav1d authors
+; Copyright © 2020, VideoLAN and dav2d authors
 ; Copyright © 2020, Two Orioles, LLC
 ; All rights reserved.
 ;
@@ -55,7 +55,7 @@ smooth_weights: SMOOTH_WEIGHT_TABLE         \
      18,  16,  15,  13,  12,  10,   9,   8, \
       7,   6,   6,   5,   5,   4,   4,   4
 
-; dav1d_filter_intra_taps[], reordered for VNNI: p1 p2 p3 p4, p6 p5 p0 __
+; dav2d_filter_intra_taps[], reordered for VNNI: p1 p2 p3 p4, p6 p5 p0 __
 filter_taps:  db 10,  0,  0,  0,  2, 10,  0,  0,  1,  1, 10,  0,  1,  1,  2, 10
               db  6,  0,  0,  0,  2,  6,  0,  0,  2,  2,  6,  0,  1,  2,  2,  6
               db  0, 12, -6,  0,  0,  9, -5,  0,  0,  7, -3,  0,  0,  5, -3,  0

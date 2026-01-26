@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,16 +25,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_SCAN_H
-#define DAV1D_SRC_SCAN_H
+#ifndef DAV2D_SRC_SCAN_H
+#define DAV2D_SRC_SCAN_H
 
 #include <stdint.h>
 
 #include "src/levels.h"
 
-EXTERN const uint16_t *const dav1d_scans[N_RECT_TX_SIZES];
-EXTERN const uint8_t *const dav1d_last_nonzero_col_from_eob[N_RECT_TX_SIZES];
+EXTERN const uint16_t *const dav2d_scans[N_RECT_TX_SIZES];
+EXTERN const uint8_t *const dav2d_last_nonzero_col_from_eob[N_RECT_TX_SIZES];
 
-void dav1d_init_last_nonzero_col_from_eob_tables(void);
+void dav2d_init_last_nonzero_col_from_eob_tables(void);
 
-#endif /* DAV1D_SRC_SCAN_H */
+#endif /* DAV2D_SRC_SCAN_H */

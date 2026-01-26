@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
- * Copyright © 2018, Janne Grunau
+ * Copyright © 2018, VideoLAN and dav2d authors
+ * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,13 +25,31 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_TESTS_LIBFUZZER_DAV1D_FUZZER_H
-#define DAV1D_TESTS_LIBFUZZER_DAV1D_FUZZER_H
+#ifndef DAV2D_CLI_PARSE_H
+#define DAV2D_CLI_PARSE_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include "dav2d/dav2d.h"
 
-int LLVMFuzzerInitialize(int *argc, char ***argv);
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
+typedef struct {
+    const char *outputfile;
+    const char *inputfile;
+    const char *demuxer;
+    const char *muxer;
+    const char *frametimes;
+    const char *verify;
+    unsigned limit, skip;
+    int quiet;
+    enum {
+        REALTIME_DISABLE = 0,
+        REALTIME_INPUT,
+        REALTIME_CUSTOM,
+    } realtime;
+    double realtime_fps;
+    unsigned realtime_cache;
+    int neg_stride;
+} CLISettings;
 
-#endif /* DAV1D_TESTS_LIBFUZZER_DAV1D_FUZZER_H */
+void parse(const int argc, char *const *const argv,
+           CLISettings *const cli_settings, Dav2dSettings *const lib_settings);
+
+#endif /* DAV2D_CLI_PARSE_H */

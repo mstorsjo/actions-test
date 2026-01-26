@@ -1,5 +1,5 @@
 /*
- * Copyright © 2023, VideoLAN and dav1d authors
+ * Copyright © 2023, VideoLAN and dav2d authors
  * Copyright © 2023, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -488,7 +488,7 @@ const mask_mv1
     .byte           4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
 endconst
 
-// void dav1d_save_tmvs_lsx(refmvs_temporal_block *rp, ptrdiff_t stride,
+// void dav2d_save_tmvs_lsx(refmvs_temporal_block *rp, ptrdiff_t stride,
 //                          refmvs_block **rr, const uint8_t *ref_sign,
 //                          int col_end8, int row_end8,
 //                          int col_start8, int row_start8)

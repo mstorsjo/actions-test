@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2021, VideoLAN and dav1d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -6884,7 +6884,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(4, 4, coef, eob_base_uv_tok_lf, op); \
     update_cdf_2d(12, 5, coef, base_uv_tok_lf, op); \
 \
-    update_cdf_2d(3, DAV1D_MAX_SEGMENTS - 1, m, seg_id, op); \
+    update_cdf_2d(3, DAV2D_MAX_SEGMENTS - 1, m, seg_id, op); \
     update_cdf_1d(3, m, delta_q, op); \
  \
     update_mv_cdfs(dmv, op); \
@@ -6945,7 +6945,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
 \
     update_mv_cdfs(mv, op)
 
-void dav1d_cdf_reset_count(const Dav1dFrameHeader *const hdr,
+void dav2d_cdf_reset_count(const Dav2dFrameHeader *const hdr,
                            CdfContext *const dst)
 {
 #define reset_count(n1d, type, name) \
@@ -6958,7 +6958,7 @@ void dav1d_cdf_reset_count(const Dav1dFrameHeader *const hdr,
 #undef reset_count
 }
 
-void dav1d_cdf_shift(CdfContext *const dst, const CdfContext *const src,
+void dav2d_cdf_shift(CdfContext *const dst, const CdfContext *const src,
                      const int n_tiles_log2)
 {
 #define shift_store(n1d, type, name) \
@@ -6976,7 +6976,7 @@ void dav1d_cdf_shift(CdfContext *const dst, const CdfContext *const src,
 #undef shift_store
 }
 
-void dav1d_cdf_shift_accumulate(CdfContext *const dst, const CdfContext *const src,
+void dav2d_cdf_shift_accumulate(CdfContext *const dst, const CdfContext *const src,
                                 const int n_tiles_log2)
 {
 #define shift_accumulate(n1d, type, name) \
@@ -6994,7 +6994,7 @@ void dav1d_cdf_shift_accumulate(CdfContext *const dst, const CdfContext *const s
 #undef shift_accumulate
 }
 
-void dav1d_cdf_pri_sec_average(CdfContext *const dst,
+void dav2d_cdf_pri_sec_average(CdfContext *const dst,
                                const CdfThreadContext *const src1,
                                const CdfThreadContext *const src2)
 {
@@ -7032,12 +7032,12 @@ void dav1d_cdf_pri_sec_average(CdfContext *const dst,
 /*
  * CDF threading wrappers.
  */
-void dav1d_cdf_thread_init_static(CdfThreadContext *const cdf, const unsigned qidx) {
+void dav2d_cdf_thread_init_static(CdfThreadContext *const cdf, const unsigned qidx) {
     cdf->ref = NULL;
     cdf->data.qcat = (qidx > 90) + (qidx > 140) + (qidx > 190);
 }
 
-void dav1d_cdf_thread_copy(CdfContext *const dst, const CdfThreadContext *const src) {
+void dav2d_cdf_thread_copy(CdfContext *const dst, const CdfThreadContext *const src) {
     if (src->ref) {
         memcpy(dst, src->data.cdf, sizeof(*dst));
     } else {
@@ -7048,12 +7048,12 @@ void dav1d_cdf_thread_copy(CdfContext *const dst, const CdfThreadContext *const 
     }
 }
 
-int dav1d_cdf_thread_alloc(Dav1dContext *const c, CdfThreadContext *const cdf,
+int dav2d_cdf_thread_alloc(Dav2dContext *const c, CdfThreadContext *const cdf,
                            const int have_frame_mt)
 {
-    cdf->ref = dav1d_ref_create_using_pool(c->cdf_pool,
+    cdf->ref = dav2d_ref_create_using_pool(c->cdf_pool,
                                            sizeof(CdfContext) + sizeof(atomic_uint));
-    if (!cdf->ref) return DAV1D_ERR(ENOMEM);
+    if (!cdf->ref) return DAV2D_ERR(ENOMEM);
     cdf->data.cdf = cdf->ref->data;
     if (have_frame_mt) {
         cdf->progress = (atomic_uint *) &cdf->data.cdf[1];
@@ -7062,15 +7062,15 @@ int dav1d_cdf_thread_alloc(Dav1dContext *const c, CdfThreadContext *const cdf,
     return 0;
 }
 
-void dav1d_cdf_thread_ref(CdfThreadContext *const dst,
+void dav2d_cdf_thread_ref(CdfThreadContext *const dst,
                           CdfThreadContext *const src)
 {
     *dst = *src;
     if (src->ref)
-        dav1d_ref_inc(src->ref);
+        dav2d_ref_inc(src->ref);
 }
 
-void dav1d_cdf_thread_unref(CdfThreadContext *const cdf) {
+void dav2d_cdf_thread_unref(CdfThreadContext *const cdf) {
     memset(&cdf->data, 0, sizeof(*cdf) - offsetof(CdfThreadContext, data));
-    dav1d_ref_dec(&cdf->ref);
+    dav2d_ref_dec(&cdf->ref);
 }

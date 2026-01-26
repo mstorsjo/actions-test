@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_LOONGARCH_IPRED_H
-#define DAV1D_SRC_LOONGARCH_IPRED_H
+#ifndef DAV2D_SRC_LOONGARCH_IPRED_H
+#define DAV2D_SRC_LOONGARCH_IPRED_H
 
 #include "config.h"
 #include "src/ipred.h"
@@ -38,37 +38,37 @@
 #define BASE_SHIFT 16
 
 #define init_fn(type0, type1, name, suffix) \
-    c->type0[type1] = BF(dav1d_##name, suffix)
+    c->type0[type1] = BF(dav2d_##name, suffix)
 
 #define init_angular_ipred_fn(type, name, suffix) \
     init_fn(intra_pred, type, name, suffix)
 #define init_cfl_pred_fn(type, name, suffix) \
     init_fn(cfl_pred, type, name, suffix)
 
-decl_angular_ipred_fn(BF(dav1d_ipred_dc, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_dc_128, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_dc_top, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_dc_left, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_h, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_v, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_paeth, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_smooth, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_smooth_v, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_smooth_h, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_filter, lsx));
-decl_angular_ipred_fn(BF(dav1d_ipred_z1, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_dc, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_dc_128, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_dc_top, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_dc_left, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_h, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_v, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_paeth, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_smooth, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_smooth_v, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_smooth_h, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_filter, lsx));
+decl_angular_ipred_fn(BF(dav2d_ipred_z1, lsx));
 
-decl_cfl_pred_fn(BF(dav1d_ipred_cfl, lsx));
-decl_cfl_pred_fn(BF(dav1d_ipred_cfl_128, lsx));
-decl_cfl_pred_fn(BF(dav1d_ipred_cfl_top, lsx));
-decl_cfl_pred_fn(BF(dav1d_ipred_cfl_left, lsx));
+decl_cfl_pred_fn(BF(dav2d_ipred_cfl, lsx));
+decl_cfl_pred_fn(BF(dav2d_ipred_cfl_128, lsx));
+decl_cfl_pred_fn(BF(dav2d_ipred_cfl_top, lsx));
+decl_cfl_pred_fn(BF(dav2d_ipred_cfl_left, lsx));
 
-decl_pal_pred_fn(BF(dav1d_pal_pred, lsx));
+decl_pal_pred_fn(BF(dav2d_pal_pred, lsx));
 
-static ALWAYS_INLINE void intra_pred_dsp_init_loongarch(Dav1dIntraPredDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void intra_pred_dsp_init_loongarch(Dav2dIntraPredDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_LOONGARCH_CPU_FLAG_LSX)) return;
+    if (!(flags & DAV2D_LOONGARCH_CPU_FLAG_LSX)) return;
 
 #if BITDEPTH == 8
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       lsx);
@@ -89,8 +89,8 @@ static ALWAYS_INLINE void intra_pred_dsp_init_loongarch(Dav1dIntraPredDSPContext
     init_cfl_pred_fn(TOP_DC_PRED,  ipred_cfl_top,  lsx);
     init_cfl_pred_fn(LEFT_DC_PRED, ipred_cfl_left, lsx);
 
-    c->pal_pred = BF(dav1d_pal_pred, lsx);
+    c->pal_pred = BF(dav2d_pal_pred, lsx);
 #endif
 }
 
-#endif /* DAV1D_SRC_LOONGARCH_IPRED_H */
+#endif /* DAV2D_SRC_LOONGARCH_IPRED_H */

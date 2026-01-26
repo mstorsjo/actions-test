@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_ENV_H
-#define DAV1D_SRC_ENV_H
+#ifndef DAV2D_SRC_ENV_H
+#define DAV2D_SRC_ENV_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -56,7 +56,7 @@ typedef struct BlockContext {
     uint8_t ALIGN(motion_mode[64], 8);
     uint8_t ALIGN(amvd[64], 8);
     uint8_t ALIGN(mvprec[64], 8);
-    uint8_t ALIGN(filter[64], 8); // DAV1D_N_SWITCHABLE_FILTERS=3 means unset
+    uint8_t ALIGN(filter[64], 8); // DAV2D_N_SWITCHABLE_FILTERS=3 means unset
     uint8_t ALIGN(tx_lpf_y[64], 8);
     uint8_t ALIGN(tx_lpf_uv[64], 8);
     uint8_t ALIGN(partition[2][64], 8);
@@ -123,17 +123,17 @@ static inline int get_filter_ctx(const BlockContext *nb[2],
     const int ref = refs[0], comp = refs[1] != -1;
     const int flt0 = (boff[0] != -1 && (nb[0]->ref[0][boff[0]] == ref ||
                                         nb[0]->ref[1][boff[0]] == ref)) ?
-                     nb[0]->filter[boff[0]] : DAV1D_N_SWITCHABLE_FILTERS;
+                     nb[0]->filter[boff[0]] : DAV2D_N_SWITCHABLE_FILTERS;
     const int flt1 = (boff[1] != -1 && (nb[1]->ref[0][boff[1]] == ref ||
                                         nb[1]->ref[1][boff[1]] == ref)) ?
-                     nb[1]->filter[boff[1]] : DAV1D_N_SWITCHABLE_FILTERS;
+                     nb[1]->filter[boff[1]] : DAV2D_N_SWITCHABLE_FILTERS;
 
-    if (flt0 == flt1 || flt1 == DAV1D_N_SWITCHABLE_FILTERS) {
+    if (flt0 == flt1 || flt1 == DAV2D_N_SWITCHABLE_FILTERS) {
         return comp * 4 + flt0;
-    } else if (flt0 == DAV1D_N_SWITCHABLE_FILTERS) {
+    } else if (flt0 == DAV2D_N_SWITCHABLE_FILTERS) {
         return comp * 4 + flt1;
     } else {
-        return comp * 4 + DAV1D_N_SWITCHABLE_FILTERS;
+        return comp * 4 + DAV2D_N_SWITCHABLE_FILTERS;
     }
 }
 
@@ -337,7 +337,7 @@ static inline void fix_int_mv_precision(mv *const mv) {
     mv->y = (mv->y - (mv->y >> 15) + 3) & ~7U;
 }
 
-static inline void fix_mv_precision(const Dav1dFrameHeader *const hdr,
+static inline void fix_mv_precision(const Dav2dFrameHeader *const hdr,
                                     mv *const mv)
 {
     if (hdr->force_integer_mv) {
@@ -384,25 +384,25 @@ static inline mv get_warpmv_2d(const int32_t *const matrix,
     return res;
 }
 
-static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
+static inline mv get_gmv_2d(const Dav2dWarpedMotionParams *const gmv,
                             const int bx4, const int by4,
                             const int bw4, const int bh4,
                             const int iw4, const int ih4,
-                            const Dav1dFrameHeader *const hdr)
+                            const Dav2dFrameHeader *const hdr)
 {
     switch (gmv->type) {
-    case DAV1D_WM_TYPE_ROT_ZOOM:
+    case DAV2D_WM_TYPE_ROT_ZOOM:
         assert(gmv->matrix[5] ==  gmv->matrix[2]);
         assert(gmv->matrix[4] == -gmv->matrix[3]);
         // fall-through
     default:
-    case DAV1D_WM_TYPE_AFFINE: {
+    case DAV2D_WM_TYPE_AFFINE: {
         mv res = get_warpmv_2d(gmv->matrix, bx4, by4, bw4, bh4,
                                iw4, ih4, hdr->mv_precision + 3);
         if (hdr->force_integer_mv) fix_int_mv_precision(&res);
         return res;
     }
-    case DAV1D_WM_TYPE_TRANSLATION: {
+    case DAV2D_WM_TYPE_TRANSLATION: {
         mv res = (mv) {
             .y = gmv->matrix[0] >> 13,
             .x = gmv->matrix[1] >> 13,
@@ -412,15 +412,15 @@ static inline mv get_gmv_2d(const Dav1dWarpedMotionParams *const gmv,
         if (hdr->force_integer_mv) fix_int_mv_precision(&res);
         return res;
     }
-    case DAV1D_WM_TYPE_IDENTITY:
+    case DAV2D_WM_TYPE_IDENTITY:
         return (mv) { .x = 0, .y = 0 };
     }
 }
 
-static inline enum Dav1dWarpedMotionType warp_type(const int32_t *const mtx) {
-    if (mtx[2] != mtx[5] || mtx[3] != -mtx[4]) return DAV1D_WM_TYPE_AFFINE;
-    if (mtx[2] != 0x10000 || mtx[3]) return DAV1D_WM_TYPE_ROT_ZOOM;
-    return mtx[0] | mtx[1] ? DAV1D_WM_TYPE_TRANSLATION : DAV1D_WM_TYPE_IDENTITY;
+static inline enum Dav2dWarpedMotionType warp_type(const int32_t *const mtx) {
+    if (mtx[2] != mtx[5] || mtx[3] != -mtx[4]) return DAV2D_WM_TYPE_AFFINE;
+    if (mtx[2] != 0x10000 || mtx[3]) return DAV2D_WM_TYPE_ROT_ZOOM;
+    return mtx[0] | mtx[1] ? DAV2D_WM_TYPE_TRANSLATION : DAV2D_WM_TYPE_IDENTITY;
 }
 
-#endif /* DAV1D_SRC_ENV_H */
+#endif /* DAV2D_SRC_ENV_H */

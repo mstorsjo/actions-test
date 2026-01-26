@@ -33,7 +33,7 @@
 #include "src/cpu.h"
 
 #define cdef_vsx_fn(w, h) \
-void dav1d_cdef_filter_##w##x##h##_vsx(pixel *const dst, \
+void dav2d_cdef_filter_##w##x##h##_vsx(pixel *const dst, \
                                        const ptrdiff_t dst_stride, \
                                        const pixel (*left)[2], \
                                        const pixel *const top, \
@@ -48,14 +48,14 @@ cdef_vsx_fn(4, 4);
 cdef_vsx_fn(4, 8);
 cdef_vsx_fn(8, 8);
 
-static ALWAYS_INLINE void cdef_dsp_init_ppc(Dav1dCdefDSPContext *const c) {
-    const unsigned flags = dav1d_get_cpu_flags();
+static ALWAYS_INLINE void cdef_dsp_init_ppc(Dav2dCdefDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_PPC_CPU_FLAG_VSX)) return;
+    if (!(flags & DAV2D_PPC_CPU_FLAG_VSX)) return;
 
 #if BITDEPTH == 8
-    c->fb[0] = dav1d_cdef_filter_8x8_vsx;
-    c->fb[1] = dav1d_cdef_filter_4x8_vsx;
-    c->fb[2] = dav1d_cdef_filter_4x4_vsx;
+    c->fb[0] = dav2d_cdef_filter_8x8_vsx;
+    c->fb[1] = dav2d_cdef_filter_4x8_vsx;
+    c->fb[2] = dav2d_cdef_filter_4x4_vsx;
 #endif
 }

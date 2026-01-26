@@ -1,4 +1,4 @@
-# Copyright © 2018, VideoLAN and dav1d authors
+# Copyright © 2018, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -23,12 +23,12 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Revision file (vcs_version.h) generation
-dav1d_git_dir = join_paths(dav1d_src_root, '.git')
+dav2d_git_dir = join_paths(dav2d_src_root, '.git')
 rev_target = vcs_tag(command: [
-        'git', '--git-dir', dav1d_git_dir, 'describe', '--long', '--always'
+        'git', '--git-dir', dav2d_git_dir, 'describe', '--long', '--always'
     ],
     input: 'vcs_version.h.in',
     output: 'vcs_version.h'
 )
 
-subdir('dav1d')
+subdir('dav2d')

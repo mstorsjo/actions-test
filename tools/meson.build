@@ -1,4 +1,4 @@
-# Copyright © 2018, VideoLAN and dav1d authors
+# Copyright © 2018, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -24,14 +24,14 @@
 
 # Common source files used by tools and examples
 
-dav1d_input_sources = files(
+dav2d_input_sources = files(
     'input/input.c',
     'input/annexb.c',
     'input/ivf.c',
     'input/section5.c',
 )
 
-dav1d_output_sources = files(
+dav2d_output_sources = files(
     'output/md5.c',
     'output/null.c',
     'output/output.c',
@@ -43,7 +43,7 @@ dav1d_output_sources = files(
 if not get_option('xxhash_muxer').disabled()
     xxhash_include = '-I' + meson.current_source_dir() / 'output'
     if cc.has_header_symbol('xxhash.h', 'XXH3_createState', args : xxhash_include)
-        dav1d_output_sources += 'output/xxhash.c'
+        dav2d_output_sources += 'output/xxhash.c'
         xxh3_found = true
     elif get_option('xxhash_muxer').enabled()
         # manual error since 'required' kw arg in has_header_symbol() was only added in meson 0.50
@@ -51,18 +51,18 @@ if not get_option('xxhash_muxer').disabled()
     endif
 endif
 
-dav1d_input_objs = static_library('dav1d_input',
-    dav1d_input_sources,
+dav2d_input_objs = static_library('dav2d_input',
+    dav2d_input_sources,
 
-    include_directories : dav1d_inc_dirs,
+    include_directories : dav2d_inc_dirs,
     install : false,
     build_by_default : false,
 )
 
-dav1d_output_objs = static_library('dav1d_output',
-    dav1d_output_sources,
+dav2d_output_objs = static_library('dav2d_output',
+    dav2d_output_sources,
 
-    include_directories : dav1d_inc_dirs,
+    include_directories : dav2d_inc_dirs,
     install : false,
     build_by_default : false,
 )
@@ -75,7 +75,7 @@ endif
 
 
 #
-# Build definition for the dav1d tools
+# Build definition for the dav2d tools
 #
 
 # Configuratin data for cli_config.h
@@ -85,34 +85,34 @@ cli_cdata.set10('HAVE_XXHASH_H', get_variable('xxh3_found', false))
 
 cli_config_h_target = configure_file(output: 'cli_config.h', configuration: cli_cdata)
 
-# dav1d cli tool sources
-dav1d_sources = files(
-    'dav1d.c',
-    'dav1d_cli_parse.c',
+# dav2d cli tool sources
+dav2d_sources = files(
+    'dav2d.c',
+    'dav2d_cli_parse.c',
 )
 
 if host_machine.system() == 'windows'
     rc_file = configure_file(
-        input : 'dav1d.rc.in',
-        output : 'dav1d.rc',
+        input : 'dav2d.rc.in',
+        output : 'dav2d.rc',
         configuration : rc_data
     )
 
-    dav1d_rc_obj = winmod.compile_resources(rc_file,
-       depend_files : files('dav1d.manifest'),
+    dav2d_rc_obj = winmod.compile_resources(rc_file,
+       depend_files : files('dav2d.manifest'),
        include_directories : include_directories('.')
     )
 else
-    dav1d_rc_obj = []
+    dav2d_rc_obj = []
 endif
 
-dav1d = executable('dav1d',
-    dav1d_sources,
-    dav1d_rc_obj,
+dav2d = executable('dav2d',
+    dav2d_sources,
+    dav2d_rc_obj,
     rev_target, cli_config_h_target,
 
-    link_with : [libdav1d, dav1d_input_objs, dav1d_output_objs],
-    include_directories : [dav1d_inc_dirs],
+    link_with : [libdav2d, dav2d_input_objs, dav2d_output_objs],
+    include_directories : [dav2d_inc_dirs],
     dependencies : [
         getopt_dependency,
         thread_dependency,

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -321,7 +321,7 @@ static const uint16_t ALIGN(scan_32x32[], 32) = {
      923,  954,  985, 1016,  831,  862,  893,  924,  955,  986, 1017,  863,  894,  925,  956,  987, 1018,  895,  926,  957,  988, 1019,  927,  958,  989, 1020,  959,  990, 1021,  991, 1022, 1023,
 };
 
-const uint16_t *const dav1d_scans[N_RECT_TX_SIZES] = {
+const uint16_t *const dav2d_scans[N_RECT_TX_SIZES] = {
     [ TX_4X4  ] = scan_4x4,
     [ TX_8X8  ] = scan_8x8,
     [ TX_16X16] = scan_16x16,
@@ -395,12 +395,12 @@ static COLD void init_internal(void) {
     init_tbl(last_nonzero_col_from_eob_32x8,  scan_32x8,  32,  8);
 }
 
-COLD void dav1d_init_last_nonzero_col_from_eob_tables(void) {
+COLD void dav2d_init_last_nonzero_col_from_eob_tables(void) {
     static pthread_once_t initted = PTHREAD_ONCE_INIT;
     pthread_once(&initted, init_internal);
 }
 
-const uint8_t *const dav1d_last_nonzero_col_from_eob[N_RECT_TX_SIZES] = {
+const uint8_t *const dav2d_last_nonzero_col_from_eob[N_RECT_TX_SIZES] = {
     [ TX_4X4  ] = last_nonzero_col_from_eob_4x4,
     [ TX_8X8  ] = last_nonzero_col_from_eob_8x8,
     [ TX_16X16] = last_nonzero_col_from_eob_16x16,

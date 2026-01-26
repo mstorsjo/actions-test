@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019, VideoLAN and dav1d authors
+ * Copyright © 2019, VideoLAN and dav2d authors
  * Copyright © 2019, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,42 +25,42 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_X86_MSAC_H
-#define DAV1D_SRC_X86_MSAC_H
+#ifndef DAV2D_SRC_X86_MSAC_H
+#define DAV2D_SRC_X86_MSAC_H
 
 #include "src/cpu.h"
 
-unsigned dav1d_msac_decode_symbol_adapt4_sse2(MsacContext *s, uint16_t *cdf,
+unsigned dav2d_msac_decode_symbol_adapt4_sse2(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
-unsigned dav1d_msac_decode_symbol_adapt8_sse2(MsacContext *s, uint16_t *cdf,
+unsigned dav2d_msac_decode_symbol_adapt8_sse2(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
-unsigned dav1d_msac_decode_bool_adapt_sse2(MsacContext *s, uint16_t *cdf);
-unsigned dav1d_msac_decode_bool_bypass_sse2(MsacContext *s);
-unsigned dav1d_msac_decode_bools_bypass_sse2(MsacContext *s, unsigned n_bits);
-unsigned dav1d_msac_decode_unary_bypass6_avx2(MsacContext *s, unsigned max_bits);
-unsigned dav1d_msac_decode_unary_bypass21_avx2(MsacContext *s);
-unsigned dav1d_msac_decode_unary_bypass21_avx512icl(MsacContext *s);
+unsigned dav2d_msac_decode_bool_adapt_sse2(MsacContext *s, uint16_t *cdf);
+unsigned dav2d_msac_decode_bool_bypass_sse2(MsacContext *s);
+unsigned dav2d_msac_decode_bools_bypass_sse2(MsacContext *s, unsigned n_bits);
+unsigned dav2d_msac_decode_unary_bypass6_avx2(MsacContext *s, unsigned max_bits);
+unsigned dav2d_msac_decode_unary_bypass21_avx2(MsacContext *s);
+unsigned dav2d_msac_decode_unary_bypass21_avx512icl(MsacContext *s);
 
-#define dav1d_msac_decode_symbol_adapt4 dav1d_msac_decode_symbol_adapt4_sse2
-#define dav1d_msac_decode_symbol_adapt8 dav1d_msac_decode_symbol_adapt8_sse2
-#define dav1d_msac_decode_bool_adapt    dav1d_msac_decode_bool_adapt_sse2
-#define dav1d_msac_decode_bool_bypass   dav1d_msac_decode_bool_bypass_sse2
-#define dav1d_msac_decode_bools_bypass  dav1d_msac_decode_bools_bypass_sse2
+#define dav2d_msac_decode_symbol_adapt4 dav2d_msac_decode_symbol_adapt4_sse2
+#define dav2d_msac_decode_symbol_adapt8 dav2d_msac_decode_symbol_adapt8_sse2
+#define dav2d_msac_decode_bool_adapt    dav2d_msac_decode_bool_adapt_sse2
+#define dav2d_msac_decode_bool_bypass   dav2d_msac_decode_bool_bypass_sse2
+#define dav2d_msac_decode_bools_bypass  dav2d_msac_decode_bools_bypass_sse2
 
-#define dav1d_msac_decode_unary_bypass6(s, n) ((s)->unary_bypass6(s, n))
-#define dav1d_msac_decode_unary_bypass21(s) ((s)->unary_bypass21(s))
+#define dav2d_msac_decode_unary_bypass6(s, n) ((s)->unary_bypass6(s, n))
+#define dav2d_msac_decode_unary_bypass21(s) ((s)->unary_bypass21(s))
 
 static ALWAYS_INLINE void msac_dsp_init_x86(MsacContext *const s) {
-    const unsigned flags = dav1d_get_cpu_flags();
+    const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX2)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
-    s->unary_bypass6  = dav1d_msac_decode_unary_bypass6_avx2;
-    s->unary_bypass21 = dav1d_msac_decode_unary_bypass21_avx2;
+    s->unary_bypass6  = dav2d_msac_decode_unary_bypass6_avx2;
+    s->unary_bypass21 = dav2d_msac_decode_unary_bypass21_avx2;
 
-    if (!(flags & DAV1D_X86_CPU_FLAG_AVX512ICL)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
-    s->unary_bypass21 = dav1d_msac_decode_unary_bypass21_avx512icl;
+    s->unary_bypass21 = dav2d_msac_decode_unary_bypass21_avx512icl;
 }
 
-#endif /* DAV1D_SRC_X86_MSAC_H */
+#endif /* DAV2D_SRC_X86_MSAC_H */

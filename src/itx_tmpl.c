@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
  * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
@@ -62,8 +62,8 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                const enum TxfmType txtp, const int eob,
                const /*enum RectTxfmSize*/ int tx HIGHBD_DECL_SUFFIX)
 {
-    const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
-    const uint8_t *const tx_shift = dav1d_tx_shift[tx];
+    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+    const uint8_t *const tx_shift = dav2d_tx_shift[tx];
     const int w = 4 * t_dim->w, h = 4 * t_dim->h;
     assert(!(w & (w - 1)) && w >= 4 && w <= 64);
     assert(!(h & (h - 1)) && h >= 4 && h <= 64);
@@ -87,8 +87,8 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
         return;
     }
 
-    const itx_1d_fn first_1d_fn = dav1d_tx1d_fns[t_dim->lw][txtp & 7];
-    const itx_1d_fn second_1d_fn = dav1d_tx1d_fns[t_dim->lh][txtp >> 5];
+    const itx_1d_fn first_1d_fn = dav2d_tx1d_fns[t_dim->lw][txtp & 7];
+    const itx_1d_fn second_1d_fn = dav2d_tx1d_fns[t_dim->lh][txtp >> 5];
     const int sh = imin(h, 32), sw = imin(w, 32);
 #if BITDEPTH == 8
     const int row_clip_min = INT16_MIN;
@@ -106,7 +106,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     } else if (txtps[0] == IDENTITY && txtps[1] != IDENTITY) {
         last_nonzero_col = eob >> (t_dim->lw + 2);
     } else {
-        last_nonzero_col = dav1d_last_nonzero_col_from_eob[tx][eob];
+        last_nonzero_col = dav2d_last_nonzero_col_from_eob[tx][eob];
     }
     assert(last_nonzero_col < sh);
 #else
@@ -220,12 +220,12 @@ static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
     for (int y = 0; y < 4; y++, c += 4) {
         for (int x = 0; x < 4; x++)
             c[x] = coeff[y + x * 4] >> 2;
-        dav1d_inv_wht4_1d_c(c, 1);
+        dav2d_inv_wht4_1d_c(c, 1);
     }
     memset(coeff, 0, sizeof(*coeff) * 4 * 4);
 
     for (int x = 0; x < 4; x++)
-        dav1d_inv_wht4_1d_c(&tmp[x], 4);
+        dav2d_inv_wht4_1d_c(&tmp[x], 4);
 
     c = tmp;
     for (int y = 0; y < 4; y++, dst += PXSTRIDE(stride))
@@ -247,7 +247,7 @@ static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
 #endif
 #endif
 
-COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
+COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c, int bpc) {
 #define assign_itx(w, h, pfx) \
     c->itxfm_add[pfx##TX_##w##X##h] = inv_txfm_add_##w##x##h##_c
 
@@ -301,5 +301,5 @@ COLD void bitfn(dav1d_itx_dsp_init)(Dav1dInvTxfmDSPContext *const c, int bpc) {
 #endif
 
     if (!all_simd)
-        dav1d_init_last_nonzero_col_from_eob_tables();
+        dav2d_init_last_nonzero_col_from_eob_tables();
 }

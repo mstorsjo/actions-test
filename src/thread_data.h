@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV1D_SRC_THREAD_DATA_H
-#define DAV1D_SRC_THREAD_DATA_H
+#ifndef DAV2D_SRC_THREAD_DATA_H
+#define DAV2D_SRC_THREAD_DATA_H
 
 #include "src/thread.h"
 
@@ -37,4 +37,4 @@ struct thread_data {
     int inited;
 };
 
-#endif /* DAV1D_SRC_THREAD_DATA_H */
+#endif /* DAV2D_SRC_THREAD_DATA_H */

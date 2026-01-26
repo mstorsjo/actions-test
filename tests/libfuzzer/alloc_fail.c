@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Janne Grunau
  * All rights reserved.
  *
@@ -36,7 +36,7 @@
 
 static int fail_probability;
 
-void dav1d_setup_alloc_fail(unsigned seed, unsigned probability) {
+void dav2d_setup_alloc_fail(unsigned seed, unsigned probability) {
     srand(seed);
 
     while (probability >= RAND_MAX)

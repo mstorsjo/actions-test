@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -42,7 +42,7 @@ static void decomp_tx(uint8_t (*const txa)[2 /* txsz, step */][32 /* y */][32 /*
                       const int y_off, const int x_off,
                       const uint16_t *const tx_masks)
 {
-    const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[from];
+    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[from];
     const int is_split = (from == (int) TX_4X4 || depth > 1) ? 0 :
         (tx_masks[depth] >> (y_off * 4 + x_off)) & 1;
 
@@ -72,7 +72,7 @@ static void decomp_tx(uint8_t (*const txa)[2 /* txsz, step */][32 /* y */][32 /*
         }
         case_set_upto16(t_dim->lw);
 #undef set_ctx
-        dav1d_memset_pow2[t_dim->lw](txa[1][1][0], t_dim->h);
+        dav2d_memset_pow2[t_dim->lw](txa[1][1][0], t_dim->h);
     }
 }
 
@@ -83,7 +83,7 @@ static inline void mask_edges_inter(uint16_t (*const masks)[64][4][4],
                                     const uint16_t *const tx_masks,
                                     uint8_t *const a, uint8_t *const l)
 {
-    const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[max_tx];
+    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[max_tx];
     int y, x;
 
     ALIGN_STK_16(uint8_t, txa, 2 /* edge */, [2 /* txsz, step */][32 /* y */][32 /* x */]);
@@ -168,8 +168,8 @@ static inline void mask_edges(uint16_t (*const masks)[64][4][4],
         masks[1][by4][imin(bhl4c, a[x])][sidx] |= smask;
     }
 
-    dav1d_memset_likely_pow2(a, bhl4c, w4);
-    dav1d_memset_likely_pow2(l, bwl4c, h4);
+    dav2d_memset_likely_pow2(a, bhl4c, w4);
+    dav2d_memset_likely_pow2(l, bwl4c, h4);
 }
 
 static inline void mask_edges_part(uint16_t (*const masks)[64][4][4],
@@ -178,7 +178,7 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][4][4],
                                    const enum RectTxfmSize tx,
                                    uint8_t *const a, uint8_t *const l)
 {
-    const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
     const int twl4 = t_dim->lw, thl4 = t_dim->lh;
     const int twl4c = imin(3, twl4), thl4c = imin(3, thl4);
     int y, x;
@@ -228,8 +228,8 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][4][4],
         if (inner4) masks[1][by4 + y][thl4c][3] |= inner4;
     }
 
-    dav1d_memset_likely_pow2(a, thl4c, w4);
-    dav1d_memset_likely_pow2(l, twl4c, h4);
+    dav2d_memset_likely_pow2(a, thl4c, w4);
+    dav2d_memset_likely_pow2(l, twl4c, h4);
 }
 
 static void mask_edges_chroma(uint16_t (*const masks)[64][2][4],
@@ -240,7 +240,7 @@ static void mask_edges_chroma(uint16_t (*const masks)[64][2][4],
                               uint8_t *const a, uint8_t *const l,
                               const int ss_hor, const int ss_ver)
 {
-    const TxfmInfo *const t_dim = &dav1d_txfm_dimensions[tx];
+    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
     const int twl4 = t_dim->lw, thl4 = t_dim->lh;
     const int twl4c = !!twl4, thl4c = !!thl4;
     int y, x;
@@ -287,20 +287,20 @@ static void mask_edges_chroma(uint16_t (*const masks)[64][2][4],
         }
     }
 
-    dav1d_memset_likely_pow2(a, thl4c, cw4);
-    dav1d_memset_likely_pow2(l, twl4c, ch4);
+    dav2d_memset_likely_pow2(a, thl4c, cw4);
+    dav2d_memset_likely_pow2(l, twl4c, ch4);
 }
 
-void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
+void dav2d_create_lf_mask_intra(Av1Filter *const lflvl,
                                 const Av1Block *const b,
                                 const int bx, const int by,
                                 const int iw, const int ih,
-                                const enum Dav1dPixelLayout layout,
+                                const enum Dav2dPixelLayout layout,
                                 uint8_t *ay, uint8_t *ly,
                                 uint8_t *const auv, uint8_t *const luv)
 {
     const enum BlockSize bs = b->bs;
-    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = imin(iw - bx, b_dim[0]);
     const int bh4 = imin(ih - by, b_dim[1]);
     const int bx4 = bx & 63;
@@ -310,14 +310,14 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
     if (bw4 && bh4) {
         if (b->intra || !b->skip_txfm) {
             const enum TxPartition tx_part = b->tx_part;
-            const int8_t *const tp = dav1d_tx_part_tbl[bs];
+            const int8_t *const tp = dav2d_tx_part_tbl[bs];
             const enum RectTxfmSize tx = tp[tx_part];
             if (tx_part < TX_PARTITION_H5) {
                 mask_edges_part(lflvl->filter_y, by4, bx4, bw4, bh4, tx, ay, ly);
             } else if (tx_part == TX_PARTITION_H5) {
                 const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
-                const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
-                               *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
+                const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
+                               *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
                 const int th4_small = t_dim_small->h;
                 const int th4_big = t_dim_big->h;
                 int cby4 = by4;
@@ -338,8 +338,8 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
                 }
             } else if (tx_part == TX_PARTITION_V5) {
                 const enum RectTxfmSize tx_big = tp[TX_PARTITION_V];
-                const TxfmInfo *const t_dim_small = &dav1d_txfm_dimensions[tx],
-                               *const t_dim_big = &dav1d_txfm_dimensions[tx_big];
+                const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
+                               *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
                 const int tw4_small = t_dim_small->w;
                 const int tw4_big = t_dim_big->w;
                 int cbx4 = bx4;
@@ -366,8 +366,8 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
 #if 0
     if (!auv) return;
 
-    const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = layout != DAV1D_PIXEL_LAYOUT_I444;
+    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
     const int cbw4 = imin(((iw + ss_hor) >> ss_hor) - (bx >> ss_hor),
                           (b_dim[0] + ss_hor) >> ss_hor);
     const int cbh4 = imin(((ih + ss_ver) >> ss_ver) - (by >> ss_ver),
@@ -384,18 +384,18 @@ void dav1d_create_lf_mask_intra(Av1Filter *const lflvl,
 #endif
 }
 
-void dav1d_create_lf_mask_inter(Av1Filter *const lflvl,
+void dav2d_create_lf_mask_inter(Av1Filter *const lflvl,
                                 const int bx, const int by,
                                 const int iw, const int ih,
                                 const int skip, const enum BlockSize bs,
                                 const enum RectTxfmSize max_ytx,
                                 const uint16_t *const tx_masks,
                                 const enum RectTxfmSize uvtx,
-                                const enum Dav1dPixelLayout layout,
+                                const enum Dav2dPixelLayout layout,
                                 uint8_t *const ay, uint8_t *const ly,
                                 uint8_t *const auv, uint8_t *const luv)
 {
-    const uint8_t *const b_dim = dav1d_block_dimensions[bs];
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = imin(iw - bx, b_dim[0]);
     const int bh4 = imin(ih - by, b_dim[1]);
     const int bx4 = bx & 31;
@@ -410,8 +410,8 @@ void dav1d_create_lf_mask_inter(Av1Filter *const lflvl,
     return;
     if (!auv) return;
 
-    const int ss_ver = layout == DAV1D_PIXEL_LAYOUT_I420;
-    const int ss_hor = layout != DAV1D_PIXEL_LAYOUT_I444;
+    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
     const int cbw4 = imin(((iw + ss_hor) >> ss_hor) - (bx >> ss_hor),
                           (b_dim[0] + ss_hor) >> ss_hor);
     const int cbh4 = imin(((ih + ss_ver) >> ss_ver) - (by >> ss_ver),

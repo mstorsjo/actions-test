@@ -115,7 +115,7 @@ The result can be found in `build/doc/html/`. An online version built from maste
 
 # Run tests
 
-1. In the root directory, run `git clone https://code.videolan.org/videolan/dav1d-test-data.git tests/dav1d-test-data` to fetch the test data repository
+1. In the root directory, run `git clone https://code.videolan.org/videolan/dav2d-test-data.git tests/dav2d-test-data` to fetch the test data repository
 2. During meson configuration, specify `-Dtestdata_tests=true`
 3. Run `meson test -v` after compiling
 
@@ -144,7 +144,7 @@ These companies can provide support and integration help, should you need it.
 
 - This project is an implementation of a decoder. It gives you no special rights on the AV2 patents.
 
-Please read the [AV1 patent license](doc/PATENTS) that applies to the AV1 specification and codec.
+Please read the [AOMedia patent license](doc/PATENTS) that applies to the AV2 specification and codec.
 
 ## Will you care about <my_arch>? <my_os>?
 

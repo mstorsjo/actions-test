@@ -1,4 +1,4 @@
-; Copyright © 2018, VideoLAN and dav1d authors
+; Copyright © 2018, VideoLAN and dav2d authors
 ; Copyright © 2018, Two Orioles, LLC
 ; Copyright © 2018, VideoLabs
 ; All rights reserved.
@@ -29,7 +29,7 @@
 
 SECTION_RODATA 16
 
-; dav1d_obmc_masks[] with 64-x interleaved
+; dav2d_obmc_masks[] with 64-x interleaved
 obmc_masks: db  0,  0,  0,  0
             ; 2 @4
             db 45, 19, 64,  0
@@ -100,7 +100,7 @@ pd_0x3ff: times 4 dd 0x3ff
 pd_0x4000:times 4 dd 0x4000
 pq_0x40000000: times 2 dq 0x40000000
 
-const mc_warp_filter2 ; dav1d_mc_warp_filter[] reordered for pmaddubsw usage
+const mc_warp_filter2 ; dav2d_mc_warp_filter[] reordered for pmaddubsw usage
     ; [-1, 0)
     db 0, 127,   0, 0,   0,   1, 0, 0, 0, 127,   0, 0,  -1,   2, 0, 0
     db 1, 127,  -1, 0,  -3,   4, 0, 0, 1, 126,  -2, 0,  -4,   6, 1, 0

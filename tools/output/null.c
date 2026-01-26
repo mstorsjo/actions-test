@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -31,8 +31,8 @@
 
 typedef struct MuxerPriv NullOutputContext;
 
-static int null_write(NullOutputContext *const c, Dav1dPicture *const p) {
-    dav1d_picture_unref(p);
+static int null_write(NullOutputContext *const c, Dav2dPicture *const p) {
+    dav2d_picture_unref(p);
     return 0;
 }
 

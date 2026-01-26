@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -84,7 +84,7 @@ static const char *find_extension(const char *const f) {
 
 int output_open(MuxerContext **const c_out,
                 const char *const name, const char *const filename,
-                const Dav1dPictureParameters *const p, const unsigned fps[2])
+                const Dav2dPictureParameters *const p, const unsigned fps[2])
 {
     const Muxer *impl;
     MuxerContext *c;
@@ -102,7 +102,7 @@ int output_open(MuxerContext **const c_out,
         }
         if (!muxers[i]) {
             fprintf(stderr, "Failed to find muxer named \"%s\"\n", name);
-            return DAV1D_ERR(ENOPROTOOPT);
+            return DAV2D_ERR(ENOPROTOOPT);
         }
     } else if (!strcmp(filename, "/dev/null")) {
         impl = muxers[0];
@@ -120,13 +120,13 @@ int output_open(MuxerContext **const c_out,
         }
         if (!muxers[i]) {
             fprintf(stderr, "Failed to find muxer for extension \"%s\"\n", ext);
-            return DAV1D_ERR(ENOPROTOOPT);
+            return DAV2D_ERR(ENOPROTOOPT);
         }
     }
 
     if (!(c = malloc(offsetof(MuxerContext, priv_data) + impl->priv_data_size))) {
         fprintf(stderr, "Failed to allocate memory\n");
-        return DAV1D_ERR(ENOMEM);
+        return DAV2D_ERR(ENOMEM);
     }
     c->impl = impl;
     c->data = (MuxerPriv *) c->priv_data;
@@ -194,7 +194,7 @@ static void assemble_field(char *const dst, const int dst_len,
 
 static void assemble_filename(MuxerContext *const ctx, char *const filename,
                               const int filename_size,
-                              const Dav1dPictureParameters *const p)
+                              const Dav2dPictureParameters *const p)
 {
     filename[0] = 0;
     const int framenum = ctx->framenum++;
@@ -229,7 +229,7 @@ static void assemble_filename(MuxerContext *const ctx, char *const filename,
     safe_strncat(filename, filename_size, ptr, (int) strlen(ptr));
 }
 
-int output_write(MuxerContext *const ctx, Dav1dPicture *const p) {
+int output_write(MuxerContext *const ctx, Dav2dPicture *const p) {
     int res;
 
     if (ctx->one_file_per_frame && ctx->impl->write_header) {

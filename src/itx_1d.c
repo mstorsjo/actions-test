@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018-2026, VideoLAN and dav1d authors
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
  * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
@@ -276,7 +276,7 @@ static void inv_identity32_1d_c(int32_t *const c, const ptrdiff_t stride) {
         c[stride * i] *= 362;
 }
 
-const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
+const itx_1d_fn dav2d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
     [TX_4X4] = {
         [DCT]      = inv_dct4_1d_c,
         [ADST]     = inv_adst4_1d_c,
@@ -304,7 +304,7 @@ const itx_1d_fn dav1d_tx1d_fns[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
     },
 };
 
-void dav1d_inv_wht4_1d_c(int32_t *const c, const ptrdiff_t stride) {
+void dav2d_inv_wht4_1d_c(int32_t *const c, const ptrdiff_t stride) {
     assert(stride > 0);
     const int in0 = c[0 * stride], in1 = c[1 * stride];
     const int in2 = c[2 * stride], in3 = c[3 * stride];

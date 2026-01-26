@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2024, Nathan Egge, Niklas Haas, Bogdan Gligorijevic
  * All rights reserved.
  *
@@ -86,7 +86,7 @@ L(blend_h_epilog):
   csrw vxrm, zero
   andi t0, t0, 0xc7
   vsetvl zero, a3, t0
-  la t1, dav1d_obmc_masks
+  la t1, dav2d_obmc_masks
   srai t0, a4, 2
   add t1, t1, a4
   sub a4, a4, t0
@@ -121,7 +121,7 @@ L(blend_h_epilog):
 128:
   csrw vxrm, zero
   vsetvli zero, t2, e8, m4, ta, ma
-  la t1, dav1d_obmc_masks
+  la t1, dav2d_obmc_masks
   srai t0, a4, 2
   add t1, t1, a4
   sub a4, a4, t0
@@ -153,7 +153,7 @@ L(blend_v_epilog):
   sub t1, a3, t1
   vsetvl zero, t1, t0
   csrw vxrm, zero
-  la t1, dav1d_obmc_masks
+  la t1, dav2d_obmc_masks
   add t1, t1, a3
   vle8.v v8, (t1)
   li t0, 64
@@ -338,7 +338,7 @@ function warp_8x8_8bpc_rvv, export=1, ext="v"
     li t0, 64
     addi a3, a3, -8
     li t1, 15
-    la t2, dav1d_mc_warp_filter
+    la t2, dav2d_mc_warp_filter
 
     lh t6, (a4)
     lh t4, 2(a4)
@@ -445,7 +445,7 @@ function warp_8x8t_8bpc_rvv, export=1, ext="v,zba"
     li t0, 64
     addi a3, a3, -8
     li t1, 15
-    la t2, dav1d_mc_warp_filter
+    la t2, dav2d_mc_warp_filter
 
     lh t6, (a4)
     lh t4, 2(a4)

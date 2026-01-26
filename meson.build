@@ -1,4 +1,4 @@
-# Copyright © 2018-2024, VideoLAN and dav1d authors
+# Copyright © 2018-2024, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -22,7 +22,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-project('dav1d', ['c'],
+project('dav2d', ['c'],
     version: '1.5.2',
     default_options: ['c_std=c99',
                       'warning_level=2',
@@ -30,7 +30,7 @@ project('dav1d', ['c'],
                       'b_ndebug=if-release'],
     meson_version: '>= 0.49.0')
 
-dav1d_src_root = meson.current_source_dir()
+dav2d_src_root = meson.current_source_dir()
 cc = meson.get_compiler('c')
 
 # Configuratin data for config.h
@@ -40,29 +40,29 @@ cdata = configuration_data()
 cdata_asm = configuration_data()
 
 # Include directories
-dav1d_inc_dirs = include_directories(['.', 'include/dav1d', 'include'])
+dav2d_inc_dirs = include_directories(['.', 'include/dav2d', 'include'])
 
-dav1d_api_version_major    = cc.get_define('DAV1D_API_VERSION_MAJOR',
-                                           prefix: '#include "dav1d/version.h"',
-                                           include_directories: dav1d_inc_dirs).strip()
-dav1d_api_version_minor    = cc.get_define('DAV1D_API_VERSION_MINOR',
-                                           prefix: '#include "dav1d/version.h"',
-                                           include_directories: dav1d_inc_dirs).strip()
-dav1d_api_version_revision = cc.get_define('DAV1D_API_VERSION_PATCH',
-                                           prefix: '#include "dav1d/version.h"',
-                                           include_directories: dav1d_inc_dirs).strip()
-dav1d_soname_version       = '@0@.@1@.@2@'.format(dav1d_api_version_major,
-                                                  dav1d_api_version_minor,
-                                                  dav1d_api_version_revision)
+dav2d_api_version_major    = cc.get_define('DAV2D_API_VERSION_MAJOR',
+                                           prefix: '#include "dav2d/version.h"',
+                                           include_directories: dav2d_inc_dirs).strip()
+dav2d_api_version_minor    = cc.get_define('DAV2D_API_VERSION_MINOR',
+                                           prefix: '#include "dav2d/version.h"',
+                                           include_directories: dav2d_inc_dirs).strip()
+dav2d_api_version_revision = cc.get_define('DAV2D_API_VERSION_PATCH',
+                                           prefix: '#include "dav2d/version.h"',
+                                           include_directories: dav2d_inc_dirs).strip()
+dav2d_soname_version       = '@0@.@1@.@2@'.format(dav2d_api_version_major,
+                                                  dav2d_api_version_minor,
+                                                  dav2d_api_version_revision)
 
 #
 # Option handling
 #
 
 # Bitdepth option
-dav1d_bitdepths = get_option('bitdepths')
+dav2d_bitdepths = get_option('bitdepths')
 foreach bitdepth : ['8', '16']
-    cdata.set10('CONFIG_@0@BPC'.format(bitdepth), dav1d_bitdepths.contains(bitdepth))
+    cdata.set10('CONFIG_@0@BPC'.format(bitdepth), dav2d_bitdepths.contains(bitdepth))
 endforeach
 
 # ASM option
@@ -143,9 +143,9 @@ if host_machine.system() == 'windows'
     rc_data.set('PROJECT_VERSION_MAJOR', rc_version_array[0])
     rc_data.set('PROJECT_VERSION_MINOR', rc_version_array[1])
     rc_data.set('PROJECT_VERSION_REVISION', rc_version_array[2])
-    rc_data.set('API_VERSION_MAJOR', dav1d_api_version_major)
-    rc_data.set('API_VERSION_MINOR', dav1d_api_version_minor)
-    rc_data.set('API_VERSION_REVISION', dav1d_api_version_revision)
+    rc_data.set('API_VERSION_MAJOR', dav2d_api_version_major)
+    rc_data.set('API_VERSION_MINOR', dav2d_api_version_minor)
+    rc_data.set('API_VERSION_REVISION', dav2d_api_version_revision)
     rc_data.set('COPYRIGHT_YEARS', '2018-2025')
 else
     thread_dependency = dependency('threads')
@@ -177,10 +177,10 @@ have_fseeko = true
 if host_machine.system() == 'android'
     if not cc.has_function('fseeko', prefix : '#include <stdio.h>', args : test_args)
         if cc.has_function('fseeko', prefix : '#include <stdio.h>', args : test_args + ['-U_FILE_OFFSET_BITS'])
-            warning('Files larger than 2 gigabytes might not be supported in the dav1d CLI tool.')
+            warning('Files larger than 2 gigabytes might not be supported in the dav2d CLI tool.')
             add_project_arguments('-U_FILE_OFFSET_BITS', language: 'c')
         elif get_option('enable_tools')
-            error('dav1d CLI tool needs fseeko()')
+            error('dav2d CLI tool needs fseeko()')
         else
             have_fseeko = false
         endif
@@ -363,7 +363,7 @@ if (is_asm_enabled and
             '--',
             host_machine.cpu_family() == 'aarch64' ? 'armasm64' : 'armasm',
             '-nologo',
-            '-I@0@'.format(dav1d_src_root),
+            '-I@0@'.format(dav2d_src_root),
             '-I@0@/'.format(meson.current_build_dir()),
     ]
     gaspp_gen = generator(gaspp,
@@ -498,7 +498,7 @@ cdata.set10('ARCH_X86_64', host_machine.cpu_family() == 'x86_64')
 cdata.set10('ARCH_X86_32', host_machine.cpu_family() == 'x86')
 
 if host_machine.cpu_family().startswith('x86')
-    cdata_asm.set('private_prefix', 'dav1d')
+    cdata_asm.set('private_prefix', 'dav2d')
     cdata_asm.set10('ARCH_X86_64', host_machine.cpu_family() == 'x86_64')
     cdata_asm.set10('ARCH_X86_32', host_machine.cpu_family() == 'x86')
     cdata_asm.set10('PIC', true)
@@ -567,7 +567,7 @@ if is_asm_enabled and host_machine.cpu_family().startswith('x86')
         depfile: '@BASENAME@.obj.ndep',
         arguments: [
             '-f', nasm_format,
-            '-I', '@0@/src/'.format(dav1d_src_root),
+            '-I', '@0@/src/'.format(dav2d_src_root),
             '-I', '@0@/'.format(meson.current_build_dir()),
             '-MQ', '@OUTPUT@', '-MF', '@DEPFILE@',
             '@EXTRA_ARGS@',

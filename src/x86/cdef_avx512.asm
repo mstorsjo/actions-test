@@ -1,4 +1,4 @@
-; Copyright © 2020, VideoLAN and dav1d authors
+; Copyright © 2020, VideoLAN and dav2d authors
 ; Copyright © 2020, Two Orioles, LLC
 ; All rights reserved.
 ;

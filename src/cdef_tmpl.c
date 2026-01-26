@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav1d authors
+ * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -129,7 +129,7 @@ cdef_filter_block_c(pixel *dst, const ptrdiff_t dst_stride,
                     int max = px, min = px;
                     int pri_tap_k = pri_tap;
                     for (int k = 0; k < 2; k++) {
-                        const int off1 = dav1d_cdef_directions[dir + 2][k]; // dir
+                        const int off1 = dav2d_cdef_directions[dir + 2][k]; // dir
                         const int p0 = tmp[x + off1];
                         const int p1 = tmp[x - off1];
                         sum += pri_tap_k * constrain(p0 - px, pri_strength, pri_shift);
@@ -140,8 +140,8 @@ cdef_filter_block_c(pixel *dst, const ptrdiff_t dst_stride,
                         max = imax(p0, max);
                         min = umin(p1, min);
                         max = imax(p1, max);
-                        const int off2 = dav1d_cdef_directions[dir + 4][k]; // dir + 2
-                        const int off3 = dav1d_cdef_directions[dir + 0][k]; // dir - 2
+                        const int off2 = dav2d_cdef_directions[dir + 4][k]; // dir + 2
+                        const int off3 = dav2d_cdef_directions[dir + 0][k]; // dir - 2
                         const int s0 = tmp[x + off2];
                         const int s1 = tmp[x - off2];
                         const int s2 = tmp[x + off3];
@@ -173,7 +173,7 @@ cdef_filter_block_c(pixel *dst, const ptrdiff_t dst_stride,
                     int sum = 0;
                     int pri_tap_k = pri_tap;
                     for (int k = 0; k < 2; k++) {
-                        const int off = dav1d_cdef_directions[dir + 2][k]; // dir
+                        const int off = dav2d_cdef_directions[dir + 2][k]; // dir
                         const int p0 = tmp[x + off];
                         const int p1 = tmp[x - off];
                         sum += pri_tap_k * constrain(p0 - px, pri_strength, pri_shift);
@@ -194,8 +194,8 @@ cdef_filter_block_c(pixel *dst, const ptrdiff_t dst_stride,
                 const int px = dst[x];
                 int sum = 0;
                 for (int k = 0; k < 2; k++) {
-                    const int off1 = dav1d_cdef_directions[dir + 4][k]; // dir + 2
-                    const int off2 = dav1d_cdef_directions[dir + 0][k]; // dir - 2
+                    const int off1 = dav2d_cdef_directions[dir + 4][k]; // dir + 2
+                    const int off2 = dav2d_cdef_directions[dir + 0][k]; // dir - 2
                     const int s0 = tmp[x + off1];
                     const int s1 = tmp[x - off1];
                     const int s2 = tmp[x + off2];
@@ -317,7 +317,7 @@ static int cdef_find_dir_c(const pixel *img, const ptrdiff_t stride,
 #endif
 #endif
 
-COLD void bitfn(dav1d_cdef_dsp_init)(Dav1dCdefDSPContext *const c) {
+COLD void bitfn(dav2d_cdef_dsp_init)(Dav2dCdefDSPContext *const c) {
     c->dir = cdef_find_dir_c;
     c->fb[0] = cdef_filter_block_8x8_c;
     c->fb[1] = cdef_filter_block_4x8_c;

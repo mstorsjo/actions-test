@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024, VideoLAN and dav1d authors
+ * Copyright © 2024, VideoLAN and dav2d authors
  * Copyright © 2024, Loongson Technology Corporation Limited
  * All rights reserved.
  *
@@ -830,7 +830,7 @@ function ipred_paeth_8bpc_lsx
     bnez          a4,       .IPRED_PAETH_H_LOOP
 endfunc
 
-const dav1d_sm_weights
+const dav2d_sm_weights
     .byte  0,   0
     // bs = 2
     .byte  255, 128
@@ -863,7 +863,7 @@ endconst
 //                       const int max_width, const int max_height
 //                       HIGHBD_DECL_SUFFIX)
 function ipred_smooth_8bpc_lsx
-    la.local       a5,      dav1d_sm_weights
+    la.local       a5,      dav2d_sm_weights
     add.d          a6,      a5,      a3  //hor
     add.d          a5,      a5,      a4  //ver
 
@@ -939,7 +939,7 @@ endfunc
 //                         const int max_width, const int max_height
 //                         HIGHBD_DECL_SUFFIX)
 function ipred_smooth_v_8bpc_lsx
-    la.local       a5,      dav1d_sm_weights
+    la.local       a5,      dav2d_sm_weights
     add.d          a5,      a5,      a4  //ver
 
     sub.d          t0,      a2,      a4
@@ -1006,7 +1006,7 @@ endfunc
 //                         const int max_width, const int max_height
 //                         HIGHBD_DECL_SUFFIX)
 function ipred_smooth_h_8bpc_lsx
-    la.local       a5,      dav1d_sm_weights
+    la.local       a5,      dav2d_sm_weights
     add.d          a6,      a5,      a3  //hor
 
     add.d          a7,      a2,      a3
@@ -1328,7 +1328,7 @@ function ipred_cfl_128_8bpc_lsx
     ipred_cfl_pred a0, a1, a3, a4, t0, a5, a6
 endfunc
 
-const dav1d_filter_intra_taps_lsx
+const dav2d_filter_intra_taps_lsx
     //arr0  8*7
 .byte    -6, -5, -3, -3, -4, -3, -3, -3
 .byte    10,  2,  1,  1,  6,  2,  2,  1
@@ -1447,7 +1447,7 @@ endconst
 //                       HIGHBD_DECL_SUFFIX)
 function ipred_filter_8bpc_lsx
     andi           a5,      a5,      511
-    la.local       a6,      dav1d_filter_intra_taps_lsx
+    la.local       a6,      dav2d_filter_intra_taps_lsx
     li.w           a7,      56
     mul.w          a7,      a7,      a5
     add.d          a6,      a6,      a7   //*filter
@@ -1713,7 +1713,7 @@ function ipred_filter_8bpc_lsx
     blt            a5,      a4,      .FILTER_LOOP_H
 endfunc
 
-const dav1d_dr_intra_derivative
+const dav2d_dr_intra_derivative
     // Values that are 0 will never be used
     .short  0         // Angles:
     .short  1023, 0   //  3,  93, 183
@@ -1960,7 +1960,7 @@ function ipred_z1_8bpc_lsx
     srai.d         a7,      a5,      10  //enable_intra_edge_filter
     andi           a5,      a5,      511
 
-    la.local       t0,      dav1d_dr_intra_derivative
+    la.local       t0,      dav2d_dr_intra_derivative
     andi           t1,      a5,      0xFFE
     ldx.hu         t1,      t0,      t1  //dx
 
