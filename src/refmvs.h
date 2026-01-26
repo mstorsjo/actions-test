@@ -38,7 +38,6 @@
 #include "src/intra_edge.h"
 #include "src/tables.h"
 
-#define INVALID_MV 0x80008000
 #define INVALID_REF2CUR (-32)
 #define INVALID_TRAJ 0x8080
 
@@ -53,19 +52,13 @@ PACKED(typedef struct refmvs_sngl_mv_block {
     mv mv;
     uint8_t ref;
 }) refmvs_sngl_mv_block;
-CHECK_SIZE(refmvs_sngl_mv_block, 5);
+CHECK_SIZE(refmvs_sngl_mv_block, 9);
 
 PACKED(typedef union refmvs_refpair {
     int8_t ref[2]; // [0] = 0: intra=1, [1] = -1: comp=0
     uint16_t pair;
 }) ALIGN(refmvs_refpair, 2);
 CHECK_SIZE(refmvs_refpair, 2);
-
-typedef union refmvs_mvpair {
-    mv mv[2];
-    uint64_t n;
-} refmvs_mvpair;
-CHECK_SIZE(refmvs_mvpair, 8);
 
 PACKED(typedef struct refmvs_temporal_block {
     union {
@@ -86,15 +79,15 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 // bx4/by4 can be stored in one-byte elements as relative offset to start of
 // the block (see how it's used in decode.c:derive_warpmv()
 PACKED(typedef struct refmvs_block {
-    refmvs_mvpair mv;
+    union mv mv[2];
     refmvs_refpair ref;
     uint8_t bs;
     int8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2-7: cwp_idx
     uint16_t bx4, by4; // top/left coordinates (in 4px units) of this block
-    refmvs_mvpair lmv; // 2dmv for warp blocks (see #1146; mf & 2)
+    union mv lmv[2]; // 2dmv for warp blocks (see #1146; mf & 2)
     int32_t m[7]; // warp matrix
 }) ALIGN(refmvs_block, 4);
-CHECK_SIZE(refmvs_block, 52);
+CHECK_SIZE(refmvs_block, 68);
 
 typedef struct refmvs_frame {
     const Dav1dSequenceHeader *seq_hdr;
@@ -145,7 +138,7 @@ typedef struct refmvs_tile {
         int start, end;
     } tile_col, tile_row;
     struct {
-        refmvs_mvpair mv[9][4];
+        union mv mv[9][4][2];
         int8_t cwp_idx[3 /* class-6 */][4];
         refmvs_refpair ref[4];
         uint8_t size[9], idx[9];
@@ -158,7 +151,7 @@ typedef struct refmvs_tile {
 } refmvs_tile;
 
 typedef struct refmvs_candidate {
-    refmvs_mvpair mv;
+    union mv mv[2];
     uint8_t weight;
     int8_t cwp_idx;
     int8_t y_off, x_off;

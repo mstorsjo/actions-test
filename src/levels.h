@@ -269,10 +269,14 @@ enum CompInterType {
 
 typedef union mv {
     struct {
-        int16_t y, x;
+        int32_t y, x;
     };
-    uint32_t n;
+    uint64_t n;
 } mv;
+#define INVALID_MV 0x200000 // applied to mv.y
+#define COPY2MV(dst, src) memcpy(dst, src, 2 * sizeof(union mv))
+#define CMP2MV(src1, src2) memcmp(src1, src2, 2 * sizeof(union mv))
+#define ZERO2MV(dst) memset(dst, 0, 2 * sizeof(union mv))
 
 enum MotionMode {
     MM_TRANSLATION,

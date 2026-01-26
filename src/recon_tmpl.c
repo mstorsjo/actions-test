@@ -1664,7 +1664,7 @@ static int tip_pred(Dav1dTaskContext *const t,
         for (int x = 0, xx = 0; x < w4; x += step, xx++) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
             mv tmv = t->rt.rp_proj[off_8x8].mv;
-            if (tmv.n == INVALID_MV) tmv.n = 0;
+            if (tmv.y == INVALID_MV) tmv.n = 0;
             union mv cmv[2];
             int left[2], top[2];
             for (int i = 0; i < 2; i++) {
@@ -1751,7 +1751,7 @@ static int tip_pred(Dav1dTaskContext *const t,
                     for (int p = 1; p < 4; p++) {
                         mv tmv = t->rt.rp_proj[off_8x8 + (p & 1) +
                                                ((p & 2) >> 1) * t_stride].mv;
-                        if (tmv.n == INVALID_MV) tmv.n = 0;
+                        if (tmv.y == INVALID_MV) tmv.n = 0;
                         for (int i = 0; i < 2; i++) {
                             const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
                             dmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);

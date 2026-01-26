@@ -243,7 +243,7 @@ static void derive_warpmv(const Dav1dTaskContext *const t,
 
 #define bs(rp) dav1d_block_dimensions[(rp)->bs]
 #define add_sample(dx, dy, sx, sy, rp) do { \
-    const union mv *const rmv = (rp)->mf & 2 ? (rp)->lmv.mv : (rp)->mv.mv; \
+    const union mv *const rmv = (rp)->mf & 2 ? (rp)->lmv : (rp)->mv; \
     for (int n = 0; n < 2; n++) { \
         if ((rp)->ref.ref[n] != ref + 1) continue; \
         pts[np][0][0] = 16 * (2 * (dx) + sx * bs(rp)[0]) - 8; \
@@ -351,8 +351,8 @@ static void extend_warpmv(Dav1dTaskContext *const t,
     } else {
         memcpy(&m[2], &dav1d_default_wm_params.matrix[2], sizeof(*m) * 4);
         const int ref = r->ref.ref[0] - 1 != b->ref[0];
-        m[0] = r->mv.mv[ref].x * (1 << 13);
-        m[1] = r->mv.mv[ref].y * (1 << 13);
+        m[0] = r->mv[ref].x * (1 << 13);
+        m[1] = r->mv[ref].y * (1 << 13);
     }
 
     // extend warpmv using (quasi-)matrix from neighbour
@@ -555,7 +555,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     refmvs_temporal_block t_src;
     t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref[0] + 1;
     s_src.ref.ref[1] = -1;
-    s_src.mv.mv[1].n = INVALID_MV;
+    s_src.mv[1].y = INVALID_MV;
     s_src.bs = bs;
     s_src.bx4 = t->bx;
     s_src.by4 = t->by;
@@ -569,12 +569,12 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         memcpy(s_src.m, mat, sizeof(int32_t) * 6);
         s_src.m[6] = t->warpmv[0].type;
-        s_src.lmv.mv[0] = b->mv[0];
-        s_src.lmv.mv[1].n = INVALID_MV;
+        s_src.lmv[0] = b->mv[0];
+        s_src.lmv[1].y = INVALID_MV;
         f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                       mvy, mvx, &t->warpmv[0], bw4, bh4);
     } else {
-        s_src.mv.mv[0] = b->mv[0];
+        s_src.mv[0] = b->mv[0];
         s_src.mf = b->inter_mode == GLOBALMV;
         // this is invalid for TIP, but that will be overwritten in tip_pred()
         t_src.mv.mv[0] = t_src.mv.mv[1] = quantize_mv(b->mv[0]);
@@ -593,8 +593,8 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
         .ref.ref = { 0, -1 },
-        .mv.mv[0] = b->mv[0],
-        .mv.mv[1].n = INVALID_MV,
+        .mv[0] = b->mv[0],
+        .mv[1].y = INVALID_MV,
         .bs = bs,
         .mf = 0,
         .bx4 = t->bx,
@@ -649,13 +649,13 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
         memcpy(s_src.m, mat1, sizeof(int32_t) * 6);
         s_src.m[6] = t->warpmv[0].type;
-        memcpy(s_src.lmv.mv, b->mv, sizeof(union mv) * 2);
+        COPY2MV(s_src.lmv, b->mv);
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                            mvy1, mvx1, mvy2, mvx2,
                                            t->warpmv, bw4, bh4, t_swap,
                                            mask, b->wedge_sign ^ t_swap);
     } else {
-        memcpy(s_src.mv.mv, b->mv, sizeof(union mv) * 2);
+        COPY2MV(s_src.mv, b->mv);
         s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
         t_src.mv.mv[0] = quantize_mv(b->mv[t_swap]);
         t_src.mv.mv[1] = quantize_mv(b->mv[!t_swap]);
@@ -689,8 +689,8 @@ static inline void splat_intraref(const Dav1dContext *const c,
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
         .ref.ref = { -1, -1 },
-        .mv.mv[0].n = INVALID_MV,
-        .mv.mv[1].n = INVALID_MV,
+        .mv[0].y = INVALID_MV,
+        .mv[1].y = INVALID_MV,
         .bs = bs,
         .mf = 0,
         .bx4 = t->bx,
@@ -1803,8 +1803,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             printf("%*sfind_mv_refs(intra)\n", depth, "");
             for (int n = 0; n < n_mvs; n++)
                 printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
-                       depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
-                       mvstack[n].mv.mv[0].x, mvstack[n].weight);
+                       depth + 1, "", n, n_mvs, mvstack[n].mv[0].y,
+                       mvstack[n].mv[0].x, mvstack[n].weight);
         }
 #endif
 
@@ -1815,7 +1815,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
             if (!dav1d_msac_decode_bool_bypass(&ts->msac)) break;
 
         b->ref[0] = b->ref[1] = -1;
-        b->mv[0] = mvstack[drl_idx].mv.mv[0];
+        b->mv[0] = mvstack[drl_idx].mv[0];
         if (!b->mv[0].n) {
             // I don't know if this can actually happen, but AVM has code here
             // to force the refmv to a nonzero value
@@ -2046,14 +2046,13 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
                 for (int n = 0; n < n_mvs; n++)
                     printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
-                           depth + 1, "", n, n_mvs, mvstack[n].mv.mv[0].y,
-                           mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
-                           mvstack[n].mv.mv[1].x, mvstack[n].weight);
+                           depth + 1, "", n, n_mvs, mvstack[n].mv[0].y,
+                           mvstack[n].mv[0].x, mvstack[n].mv[1].y,
+                           mvstack[n].mv[1].x, mvstack[n].weight);
             }
 #endif
 
-            b->mv[0] = mvstack[drl_idx].mv.mv[0];
-            b->mv[1] = mvstack[drl_idx].mv.mv[1];
+            COPY2MV(b->mv, mvstack[drl_idx].mv);
             b->cwp_idx = mvstack[drl_idx].cwp_idx;
         } else if (is_comp) {
             const int n_refs = f->frame_hdr->n_ref_frames;
@@ -2187,7 +2186,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
-                    mvstack[n].mv.mv[1] = mvstack[n].mv.mv[0];
+                    mvstack[n].mv[1] = mvstack[n].mv[0];
                     mvstack[n].weight *= 0x11;
                 }
                 n_mvs[1] = n_mvs[0];
@@ -2200,7 +2199,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                                   (union refmvs_refpair) { .ref = {
                                       b->ref[1] + 1, -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
-                    mvstack[n].mv.mv[1] = mvstack2[n].mv.mv[0];
+                    mvstack[n].mv[1] = mvstack2[n].mv[0];
                     mvstack[n].weight = (mvstack[n].weight & 0xf) |
                                          mvstack2[n].weight << 4;
                 }
@@ -2213,15 +2212,15 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         for (int n = 0; n < n_mvs[drl]; n++)
                             printf("%*smv[%d:%d/%d]: y=%d,x=%d,w=%d\n",
                                    depth + 1, "", drl, n, n_mvs[drl],
-                                   mvstack[n].mv.mv[drl].y,
-                                   mvstack[n].mv.mv[drl].x,
+                                   mvstack[n].mv[drl].y,
+                                   mvstack[n].mv[drl].x,
                                    (mvstack[n].weight >> (4 * drl)) & 0xf);
                 } else {
                     for (int n = 0; n < n_mvs[0]; n++)
                         printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
-                               depth + 1, "", n, n_mvs[0], mvstack[n].mv.mv[0].y,
-                               mvstack[n].mv.mv[0].x, mvstack[n].mv.mv[1].y,
-                               mvstack[n].mv.mv[1].x, mvstack[n].weight);
+                               depth + 1, "", n, n_mvs[0], mvstack[n].mv[0].y,
+                               mvstack[n].mv[0].x, mvstack[n].mv[1].y,
+                               mvstack[n].mv[1].x, mvstack[n].weight);
                 }
             }
 #endif
@@ -2341,7 +2340,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 int n;
                 int sum_mvd = 0, nnzc = 0;
                 for (n = start; n < end; n++) {
-                    b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
+                    b->mv[n] = mvstack[drl_idx[n]].mv[n];
                     m[n] = dav1d_comp_inter_pred_modes[b->inter_mode -
                                                        NEARMV_NEARMV][n];
                     if (m[n] != NEWMV) continue;
@@ -2403,7 +2402,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                         diff[n] = mv_projection(diff[!n], refdist[1], refdist[0],
                                                 -0xffff, 0xffff);
                         jmvd_scale(&diff[n], amvd, jmvd_scale_mode);
-                        b->mv[n] = mvstack[drl_idx[n]].mv.mv[n];
+                        b->mv[n] = mvstack[drl_idx[n]].mv[n];
                         b->mv[n].x += diff[n].x;
                         b->mv[n].y += diff[n].y;
                     }
@@ -2625,8 +2624,8 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                 printf("%*sfind_mv_refs(%d,-1)\n", depth, "", b->ref[0]);
                 for (int n = 0; n < n_mvs[0]; n++)
                     printf("%*smv[%d/%d]: y=%d,x=%d,w=%d,y_off=%d,x_off=%d\n",
-                           depth + 1, "", n, n_mvs[0], mvstack[n].mv.mv[0].y,
-                           mvstack[n].mv.mv[0].x, mvstack[n].weight,
+                           depth + 1, "", n, n_mvs[0], mvstack[n].mv[0].y,
+                           mvstack[n].mv[0].x, mvstack[n].weight,
                            mvstack[n].y_off, mvstack[n].x_off);
                 if (b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV)
                     for (int n = 0; n < n_mvs[1]; n++)
@@ -2804,7 +2803,7 @@ static int decode_b(Dav1dTaskContext *const t, DB_ONLY(const int depth)
                     get_warpmv_2d(warp[warp_ref_idx], t->bx, t->by,
                                   bw4, bh4, f->bw, f->bh,
                                   warpmv_with_mvd ? mv_prec : 6) :
-                    mvstack[drl_idx].mv.mv[0];
+                    mvstack[drl_idx].mv[0];
                 if (b->inter_mode == NEWMV || b->inter_mode == WARPNEWMV ||
                     (b->inter_mode == WARPMV && warpmv_with_mvd))
                 {
