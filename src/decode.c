@@ -3085,11 +3085,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     if (has_luma &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
-        dav2d_create_lf_mask_intra(t->lf_mask, b, t->bx, t->by, f->bw, f->bh,
-                                   f->cur.p.layout,
-                                   &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
-                                   has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
-                                   has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL);
+        dav2d_create_lf_mask(t->lf_mask, b, t->bx, t->by, f->bw, f->bh,
+                             f->cur.p.layout,
+                             &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
+                             has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
+                             has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL,
+                             f->frame_hdr, f->seq_hdr);
     }
 
     if (!b->skip_txfm) {
@@ -4238,10 +4239,17 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                 .cwp_idx = 8,
             };
             const uint8_t *const b_dim = dav2d_block_dimensions[root_bs];
-            splat_oneref_mv(DB_ONLY(0) f, t, root_bs, &b, t->by & 63,
-                            b_dim[0], b_dim[1]);
+            const int by4 = t->by & 63, bx4 = t->bx & 63;
+            splat_oneref_mv(DB_ONLY(0) f, t, root_bs, &b, by4, b_dim[0], b_dim[1]);
             t->cbx = t->bx;
             t->cby = t->by;
+            if (f->frame_hdr->tip.apply_filter) {
+                dav2d_create_lf_mask(t->lf_mask, &b, t->bx, t->by, f->bw, f->bh,
+                                     f->cur.p.layout,
+                                     &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
+                                     &t->a->tx_lpf_uv[bx4], &t->l.tx_lpf_uv[by4],
+                                     f->frame_hdr, f->seq_hdr);
+            }
             f->bd_fn.recon_b(t, DB_ONLY(0) root_bs, c_root_bs, &b);
         } else {
             // Restoration filter

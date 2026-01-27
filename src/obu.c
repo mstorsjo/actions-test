@@ -1197,8 +1197,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (hdr->tip.frame_mode == 2) {
             if (seqhdr->lf_sub_pu) {
                 hdr->loopfilter.lf_sub_pu = dav2d_get_bit(gb);
-                if (hdr->loopfilter.lf_sub_pu)
+                if (hdr->loopfilter.lf_sub_pu) {
                     hdr->tip.apply_filter = dav2d_get_bit(gb);
+                    if (hdr->tip.apply_filter) {
+                        hdr->loopfilter.level_y[0] = 1;
+                        hdr->loopfilter.level_y[1] = 1;
+                    }
+                }
             }
 #if DEBUG_FRAME_HDR
             printf("HDR: post-tip_deblock[lfsubpu:%d,apply:%d]: off=%td\n",

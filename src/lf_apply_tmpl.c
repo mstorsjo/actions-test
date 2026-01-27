@@ -137,7 +137,7 @@ void bytefn(dav2d_copy_lpf)(Dav2dFrameContext *const f,
 
 static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
                                        const int have_left,
-                                       const uint16_t (*const mask)[4][4],
+                                       const uint16_t (*const mask)[5][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
                                        const int starty4, const int endy4,
@@ -153,12 +153,13 @@ static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
     // filter edges between columns (e.g. block1 | block2)
     for (int x = 0; x < w; x++) {
         if (!have_left && !x) continue;
-        uint64_t hmask[4] = { 0 };
+        uint64_t hmask[5] = { 0 };
         for (int y = starty64, shift = 0; y < endy64; y++, shift += 16) {
             hmask[0] |= (uint64_t) mask[x][0][y] << shift;
             hmask[1] |= (uint64_t) mask[x][1][y] << shift;
             hmask[2] |= (uint64_t) mask[x][2][y] << shift;
             hmask[3] |= (uint64_t) mask[x][3][y] << shift;
+            hmask[4] |= (uint64_t) mask[x][4][y] << shift;
         }
         dsp->lf.loop_filter_sb[0][0](&dst[x * 4], ls, hmask, q_thr, side_thr, x == tile_end,
                                      &f->lf.thr_lut, endy4 - starty4 HIGHBD_CALL_SUFFIX);
@@ -167,7 +168,7 @@ static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
 
 static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
                                        const int have_top,
-                                       const uint16_t (*const mask)[4][4],
+                                       const uint16_t (*const mask)[5][4],
                                        pixel *dst, const ptrdiff_t ls,
                                        const int w,
                                        const int starty4, const int endy4)
@@ -181,11 +182,12 @@ static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
     //                                 block2
     for (int y = starty4; y < endy4; y++, dst += 4 * PXSTRIDE(ls)) {
         if (!have_top && !y) continue;
-        const uint64_t vmask[4] = {
+        const uint64_t vmask[5] = {
             mask[y][0][0] | (uint64_t) mask[y][0][1] << 16 | (uint64_t) mask[y][0][2] << 32 | (uint64_t) mask[y][0][3] << 48,
             mask[y][1][0] | (uint64_t) mask[y][1][1] << 16 | (uint64_t) mask[y][1][2] << 32 | (uint64_t) mask[y][1][3] << 48,
             mask[y][2][0] | (uint64_t) mask[y][2][1] << 16 | (uint64_t) mask[y][2][2] << 32 | (uint64_t) mask[y][2][3] << 48,
             mask[y][3][0] | (uint64_t) mask[y][3][1] << 16 | (uint64_t) mask[y][3][2] << 32 | (uint64_t) mask[y][3][3] << 48,
+            mask[y][4][0] | (uint64_t) mask[y][4][1] << 16 | (uint64_t) mask[y][4][2] << 32 | (uint64_t) mask[y][4][3] << 48,
         };
         dsp->lf.loop_filter_sb[0][1](dst, ls, vmask, q_thr, side_thr, (y & 15) == 0,
                                      &f->lf.thr_lut, w HIGHBD_CALL_SUFFIX);
