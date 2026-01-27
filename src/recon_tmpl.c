@@ -3174,7 +3174,7 @@ chroma: {}
                           umin(ctw, 32) * umin(cth, 32) HIGHBD_CALL_SUFFIX);
             const int gt = eob[1] > eob[0];
             eob[!gt] = eob[gt];
-            txtp[0] &= 0xff;
+            txtp[1] = txtp[0] &= 0xff;
         }
         // inverse transform
         for (int pl = 0; pl < 2; pl++) {
