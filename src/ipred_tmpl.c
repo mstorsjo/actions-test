@@ -1125,8 +1125,7 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
     const int has_t = flags & CFL_HAS_TOP;
     const int has_l = flags & CFL_HAS_LEFT;
     const int dir = flags & CFL_DIR_ALL;
-    const int dir_l = dir == CFL_DIR_LEFT;
-    const int n_left = has_l ? 1 + dir_l : 0;
+    const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
     const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
     src -= n_left << 1;
 
@@ -1144,7 +1143,6 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
     if (has_t) {
         const pixel *top = top_sb_edge ?
             top_sb_edge - n_left * 2 : src - n_top * 2 * src_stride;
-        if (!has_l && !dir_l) top += 2;
         const ptrdiff_t a = !top_sb_edge ? -src_stride : 0;
         const ptrdiff_t b = !top_sb_edge ? src_stride : 0;
         for (int y = 0; y < n_top; y++) {
@@ -1231,7 +1229,7 @@ cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES],
 
     int n = 0;
     if (has_t) {
-        for (int i = 0; i < refw - 1 - !has_l; i++, n++) {
+        for (int i = !dir_l && !has_l; i < refw - 1 - (dir_l && !has_l); i++, n++) {
             const int v0 = y[i];
             const int v1 = SQRND(y[dir_t * ystride + i + dir_l]);
             imat[0][n] = v0;
