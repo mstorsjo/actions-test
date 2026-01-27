@@ -1312,10 +1312,9 @@ static void get_div_scale_sh(int d, int *scale, int *sh) {
 
     const int idx = d >> 11;
     const uint8_t coefw = dav2d_div_scale_sh_coefw[idx];
-    const uint8_t coefq = dav2d_div_scale_sh_coefq[idx];
     const uint16_t bias = dav2d_div_scale_sh_bias[idx];
     d -= dav2d_div_scale_sh_offset[idx];
-    *scale = (((coefw * ((d * d) >> 14)) >> 8) - ((coefq * d) >> 8) + bias) << 2;
+    *scale = (((coefw * ((d * d) >> 14)) >> 8) - (d >> 1) + bias) << 2;
 }
 
 /*

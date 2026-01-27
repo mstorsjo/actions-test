@@ -990,19 +990,15 @@ const uint16_t dav2d_div_recip[128 + 1] = {
 
 // Offset values used to adjust the normalized denominator.
 const uint16_t dav2d_div_scale_sh_offset[8] = {
-    1024, 3072,  5120,  7168, 9216, 11264, 13312, 15360
+    4822, 5952, 6624, 6792, 6408, 5424, 3792, 1466
 };
 // Bias for each region's polynomial.
 const uint16_t dav2d_div_scale_sh_bias[8] = {
-    15420, 13797, 12483, 11397, 10485, 9709,  9039,  8456
+    12784, 12054, 11670, 11583, 11764, 12195, 12870, 13782
 };
 // Coefficients for the quadratic (squared) term in the polynomial.
 const uint8_t dav2d_div_scale_sh_coefw[8] = {
     214, 153, 113,  86,  67, 53, 43, 35
-};
-// Coefficients for the other term in the polynomial.
-const uint8_t dav2d_div_scale_sh_coefq[8] = {
-    227, 181, 148, 124, 104, 89, 77, 68
 };
 
 #if ARCH_X86
