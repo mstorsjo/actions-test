@@ -183,8 +183,8 @@ static void mask_edges_chroma(uint16_t (*const masks)[64][2][4],
     dav2d_memset_likely_pow2(l, twl4c, ch4);
 }
 
-void dav2d_create_lf_mask_intra(Av1Filter *const lflvl,
-                                const Av1Block *const b,
+void dav2d_create_lf_mask_intra(Av2Filter *const lflvl,
+                                const Av2Block *const b,
                                 const int bx, const int by,
                                 const int iw, const int ih,
                                 const enum Dav2dPixelLayout layout,

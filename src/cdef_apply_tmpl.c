@@ -96,7 +96,7 @@ static int adjust_strength(const int strength, const unsigned var) {
 
 void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                              pixel *const p[3],
-                             const Av1Filter *const lflvl,
+                             const Av2Filter *const lflvl,
                              const int by_start, const int by_end,
                              const int sbrow_start, const int sby)
 {

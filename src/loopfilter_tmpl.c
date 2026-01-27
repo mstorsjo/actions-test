@@ -130,7 +130,7 @@ static void loop_filter_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
                                    const unsigned q_thr,
                                    const unsigned side_thr,
                                    const int edge,
-                                   const Av1FilterLUT *lut, const int h
+                                   const Av2FilterLUT *lut, const int h
                                    HIGHBD_DECL_SUFFIX)
 {
     const uint64_t vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
@@ -150,7 +150,7 @@ static void loop_filter_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
                                    const unsigned q_thr,
                                    const unsigned side_thr,
                                    const int edge,
-                                   const Av1FilterLUT *lut, const int w
+                                   const Av2FilterLUT *lut, const int w
                                    HIGHBD_DECL_SUFFIX)
 {
     const uint64_t vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
@@ -170,7 +170,7 @@ static void loop_filter_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const unsigned q_thr,
                                     const unsigned side_thr,
                                     const int edge,
-                                    const Av1FilterLUT *lut, const int h
+                                    const Av2FilterLUT *lut, const int h
                                     HIGHBD_DECL_SUFFIX)
 {
 #if 0
@@ -196,7 +196,7 @@ static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const unsigned q_thr,
                                     const unsigned side_thr,
                                     const int edge,
-                                    const Av1FilterLUT *lut, const int h
+                                    const Av2FilterLUT *lut, const int h
                                     HIGHBD_DECL_SUFFIX)
 {
 #if 0

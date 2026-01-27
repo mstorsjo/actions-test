@@ -33,17 +33,17 @@
 
 #include "src/levels.h"
 
-typedef struct Av1FilterLUT {
+typedef struct Av2FilterLUT {
     uint16_t thr[2 /* 0=col, 1=row */][2 /* 0 = q_thr, 1 = side_thr */][16];
-} Av1FilterLUT;
+} Av2FilterLUT;
 
-typedef struct Av1RestorationUnit {
+typedef struct Av2RestorationUnit {
     uint8_t /* enum Dav2dRestorationType */ type;
     int8_t ns_filter[16][32];
-} Av1RestorationUnit;
+} Av2RestorationUnit;
 
 // each struct describes one 256x256 area
-typedef struct Av1Filter {
+typedef struct Av2Filter {
     // each bit is 1 col
     uint16_t filter_y[2 /* 0=col, 1=row */][64][4][4];
     uint16_t filter_uv[2 /* 0=col, 1=row */][64][2][4];
@@ -51,14 +51,14 @@ typedef struct Av1Filter {
     int8_t cdef_idx[16]; // -1 means "unset"
     uint8_t ccso[3];
     uint16_t noskip_mask[32][4]; // for 8x8 blocks, but stored on a 4x8 basis
-} Av1Filter;
+} Av2Filter;
 
 // each struct describes one 256x256 area (1, 4, or 16 SBs)
-typedef struct Av1Restoration {
-    Av1RestorationUnit lr[3][16];
-} Av1Restoration;
+typedef struct Av2Restoration {
+    Av2RestorationUnit lr[3][16];
+} Av2Restoration;
 
-void dav2d_create_lf_mask_intra(Av1Filter *lflvl, const Av1Block *b, int bx, int by,
+void dav2d_create_lf_mask_intra(Av2Filter *lflvl, const Av2Block *b, int bx, int by,
                                 int iw, int ih, enum Dav2dPixelLayout layout, uint8_t *ay,
                                 uint8_t *ly, uint8_t *auv, uint8_t *luv);
 

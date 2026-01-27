@@ -772,7 +772,7 @@ endfunc
 // void dav2d_lpf_v_sb_y_16bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                                  const uint32_t *const vmask,
 //                                  const uint8_t (*l)[4], ptrdiff_t b4_stride,
-//                                  const Av1FilterLUT *lut, const int w,
+//                                  const Av2FilterLUT *lut, const int w,
 //                                  const int bitdepth_max)
 
 .macro lpf_func dir, type

@@ -264,7 +264,7 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
 }
 
 void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
-                                         pixel *const p[3], Av1Filter *const lflvl,
+                                         pixel *const p[3], Av2Filter *const lflvl,
                                          int sby, const int start_of_tile_row)
 {
     int x, have_left;
@@ -418,7 +418,7 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
 }
 
 void bytefn(dav2d_loopfilter_sbrow_rows)(const Dav2dFrameContext *const f,
-                                         pixel *const p[3], Av1Filter *const lflvl,
+                                         pixel *const p[3], Av2Filter *const lflvl,
                                          int sby)
 {
     int x;

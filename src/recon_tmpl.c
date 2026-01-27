@@ -335,7 +335,7 @@ static inline int tcq_next_state(const int state, const int abs_level) {
 static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         uint8_t *const a, uint8_t *const l,
                         const enum RectTxfmSize tx, const enum BlockSize bs,
-                        const Av1Block *const b, const int plane, coef *cf,
+                        const Av2Block *const b, const int plane, coef *cf,
                         enum TxfmType *const txtp, uint8_t *res_ctx)
 {
     Dav2dTileState *const ts = t->ts;
@@ -1079,7 +1079,7 @@ end:
 }
 
 void bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
-                                    const enum BlockSize bs, const Av1Block *const b)
+                                    const enum BlockSize bs, const Av2Block *const b)
 {
 #if 0
     const Dav2dFrameContext *const f = t->f;
@@ -1622,7 +1622,7 @@ static void opfl_mv_adj(const struct OpflRegressionData *const r,
 }
 
 static int tip_pred(Dav2dTaskContext *const t,
-                    int16_t (*const tmp)[64 * 64], const Av1Block *const b,
+                    int16_t (*const tmp)[64 * 64], const Av2Block *const b,
                     const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav2dFrameContext *const f = t->f;
@@ -1774,7 +1774,7 @@ static int tip_pred(Dav2dTaskContext *const t,
 }
 
 static int opfl_pred(Dav2dTaskContext *const t,
-                     int16_t (*const tmp)[64 * 64], const Av1Block *const b,
+                     int16_t (*const tmp)[64 * 64], const Av2Block *const b,
                      const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav2dFrameContext *const f = t->f;
@@ -2002,7 +2002,7 @@ static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
 }
 
 static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
-                           const enum RectTxfmSize tx, Av1Block *const b)
+                           const enum RectTxfmSize tx, Av2Block *const b)
 {
     const Dav2dFrameContext *const f = t->f;
     const Dav2dDSPContext *const dsp = f->dsp;
@@ -2377,7 +2377,7 @@ static void bawp(Dav2dTaskContext *const t,
 }
 
 static inline void
-cfl(Dav2dTaskContext *const t, const Av1Block *const b,
+cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     const enum BlockSize bs, const TxfmInfo *const uv_t_dim, const int can_cfl)
 {
     const Dav2dTileState *const ts = t->ts;
@@ -2579,7 +2579,7 @@ cfl(Dav2dTaskContext *const t, const Av1Block *const b,
 
 int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                           const enum BlockSize lbs, const enum BlockSize cbs,
-                          Av1Block *const b)
+                          Av2Block *const b)
 {
 #if 1
     Dav2dTileState *const ts = t->ts;
@@ -3553,7 +3553,7 @@ chroma: {}
 
 #if 0
 int bytefn(dav2d_recon_b_inter)(Dav2dTaskContext *const t, const enum BlockSize bs,
-                                const Av1Block *const b)
+                                const Av2Block *const b)
 {
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
@@ -3997,7 +3997,7 @@ void bytefn(dav2d_filter_sbrow_deblock_cols)(Dav2dFrameContext *const f, const i
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
+    Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     bytefn(dav2d_loopfilter_sbrow_cols)(f, p, mask, sby, f->lf.start_of_tile_row[sby]);
 }
 
@@ -4009,7 +4009,7 @@ void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const i
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
+    Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     if (f->c->inloop_filters & DAV2D_INLOOPFILTER_DEBLOCK &&
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
@@ -4036,8 +4036,8 @@ void bytefn(dav2d_filter_sbrow_cdef)(Dav2dTaskContext *const tc, const int sby) 
         f->lf.p[1] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.stride[1]) >> ss_ver)
     };
-    Av1Filter *prev_mask = f->lf.mask + ((sby - 1) >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    Av1Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
+    Av2Filter *prev_mask = f->lf.mask + ((sby - 1) >> (2 - f->frame_hdr->sb128)) * f->sb256w;
+    Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     const int start = sby * sbsz;
     if (sby) {
         const int ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
@@ -4117,7 +4117,7 @@ void bytefn(dav2d_copy_pal_block_y)(Dav2dTaskContext *const t,
 }
 
 void bytefn(dav2d_read_pal_plane)(DB_ONLY(const int depth)
-                                  Dav2dTaskContext *const t, Av1Block *const b,
+                                  Dav2dTaskContext *const t, Av2Block *const b,
                                   const int bx4, const int by4)
 {
     Dav2dTileState *const ts = t->ts;

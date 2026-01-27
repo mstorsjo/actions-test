@@ -33,7 +33,7 @@
 #include "src/internal.h"
 
 void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *tc, pixel *const p[3],
-                             const Av1Filter *lflvl, int by_start, int by_end,
+                             const Av2Filter *lflvl, int by_start, int by_end,
                              int sbrow_start, int sby);
 
 #endif /* DAV2D_SRC_CDEF_APPLY_H */

@@ -251,7 +251,7 @@ void dav2d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,
 void dav2d_refmvs_reset_sb(refmvs_tile *rt, int by, int bx);
 void dav2d_refmvs_bank_update(refmvs_tile *rt, enum BlockSize bs, int by, int bx);
 void dav2d_refmvs_bank_add(refmvs_tile *rt, enum BlockSize bs, int by, int bx,
-                           const Av1Block *b);
+                           const Av2Block *b);
 int dav2d_refmvs_warp_add(refmvs_tile *rt, const Dav2dWarpedMotionParams *const m,
                           DB_ONLY(int by4, int bx4) int ref);
 

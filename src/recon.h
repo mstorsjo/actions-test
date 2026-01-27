@@ -34,7 +34,7 @@
 
 #define decl_recon_b_fn(name) \
 int (name)(Dav2dTaskContext *t, DB_ONLY(int depth) \
-           enum BlockSize bs, enum BlockSize cbs, Av1Block *b)
+           enum BlockSize bs, enum BlockSize cbs, Av2Block *b)
 typedef decl_recon_b_fn(*recon_b_fn);
 
 #define decl_filter_sbrow_fn(name) \
@@ -46,7 +46,7 @@ void (name)(Dav2dTaskContext *t)
 typedef decl_backup_ipred_edge_fn(*backup_ipred_edge_fn);
 
 #define decl_read_coef_blocks_fn(name) \
-void (name)(Dav2dTaskContext *t, enum BlockSize bs, const Av1Block *b)
+void (name)(Dav2dTaskContext *t, enum BlockSize bs, const Av2Block *b)
 typedef decl_read_coef_blocks_fn(*read_coef_blocks_fn);
 
 #define decl_copy_pal_block_fn(name) \
@@ -55,7 +55,7 @@ typedef decl_copy_pal_block_fn(*copy_pal_block_fn);
 
 #define decl_read_pal_plane_fn(name) \
 void (name)(DB_ONLY(const int depth) Dav2dTaskContext *t, \
-                    Av1Block *b, int bx4, int by4)
+                    Av2Block *b, int bx4, int by4)
 typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 
 decl_recon_b_fn(dav2d_recon_b_8bpc);

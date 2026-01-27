@@ -1363,7 +1363,7 @@ loop_filter_v_16_all(uint8_t *dst, u8x16 E, u8x16 I, u8x16 H,
 void LPF(h_sb_y)(pixel *dst, const ptrdiff_t stride,
                  const uint32_t *const vmask,
                  const uint8_t (*l)[4], ptrdiff_t b4_stride,
-                 const Av1FilterLUT *lut, const int h)
+                 const Av2FilterLUT *lut, const int h)
 {
     unsigned vm = vmask[0] | vmask[1] | vmask[2];
 
@@ -1450,7 +1450,7 @@ void LPF(h_sb_y)(pixel *dst, const ptrdiff_t stride,
 void LPF(v_sb_y)(pixel *dst, const ptrdiff_t stride,
                  const uint32_t *const vmask,
                  const uint8_t (*l)[4], ptrdiff_t b4_stride,
-                 const Av1FilterLUT *lut, const int w)
+                 const Av2FilterLUT *lut, const int w)
 {
     unsigned vm = vmask[0] | vmask[1] | vmask[2];
 
@@ -1531,7 +1531,7 @@ void LPF(v_sb_y)(pixel *dst, const ptrdiff_t stride,
 void LPF(h_sb_uv)(pixel *dst, const ptrdiff_t stride,
                   const uint32_t *const vmask,
                   const uint8_t (*l)[4], ptrdiff_t b4_stride,
-                  const Av1FilterLUT *lut, const int h)
+                  const Av2FilterLUT *lut, const int h)
 {
     unsigned vm = vmask[0] | vmask[1];
     u32x4 vm0 = vec_splats(vm);
@@ -1615,7 +1615,7 @@ void LPF(h_sb_uv)(pixel *dst, const ptrdiff_t stride,
 void LPF(v_sb_uv)(pixel *dst, const ptrdiff_t stride,
                   const uint32_t *const vmask,
                   const uint8_t (*l)[4], ptrdiff_t b4_stride,
-                  const Av1FilterLUT *lut, const int w)
+                  const Av2FilterLUT *lut, const int w)
 {
     unsigned vm = vmask[0] | vmask[1];
 

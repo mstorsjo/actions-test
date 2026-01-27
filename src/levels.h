@@ -301,7 +301,7 @@ enum CflMhDir {
 
 #define TIP_FRAME 7
 
-typedef struct Av1Block {
+typedef struct Av2Block {
     uint8_t bs;
     uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, uvtx, fsc;
     union {
@@ -332,6 +332,6 @@ typedef struct Av1Block {
             uint8_t refine_mv; // 1 = enabled, 2 = implicitly enabled
         }; // inter
     };
-} Av1Block;
+} Av2Block;
 
 #endif /* DAV2D_SRC_LEVELS_H */

@@ -41,7 +41,7 @@
 #define decl_loopfilter_sb_fn(name) \
 void (name)(pixel *dst, ptrdiff_t stride, const uint64_t *mask, \
             unsigned q_thr, unsigned side_thr, int edge, \
-            const Av1FilterLUT *lut, int w HIGHBD_DECL_SUFFIX)
+            const Av2FilterLUT *lut, int w HIGHBD_DECL_SUFFIX)
 typedef decl_loopfilter_sb_fn(*loopfilter_sb_fn);
 
 typedef struct Dav2dLoopFilterDSPContext {

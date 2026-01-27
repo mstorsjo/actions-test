@@ -990,7 +990,7 @@ endfunc
 // void dav2d_lpf_v_sb_y_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                                 const uint32_t *const vmask,
 //                                 const uint8_t (*l)[4], ptrdiff_t b4_stride,
-//                                 const Av1FilterLUT *lut, const int w)
+//                                 const Av2FilterLUT *lut, const int w)
 
 .macro lpf_func dir, type
 function lpf_\dir\()_sb_\type\()_8bpc_neon, export=1

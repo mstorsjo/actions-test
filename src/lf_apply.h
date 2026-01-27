@@ -36,10 +36,10 @@
 #include "src/levels.h"
 
 void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *f,
-                                         pixel *const p[3], Av1Filter *lflvl,
+                                         pixel *const p[3], Av2Filter *lflvl,
                                          int sby, int start_of_tile_row);
 void bytefn(dav2d_loopfilter_sbrow_rows)(const Dav2dFrameContext *f,
-                                         pixel *const p[3], Av1Filter *lflvl,
+                                         pixel *const p[3], Av2Filter *lflvl,
                                          int sby);
 
 void bytefn(dav2d_copy_lpf)(Dav2dFrameContext *const f,

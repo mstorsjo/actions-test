@@ -299,7 +299,7 @@ struct Dav2dFrameContext {
         atomic_int deblock_progress; // in sby units
         atomic_uint *frame_progress, *copy_lpf_progress;
         // indexed using t->by * f->b4_stride + t->bx
-        Av1Block *b;
+        Av2Block *b;
         int16_t *cbi; /* bits 0-4: txtp, bits 5-15: eob */
         // indexed using (t->by >> 1) * (f->b4_stride >> 1) + (t->bx >> 1)
         pixel (*pal)[8 /* idx */];
@@ -314,14 +314,14 @@ struct Dav2dFrameContext {
 
     // loopfilter
     struct {
-        Av1Filter *mask;
-        Av1Restoration *lr_mask;
+        Av2Filter *mask;
+        Av2Restoration *lr_mask;
         int mask_sz /* w*h */, lr_mask_sz;
         int cdef_buf_plane_sz[2]; /* stride*sbh*4 */
         int cdef_buf_sbh;
         int lr_buf_plane_sz[2]; /* (stride*sbh*4) << sb128 if n_tc > 1, else stride*4 */
         int re_sz /* h */;
-        ALIGN(Av1FilterLUT thr_lut, 16);
+        ALIGN(Av2FilterLUT thr_lut, 16);
         uint8_t *tx_lpf_right_edge[2];
         uint8_t *cdef_line_buf, *lr_line_buf;
         pixel *cdef_line[2 /* pre, post */][3 /* plane */];
@@ -396,7 +396,7 @@ struct Dav2dTileState {
     const uint32_t (*dq)[3][2];
     int last_qidx;
 
-    Av1RestorationUnit *lr_ref[3];
+    Av2RestorationUnit *lr_ref[3];
 
     struct NsWienerBank {
         uint8_t bank_size[16], bank_idx[16];
@@ -487,7 +487,7 @@ struct Dav2dTaskContext {
             unsigned n;
         } opfl[8 * 8];
     };
-    Av1Filter *lf_mask;
+    Av2Filter *lf_mask;
     int top_pre_cdef_toggle;
     // for chroma sub8x8, we need to know the filter for all 4 subblocks in
     // a 4x4 area, but the top/left one can go out of cache already, so this

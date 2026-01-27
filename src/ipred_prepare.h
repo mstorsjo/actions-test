@@ -74,7 +74,7 @@
  * Each edge may remain uninitialized if it is not used by the returned mode
  * index. If edges are not available (because the edge position is outside the
  * tile dimensions or because edge_flags indicates lack of edge availability),
- * they will be extended from nearby edges as defined by the av1 spec.
+ * they will be extended from nearby edges as defined by the av2 spec.
  *
  * Intra flags is a bitmask indicating intra mode features such as top/left
  * edge use, MRL mode, IBP, and edge filtering options (see ipred.h).

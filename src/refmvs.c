@@ -1304,7 +1304,7 @@ static void refmvs_bank_add(refmvs_tile *const rt,
 }
 
 void dav2d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
-                           const int by4, const int bx4, const Av1Block *const b)
+                           const int by4, const int bx4, const Av2Block *const b)
 {
     RDB_ONLY(const refmvs_frame *const rf = rt->rf);
 

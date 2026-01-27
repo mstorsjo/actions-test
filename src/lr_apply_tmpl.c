@@ -36,7 +36,7 @@
 static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                       const pixel (*left)[4], int x, int y,
                       const int plane, const int unit_w, const int row_h,
-                      const Av1RestorationUnit *const lr, enum LrEdgeFlags edges)
+                      const Av2RestorationUnit *const lr, enum LrEdgeFlags edges)
 {
     const Dav2dDSPContext *const dsp = f->dsp;
     const int chroma = !!plane;
@@ -113,7 +113,7 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
 
     /* maximum sbrow height is 128 + 8 rows offset */
     ALIGN_STK_16(pixel, pre_lr_border, 2, [128 + 8][4]);
-    const Av1RestorationUnit *lr[2];
+    const Av2RestorationUnit *lr[2];
 
     enum LrEdgeFlags edges = (y > 0 ? LR_HAVE_TOP : 0) | LR_HAVE_RIGHT;
 

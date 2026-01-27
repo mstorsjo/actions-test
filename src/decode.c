@@ -100,7 +100,7 @@ static uint16_t deblock_side_thr(const int hbd, const int qidx) {
 
 static void init_deblock_lut(const Dav2dSequenceHeader *const seq_hdr,
                              const Dav2dFrameHeader *const frame_hdr,
-                             const int qidx, Av1FilterLUT *const lut)
+                             const int qidx, Av2FilterLUT *const lut)
 {
     const int qmax = 255 + 48 * seq_hdr->hbd;
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
@@ -331,7 +331,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
 static void extend_warpmv(Dav2dTaskContext *const t,
                           const int x_off, const int y_off,
                           const uint8_t *const b_dim,
-                          const Av1Block *const b,
+                          const Av2Block *const b,
                           Dav2dWarpedMotionParams *const wmp)
 {
     const Dav2dFrameContext *const f = t->f;
@@ -523,7 +523,7 @@ static inline unsigned get_prev_frame_segid(const Dav2dFrameContext *const f,
 static void debug_warp_matrix(const int depth,
                               const Dav2dFrameContext *const f,
                               const Dav2dTaskContext *const t,
-                              const Av1Block *const b, const int r)
+                              const Av2Block *const b, const int r)
 {
 #define signabs(v) v < 0 ? '-' : ' ', abs(v)
     DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ],t=%d "
@@ -545,7 +545,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                                    const Dav2dFrameContext *const f,
                                    Dav2dTaskContext *const t,
                                    const enum BlockSize bs,
-                                   const Av1Block *const b,
+                                   const Av2Block *const b,
                                    const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
@@ -587,7 +587,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
                                     const Dav2dFrameContext *const f,
                                     Dav2dTaskContext *const t,
                                     const enum BlockSize bs,
-                                    const Av1Block *const b,
+                                    const Av2Block *const b,
                                     const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
@@ -616,7 +616,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                                    const Dav2dFrameContext *const f,
                                    Dav2dTaskContext *const t,
                                    const enum BlockSize bs,
-                                   const Av1Block *const b,
+                                   const Av2Block *const b,
                                    const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
@@ -770,7 +770,7 @@ static NOINLINE void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *con
 #endif
 
 static void read_tx_part(Dav2dTaskContext *const t,
-                         DB_ONLY(const int depth) Av1Block *const b,
+                         DB_ONLY(const int depth) Av2Block *const b,
                          const enum BlockSize bs)
 {
     Dav2dTileState *const ts = t->ts;
@@ -927,7 +927,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     assert(bs != BS_INVALID);
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
-    Av1Block b_mem, *const b = t->frame_thread.pass ?
+    Av2Block b_mem, *const b = t->frame_thread.pass ?
         &f->frame_thread.b[t->by * f->b4_stride + t->bx] : &b_mem;
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bx4 = t->bx & 63, by4 = t->by & 63;
@@ -4040,7 +4040,7 @@ static inline int decode_4way(MsacContext *const s, const int ref,
 }
 
 static void read_restoration_info(Dav2dTaskContext *const t,
-                                  Av1RestorationUnit *const lr, const int p,
+                                  Av2RestorationUnit *const lr, const int p,
                                   const enum Dav2dRestorationType frame_type)
 {
     const Dav2dFrameContext *const f = t->f;
@@ -4220,7 +4220,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             dav2d_refmvs_reset_sb(&t->rt, t->by, t->bx);
         }
         if (f->frame_hdr->tip.frame_mode == 2) {
-            Av1Block b = {
+            Av2Block b = {
                 .bs = root_bs,
                 .intra = 0,
                 .intrabc = 0,
@@ -4284,7 +4284,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                 for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
                     for (int x = 0; x < lruw; x++) {
                         int unit_idx = start_unit_idx; // TODO: + x * ... + y * ...;
-                        Av1RestorationUnit *const lr =
+                        Av2RestorationUnit *const lr =
                             &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][unit_idx];
                         read_restoration_info(t, lr, p, frame_type);
                         DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",

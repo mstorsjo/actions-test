@@ -102,7 +102,7 @@ static void check_lpf_sb(loopfilter_sb_fn fn, const char *const name,
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const uint32_t *mask,
                  const uint8_t (*l)[4], ptrdiff_t b4_stride,
-                 const Av1FilterLUT *lut, int w HIGHBD_DECL_SUFFIX);
+                 const Av2FilterLUT *lut, int w HIGHBD_DECL_SUFFIX);
 
     pixel *a_dst, *c_dst;
     ptrdiff_t stride, b4_stride;
@@ -122,7 +122,7 @@ static void check_lpf_sb(loopfilter_sb_fn fn, const char *const name,
     }
     stride = w * sizeof(pixel);
 
-    Av1FilterLUT lut;
+    Av2FilterLUT lut;
     const int sharp = rnd() & 7;
     for (int level = 0; level < 64; level++) {
         int limit = level;
