@@ -52,8 +52,8 @@ static void cctx_c(coef *const u, coef *const v, const int16_t angle[2],
     for (size_t i = 0; i < sz; i++) {
         const int a = u[i] * cosa - v[i] * sina;
         const int b = u[i] * sina + v[i] * cosa;
-        u[i] = iclip((a + 128) >> 8, min, max);
-        v[i] = iclip((b + 128) >> 8, min, max);
+        u[i] = iclip((a + 128 - (a < 0)) >> 8, min, max);
+        v[i] = iclip((b + 128 - (b < 0)) >> 8, min, max);
     }
 }
 
