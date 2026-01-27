@@ -2451,8 +2451,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                         n_left = 4;
                     }
                 } else {
-                    n_top = has_top ? 4 : 0;
-                    n_left = has_left ? 4 : 0;
+                    n_top = has_top ? imin(8, ctw) : 0;
+                    n_left = has_left ? imin(8, cth) : 0;
                 }
 
                 int sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
