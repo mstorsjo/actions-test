@@ -556,9 +556,8 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         } else {
             const int y = eob >> (2 + slw), x = eob & ((4 << slw) - 1);
             const int xy = x + y;
-            // transform dimensions are not truncated for tx64 (to tx32) here,
-            // see AVM bug #943
-            const int ctx = xy < 2 ? 1 : xy > 4 * (t_dim->w + t_dim->h) - 4 ? 2 : 0;
+            const int ctx = xy < 2 ? 1 : xy > 4 * (imin(8, t_dim->w) +
+                                                   imin(8, t_dim->h)) - 4 ? 2 : 0;
             if (tx == (enum RectTxfmSize)TX_32X32) {
                 *txtp = dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.txtp_inter_dct_idtx[ctx][TX_32X32]) ?
