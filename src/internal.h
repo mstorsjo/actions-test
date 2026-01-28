@@ -485,19 +485,11 @@ struct Dav2dTaskContext {
 
     union {
         Dav2dWarpedMotionParams warpmv[2];
-        union OpflMvDeltaBlock {
-            struct OpflMvDelta {
-                int8_t x, y;
-            } d[2];
-            unsigned n;
-        } opfl[8 * 8];
+        // refined mvs after tip/opfl/refinemv
+        union mv rmv[8 * 8 /* y * 8 + x */][2 /* refined, tmv */][2 /* ref */];
     };
     Av2Filter *lf_mask;
     int top_pre_cdef_toggle;
-    // for chroma sub8x8, we need to know the filter for all 4 subblocks in
-    // a 4x4 area, but the top/left one can go out of cache already, so this
-    // keeps it accessible
-    enum Dav2dFilterMode tl_4x4_filter;
 
     struct {
         int pass;

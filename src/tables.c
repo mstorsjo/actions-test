@@ -214,6 +214,42 @@ const uint8_t /* enum (Rect)TxfmSize */
     [BS_4x4]     = {  TX_4X4,    TX_4X4,    TX_4X4,    TX_4X4   },
 };
 
+const uint8_t /* enum BlockSize */
+    dav2d_ss_bs[N_BS_SIZES][3 /* 420, 422, 444 */] =
+{
+    [BS_256x256] = { BS_128x128, BS_128x256, BS_256x256 },
+    [BS_256x128] = { BS_128x64,  BS_128x128, BS_256x128 },
+    [BS_128x256] = { BS_64x128,  BS_INVALID, BS_128x256 },
+    [BS_128x128] = { BS_64x64,   BS_64x128,  BS_128x128 },
+    [BS_128x64]  = { BS_64x32,   BS_64x64,   BS_128x64  },
+    [BS_64x128]  = { BS_32x64,   BS_INVALID, BS_64x128 },
+    [BS_64x64]   = { BS_32x32,   BS_32x64,   BS_64x64 },
+    [BS_64x32]   = { BS_32x16,   BS_32x32,   BS_64x32 },
+    [BS_64x16]   = { BS_32x8,    BS_32x16,   BS_64x16 },
+    [BS_64x8]    = { BS_32x4,    BS_32x8,    BS_64x8  },
+    [BS_64x4]    = { BS_INVALID, BS_32x4,    BS_64x4  },
+    [BS_32x64]   = { BS_16x32,   BS_16x64,   BS_32x64 },
+    [BS_32x32]   = { BS_16x16,   BS_16x32,   BS_32x32 },
+    [BS_32x16]   = { BS_16x8,    BS_16x16,   BS_32x16 },
+    [BS_32x8]    = { BS_16x4,    BS_16x8,    BS_32x8  },
+    [BS_32x4]    = { BS_INVALID, BS_16x4,    BS_32x4  },
+    [BS_16x64]   = { BS_8x32,    BS_8x64,    BS_16x64 },
+    [BS_16x32]   = { BS_8x16,    BS_8x32,    BS_16x32 },
+    [BS_16x16]   = { BS_8x8,     BS_8x16,    BS_16x16 },
+    [BS_16x8]    = { BS_8x4,     BS_8x8,     BS_16x8  },
+    [BS_16x4]    = { BS_INVALID, BS_8x4,     BS_16x4  },
+    [BS_8x64]    = { BS_4x32,    BS_4x64,    BS_8x64  },
+    [BS_8x32]    = { BS_4x16,    BS_4x32,    BS_8x32  },
+    [BS_8x16]    = { BS_4x8,     BS_4x16,    BS_8x16  },
+    [BS_8x8]     = { BS_4x4,     BS_4x8,     BS_8x8   },
+    [BS_8x4]     = { BS_INVALID, BS_4x4,     BS_8x4   },
+    [BS_4x64]    = { BS_INVALID, BS_INVALID, BS_4x64  },
+    [BS_4x32]    = { BS_INVALID, BS_INVALID, BS_4x32  },
+    [BS_4x16]    = { BS_INVALID, BS_INVALID, BS_4x16  },
+    [BS_4x8]     = { BS_INVALID, BS_INVALID, BS_4x8   },
+    [BS_4x4]     = { BS_INVALID, BS_INVALID, BS_4x4   },
+};
+
 #if DEBUG_BLOCK_INFO
 const char *const dav2d_tx1d_names[N_TX_1D_TYPES] = {
     [DCT]      = "dct",

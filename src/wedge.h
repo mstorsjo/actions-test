@@ -34,27 +34,29 @@ typedef struct {
     /* Offsets, in units of 8 bytes, relative to the start of the struct. */
     struct {
         uint8_t wedge[N_BS_SIZES - BS_64x64 - 6];
-        uint8_t ii_nondc[N_BS_SIZES - BS_64x64 - 2];
+        uint16_t ii_nondc[N_BS_SIZES - BS_64x64];
     } offsets;
-    uint8_t ALIGN(wedge[68 * (64 + 32 + 16 + 8) * (64 + 32 + 16 + 8)], 64);
+    uint8_t *wedge[3];
+    uint8_t ALIGN(wedge_444[68 * (64 + 32 + 16 + 8) * (64 + 32 + 16 + 8)], 64);
+    uint8_t ALIGN(wedge_422[68 * (32 + 16 + 8 + 4) * (64 + 32 + 16 + 8)], 64);
+    uint8_t ALIGN(wedge_420[68 * (32 + 16 + 8 + 4) * (32 + 16 + 8 + 4)], 64);
     uint8_t ALIGN(wedge_tmvp[68 * (8 + 4 + 2 + 1) * (8 + 4 + 2 + 1)], 64);
     uint8_t ALIGN(ii_dc[64 * 64], 64);
-    uint8_t ALIGN(ii_nondc[((64 + 32 + 16 + 8 + 4) * (64 + 32 + 16 + 8 + 4) -
-                            (4 * 4 + 8 * 4 + 4 * 8)) * 3], 64);
+    uint8_t ALIGN(ii_nondc[(64 + 32 + 16 + 8 + 4) * (64 + 32 + 16 + 8 + 4) * 3], 64);
 } Dav2dMasks;
 
 #define II_MASK(bs, bw4, bh4, ii_mode) \
     (ii_mode == II_DC_PRED ? dav2d_masks.ii_dc : \
-     &dav2d_masks.ii_nondc[dav2d_masks.offsets.ii_nondc[bs - BS_64x64] * 0xc0 + \
-                           16 * bw4 * bh4 * (ii_mode - 1)])
+     &dav2d_masks.ii_nondc[dav2d_masks.offsets.ii_nondc[bs - BS_64x64] * 0x60 + \
+                           16 * (bw4) * (bh4) * (ii_mode - 1)])
 
-#define WEDGE_MASK(bs, bw4, bh4, widx) \
-    &dav2d_masks.wedge[dav2d_masks.offsets.wedge[bs - BS_64x64] * 0x1100 + \
-                       16 * bw4 * bh4 * widx]
+#define WEDGE_MASK(bs, bw4, bh4, widx, ssidx) \
+    &dav2d_masks.wedge[ssidx][(dav2d_masks.offsets.wedge[bs - BS_64x64] * 0x1100 + \
+                               16 * bw4 * bh4 * widx) >> (ssidx)]
 
 #define WEDGE_TMVP(bs, bw4, bh4, widx) \
     &dav2d_masks.wedge_tmvp[dav2d_masks.offsets.wedge[bs - BS_64x64] * 68 + \
-                            (bw4 * bh4 >> 2) * widx]
+                            ((bw4) * (bh4) >> 2) * widx]
 
 EXTERN Dav2dMasks dav2d_masks;
 

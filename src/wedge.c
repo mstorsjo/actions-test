@@ -105,6 +105,30 @@ static void copy2d(uint8_t *dst, const uint8_t *src,
     }
 }
 
+static void subsample_420(uint8_t *dst, const uint8_t *src,
+                          const int w8, const int h8)
+{
+    for (int y = 0; y < h8 * 8; y++) {
+        for (int x = 0; x < w8 * 8; x++)
+            dst[x] = (src[x * 2 + 0] + src[x * 2 + 1] +
+                      src[x * 2 + 0 + w8 * 8] +
+                      src[x * 2 + 1 + w8 * 8] + 2) >> 2;
+        dst += w8 * 4;
+        src += w8 * 8 * 2;
+    }
+}
+
+static void subsample_422(uint8_t *dst, const uint8_t *src,
+                          const int w8, const int h8)
+{
+    for (int y = 0; y < h8 * 8; y++) {
+        for (int x = 0; x < w8 * 8; x++)
+            dst[x] = (src[x * 2 + 0] + src[x * 2 + 1] + 1) >> 1;
+        dst += w8 * 4;
+        src += w8 * 8;
+    }
+}
+
 static void fill_tmvp(uint8_t *dst, const uint8_t *src,
                       const int w8, const int h8)
 {
@@ -156,7 +180,11 @@ static COLD void init_wedge_masks(void) {
         dav2d_masks.offsets.wedge[bs - BS_64x64] = o;
         o += b_dim[0] * b_dim[1] >> 2;
     }
-    assert(o * 0x1100 == sizeof(dav2d_masks.wedge) && o < 256);
+    assert(o * 0x1100 == sizeof(dav2d_masks.wedge_444) && o < 256);
+
+    dav2d_masks.wedge[0] = dav2d_masks.wedge_444;
+    dav2d_masks.wedge[1] = dav2d_masks.wedge_422;
+    dav2d_masks.wedge[2] = dav2d_masks.wedge_420;
 
     uint8_t master[128 * 128];
     enum WedgeDirectionType wd = N_WEDGE_DIRECTIONS;
@@ -167,8 +195,10 @@ static COLD void init_wedge_masks(void) {
             wd = cb->direction;
         }
 #define fill(w8, h8, sz) do { \
-        uint8_t *const wm = WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx); \
+        uint8_t *const wm = WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx, 0); \
         copy2d(wm, master, w8, h8, cb->x_offset, cb->y_offset); \
+        subsample_422(WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx, 1), wm, w8, h8); \
+        subsample_420(WEDGE_MASK(BS_##sz, w8 * 2, h8 * 2, widx, 2), wm, w8, h8); \
         fill_tmvp(WEDGE_TMVP(BS_##sz, w8 * 2, h8 * 2, widx), wm, w8, h8); \
     } while (0)
         fill(1, 1, 8x8);
@@ -225,17 +255,21 @@ static COLD void init_ii_masks(void) {
     int o = 0;
     for (enum BlockSize bs = BS_64x64; bs < N_BS_SIZES; bs++) {
         const uint8_t *const b_dim = dav2d_block_dimensions[bs];
-        if (b_dim[0] * b_dim[1] <= 2) continue;
         dav2d_masks.offsets.ii_nondc[bs - BS_64x64] = o;
-        o += b_dim[0] * b_dim[1] >> 2;
+        // we rely on 4x4 being the last entry here
+        o += b_dim[0] * b_dim[1] >> 1;
     }
-    assert(o * 0xc0 == sizeof(dav2d_masks.ii_nondc) && o < 256);
+    // but sadly, o will still go one bit too far to fit in uint8_t...
+    assert(o * 0x60 + 0x30 == sizeof(dav2d_masks.ii_nondc) && o < UINT16_MAX);
 
 #define fill(w, h, s) \
     build_nondc_ii_masks(II_MASK(BS_##w##x##h, 0, 0, 1), w, h, s)
+    fill( 4,  4, 16);
+    fill( 4,  8, 8);
     fill( 4, 16, 4);
     fill( 4, 32, 2);
     fill( 4, 64, 1);
+    fill( 8,  4, 8);
     fill( 8,  8, 8);
     fill( 8, 16, 4);
     fill( 8, 32, 2);

@@ -1323,27 +1323,28 @@ static void mc(Dav2dTaskContext *const t,
 static void mc_opfl(Dav2dTaskContext *const t,
                     int16_t *const dst16, const ptrdiff_t dst_stride,
                     const int bw4, const int bh4, const int bx4, const int by4,
-                    const mv mv, const Dav2dThreadPicture *const refp,
+                    const int pl, const mv mv, const Dav2dThreadPicture *const refp,
                     const enum Dav2dFilterMode filter,
                     const int left, const int right, const int top, const int bottom)
 {
     const Dav2dFrameContext *const f = t->f;
     assert(refp->p.p.w == f->cur.p.w && refp->p.p.h == f->cur.p.h);
     const int mvx = mv.x, mvy = mv.y;
-    ptrdiff_t ref_stride = refp->p.stride[0];
+    ptrdiff_t ref_stride = refp->p.stride[!!pl];
     const pixel *ref;
     const int mx = mvx & 15, my = mvy & 15;
     const int dx = bx4 * 4 + (mvx >> 4);
     const int dy = by4 * 4 + (mvy >> 4);
     assert(top >= 0 && left >= 0 && left < right && top < bottom &&
-           right <= f->bw * 4 && bottom <= f->bh * 4);
+           right <= (f->bw * 4) >> !!pl * f->ss_hor &&
+           bottom <= (f->bh * 4) >> !!pl * f->ss_ver);
 
     if (dx - !!mx * 3 < left || dy - !!my * 3 < top ||
         dx + bw4 * 4 + !!mx * 4 > right ||
         dy + bh4 * 4 + !!my * 4 > bottom)
     {
         pixel *const emu_edge_buf = bitfn(t->scratch.emu_edge);
-        ref = refp->p.data[0];
+        ref = refp->p.data[pl];
         f->dsp->mc.emu_edge(bw4 * 4 + !!mx * 7, bh4 * 4 + !!my * 7,
                             right - left, bottom - top, dx - !!mx * 3 - left,
                             dy - !!my * 3 - top,
@@ -1353,7 +1354,7 @@ static void mc_opfl(Dav2dTaskContext *const t,
         ref = &emu_edge_buf[192 * !!my * 3 + !!mx * 3];
         ref_stride = 192 * sizeof(pixel);
     } else {
-        ref = ((pixel *) refp->p.data[0]) + PXSTRIDE(ref_stride) * dy + dx;
+        ref = ((pixel *) refp->p.data[pl]) + PXSTRIDE(ref_stride) * dy + dx;
     }
 
     f->dsp->mc.mct[filter](dst16, dst_stride, ref, ref_stride,
@@ -1373,12 +1374,12 @@ static void ext_warp(Dav2dTaskContext *const t,
     const int ss_ver = !!pl && f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_hor = !!pl && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
     const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
-    assert(!((b_dim[0] * h_mul) & 7) && !((b_dim[1] * v_mul) & 7));
+    assert(!((b_dim[0] * h_mul) & 3) && !((b_dim[1] * v_mul) & 3));
     const int32_t *const mat = wmp->matrix;
     const int w = f->bw * 4 >> ss_hor;
     const int h = f->bh * 4 >> ss_ver;
-    const int sw = imin(b_dim[0] * 4, 8), hsw = sw >> 1;
-    const int sh = imin(b_dim[1] * 4, 8), hsh = sh >> 1;
+    const int sw = imin(b_dim[0] * h_mul, 8), hsw = sw >> 1;
+    const int sh = imin(b_dim[1] * v_mul, 8), hsh = sh >> 1;
 
     for (int y = 0; y < b_dim[1] * v_mul; y += sh) {
         const int src_y = t->by * 4 + ((y + hsh) << ss_ver);
@@ -1451,17 +1452,18 @@ static void warp_affine(Dav2dTaskContext *const t,
                         const Dav2dThreadPicture *const refp,
                         const Dav2dWarpedMotionParams *const wmp)
 {
-    if (!wmp->affine) {
+    assert((dst8 != NULL) ^ (dst16 != NULL));
+    const Dav2dFrameContext *const f = t->f;
+    const int ss_ver = !!pl && f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = !!pl && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
+
+    if (!wmp->affine || imin(b_dim[0] * h_mul, b_dim[1] * v_mul) < 8) {
         ext_warp(t, dst8, dst16, dstride, b_dim, pl, refp, wmp);
         return;
     }
 
-    assert((dst8 != NULL) ^ (dst16 != NULL));
-    const Dav2dFrameContext *const f = t->f;
     const Dav2dDSPContext *const dsp = f->dsp;
-    const int ss_ver = !!pl && f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-    const int ss_hor = !!pl && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
-    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
     assert(!((b_dim[0] * h_mul) & 7) && !((b_dim[1] * v_mul) & 7));
     const int32_t *const mat = wmp->matrix;
     const int width = f->bw * 4 >> ss_hor;
@@ -1529,14 +1531,15 @@ static void gen_mask(uint8_t *mask, const ptrdiff_t stride,
 static ALWAYS_INLINE int get_mask(uint8_t *const mask, const ptrdiff_t stride,
                                   const int bx4, const int x4,
                                   const int by4, const int y4,
-                                  const union mv mv[2], const int subpel_bits,
+                                  const union mv mv[2],
+                                  const int h_subpel_bits, const int v_subpel_bits,
                                   const int bw4, const int bh4,
                                   const int iw, const int ih)
 {
-    const int x0 = (bx4 + x4) * 4 + (mv[0].x >> subpel_bits);
-    const int y0 = (by4 + y4) * 4 + (mv[0].y >> subpel_bits);
-    const int x1 = (bx4 + x4) * 4 + (mv[1].x >> subpel_bits);
-    const int y1 = (by4 + y4) * 4 + (mv[1].y >> subpel_bits);
+    const int x0 = (bx4 + x4) * 4 + (mv[0].x >> h_subpel_bits);
+    const int y0 = (by4 + y4) * 4 + (mv[0].y >> v_subpel_bits);
+    const int x1 = (bx4 + x4) * 4 + (mv[1].x >> h_subpel_bits);
+    const int y1 = (by4 + y4) * 4 + (mv[1].y >> v_subpel_bits);
     if (x0 < 0 || x1 < 0 || y0 < 0 || y1 < 0 ||
         x0 + bw4 * 4 >= iw || x1 + bw4 * 4 >= iw ||
         y0 + bh4 * 4 >= ih || y1 + bh4 * 4 >= ih)
@@ -1574,6 +1577,13 @@ static void update_temporal(refmvs_temporal_block *t_dst, const ptrdiff_t t_stri
         t_dst += t_stride;
     }
 }
+
+union OpflMvDeltaBlock {
+    struct OpflMvDelta {
+        int8_t x, y;
+    } d[2];
+    uint32_t n;
+};
 
 static void opfl_mv_adj(const struct OpflRegressionData *const r,
                         union OpflMvDeltaBlock *const dd, const int8_t d[2])
@@ -1620,6 +1630,34 @@ static void opfl_mv_adj(const struct OpflRegressionData *const r,
     } else dd->n = 0;
 }
 
+static ALWAYS_INLINE void
+scaledown_16pel_mv_for_chroma(union mv *const mv, const enum Dav2dPixelLayout layout) {
+    switch (layout) {
+    case DAV2D_PIXEL_LAYOUT_I420:
+        for (int i = 0; i < 2; i++)
+            mv[i].y = (mv[i].y + (mv[i].y > 0)) >> 1;
+        // fall-through
+    case DAV2D_PIXEL_LAYOUT_I422:
+        for (int i = 0; i < 2; i++)
+            mv[i].x = (mv[i].x + (mv[i].x > 0)) >> 1;
+        break;
+    default: break;
+    }
+}
+
+static ALWAYS_INLINE void
+scaleup_8pel_mv_for_chroma(union mv *const mv, const enum Dav2dPixelLayout layout) {
+    switch (layout) {
+    case DAV2D_PIXEL_LAYOUT_I444:
+        for (int i = 0; i < 2; i++) mv[i].x <<= 1;
+        // fall-through
+    case DAV2D_PIXEL_LAYOUT_I422:
+        for (int i = 0; i < 2; i++) mv[i].y <<= 1;
+        break;
+    default: break;
+    }
+}
+
 static int tip_pred(Dav2dTaskContext *const t,
                     int16_t (*const tmp)[64 * 64], const Av2Block *const b,
                     const int bw4, const int bh4, const int w4, const int h4)
@@ -1654,25 +1692,27 @@ static int tip_pred(Dav2dTaskContext *const t,
         d[1] = apply_sign(1 + (d1 > d0), -f->refdist[refs[1]]);
     }
 
+    union mv (*rmv_line)[2][2] = t->rmv;
     const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == 1 /* reference */ ? 6 : 15;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (refs[0] * 8 + refs[1])));
-    for (int y = 0, yy = 0; y < h4; y += step, yy++) {
+    for (int y = 0, yy = 0; y < h4; y += step, yy++, rmv_line += 8) {
         const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
         for (int x = 0, xx = 0; x < w4; x += step, xx++) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
             mv tmv = t->rt.rp_proj[off_8x8].mv;
             if (tmv.y == INVALID_MV) tmv.n = 0;
-            union mv cmv[2];
+            union mv (*const rmv)[2] = rmv_line[xx], *const cmv = rmv[0];
             int left[2], top[2];
             for (int i = 0; i < 2; i++) {
                 const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
-                cmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
-                cmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
+                rmv[1][i].y = cmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
+                rmv[1][i].x = cmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                 top[i] = t->by * 4 + y * 4 + (cmv[i].y >> 3) - 3;
                 left[i] = t->bx * 4 + x * 4 + (cmv[i].x >> 3) - 3;
             }
+            scaleup_8pel_mv_for_chroma(rmv[1], f->cur.p.layout);
             if (opfl) {
                 // refinement
                 for (int i = 0; i < 2; i++)
@@ -1695,7 +1735,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                     cmv[0].x += 8 * dx;
                     cmv[1].x -= 8 * dx;
                 } else dy = dx = 0;
-                union OpflMvDeltaBlock *const dd = &t->opfl[yy * ((bw4 + 1) >> 1) + xx];
+                union OpflMvDeltaBlock dd;
                 const unsigned sad = b->bs == BS_256x256 && f->frame_hdr->tip.frame_mode == 1 ? 0 :
                                      f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
                                                              (4 + dx)], p_stride,
@@ -1711,29 +1751,33 @@ static int tip_pred(Dav2dTaskContext *const t,
                                                     (4 - dx)], p_stride,
                                               step * 4, step * 4, 8, d
                                               HIGHBD_CALL_SUFFIX);
-                    opfl_mv_adj(res, dd, d);
+                    opfl_mv_adj(res, &dd, d);
                 } else {
-                    dd->n = 0;
+                    dd.n = 0;
                 }
-                cmv[0].x = cmv[0].x * 2 + dd->d[0].x;
-                cmv[0].y = cmv[0].y * 2 + dd->d[0].y;
-                cmv[1].x = cmv[1].x * 2 + dd->d[1].x;
-                cmv[1].y = cmv[1].y * 2 + dd->d[1].y;
+                cmv[0].x = cmv[0].x * 2 + dd.d[0].x;
+                cmv[0].y = cmv[0].y * 2 + dd.d[0].y;
+                cmv[1].x = cmv[1].x * 2 + dd.d[1].x;
+                cmv[1].y = cmv[1].y * 2 + dd.d[1].y;
                 for (int i = 0; i < 2; i++)
                     mc_opfl(t, &tmp[i][y * bw4 * 16 + x * 4], bw4 * 4, step, step,
-                            t->bx + x, t->by + y, cmv[i], refp[i], b->filter,
+                            t->bx + x, t->by + y, 0, cmv[i], refp[i], b->filter,
                             iclip(left[i], 0, w - 1),
                             iclip(left[i] + 7 + step * 4, 1, w),
                             iclip(top[i], 0, h - 1),
                             iclip(top[i] + 7 + step * 4, 1, h));
                 const union mv dmv[2] = {
-                    [0] = { .y = (cmv[0].y + (dd->d[0].y > 0)) >> 1,
-                            .x = (cmv[0].x + (dd->d[0].x > 0)) >> 1 },
-                    [1] = { .y = (cmv[1].y + (dd->d[1].y > 0)) >> 1,
-                            .x = (cmv[1].x + (dd->d[1].x > 0)) >> 1 },
+                    [0] = { .y = (cmv[0].y + (dd.d[0].y > 0)) >> 1,
+                            .x = (cmv[0].x + (dd.d[0].x > 0)) >> 1 },
+                    [1] = { .y = (cmv[1].y + (dd.d[1].y > 0)) >> 1,
+                            .x = (cmv[1].x + (dd.d[1].x > 0)) >> 1 },
                 };
                 update_temporal(&t_dst[x >> 1], t_stride, step >> 1, step >> 1,
                                 (const int8_t *) refs, dmv, t_swap);
+                if (bacp)
+                    have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
+                                          cmv, 4, 4, step, step, w, h);
+                scaledown_16pel_mv_for_chroma(cmv, f->cur.p.layout);
             } else {
                 for (int i = 0; i < 2; i++)
                     mc(t, NULL, &tmp[i][off_y + x * 4], bw4 * 4,
@@ -1761,10 +1805,11 @@ static int tip_pred(Dav2dTaskContext *const t,
                                         1, (const int8_t *) refs, dmv, t_swap);
                     }
                 }
+                if (bacp)
+                    have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
+                                          cmv, 3, 3, step, step, w, h);
+                scaleup_8pel_mv_for_chroma(cmv, f->cur.p.layout);
             }
-            if (bacp)
-                have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
-                                      cmv, 3 + opfl, step, step, w, h);
         }
         off_y += bw4 * 4 * 4 * step;
         t_dst += (step >> 1) * t_stride;
@@ -1805,13 +1850,14 @@ static int opfl_pred(Dav2dTaskContext *const t,
         apply_sign(1 + (d1 > d0), -f->refdist[b->ref[1]]),
     };
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
-    const ptrdiff_t opfl_stride = bw4 >> (bs == 2);
+    union OpflMvDeltaBlock dd[2 * 2];
 
+    union mv (*rmv_line)[2][2] = t->rmv;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref[0] * 8 + b->ref[1])));
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4);
-    for (int y = 0; y < h4; y += sh4) {
+    for (int y = 0; y < h4; y += sh4, rmv_line += (1 + opfl) * 8) {
         int left[2] = { t->bx * 4 + (b->mv[0].x >> 3) - 3,
                         t->bx * 4 + (b->mv[1].x >> 3) - 3 };
         if (refine) {
@@ -1828,8 +1874,6 @@ static int opfl_pred(Dav2dTaskContext *const t,
                                          sw4 * 4, sh4 * 4, b->refine_mv == 2,
                                          &o HIGHBD_CALL_SUFFIX);
                 const int dy = o.y, dx = o.x;
-                union OpflMvDeltaBlock *delta_line =
-                    &t->opfl[(y >> 1) * opfl_stride + (x >> 1)];
                 if (opfl) {
                     struct OpflRegressionData res[2 * 2];
                     // subpel-gradient based mv refinement (optical flow = opfl)
@@ -1841,45 +1885,43 @@ static int opfl_pred(Dav2dTaskContext *const t,
                                               sw4 * 4, sh4 * 4, bs * 4, d
                                               HIGHBD_CALL_SUFFIX);
                     const struct OpflRegressionData *r = res;
-                    for (int by = 0; by < sh4; by += 2, delta_line += opfl_stride) {
-                        union OpflMvDeltaBlock *dd = delta_line;
-                        for (int bx = 0; bx < sw4; bx += 2, dd++, r++) {
+                    for (int by = 0; by < sh4; by += 2) {
+                        for (int bx = 0; bx < sw4; bx += 2, r++) {
                             opfl_mv_adj(r, dd, d);
-                            const union mv mv[2] = {
-                                [0] = { .y = b->mv[0].y * 2 + dd->d[0].y + dy * 16,
-                                        .x = b->mv[0].x * 2 + dd->d[0].x + dx * 16 },
-                                [1] = { .y = b->mv[1].y * 2 + dd->d[1].y - dy * 16,
-                                        .x = b->mv[1].x * 2 + dd->d[1].x - dx * 16 },
-                            };
+                            union mv *const mv = rmv_line[!!by * 8 + ((x + bx) >> 1)][0];
+                            mv[0].y = b->mv[0].y * 2 + dd[0].d[0].y + dy * 16;
+                            mv[0].x = b->mv[0].x * 2 + dd[0].d[0].x + dx * 16;
+                            mv[1].y = b->mv[1].y * 2 + dd[0].d[1].y - dy * 16;
+                            mv[1].x = b->mv[1].x * 2 + dd[0].d[1].x - dx * 16;
                             for (int i = 0; i < 2; i++)
                                 mc_opfl(t, &tmp[i][((y + by) * bw4 * 4 + x + bx) * 4],
                                         bw4 * 4, bs, bs, t->bx + x + bx, t->by + y + by,
-                                        mv[i], refp[i], b->filter,
+                                        0, mv[i], refp[i], b->filter,
                                         iclip(left[i], 0, w - 1),
                                         iclip(left[i] + sw4 * 4 + 7, 1, w),
                                         iclip(top[i], 0, h - 1),
                                         iclip(top[i] + sh4 * 4 + 7, 1, h));
                             const union mv dmv[2] = {
-                                [0] = { .y = (mv[0].y + (dd->d[0].y > 0)) >> 1,
-                                        .x = (mv[0].x + (dd->d[0].x > 0)) >> 1 },
-                                [1] = { .y = (mv[1].y + (dd->d[1].y > 0)) >> 1,
-                                        .x = (mv[1].x + (dd->d[1].x > 0)) >> 1 },
+                                [0] = { .y = (mv[0].y + (dd[0].d[0].y > 0)) >> 1,
+                                        .x = (mv[0].x + (dd[0].d[0].x > 0)) >> 1 },
+                                [1] = { .y = (mv[1].y + (dd[0].d[1].y > 0)) >> 1,
+                                        .x = (mv[1].x + (dd[0].d[1].x > 0)) >> 1 },
                             };
                             update_temporal(&t_dst[((x + bx) >> 1) + !!by * t_stride],
                                             t_stride, 1, 1,
                                             (const int8_t *) b->ref, dmv, t_swap);
                             if (bacp)
                                 have_bacp |= get_mask(mask, bw4 * 4, t->bx, x + bx,
-                                                      t->by, y + by, mv, 4, 2, 2, w, h);
+                                                      t->by, y + by, mv, 4, 4, 2, 2, w, h);
+                            scaledown_16pel_mv_for_chroma(mv, f->cur.p.layout);
                         }
                     }
                 } else {
-                    const union mv mv[2] = {
-                        [0] = { .y = b->mv[0].y + dy * 8,
-                                .x = b->mv[0].x + dx * 8 },
-                        [1] = { .y = b->mv[1].y - dy * 8,
-                                .x = b->mv[1].x - dx * 8 },
-                    };
+                    union mv *const mv = rmv_line[x >> 2][0];
+                    mv[0].y = b->mv[0].y + dy * 8;
+                    mv[0].x = b->mv[0].x + dx * 8;
+                    mv[1].y = b->mv[1].y - dy * 8;
+                    mv[1].x = b->mv[1].x - dx * 8;
                     for (int i = 0; i < 2; i++)
                         mc(t, NULL, &tmp[i][(y * 4 * bw4 + x) * 4], bw4 * 4,
                            sw4, sh4, t->bx + x, t->by + y, 0,
@@ -1890,9 +1932,10 @@ static int opfl_pred(Dav2dTaskContext *const t,
                            iclip(top[i] + sh4 * 4 + 7, 1, h));
                     update_temporal(&t_dst[x >> 1], t_stride, sw4 >> 1, sh4 >> 1,
                                     (const int8_t *) b->ref, mv, t_swap);
+                    scaleup_8pel_mv_for_chroma(mv, f->cur.p.layout);
                     if (bacp)
                         have_bacp |= get_mask(mask, bw4 * 4, t->bx, x,
-                                              t->by, y, mv, 3, sw4, sh4, w, h);
+                                              t->by, y, mv, 3, 3, sw4, sh4, w, h);
                 }
                 for (int n = 0; n < 2; n++)
                     left[n] += 16;
@@ -1907,56 +1950,56 @@ static int opfl_pred(Dav2dTaskContext *const t,
             f->dsp->mc.opfl_derive_mv(res, p[0], p_stride, p[1], p_stride,
                                       bw4 * 4, sh4 * 4, bs * 4, d
                                       HIGHBD_CALL_SUFFIX);
-            union OpflMvDeltaBlock *delta_line = &t->opfl[(y >> 1) * opfl_stride];
             const struct OpflRegressionData *r_line = res;
+            union OpflMvDeltaBlock *ddl = dd;
             for (int by = 0; by < sh4; by += bs) {
-                union OpflMvDeltaBlock *dd = delta_line;
                 const struct OpflRegressionData *r = r_line;
-                for (int bx = 0; bx < w4; bx += bs, dd++, r++) {
-                    opfl_mv_adj(r, dd, d);
-                    const union mv mv[2] = {
-                        [0] = { .y = b->mv[0].y * 2 + dd->d[0].y,
-                                .x = b->mv[0].x * 2 + dd->d[0].x },
-                        [1] = { .y = b->mv[1].y * 2 + dd->d[1].y,
-                                .x = b->mv[1].x * 2 + dd->d[1].x },
-                    };
+                for (int bx = 0, xx = 0; bx < w4; bx += bs, r++, xx++) {
+                    opfl_mv_adj(r, ddl, d);
+                    union mv *const mv = rmv_line[!!by * 8 + xx][0];
+                    mv[0].y = b->mv[0].y * 2 + ddl->d[0].y;
+                    mv[0].x = b->mv[0].x * 2 + ddl->d[0].x;
+                    mv[1].y = b->mv[1].y * 2 + ddl->d[1].y;
+                    mv[1].x = b->mv[1].x * 2 + ddl->d[1].x;
                     for (int i = 0; i < 2; i++)
                         mc_opfl(t, &tmp[i][((y + by) * bw4 * 4 + bx) * 4],
                                 bw4 * 4, bs, bs, t->bx + bx, t->by + y + by,
-                                mv[i], refp[i], b->filter,
+                                0, mv[i], refp[i], b->filter,
                                 iclip(left[i] + bx * 4, 0, w - 1),
                                 iclip(left[i] + bx * 4 + 7 + 8, 1, w),
                                 iclip(top[i] + by * 4, 0, h - 1),
                                 iclip(top[i] + by * 4 + 7 + 8, 1, h));
                     if (bs > 1) {
                         const union mv dmv[2] = {
-                            [0] = { .y = (mv[0].y + (dd->d[0].y > 0)) >> 1,
-                                    .x = (mv[0].x + (dd->d[0].x > 0)) >> 1 },
-                            [1] = { .y = (mv[1].y + (dd->d[1].y > 0)) >> 1,
-                                    .x = (mv[1].x + (dd->d[1].x > 0)) >> 1 },
+                            [0] = { .y = (mv[0].y + (ddl->d[0].y > 0)) >> 1,
+                                    .x = (mv[0].x + (ddl->d[0].x > 0)) >> 1 },
+                            [1] = { .y = (mv[1].y + (ddl->d[1].y > 0)) >> 1,
+                                    .x = (mv[1].x + (ddl->d[1].x > 0)) >> 1 },
                         };
                         update_temporal(&t_dst[(bx >> 1) + !!by * t_stride],
                                         t_stride, bs >> 1, bs >> 1,
                                         (const int8_t *) b->ref, dmv, t_swap);
+                    } else {
+                        assert(b->bs == BS_8x8);
+                        ddl++;
                     }
                     if (bacp)
                         have_bacp |= get_mask(mask, bw4 * 4, t->bx, bx,
-                                              t->by, y + by, mv, 4, bs, bs, w, h);
+                                              t->by, y + by, mv, 4, 4, bs, bs, w, h);
+                    scaledown_16pel_mv_for_chroma(mv, f->cur.p.layout);
                 }
-                delta_line += opfl_stride;
                 r_line += bw4 >> (bs == 2);
             }
             if (bs == 1) {
-                union OpflMvDeltaBlock *const dd = &t->opfl[0];
                 union mv dmv[2];
-                dd->d[0].x = dd[0].d[0].x + dd[1].d[0].x + dd[2].d[0].x + dd[3].d[0].x;
-                dmv[0].x = (b->mv[0].x * 8 + dd->d[0].x + 3 + (dd->d[0].x > 0)) >> 3;
-                dd->d[0].y = dd[0].d[0].y + dd[1].d[0].y + dd[2].d[0].y + dd[3].d[0].y;
-                dmv[0].y = (b->mv[0].y * 8 + dd->d[0].y + 3 + (dd->d[0].y > 0)) >> 3;
-                dd->d[1].x = dd[0].d[1].x + dd[1].d[1].x + dd[2].d[1].x + dd[3].d[1].x;
-                dmv[1].x = (b->mv[1].x * 8 + dd->d[1].x + 3 + (dd->d[1].x > 0)) >> 3;
-                dd->d[1].y = dd[0].d[1].y + dd[1].d[1].y + dd[2].d[1].y + dd[3].d[1].y;
-                dmv[1].y = (b->mv[1].y * 8 + dd->d[1].y + 3 + (dd->d[1].y > 0)) >> 3;
+                int tmp = dd[0].d[0].x + dd[1].d[0].x + dd[2].d[0].x + dd[3].d[0].x;
+                dmv[0].x = (b->mv[0].x * 8 + tmp + 3 + (tmp > 0)) >> 3;
+                tmp = dd[0].d[0].y + dd[1].d[0].y + dd[2].d[0].y + dd[3].d[0].y;
+                dmv[0].y = (b->mv[0].y * 8 + tmp + 3 + (tmp > 0)) >> 3;
+                tmp = dd[0].d[1].x + dd[1].d[1].x + dd[2].d[1].x + dd[3].d[1].x;
+                dmv[1].x = (b->mv[1].x * 8 + tmp + 3 + (tmp > 0)) >> 3;
+                tmp = dd[0].d[1].y + dd[1].d[1].y + dd[2].d[1].y + dd[3].d[1].y;
+                dmv[1].y = (b->mv[1].y * 8 + tmp + 3 + (tmp > 0)) >> 3;
                 update_temporal(t_dst, t_stride, 1, 1,
                                 (const int8_t *) b->ref, dmv, t_swap);
             }
@@ -1966,6 +2009,57 @@ static int opfl_pred(Dav2dTaskContext *const t,
         t_dst += t_stride * (sh4 >> 1);
     }
 
+    return bacp && have_bacp;
+}
+
+static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
+                      const int plane, const int step,
+                      const int bw4, const int bh4)
+{
+    const Dav2dFrameContext *const f = t->f;
+    const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
+    const int tip = b->ref[0] == TIP_FRAME;
+    const int8_t *const ref = tip ? (const int8_t *) f->frame_hdr->tip.refs : b->ref;
+    int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
+    union mv (*rmv_line)[2][2] = t->rmv;
+    const ptrdiff_t stride = bw4 * 4 >> ss_hor;
+    ptrdiff_t uvoff = 0;
+
+    uint8_t *const mask = t->scratch.seg_mask;
+    const int bacp = !plane && f->seq_hdr->imp_msk_bld && b->cwp_idx == 8;
+    if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
+    int have_bacp = 0;
+
+    const int w = f->bw * 4 >> ss_hor, h = f->bw * 4 >> ss_hor;
+    const int sw4 = imin(bw4, step), sh4 = imin(bh4, step);
+    const int hhtaps = 2 + 2 * (sw4 > 1 + ss_hor), hvtaps = 2 + 2 * (sh4 > 1 + ss_ver);
+    for (int y = 0; y < bh4; y += step) {
+        for (int x = 0, xx = 0; x < bw4; x += step, xx++) {
+            union mv (*const rmv)[2] = rmv_line[xx];
+            for (int i = 0; i < 2; i++) {
+                int top = ((t->by + y) * 4 >> ss_ver) + (rmv[tip][i].y >> 4);
+                int left = ((t->bx + x) * 4 >> ss_hor) + (rmv[tip][i].x >> 4);
+                const int bottom = top + (4 * sh4 >> ss_ver) + hvtaps;
+                const int right = left + (4 * sw4 >> ss_ver) + hhtaps;
+                top -= hvtaps - 1;
+                left -= hhtaps - 1;
+                mc_opfl(t, &tmp[i][uvoff + (x * 4 >> ss_hor)], stride,
+                        sw4 >> ss_hor, sh4 >> ss_ver,
+                        (t->cbx + x) >> ss_hor, (t->cby + y) >> ss_ver,
+                        1 + plane, rmv[0][i], &f->refp[ref[i]], b->filter,
+                        iclip(left, 0, w - 1), iclip(right, 1, w),
+                        iclip(top, 0, h - 1), iclip(bottom, 1, h));
+            }
+            if (bacp)
+                have_bacp |= get_mask(mask, bw4 * 4 >> ss_hor,
+                                      t->bx >> ss_hor, x >> ss_hor,
+                                      t->by >> ss_ver, y >> ss_ver,
+                                      rmv[0], 4, 4, step >> ss_hor, step >> ss_ver,
+                                      f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
+        }
+        rmv_line += 8;
+        uvoff += step * 4 * stride >> ss_ver;
+    }
     return bacp && have_bacp;
 }
 
@@ -2375,6 +2469,92 @@ static void bawp(Dav2dTaskContext *const t,
                   bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
 }
 
+static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
+                    pixel *const dst, const ptrdiff_t stride, const int plane,
+                    const int bw4, const int bh4, const int by, const int bx,
+                    const enum BlockSize ss_bs)
+{
+    const Dav2dTileState *const ts = t->ts;
+    const Dav2dFrameContext *const f = t->f;
+    const Dav2dDSPContext *const dsp = f->dsp;
+    pixel *const tl_edge = bitfn(t->scratch.edge) + 128;
+    enum IntraPredMode m = b->interintra_mode == II_SMOOTH_PRED ?
+                           SMOOTH_PRED : b->interintra_mode;
+    pixel *const tmp = bitfn(t->scratch.interintra);
+    int angle = (const uint8_t[4]) { 0, 90, 180, 0 }[b->interintra_mode];
+    int n_tr = 0, n_bl = 0;
+    const int chroma = !!plane;
+    const int bx4 = bx & 63, by4 = by & 63, sbsz = f->sb_step;
+    if (by > ts->tiling.row_start) {
+        int w = imin(bw4, ts->tiling.col_end - bx - bw4);
+        if (!(by & (sbsz - 1))) {
+            // top sb boundary
+            n_tr = w;
+        } else {
+            const int end = imin((bx + sbsz) & ~(sbsz - 1),
+                                 ts->tiling.col_end);
+            w = imin(w, end - t->bx - bw4);
+            if (!w) {
+                // right sb or tile/frame boundary
+                n_tr = 0;
+            } else {
+                const int xpos = (bx4 + bw4) & 63;
+                const unsigned bits = (unsigned) (t->is_coded[chroma][by4 - 1] >> xpos);
+                n_tr = imin(ctz(0x10000 | ~bits), w);
+            }
+        }
+    }
+
+    if (bx > ts->tiling.col_start) {
+        const int end = imin((by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
+        const int h = imin(bh4, end - by - bh4);
+        if (!h) {
+            // bottom sb or tile/frame boundary
+            n_bl = 0;
+        } else if (!(bx & (sbsz - 1))) {
+            // left sb boundary
+            n_bl = h;
+        } else {
+            const uint64_t mask = 1ULL << ((bx4 - 1) & 63);
+            int y;
+            for (y = 0; y < h; y++) {
+                if (!(t->is_coded[chroma][by4 + y + bh4] & mask))
+                    break;
+            }
+            n_bl = y;
+        }
+    }
+    const int ss_hor = chroma * f->ss_hor, ss_ver = chroma * f->ss_ver;
+    const pixel *top_sb_edge = NULL;
+    if (!(t->by & (f->sb_step - 1))) {
+        top_sb_edge = f->ipred_edge[plane];
+        const int sby = by >> f->sb_shift;
+        top_sb_edge += f->sb256w * 256 * (sby - 1);
+    }
+    const int intra_flags = ANGLE_IBP_FLAG /* for dc */ |
+        ((bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
+        ((by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+    m = bytefn(dav2d_prepare_intra_edges)(
+            DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+            bx >> ss_hor, by >> ss_ver,
+            ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
+            n_tr >> ss_hor, n_bl >> ss_ver, dst, stride, top_sb_edge, m, &angle,
+            bw4 >> ss_hor, bh4 >> ss_ver, intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
+    dsp->ipred.intra_pred[m](tmp, 4 * bw4 * sizeof(pixel) >> ss_hor,
+                             tl_edge, bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver,
+                             intra_flags, 0, 0 HIGHBD_CALL_SUFFIX);
+    if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+        hex_dump(tmp, bw4 * 4 * sizeof(pixel) >> ss_hor,
+                 bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver, "intra-pred");
+        hex_dump(dst, stride,
+                 bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver, "inter-pred");
+    }
+    const uint8_t *const mask = b->wedge_idx == -1 ?
+        II_MASK(ss_bs, bw4 >> ss_hor, bh4 >> ss_ver, b->interintra_mode) :
+        WEDGE_MASK(ss_bs, bw4, bh4, b->wedge_idx, ss_hor + ss_ver);
+    dsp->mc.blend(dst, stride, tmp, bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver, mask);
+}
+
 static inline void
 cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     const enum BlockSize bs, const TxfmInfo *const uv_t_dim, const int can_cfl)
@@ -2676,82 +2856,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 bawp(t, b->bawp[0], b->mv[0], dst, f->cur.stride[0],
                      refp, b->ref[0], bw4, bh4, w4, h4, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
-                pixel *const tl_edge = bitfn(t->scratch.edge) + 32;
-                enum IntraPredMode m = b->interintra_mode == II_SMOOTH_PRED ?
-                                       SMOOTH_PRED : b->interintra_mode;
-                pixel *const tmp = bitfn(t->scratch.interintra);
-                int angle = (const uint8_t[4]) { 0, 90, 180, 0 }[b->interintra_mode];
-                int n_tr = 0, n_bl = 0;
-                const int bx4 = t->bx & 63, by4 = t->by & 63, sbsz = f->sb_step;
-                if (t->by > ts->tiling.row_start) {
-                    int w = imin(bw4, ts->tiling.col_end - t->bx - bw4);
-                    if (!(t->by & (sbsz - 1))) {
-                        // top sb boundary
-                        n_tr = w;
-                    } else {
-                        const int end = imin((t->bx + sbsz) & ~(sbsz - 1),
-                                             ts->tiling.col_end);
-                        w = imin(w, end - t->bx - bw4);
-                        if (!w) {
-                            // right sb or tile/frame boundary
-                            n_tr = 0;
-                        } else {
-                            const int xpos = (bx4 + bw4) & 63;
-                            const unsigned bits = (unsigned) (t->is_coded[0][by4 - 1] >> xpos);
-                            n_tr = imin(ctz(0x10000 | ~bits), w);
-                        }
-                    }
-                }
-
-                if (t->bx > ts->tiling.col_start) {
-                    const int end = imin((t->by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
-                    const int h = imin(bh4, end - t->by - bh4);
-                    if (!h) {
-                        // bottom sb or tile/frame boundary
-                        n_bl = 0;
-                    } else if (!(t->bx & (sbsz - 1))) {
-                        // left sb boundary
-                        n_bl = h;
-                    } else {
-                        const uint64_t mask = 1ULL << ((bx4 - 1) & 63);
-                        int y;
-                        for (y = 0; y < h; y++) {
-                            if (!(t->is_coded[0][by4 + y + bh4] & mask))
-                                break;
-                        }
-                        n_bl = y;
-                    }
-                }
-                const pixel *top_sb_edge = NULL;
-                if (!(t->by & (f->sb_step - 1))) {
-                    top_sb_edge = f->ipred_edge[0];
-                    const int sby = t->by >> f->sb_shift;
-                    top_sb_edge += f->sb256w * 256 * (sby - 1);
-                }
-                const int intra_flags = ANGLE_IBP_FLAG /* for dc */ |
-                    ((t->bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
-                    ((t->by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
-                m = bytefn(dav2d_prepare_intra_edges)(
-                        DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-                        t->bx, t->by, ts->tiling.col_end, ts->tiling.row_end,
-                        n_tr, n_bl, dst, f->cur.stride[0], top_sb_edge, m, &angle,
-                        bw4, bh4, intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
-                dsp->ipred.intra_pred[m](tmp, 4 * bw4 * sizeof(pixel),
-                                         tl_edge, bw4 * 4, bh4 * 4,
-                                         intra_flags, 0, 0 HIGHBD_CALL_SUFFIX);
-                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    hex_dump(tmp, bw4 * 4 * sizeof(pixel),
-                             bw4 * 4, bh4 * 4, "y-intra-pred");
-                }
-                const uint8_t *const mask = b->wedge_idx == -1 ?
-                    II_MASK(bs, bw4, bh4, b->interintra_mode) :
-                    WEDGE_MASK(bs, bw4, bh4, b->wedge_idx);
-                if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    hex_dump(dst, f->cur.stride[0],
-                             bw4 * 4, bh4 * 4, "y-inter-pred");
-                }
-                dsp->mc.blend(dst, f->cur.stride[0], tmp,
-                              bw4 * 4, bh4 * 4, mask);
+                iiblend(t, b, dst, f->cur.stride[0], 0, bw4, bh4, t->by, t->bx, bs);
             }
         } else {
             int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
@@ -2784,14 +2889,14 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                            b->mv[i], refp, b->ref[i], b->filter,
                            0, f->bw * 4, 0, f->bh * 4);
                     }
-                    if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                    if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
                         ac_dump(tmp[i], bw4 * 4, bh4 * 4, "y-single-pred");
                 }
             }
             switch (b->comp_type) {
             case COMP_INTER_WEDGE: {
                 const uint8_t *const mask =
-                    WEDGE_MASK(bs, bw4, bh4, b->wedge_idx);
+                    WEDGE_MASK(bs, bw4, bh4, b->wedge_idx, 0);
                 dsp->mc.mask(dst, f->cur.stride[0],
                              tmp[b->wedge_sign], tmp[!b->wedge_sign],
                              bw4 * 4, bh4 * 4, mask HIGHBD_CALL_SUFFIX);
@@ -2817,7 +2922,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (wt == 8) {
                     if (bacp == 2)
                         bacp = get_mask(t->scratch.seg_mask, bw4 * 4, t->bx, 0,
-                                        t->by, 0, b->mv, 3, bw4, bh4,
+                                        t->by, 0, b->mv, 3, 3, bw4, bh4,
                                         f->bw * 4, f->bh * 4);
                     if (bacp) {
                         dsp->mc.mask(dst, f->cur.stride[0], tmp[0], tmp[1],
@@ -3035,6 +3140,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     // chroma
 chroma: {}
+    const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
+    const int cbw4 = cb_dim[0], cbh4 = cb_dim[1];
     const enum RectTxfmSize uvtx = dav2d_max_txfm_size_for_bs[cbs][f->cur.p.layout];
     const TxfmInfo *const uv_t_dim = &dav2d_txfm_dimensions[uvtx];
     const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
@@ -3044,6 +3151,7 @@ chroma: {}
     const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
     const ptrdiff_t stride = f->cur.stride[1];
+    const ptrdiff_t uvdstoff = 4 * (ssby * PXSTRIDE(stride) + ssbx);
     const int sbsz = f->sb_step;
     const int intra = b->intra && !b->intrabc;
 
@@ -3054,8 +3162,161 @@ chroma: {}
 
     const int can_cfl = b->uv_mode == CFL_PRED ? b->cfl_type > CFL_EXPLICIT ?
         0x3 : (!!b->cfl_alpha[0]) | (!!b->cfl_alpha[1] << 1) : 0x0;
-    if (intra && can_cfl)
-        cfl(t, b, cbs, uv_t_dim, can_cfl);
+    if (intra) {
+        if (can_cfl)
+            cfl(t, b, cbs, uv_t_dim, can_cfl);
+    } else if (cbs != lbs) {
+        // sub8x8 coding
+        const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
+        ptrdiff_t uvoff = uvdstoff;
+        for (int y = 0; y < cbh4; y++, r += 128,
+             uvoff += 4 * PXSTRIDE(stride) >> ss_ver)
+        {
+            for (int x = 0; x < cbw4; x++) {
+                // grab ref/MV from spatial refmvs
+                const refmvs_block *const r2 = &r[x];
+                if (r2->ox4 || r2->oy4) continue;
+                const int ref = r2->ref.ref[0] - 1;
+                const union mv mv = r2->mv[0];
+                const Dav2dThreadPicture *const refp = &f->refp[ref];
+                const uint8_t *const sdim = dav2d_block_dimensions[r2->bs];
+                for (int pl = 0; pl < 2; pl++) {
+                    mc(t, ((pixel *) f->cur.data[1 + pl]) + uvoff + (x * 4 >> ss_hor),
+                       NULL, stride, sdim[0], sdim[1], t->cbx + x, t->cby + y,
+                       1 + pl, mv, refp, ref, r2->subpel_filter,
+                       0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
+                }
+            }
+        }
+        if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+            for (int pl = 0; pl < 2; pl++)
+                hex_dump(((pixel *) f->cur.data[1 + pl]) + uvdstoff,
+                         stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                         pl ? "v-pred" : "u-pred");
+    } else if (b->ref[1] == -1 && b->ref[0] != TIP_FRAME) {
+        const Dav2dThreadPicture *const refp = &f->refp[b->ref[0]];
+        for (int pl = 0; pl < 2; pl++) {
+            if (!f->frame_hdr->force_integer_mv &&
+                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                 (b->motion_mode >= MM_WARP_CAUSAL &&
+                  t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
+            {
+                warp_affine(t, ((pixel *) f->cur.data[1 + pl]) + uvdstoff,
+                            NULL, stride, cb_dim, 1 + pl, refp,
+                            b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
+                                &f->frame_hdr->gmv[b->ref[0]]);
+            } else {
+                mc(t, ((pixel *) f->cur.data[1 + pl]) + uvdstoff, NULL, stride,
+                   cbw4, cbh4, t->cbx, t->cby, 1 + pl, b->mv[0], refp, b->ref[0],
+                   b->filter, 0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
+            }
+            if (b->bawp[1]) {
+                DEBUG_BLOCK_printf("bawp\n");
+            } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
+                iiblend(t, b, ((pixel *) f->cur.data[1 + pl]) + uvdstoff,
+                        stride, 1 + pl, cbw4, cbh4, t->cby, t->cbx,
+                        b->wedge_idx == -1 ? dav2d_ss_bs[cbs][f->cur.p.layout - 1] : cbs);
+            }
+            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                hex_dump(((pixel *) f->cur.data[1 + pl]) + uvdstoff,
+                         stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                         pl ? "v-pred" : "u-pred");
+        }
+    } else /* compound-inter */ {
+        int16_t (*tmp)[64 * 64] = t->scratch.compinter;
+        for (int pl = 0, bacp, bacpu; pl < 2; pl++, bacpu = bacp, bacp = 0) {
+            if (b->ref[0] == TIP_FRAME) {
+                const int opfl = f->seq_hdr->tip_refine_mv &&
+                    (f->frame_hdr->tip.frame_mode == 1 ||
+                     f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
+                const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+                                       ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+                bacp = rmv_uvpred(t, b, pl, step, cbw4, cbh4);
+            } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
+                       (b->refine_mv && b->comp_type == COMP_INTER_AVG))
+            {
+                const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
+                bacp = rmv_uvpred(t, b, pl, 4 >> opfl, cbw4, cbh4);
+            } else {
+                if (!pl)
+                    bacp = 2 * (f->seq_hdr->imp_msk_bld &&
+                                b->motion_mode != MM_WARP_CAUSAL &&
+                                b->inter_mode != GLOBALMV_GLOBALMV &&
+                                !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale);
+                for (int i = 0; i < 2; i++) {
+                    const Dav2dThreadPicture *const refp = &f->refp[b->ref[i]];
+                    if ((b->inter_mode == GLOBALMV_GLOBALMV &&
+                         f->gmv_warp_allowed[b->ref[i]]) ||
+                        (b->motion_mode == MM_WARP_CAUSAL &&
+                         t->warpmv[i].type > DAV2D_WM_TYPE_INVALID))
+                    {
+                        warp_affine(t, NULL, tmp[i], cbw4 * 4 >> ss_hor,
+                                    cb_dim, 1 + pl, refp,
+                                    b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[i] :
+                                        &f->frame_hdr->gmv[b->ref[i]]);
+                    } else {
+                        mc(t, NULL, tmp[i], cbw4 * 4 >> ss_hor, cbw4, cbh4,
+                           t->cbx, t->cby, 1 + pl, b->mv[i],
+                           refp, b->ref[i], b->filter,
+                           0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
+                    }
+                }
+            }
+            switch (b->comp_type) {
+            case COMP_INTER_SEG: {
+                uint8_t *const seg_mask = t->scratch.seg_mask;
+                dsp->mc.mask(((pixel *) f->cur.data[1 + pl]) + uvdstoff, stride,
+                             tmp[b->mask_sign], tmp[!b->mask_sign],
+                             cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver, seg_mask
+                             HIGHBD_CALL_SUFFIX);
+                break;
+            }
+            case COMP_INTER_WEDGE: {
+                const uint8_t *const mask =
+                    WEDGE_MASK(cbs, cbw4, cbh4, b->wedge_idx, ss_hor + ss_ver);
+                dsp->mc.mask(((pixel *) f->cur.data[1 + pl]) + uvdstoff, stride,
+                             tmp[b->wedge_sign], tmp[!b->wedge_sign],
+                             cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                             mask HIGHBD_CALL_SUFFIX);
+                break;
+            }
+            default: assert(0);
+            case COMP_INTER_NONE:
+                assert(b->ref[0] == TIP_FRAME);
+                // fall-through
+            case COMP_INTER_AVG: {
+                const int wt = b->cwp_idx;
+                if (wt == 8) {
+                    if (bacp == 2)
+                        bacp = get_mask(t->scratch.seg_mask, cbw4 * 4 >> ss_hor,
+                                        t->cbx >> ss_hor, 0, t->cby >> ss_ver, 0,
+                                        b->mv, 3 + ss_hor, 3 + ss_ver,
+                                        cbw4 >> ss_hor, cbh4 >> ss_ver,
+                                        f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
+                    if (pl) bacp = bacpu;
+                    if (bacp) {
+                        dsp->mc.mask(((pixel *) f->cur.data[1 + pl]) + uvdstoff, stride,
+                                     tmp[0], tmp[1], cbw4 * 4 >> ss_hor,
+                                     cbh4 * 4 >> ss_ver, t->scratch.seg_mask
+                                     HIGHBD_CALL_SUFFIX);
+                    } else {
+                        dsp->mc.avg(((pixel *) f->cur.data[1 + pl]) + uvdstoff, stride,
+                                    tmp[0], tmp[1], cbw4 * 4 >> ss_hor,
+                                    cbh4 * 4 >> ss_ver HIGHBD_CALL_SUFFIX);
+                    }
+                } else {
+                    dsp->mc.w_avg(((pixel *) f->cur.data[1 + pl]) + uvdstoff, stride,
+                                  tmp[0], tmp[1], cbw4 * 4 >> ss_hor,
+                                  cbh4 * 4 >> ss_ver, wt HIGHBD_CALL_SUFFIX);
+                }
+                break;
+            }}
+            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                hex_dump(((pixel *) f->cur.data[1 + pl]) + uvdstoff,
+                         stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                         pl ? "v-pred" : "u-pred");
+        }
+    }
 
     for (int pl = 0; pl < 2; pl++) {
         pixel *const dst = ((pixel *) f->cur.data[1 + pl]) +
