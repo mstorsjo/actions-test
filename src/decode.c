@@ -4539,7 +4539,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
 
     const int sb256 = f->frame_hdr->sb128;
-    const int num_lines = c->n_tc > 1 ? f->sbh * 4 << sb256 : 12;
+    const int num_lines = c->n_tc > 1 ? f->sbh * 4 << sb256 : 20;
     y_stride = f->sr_cur.p.stride[0], uv_stride = f->sr_cur.p.stride[1];
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
         uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1])
