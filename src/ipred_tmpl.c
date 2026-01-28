@@ -922,7 +922,7 @@ static int cfl_dc_420(uint16_t *const edge,
     const int is_top_sb_edge = filter_type & CFL_IS_TOP_SB_EDGE;
     int dc = 0, v;
     if (filter_type & 2) {
-        const int above = is_top_sb_edge ? 0 : -PXSTRIDE(stride);
+        const ptrdiff_t above = is_top_sb_edge ? 0 : -PXSTRIDE(stride);
         for (int i = 0; i < w; i += 2) {
             v = top[imax(0, i - 1)] + 4 * top[i] + top[i + 1] +
                 top[i + above] + top[i + PXSTRIDE(stride)];
