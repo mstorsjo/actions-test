@@ -34,7 +34,8 @@
 
 #include "src/loopfilter.h"
 
-static const int8_t max_width_y[4] = { 1, 3, 6, 8 }; // 4x4,
+static const int8_t max_width_y[4] = { 1, 3, 6, 8 };
+static const int8_t max_width_uv[3] = { 1, 3, 5 };
 
 static const int8_t q_first[5] = { 45, 40, 32 };
 static const int8_t q_thresh_mults[8] = { 32, 25, 19, 19, 0, 18, 0, 17 };
@@ -175,22 +176,17 @@ static void loop_filter_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const Av2FilterLUT *lut, const int h
                                     HIGHBD_DECL_SUFFIX)
 {
-#if 0
-    const unsigned vm = vmask[0] | vmask[1];
-    for (unsigned y = 1; vm & ~(y - 1);
-         y <<= 1, dst += 4 * PXSTRIDE(stride), l += b4_stride)
-    {
+    const uint64_t vm = vmask[0] | vmask[1] | vmask[2];
+    for (uint64_t y = 1; vm & ~(y - 1); y <<= 1, dst += 4 * PXSTRIDE(stride)) {
         if (vm & y) {
-            const int L = l[0][0] ? l[0][0] : l[-1][0];
-            if (!L) continue;
-            const int H = L >> 4;
-            const int E = lut->e[L], I = lut->i[L];
-            const int idx = !!(vmask[1] & y);
-            loop_filter(dst, E, I, H, PXSTRIDE(stride), 1, 4 + 2 * idx
-                        HIGHBD_TAIL_SUFFIX);
+            const int idx = (vmask[2] & y) ? 2 : !!(vmask[1] & y);
+            const int max_width_pos = max_width_uv[idx];
+            const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
+            const int is_sub_pu = !!(vmask[3] & y) * 3;
+            loop_filter(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
+                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
-#endif
 }
 
 static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
@@ -201,20 +197,17 @@ static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const Av2FilterLUT *lut, const int h
                                     HIGHBD_DECL_SUFFIX)
 {
-#if 0
-    const unsigned vm = vmask[0] | vmask[1];
-    for (unsigned x = 1; vm & ~(x - 1); x <<= 1, dst += 4, l++) {
+    const uint64_t vm = vmask[0] | vmask[1] | vmask[2];
+    for (uint64_t x = 1; vm & ~(x - 1); x <<= 1, dst += 4) {
         if (vm & x) {
-            const int L = l[0][0] ? l[0][0] : l[-b4_stride][0];
-            if (!L) continue;
-            const int H = L >> 4;
-            const int E = lut->e[L], I = lut->i[L];
-            const int idx = !!(vmask[1] & x);
-            loop_filter(dst, E, I, H, 1, PXSTRIDE(stride), 4 + 2 * idx
-                        HIGHBD_TAIL_SUFFIX);
+            const int idx = (vmask[2] & x) ? 2 : !!(vmask[1] & x);
+            const int max_width_pos = max_width_uv[idx];
+            const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
+            const int is_sub_pu = !!(vmask[3] & x) * 3;
+            loop_filter(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
+                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
-#endif
 }
 
 #if HAVE_ASM
