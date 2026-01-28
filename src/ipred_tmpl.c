@@ -1058,7 +1058,6 @@ cfl_ac_c(int16_t *ac, const int dc, const pixel *ypx, const ptrdiff_t stride,
          const int filter_type, const int ss_hor, const int ss_ver)
 {
     int y, x;
-    int16_t *const ac_orig = ac;
 
     assert(w_pad >= 0 && w_pad * 4 < width);
     assert(h_pad >= 0 && h_pad * 4 < height);
