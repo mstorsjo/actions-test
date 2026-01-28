@@ -1382,10 +1382,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     // ccso
     if (has_luma && !((t->bx | t->by) & 63)) {
+        const ptrdiff_t ccso_idx = 3 * ((t->bx >> 6) + (t->by >> 6) * f->sb256w);
         for (int p = 0; p < 3; p++) {
             if (!f->frame_hdr->ccso.p[p].enabled) continue;
+            int ccso;
             if (f->frame_hdr->ccso.p[p].sb_reuse) {
-                // FIXME copy from reference
+                ccso = t->lf_mask->ccso[p] = f->prev_ccsomap[p][ccso_idx + p];
             } else {
                 // for left/left-bottom [if no overhang] context:
                 // ctx=0: --/--, false/--, --/false, false/false
@@ -1394,12 +1396,14 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 // ctx=3: true/true [different coded block]
                 const int ctx = t->bx - 64 >= ts->tiling.col_start ?
                                 t->lf_mask[-1].ccso[p] * 2 : 0;
-                t->lf_mask->ccso[p] = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                            ts->cdf.m.ccso[p][ctx]);
+                ccso = t->lf_mask->ccso[p] = dav2d_msac_decode_bool_adapt(&ts->msac,
+                                                 ts->cdf.m.ccso[p][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,ctx=%d,%d]: r=%d\n",
                                    depth, "", "yuv"[p], ctx,
                                    t->lf_mask->ccso[p], ts->msac.rng);
             }
+            if (f->cur_ccsomap)
+                f->cur_ccsomap[ccso_idx + p] = ccso;
         }
     }
 
@@ -4816,6 +4820,9 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
     dav2d_ref_dec(&f->cur_segmap_ref);
     dav2d_ref_dec(&f->prev_segmap_ref);
     dav2d_ref_dec(&f->mvs_ref);
+    dav2d_ref_dec(&f->cur_ccsomap_ref);
+    for (int p = 0; p < 3; p++)
+        dav2d_ref_dec(&f->prev_ccsomap_ref[p]);
     dav2d_ref_dec(&f->seq_hdr_ref);
     dav2d_ref_dec(&f->frame_hdr_ref);
 
@@ -5244,6 +5251,42 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         f->prev_segmap_ref = NULL;
     }
 
+    // CCSO map
+    for (int p = 0; p < 3; p++)
+        f->prev_ccsomap_ref[p] = NULL;
+    if (f->frame_hdr->ccso.enabled) {
+        const int n_planes = f->seq_hdr->layout == DAV2D_PIXEL_LAYOUT_I400 ? 1 : 3;
+        for (int p = 0; p < n_planes; p++) {
+            if (!f->frame_hdr->ccso.p[p].sb_reuse) continue;
+            const int ref = f->frame_hdr->ccso.p[p].refidx;
+            f->prev_ccsomap_ref[p] = c->refs[f->frame_hdr->refidx[ref]].ccsomap;
+            dav2d_ref_inc(f->prev_ccsomap_ref[p]);
+            f->prev_ccsomap[p] = f->prev_ccsomap_ref[p]->data;
+        }
+
+        if (f->frame_hdr->ccso.p[0].sb_reuse &&
+            (n_planes == 1 ||
+             (f->frame_hdr->ccso.p[1].sb_reuse && f->frame_hdr->ccso.p[2].sb_reuse &&
+              f->frame_hdr->ccso.p[0].refidx == f->frame_hdr->ccso.p[1].refidx &&
+              f->frame_hdr->ccso.p[0].refidx == f->frame_hdr->ccso.p[2].refidx)))
+        {
+            f->cur_ccsomap_ref = f->prev_ccsomap_ref[0];
+            dav2d_ref_inc(f->cur_ccsomap_ref);
+            f->cur_ccsomap = NULL;
+        } else {
+            const size_t ccsomap_size = sizeof(*f->cur_ccsomap) * 3 * f->sb256w * f->sb256h;
+            f->cur_ccsomap_ref = dav2d_ref_create_using_pool(c->ccsomap_pool, ccsomap_size);
+            if (!f->cur_ccsomap_ref) {
+                res = DAV2D_ERR(ENOMEM);
+                goto error;
+            }
+            f->cur_ccsomap = f->cur_ccsomap_ref->data;
+        }
+    } else {
+        f->cur_ccsomap = NULL;
+        f->cur_ccsomap_ref = NULL;
+    }
+
     // skipmode
     f->skip_mode_refs[0] = 0;
     f->skip_mode_refs[1] = f->frame_hdr->skip_mode_enabled &&
@@ -5275,6 +5318,9 @@ int dav2d_submit_frame(Dav2dContext *const c) {
                 if (f->mvs_ref)
                     dav2d_ref_inc(f->mvs_ref);
             }
+            c->refs[i].ccsomap = f->cur_ccsomap_ref;
+            if (f->cur_ccsomap_ref)
+                dav2d_ref_inc(f->cur_ccsomap_ref);
             memcpy(c->refs[i].refpoc, f->refpoc, sizeof(f->refpoc));
         }
     }
@@ -5317,7 +5363,12 @@ error:
     if (q) q->res = res;
     dav2d_picture_unref_internal(&f->cur);
     dav2d_thread_picture_unref(&f->sr_cur);
+    dav2d_ref_dec(&f->cur_segmap_ref);
+    dav2d_ref_dec(&f->prev_segmap_ref);
     dav2d_ref_dec(&f->mvs_ref);
+    dav2d_ref_dec(&f->cur_ccsomap_ref);
+    for (int p = 0; p < 3; p++)
+        dav2d_ref_dec(&f->prev_ccsomap_ref[p]);
     dav2d_ref_dec(&f->seq_hdr_ref);
     dav2d_ref_dec(&f->frame_hdr_ref);
 #if 0

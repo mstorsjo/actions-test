@@ -169,6 +169,7 @@ COLD void dav2d_log_alloc_stats(Dav2dContext *const c) {
         [ALLOC_PIC_CTX   ] = "Picture context data",
         [ALLOC_REFMVS    ] = "Reference mv data",
         [ALLOC_SEGMAP    ] = "Segmentation maps",
+        [ALLOC_CCSOMAP   ] = "CCSO maps",
         [ALLOC_THREAD_CTX] = "Thread context data",
         [ALLOC_TILE      ] = "Tile data",
     };

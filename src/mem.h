@@ -59,6 +59,7 @@ enum AllocationType {
     ALLOC_PIC_CTX,
     ALLOC_REFMVS,
     ALLOC_SEGMAP,
+    ALLOC_CCSOMAP,
     ALLOC_THREAD_CTX,
     ALLOC_TILE,
     N_ALLOC_TYPES,

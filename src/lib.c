@@ -188,6 +188,7 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
         dav2d_mem_pool_init(ALLOC_OBU_HDR, &c->frame_hdr_pool) ||
         dav2d_mem_pool_init(ALLOC_SEGMAP, &c->segmap_pool) ||
         dav2d_mem_pool_init(ALLOC_REFMVS, &c->refmvs_pool) ||
+        dav2d_mem_pool_init(ALLOC_CCSOMAP, &c->ccsomap_pool) ||
         dav2d_mem_pool_init(ALLOC_PIC_CTX, &c->pic_ctx_pool) ||
         dav2d_mem_pool_init(ALLOC_CDF, &c->cdf_pool))
     {
@@ -705,6 +706,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
     dav2d_mem_pool_end(c->frame_hdr_pool);
     dav2d_mem_pool_end(c->segmap_pool);
     dav2d_mem_pool_end(c->refmvs_pool);
+    dav2d_mem_pool_end(c->ccsomap_pool);
     dav2d_mem_pool_end(c->cdf_pool);
     dav2d_mem_pool_end(c->picture_pool);
     dav2d_mem_pool_end(c->pic_ctx_pool);

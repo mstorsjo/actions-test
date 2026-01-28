@@ -124,29 +124,11 @@ build-debian:
               base="$(basename "$file")"
               a_file="/tmp/${base}.avm.yuv"
               d_file="/tmp/${base}.dav2d.yuv"
-              ./avm/x86-64/avmdec "$file" -o "$a_file" --limit=1 --inloopfilters=deblock+cdef+ccso --rawvideo
-              ./build/tools/dav2d -i "$file" -o "$d_file" --limit=1 --inloopfilters=deblock+cdef+ccso --threads=1 --quiet
-              a_md5=$(head -c "$((64 * 64))" "$a_file" | md5sum | cut -d' ' -f1)
-              d_md5=$(head -c "$((64 * 64))" "$d_file" | md5sum | cut -d' ' -f1)
-              if [[ "$a_md5" == "$d_md5" ]]; then
-                  echo $base "[OK] md5:$a_md5"
-              else
-                  echo $base "[FAILED!]"
-                  diff <(echo "$a_md5") <(echo "$d_md5")
-              fi
-          done
-          files=(
-              "./media/avm-v13.0.0-bus.64x64.l5.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
-          )
-          for file in "${files[@]}"; do
-              base="$(basename "$file")"
-              a_file="/tmp/${base}.avm.yuv"
-              d_file="/tmp/${base}.dav2d.yuv"
-              ./avm/x86-64/avmdec "$file" -o "$a_file" --inloopfilters=none --rawvideo
-              ./build/tools/dav2d -i "$file" -o "$d_file" --inloopfilters=none --filmgrain=0 --threads=1 --quiet
-              a_md5=$(for i in `seq 0 4`; do head -c "$((64 * 64 + 64 * 96 * $i))" $a_file | tail -c "$((64 * 64))"; done | md5sum | cut -d' ' -f1)
-              d_md5=$(for i in `seq 0 4`; do head -c "$((64 * 64 + 64 * 96 * $i))" $d_file | tail -c "$((64 * 64))"; done | md5sum | cut -d' ' -f1)
+              ./avm/x86-64/avmdec "$file" -o "$a_file" --inloopfilters=deblock+cdef+ccso --rawvideo
+              ./build/tools/dav2d -i "$file" -o "$d_file" --inloopfilters=deblock+cdef+ccso --filmgrain=0 --threads=1 --quiet
+              n=$(($(echo $base | tr '.' '\n' | grep ^l | cut -dl -f2)-1))
+              a_md5=$(for i in `seq 0 $n`; do head -c "$((64 * 64 + 64 * 96 * $i))" $a_file | tail -c "$((64 * 64))"; done | md5sum | cut -d' ' -f1)
+              d_md5=$(for i in `seq 0 $n`; do head -c "$((64 * 64 + 64 * 96 * $i))" $d_file | tail -c "$((64 * 64))"; done | md5sum | cut -d' ' -f1)
               if [[ "$a_md5" == "$d_md5" ]]; then
                   echo $base "[OK] md5:$a_md5"
               else

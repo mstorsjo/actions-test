@@ -1764,7 +1764,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                             const int h4 = (hdr->height + 3) >> 2;
                             const int rw4 = (refhdr->width + 3) >> 2;
                             const int rh4 = (refhdr->height + 3) >> 2;
-                            if (w4 != rw4 || h4 != rh4) goto error;
+                            if (w4 != rw4 || h4 != rh4 || !refhdr->ccso.p[p].enabled)
+                                goto error;
                         }
                     }
                 }
@@ -1801,7 +1802,12 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                         }
                     }
                 } else {
-                    // FIXME copy ccso plane data from reference
+                    const Dav2dFrameHeader *const refhdr =
+                        c->refs[hdr->refidx[hdr->ccso.p[p].refidx]].p.p.frame_hdr;
+                    memcpy(&hdr->ccso.p[p].bo_only, &refhdr->ccso.p[p].bo_only,
+                           sizeof(hdr->ccso.p[p]) -
+                               (offsetof(Dav2dFrameHeader, ccso.p[p].bo_only) -
+                                offsetof(Dav2dFrameHeader, ccso.p[p].enabled)));
                 }
             }
         }

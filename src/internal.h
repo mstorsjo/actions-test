@@ -176,10 +176,12 @@ struct Dav2dContext {
     // reference/entropy state
     Dav2dMemPool *segmap_pool;
     Dav2dMemPool *refmvs_pool;
+    Dav2dMemPool *ccsomap_pool;
     struct {
         Dav2dThreadPicture p;
         Dav2dRef *segmap;
         Dav2dRef *refmvs;
+        Dav2dRef *ccsomap;
         uint8_t refpoc[7];
     } refs[8];
     Dav2dMemPool *cdf_pool;
@@ -238,6 +240,9 @@ struct Dav2dFrameContext {
     Dav2dRef *cur_segmap_ref, *prev_segmap_ref;
     uint8_t *cur_segmap;
     const uint8_t *prev_segmap;
+    Dav2dRef *cur_ccsomap_ref, *prev_ccsomap_ref[3];
+    uint8_t *cur_ccsomap;
+    const uint8_t *prev_ccsomap[3];
     uint8_t refpoc[7], refrefpoc[7][7], refcnt[7];
     union {
         int8_t refdir_with_intra[1 /* intra */ + 7 + 1 /* tip */];
