@@ -2688,8 +2688,10 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             const int end = imin((ssbx + csbsz) & ~(csbsz - 1),
                                  ts->tiling.col_end >> ss_hor);
             const int w = imin(ctw4, end - ssbx - ctw4);
-            if (is_top_sb_edge || !w) { // top or right sb boundary
-                n_tr = w;
+            if (is_top_sb_edge) {
+                n_tr = ctw4;
+            } else if (!w) { // right sb boundary
+                n_tr = 0;
             } else {
                 const unsigned bits = (unsigned)
                     (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
