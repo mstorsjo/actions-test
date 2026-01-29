@@ -1248,7 +1248,7 @@ cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES],
     // general part, altho it will probably be faster to not care and just
     // store 2px in the general part anyways.
     if (has_l) {
-        for (int i = has_t; i < refh - 1; i++, n++) {
+        for (int i = 1; i < refh - 1; i++, n++) {
             const int v0 = y[i * ystride];
             const int v1 = SQRND(y[(i + dir_t) * ystride + dir_l]);
             imat[0][n] = v0;
@@ -1365,7 +1365,7 @@ cfl_calc_alphas_c(int alpha[3], const pixel *const c,
         }
     }
     if (has_l) {
-        for (int i = 0; i < refh - 2; i++, n++) {
+        for (int i = !has_t; i < refh - 1 - has_t; i++, n++) {
             const int v = c[i * PXSTRIDE(stride) - 1];
             alpha[0] += imat[0][n] * v;
             alpha[1] += imat[1][n] * v;
