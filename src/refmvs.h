@@ -76,17 +76,18 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 
 // FIXME the size of this array can be reduced if we generate mv on-the-fly
 // from the (separately stored) warp matrix.
-PACKED(typedef struct refmvs_block {
+typedef struct refmvs_block {
     union mv mv[2];
     refmvs_refpair ref;
     uint8_t bs;
     int8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2-7: cwp_idx
     uint8_t ox4, oy4; // distance to top/left coordinates (in 4px units) of this block
-    uint16_t dummy; // FIXME remove
+    uint8_t dummy; // FIXME remove
+    int8_t warp_type;
     union mv lmv[2]; // 2dmv for warp blocks (see #1146; mf & 2)
-    int32_t m[7]; // warp matrix
-}) ALIGN(refmvs_block, 4);
-CHECK_SIZE(refmvs_block, 68);
+    int32_t m[6]; // warp matrix
+} ALIGN(refmvs_block, 64);
+CHECK_SIZE(refmvs_block, 64);
 
 typedef struct refmvs_frame {
     const Dav2dSequenceHeader *seq_hdr;
@@ -120,7 +121,6 @@ typedef struct refmvs_frame {
     mv *rp_traj[7]; // FIXME we may not need 7?
     refmvs_traj_map *rp_map[3][7];
     refmvs_block *ra;
-    int32_t (*ram)[7];
 #if 0
     int n_frame_threads;
 #endif
@@ -144,7 +144,8 @@ typedef struct refmvs_tile {
         uint8_t hits[2 /* sb, b */], avail;
     } bank;
     struct {
-        int32_t mat[7][4][7 /* see #834 */];
+        int32_t mat[7][4][6];
+        int8_t type[7][4]; // see #834
         uint8_t hits, size[7], idx[7];
     } warp;
 } refmvs_tile;

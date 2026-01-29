@@ -342,7 +342,7 @@ static void extend_warpmv(Dav2dTaskContext *const t,
     int32_t *const m = wmp->matrix;
 
     if (r->mf & 2) {
-        if (r->m[6] == DAV2D_WM_TYPE_INVALID)
+        if (r->warp_type == DAV2D_WM_TYPE_INVALID)
             memcpy(m, &dav2d_default_wm_params.matrix, sizeof(*m) * 6);
         else
             memcpy(m, r->m, sizeof(*m) * 6);
@@ -566,7 +566,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         memcpy(s_src.m, mat, sizeof(int32_t) * 6);
-        s_src.m[6] = t->warpmv[0].type;
+        s_src.warp_type = t->warpmv[0].type;
         s_src.lmv[0] = b->mv[0];
         s_src.lmv[1].y = INVALID_MV;
         f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
@@ -642,7 +642,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                              (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
         // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
         memcpy(s_src.m, mat1, sizeof(int32_t) * 6);
-        s_src.m[6] = t->warpmv[0].type;
+        s_src.warp_type = t->warpmv[0].type;
         COPY2MV(s_src.lmv, b->mv);
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                            mvy1, mvx1, mvy2, mvx2,
