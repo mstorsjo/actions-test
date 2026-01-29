@@ -1146,7 +1146,8 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
         const ptrdiff_t b = !top_sb_edge ? src_stride : 0;
         for (int y = 0; y < n_top; y++) {
             for (int x = 0; x < refw; x++) {
-                const int c = x * 2, l = imax(c - 1, 0), r = c + 1;
+                const int c = x * 2, r = c + 1;
+                const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
                 dst[x] = filter_type & 2 ? FILTER_CROSS(top, (&top[a])) :
                          filter_type & 1 ? FILTER_RECT(top) : FILTER_CENTER(top);
             }
@@ -1161,7 +1162,8 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
     const pixel *top = top_sb_edge ? top_sb_edge - n_left * 2 : src - src_stride;
     for (int y = 0; y < th; y++) {
         for (int x = 0; x < n_left + tw; x++) {
-            const int c = x * 2, l = imax(c - 1, 0), r = c + 1;
+            const int c = x * 2, r = c + 1;
+            const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
             dst[x] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
                      filter_type & 1 ? FILTER_RECT(src) : FILTER_CENTER(src);
         }
@@ -1175,7 +1177,8 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
         const int n_bl = refh - th;
         for (int y = 0; y < n_bl; y++) {
             for (int x = 0; x < n_left; x++) {
-                const int c = x * 2, l = imax(c - 1, 0), r = c + 1;
+                const int c = x * 2, r = c + 1;
+                const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
                 dst[x] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
                          filter_type & 1 ? FILTER_RECT(src) : FILTER_CENTER(src);
             }
