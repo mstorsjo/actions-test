@@ -3180,7 +3180,7 @@ chroma: {}
                 // don't print chroma as avm does things in a different order
                 // (decode coefs of both planes first then pred + itx)
                 if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    coef_dump(cf[pl], imin(ctw, 32), imin(cth, 32), 3, "dq");
+                    coef_dump(cf[pl], imin(cth, 32), imin(ctw, 32), 3, "dq");
                 }
                 pixel *const dst = ((pixel *) f->cur.data[1 + pl]) +
                     4 * (ssby * PXSTRIDE(stride) + ssbx);
