@@ -1754,8 +1754,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            t->pb.is_sm.a = sm_flag(t->a, bx4);
-            t->pb.is_sm.l = sm_flag(&t->l, by4);
+            t->pb.is_sm[0].a = sm_flag(t->a, bx4);
+            t->pb.is_sm[0].l = sm_flag(&t->l, by4);
+            if (has_chroma) {
+                t->pb.is_sm[1].a = sm_uv_flag(t->a, cbx4);
+                t->pb.is_sm[1].l = sm_uv_flag(&t->l, cby4);
+            }
             const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
             if (res < 0) return res;
         }

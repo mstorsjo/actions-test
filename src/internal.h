@@ -422,7 +422,7 @@ struct Dav2dTaskContext {
         union {
             struct {
                 int a, l;
-            } is_sm;
+            } is_sm[2 /* luma, chroma */];
             struct {
                 int alpha, beta;
             } bawp;

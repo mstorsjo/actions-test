@@ -2205,8 +2205,8 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 &&
                         !mrl_idx;
         const int dip = b->dip - 1;
-        const int sm_top = t->pb.is_sm.a;
-        const int sm_left = t->pb.is_sm.l;
+        const int sm_top = t->pb.is_sm[0].a;
+        const int sm_left = t->pb.is_sm[0].l;
         const int is_sm_flag = apply_ibp ?
             (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
             (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
@@ -3376,12 +3376,15 @@ chroma: {}
                 }
             }
 
-            const int apply_ibp = f->seq_hdr->ibp &&
-                uvtx != (enum RectTxfmSize) TX_4X4 && b->uv_mode == DC_PRED;
-            const int sm_top = sm_uv_flag(t->a, cbx4);
-            const int sm_left = sm_uv_flag(&t->l, cby4);
-            const int is_sm_flag = (sm_top | sm_left) *
-                (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+            int apply_ibp = f->seq_hdr->ibp && uvtx != (enum RectTxfmSize) TX_4X4;
+            const int sm_top = t->pb.is_sm[1].a;
+            const int sm_left = t->pb.is_sm[1].l;
+            const int is_sm_flag = apply_ibp ?
+                (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
+                (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
+                (sm_top | sm_left) * (ANGLE_SMOOTH_TOP_EDGE_FLAG |
+                                      ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+            apply_ibp &= b->uv_mode == DC_PRED;
             int intra_flags = is_sm_flag |
                 (apply_ibp ? ANGLE_IBP_FLAG : 0) |
                 (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
