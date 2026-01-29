@@ -919,11 +919,11 @@ static int cfl_dc_420(uint16_t *const edge,
 {
     const int is_top_sb_edge = filter_type & CFL_IS_TOP_SB_EDGE;
     int dc = 0, v;
+    const ptrdiff_t bottom = is_top_sb_edge ? 0 : PXSTRIDE(stride);
     if (filter_type & 2) {
-        const ptrdiff_t above = is_top_sb_edge ? 0 : -PXSTRIDE(stride);
         for (int i = 0; i < w; i += 2) {
             v = top[imax(0, i - 1)] + 4 * top[i] + top[i + 1] +
-                top[i + above] + top[i + PXSTRIDE(stride)];
+                top[i + -bottom] + top[i + bottom];
             edge[i >> 1] = v;
             dc += v;
         }
@@ -936,8 +936,8 @@ static int cfl_dc_420(uint16_t *const edge,
     } else if (filter_type & 1) {
         for (int i = 0; i < w; i += 2) {
             v = top[imax(0, i - 1)] + 2 * top[i] + top[i + 1] +
-                top[imax(0, i - 1) + PXSTRIDE(stride)] +
-                2 * top[i + PXSTRIDE(stride)] + top[i + 1 + PXSTRIDE(stride)];
+                top[imax(0, i - 1) + bottom] +
+                2 * top[i + bottom] + top[i + 1 + bottom];
             edge[i >> 1] = v;
             dc += v;
         }
@@ -950,7 +950,7 @@ static int cfl_dc_420(uint16_t *const edge,
     } else {
         for (int i = 0; i < w; i += 2) {
             v = (top[i] + top[i + 1] +
-                 top[i + PXSTRIDE(stride)] + top[i + 1 + PXSTRIDE(stride)]) << 1;
+                 top[i + bottom] + top[i + 1 + bottom]) << 1;
             edge[i >> 1] = v;
             dc += v;
         }
