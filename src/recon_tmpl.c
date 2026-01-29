@@ -3184,6 +3184,8 @@ chroma: {}
                 }
                 pixel *const dst = ((pixel *) f->cur.data[1 + pl]) +
                     4 * (ssby * PXSTRIDE(stride) + ssbx);
+                if (f->seq_hdr->inter_ddt && !b->intra)
+                    txtp[pl] += txtp[pl] & dav2d_tx_ddt_mask[uvtx]; // (flip)adst -> (f)ddt
                 dsp->itx.itxfm_add[uvtx](dst, stride, cf[pl], txtp[pl], eob[pl]
                                          HIGHBD_CALL_SUFFIX);
             }
