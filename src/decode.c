@@ -257,13 +257,14 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
     const Dav2dFrameContext *const f = t->f;
     int have_topleft = 0;
     int have_topright = 0;
+    int odd = 0;
     const int is_not_sb_boundary = t->by & (f->sb_step - 1);
     if (have_top) {
         int off;
         if (is_not_sb_boundary) {
             ra = &t->rt.r[((t->by - 1) & 63) * 128];
             const refmvs_block *r2 = &ra[(t->bx & 127)];
-            off = r2->bx4 - t->bx;
+            off = -r2->ox4;
             have_topleft = !off;
             do {
                 add_sample(off, 0, 1, -1, &r2[off]);
@@ -272,14 +273,14 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
         } else {
             ra = t->rt.ra;
             const refmvs_block *r2 = &ra[t->bx >> 1];
-            off = r2->bx4 - t->bx;
+            off = -r2->ox4;
             have_topleft = !off;
-            off++; // to round up (not down) in the right-shifts below
+            off += off & 1; // to round up (not down) in the right-shifts below
+            odd = t->bx & 1;
             do {
-                add_sample(r2[off >> 1].bx4 - t->bx, 0, 1, -1, &r2[off >> 1]);
+                add_sample(off - r2[off >> 1].ox4 - odd, 0, 1, -1, &r2[off >> 1]);
                 off += imax(2, bs(&r2[off >> 1])[0]);
             } while (off < w4 && np < 8);
-            off--;
         }
         have_topright = bw4 <= 16 && off <= bw4 &&
             t->bx + bw4 < t->ts->tiling.col_end &&
@@ -290,7 +291,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
 
     if (np < 8 && have_left) {
         const refmvs_block *r2 = &r[(t->bx - 1) & 127];
-        int off = r2->by4 - t->by;
+        int off = -r2->oy4;
         have_topleft &= !off;
         do {
             add_sample(0, off, -1, 1, &r2[off * 128]);
@@ -308,13 +309,12 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
         if (np < 8 && have_topleft) { // top/left
             const refmvs_block *const r2 = (t->bx & ~1) & (f->sb_step - 1) ?
                                            &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl;
-            assert(r2->bx4 + dav2d_block_dimensions[r2->bs][0] <= t->bx);
-            if (r2->bx4 + dav2d_block_dimensions[r2->bs][0] == t->bx)
+            if (dav2d_block_dimensions[r2->bs][0] == r2->ox4 + 2 - odd)
                 add_sample(0, 0, -1, -1, r2);
         }
         if (np < 8 && have_topright) { // top/right
             const refmvs_block *const r2 = &ra[(t->bx >> 1) + ((bw4 + 1) >> 1)];
-            add_sample(r2->bx4 - t->bx, 0, 1, -1, r2);
+            add_sample(bw4 - r2->ox4 - odd, 0, 1, -1, r2);
         }
     }
     assert(np > 0 && np <= 8);
@@ -557,8 +557,6 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     s_src.ref.ref[1] = -1;
     s_src.mv[1].y = INVALID_MV;
     s_src.bs = bs;
-    s_src.bx4 = t->bx;
-    s_src.by4 = t->by;
     if (b->motion_mode > MM_INTERINTRA) {
         assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
         s_src.mf = 2;
@@ -597,8 +595,6 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
         .mv[1].y = INVALID_MV,
         .bs = bs,
         .mf = 0,
-        .bx4 = t->bx,
-        .by4 = t->by,
     };
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
@@ -629,8 +625,6 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref[1] + 1;
     s_src.bs = bs;
     s_src.mf = b->cwp_idx << 2;
-    s_src.bx4 = t->bx;
-    s_src.by4 = t->by;
     const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
         WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
     if (b->motion_mode > MM_INTERINTRA) {
@@ -693,8 +687,6 @@ static inline void splat_intraref(const Dav2dContext *const c,
         .mv[1].y = INVALID_MV,
         .bs = bs,
         .mf = 0,
-        .bx4 = t->bx,
-        .by4 = t->by,
     };
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
