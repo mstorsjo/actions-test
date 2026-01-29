@@ -2578,7 +2578,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     const int ctw = uv_t_dim->w * 4, cth = uv_t_dim->h * 4;
     const int filter_type = f->c->seq_hdr->cfl_ds_filter_index;
     const pixel *const ytop_sb_edge = !is_top_sb_edge ? NULL :
-        f->ipred_edge[0] + f->sb256w * 256 * (sby - 1);
+        f->ipred_edge[0] + f->sb256w * 256 * (sby - 1) + t->cbx * 4;
 
     if (b->cfl_type < CFL_MHCCP) { // CFL EXPLICIT / IMPLICIT
         // calc AC / gen Y edge
@@ -2636,7 +2636,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                 int sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
                 if (n_top) {
                     const pixel *const top = is_top_sb_edge ?
-                        ctop_sb_edge : src - PXSTRIDE(cstride);
+                        &ctop_sb_edge[ssbx * 4] : src - PXSTRIDE(cstride);
                     const int step = ctw >> ctz(n_top);
                     const int start = step >> 1;
                     for (int i = start; i < ctw; i += step) {
@@ -2732,8 +2732,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             int alpha[3] = { 0 };
             pixel *chroma = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
-            const pixel *const ctop_sb_edge = is_top_sb_edge ?
-                f->ipred_edge[pl] + ((sby - 1) * f->sb256w * 256 >> ss_hor) : NULL;
+            const pixel *const ctop_sb_edge = is_top_sb_edge ? f->ipred_edge[pl] +
+                ((sby - 1) * f->sb256w * 256 >> ss_hor) + ssbx * 4 : NULL;
 
             if (has_top || has_left) {
                 dsp->ipred.cfl_calc_alphas(alpha, chroma, ctop_sb_edge, cstride,
