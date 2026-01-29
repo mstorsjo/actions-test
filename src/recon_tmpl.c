@@ -3136,19 +3136,18 @@ chroma: {}
         }
     }
 
-    const int cctx = f->seq_hdr->cctx &&
-        (f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
-    enum TxfmType txtp[2];
-    int eob[2];
-    uint8_t cf_ctx[2];
-    coef *const cf[2] = { bitfn(t->cf)[0], bitfn(t->cf)[1] };
-
     if (b->skip_txfm) {
         for (int pl = 0; pl < 2; pl++) {
             dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, ctw4);
             dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, cth4);
         }
     } else {
+        const int cctx = f->seq_hdr->cctx &&
+            (f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
+        enum TxfmType txtp[2];
+        int eob[2];
+        uint8_t cf_ctx[2];
+        coef *const cf[2] = { bitfn(t->cf)[0], bitfn(t->cf)[1] };
         int cctx_type;
         // decode coefficients
         for (int pl = 0; pl < 2; pl++) {
