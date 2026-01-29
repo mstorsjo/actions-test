@@ -1068,9 +1068,9 @@ cfl_ac_c(int16_t *ac, const int dc, const pixel *ypx, const ptrdiff_t stride,
             if (!(ss_hor | ss_ver)) {
                 ac[x] = ypx[x << ss_hor] << 3;
             } else if (!(ss_hor ^ ss_ver)) {
-                const int bot = x * 2 + PXSTRIDE(stride);
+                const ptrdiff_t bot = x * 2 + PXSTRIDE(stride);
                 if (filter_type & 2) {
-                    const int top = ((y & 63) == 0) ? x * 2 : (x * 2 - PXSTRIDE(stride));
+                    const ptrdiff_t top = (y & 63) == 0 ? x * 2 : (x * 2 - PXSTRIDE(stride));
                     ac[x] = ypx[left] + 4 * ypx[x * 2] + ypx[x * 2 + 1] +
                             ypx[top] + ypx[bot];
                 } else if (filter_type & 1) {
@@ -1157,7 +1157,7 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
     }
 
     // l+blk
-    const int b = src_stride;
+    const ptrdiff_t b = src_stride;
     const pixel *top = top_sb_edge ? top_sb_edge - n_left * 2 : src - src_stride;
     for (int y = 0; y < th; y++) {
         for (int x = 0; x < n_left + tw; x++) {
