@@ -41,12 +41,13 @@
 #define INVALID_REF2CUR (-32)
 #define INVALID_TRAJ 0x8080
 
-typedef union refmvs_traj_map {
+PACKED(typedef union refmvs_traj_map {
     struct {
         int8_t y, x;
     };
     uint16_t n;
-} refmvs_traj_map;
+}) ALIGN(refmvs_traj_map, 2);
+CHECK_SIZE(refmvs_traj_map, 2);
 
 PACKED(typedef struct refmvs_sngl_mv_block {
     mv mv;
@@ -71,7 +72,7 @@ PACKED(typedef struct refmvs_temporal_block {
         uint32_t n;
     } mv;
     refmvs_refpair ref;
-}) refmvs_temporal_block;
+}) ALIGN(refmvs_temporal_block, 2);
 CHECK_SIZE(refmvs_temporal_block, 6);
 
 // FIXME the size of this array can be reduced if we generate mv on-the-fly
