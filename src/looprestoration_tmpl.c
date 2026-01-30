@@ -40,6 +40,8 @@
 
 // 512 * 1.5 + 4 + 4
 #define REST_UNIT_STRIDE (776)
+// (512 * 1.5) >> 2
+#define CLASS_BUF_SIZE (192)
 
 static const int8_t wiener_ns_config_y[32][2] = {
     { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
@@ -51,6 +53,22 @@ static const int8_t wiener_ns_config_y[32][2] = {
     { 4, 0 }, { -4, 0 }, { 0, 4 }, { 0, -4 },
     { 3, 3 }, { -3, -3 }, { 3, -3 }, { -3, 3 }
 };
+
+static const int8_t pc_wiener_config[25][2] = {
+    {  1,  0 }, { -1,  0 }, {  0,  1 }, {  0, -1 }, {  2,  0 },
+    { -2,  0 }, {  0,  2 }, {  0, -2 }, {  1,  1 }, { -1, -1 },
+    { -1,  1 }, {  1, -1 }, {  2,  1 }, { -2, -1 }, {  2, -1 },
+    { -2,  1 }, {  1,  2 }, { -1, -2 }, {  1, -2 }, { -1,  2 },
+    {  3,  0 }, { -3,  0 }, {  0,  3 }, {  0, -3 }, {  0,  0 }
+};
+
+static const uint16_t pc_wiener_normalizer[ 4 ] = { 3739, 3273, 3074, 7 };
+
+static const int16_t mode_weights[ 4 ][ 3 ] = {
+    { -527, 15325, 321 }, { 26436, -17705, 17905 }, { 366, -147, -194 }, { 202, -267, -179 }
+};
+
+static const int16_t mode_offsets[ 4 ] = { -547, -21565, -573, -680 };
 
 static void backup_row(pixel *dst, const pixel *src, const pixel *left, const int w, const enum LrEdgeFlags edges) {
     if (edges & LR_HAVE_LEFT)
@@ -92,12 +110,13 @@ static void backup_row_lpf(pixel *dst, const pixel *src, const int w, const enum
     }
 }
 
-static void ns_wiener_y_c(pixel *p, const ptrdiff_t stride,
-                          const pixel (*left)[4],
-                          const pixel *lpf, const int w, int h,
-                          const int8_t *coeffs,
-                          const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
+                                 const pixel (*left)[4],
+                                 const pixel *lpf, const int w, int h,
+                                 const WienerParams *params,
+                                 const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
+    const int8_t *filter = params->single.filter;
     pixel row_buffers[9][REST_UNIT_STRIDE];
     pixel *bak_rows[9];
     const pixel *ptrs[9];
@@ -150,7 +169,7 @@ static void ns_wiener_y_c(pixel *p, const ptrdiff_t stride,
                 const int dy = wiener_ns_config_y[i][0];
                 const int dx = wiener_ns_config_y[i][1];
                 const int diff = ptrs[4 + dy][x + dx] - m;
-                s += diff * coeffs[i >> 1];
+                s += diff * filter[i >> 1];
             }
             // TODO: chroma: if (plane > 0) {...}
             const int v = (s + 64) >> 7;
@@ -160,6 +179,215 @@ static void ns_wiener_y_c(pixel *p, const ptrdiff_t stride,
         for (int r = 0; r < 8; r++) ptrs[r] = ptrs[r+1];
         p += PXSTRIDE(stride);
     }
+}
+
+
+static int get_qval_given_tskip(int qstep, int tskip, int i, int bitdepth_min_8) {
+    qstep = (qstep + (1 << bitdepth_min_8 >> 1)) >> bitdepth_min_8;
+    int prod = (tskip * qstep + 128) >> 8;
+    int qval = mode_weights[i][0] * (tskip << 5) + mode_weights[i][1] * qstep + mode_weights[i][2] * prod;
+    int abs_qval = abs(qval);
+    qval = apply_sign((abs_qval + (1 << 12)) >> 13, qval);
+    qval = 255 * (mode_offsets[i] + qval);
+    return qval;
+}
+
+static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t (*noskip_mask)[12], const int base_q,
+                             const int bx, const int by, const int bh, const int bitdepth_min_8) {
+    int f[3] = {0, 0, 0};
+    int s = 0;
+
+    for (int dy = -1; dy <= 4; dy++) {
+        for (int dx = -1; dx <= 4; dx++) {
+            const int x = (bx << 2) + dx;
+            const int y = 4 + dy;
+            const int m = ptrs[y][x];
+            const int up = ptrs[y - 1][x];
+            const int down = ptrs[y + 1][x];
+            const int vert = up - 2 * m + down;
+
+            const int up_right = ptrs[y - 1][x + 1];
+            const int down_left = ptrs[y + 1][x - 1];
+            const int anti_diag = up_right - 2 * m + down_left;
+
+            const int down_right = ptrs[y + 1][x + 1];
+            const int up_left = ptrs[y - 1][x - 1];
+            const int diag = up_left - 2 * m + down_right;
+
+            f[0] += abs(vert);
+            f[1] += abs(anti_diag);
+            f[2] += abs(diag);
+        }
+    }
+
+    // count skip masks for center, sides, and corners.
+    const uint8_t num_pixels[3] = {16, 4, 1};
+    const int sb64x = bx >> 4;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            const int edge = !!dy + !!dx;
+            const int fx = iclip((bx & 15) + dx, 0, 15);
+            const int fy = iclip(by + dy, 0, bh - 1);
+            s += num_pixels[edge] * !((noskip_mask[fy][sb64x] >> fx) & 1);
+        }
+    }
+
+    const int rnd = 1 << bitdepth_min_8 >> 1;
+    for (int i = 0; i < 3; i++) {
+        f[i] = (f[i] * pc_wiener_normalizer[i] + rnd) >> bitdepth_min_8;
+    }
+    s = s * pc_wiener_normalizer[3];
+
+    int qval = (imax(0, get_qval_given_tskip(base_q, s, 0, bitdepth_min_8)) + (1 << 13)) >> 14;
+    qval = imin(qval, 255) >> 5;
+    int lut_idx = qval << 9;
+    for (int i = 0; i < 3; i++) {
+        qval = (imax(0, f[i] + get_qval_given_tskip(base_q, s, i + 1, bitdepth_min_8)) + (1 << 13)) >> 14;
+        qval = imin(qval, 255) >> 5;
+        lut_idx |= qval << (3 * (2-i));
+    }
+    return lut_idx;
+}
+
+static void wiener_multi(pixel *p, const ptrdiff_t stride,
+                         const pixel (*left)[4],
+                         const pixel *lpf, const int w, int h,
+                         const int8_t (*filters_user)[18],
+                         const int16_t (*filters_pretrained)[13],
+                         const uint8_t *subclass_lut,
+                         const uint16_t (*noskip_mask)[12],
+                         const int base_q,
+                         const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+{
+    const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
+
+    uint8_t classes[CLASS_BUF_SIZE];
+    pixel row_buffers[10][REST_UNIT_STRIDE];
+    pixel *bak_rows[10];
+    const pixel *ptrs[10];
+    const pixel *lpf_bottom = lpf + 6*PXSTRIDE(stride);
+
+    for (int i = 0; i < 10; i++)
+        bak_rows[i] = row_buffers[i] + 4;
+
+    backup_row(bak_rows[4], p, left[0], w, edges);
+    ptrs[4] = bak_rows[4];
+    if (edges & LR_HAVE_TOP) {
+        // y = -2,-1
+        backup_row_lpf(bak_rows[2], lpf, w, edges);
+        ptrs[2] = bak_rows[2];
+        backup_row_lpf(bak_rows[3], lpf + PXSTRIDE(stride), w, edges);
+        ptrs[3] = bak_rows[3];
+
+        // y = -3,-4
+        ptrs[0] = ptrs[1] = ptrs[2];
+    } else {
+        ptrs[0] = ptrs[1] = ptrs[2] = ptrs[3] = ptrs[4];
+    }
+
+    backup_row(bak_rows[5], p + PXSTRIDE(stride), left[1], w, edges);
+    ptrs[5] = bak_rows[5];
+    backup_row(bak_rows[6], p + 2*PXSTRIDE(stride), left[2], w, edges);
+    ptrs[6] = bak_rows[6];
+    backup_row(bak_rows[7], p + 3*PXSTRIDE(stride), left[3], w, edges);
+    ptrs[7] = bak_rows[7];
+    int bak_idx = 8;
+
+    const int bh = h >> 2;
+    const int bw = w >> 2;
+    for (int by = 0; by < bh; by++) {
+        // Backup an extra row to compute class
+        if (by + 1 < bh) {
+            // TODO: don't backup lines twice
+            backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[(by << 2) + 4], w, edges);
+            ptrs[8] = bak_rows[bak_idx];
+            backup_row(bak_rows[9], p + 5*PXSTRIDE(stride), left[(by << 2) + 5], w, edges);
+            ptrs[9] = bak_rows[9];
+        } else if (edges & LR_HAVE_BOTTOM) {
+            backup_row_lpf(bak_rows[bak_idx], lpf_bottom + 0 * PXSTRIDE(stride), w, edges);
+            ptrs[8] = bak_rows[bak_idx];
+            backup_row_lpf(bak_rows[9], lpf_bottom + 1 * PXSTRIDE(stride), w, edges);
+            ptrs[9] = bak_rows[9];
+        } else {
+            ptrs[8] = ptrs[7];
+            ptrs[9] = ptrs[7];
+        }
+        for (int bx = 0; bx < bw; bx++) {
+            int lut_idx = get_class_lut_idx(ptrs, noskip_mask, base_q, bx, by, bh, bitdepth_min_8);
+            // TODO: Convert these 2 lookup tables to a  Pre compute a single lookup table ahead of time
+            int cls = dav2d_pc_weiner_lut_to_class[lut_idx];
+            classes[bx] = subclass_lut[cls];
+        }
+        for (int y = by << 2; y < (by << 2) + 4; y++) {
+            if (y + 4 < h) {
+                backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, edges);
+                ptrs[8] = bak_rows[bak_idx];
+            } else if (y + 2 < h && edges & LR_HAVE_BOTTOM) {
+                int offset_y = y + 4 - h;
+                assert(offset_y < 2);
+                backup_row_lpf(bak_rows[bak_idx], lpf_bottom + offset_y * PXSTRIDE(stride), w, edges);
+                ptrs[8] = bak_rows[bak_idx];
+            } else {
+                ptrs[8] = ptrs[7];
+            }
+            if (++bak_idx == 9) bak_idx = 0;
+
+            for (int bx = 0; bx < bw; bx++) {
+                if (filters_user) {
+                    const int8_t *filter = filters_user[classes[bx]];
+                    for (int x = bx << 2; x < (bx << 2) + 4; x++) {
+                        const int m = ptrs[4][x];
+                        int s = m << 7;
+                        for (int i = 0; i < 32; i++) {
+                            const int dy = wiener_ns_config_y[i][0];
+                            const int dx = wiener_ns_config_y[i][1];
+                            const int diff = ptrs[4 + dy][x + dx] - m;
+                            s += diff * filter[i >> 1];
+                        }
+                        const int v = (s + 64) >> 7;
+                        p[x] = iclip_pixel(v);
+                    }
+                } else {
+                    const int16_t *filter = filters_pretrained[classes[bx]];
+                    for (int x = bx << 2; x < (bx << 2) + 4; x++) {
+                        int s = 0;
+                        for (int i = 0; i < 25; i++) {
+                            const int dy = pc_wiener_config[i][0];
+                            const int dx = pc_wiener_config[i][1];
+                            s += ptrs[4 + dy][x + dx] * filter[i >> 1];
+                        }
+                        const int v = (s + 64) >> 7;
+                        p[x] = iclip_pixel(v);
+                    }
+                }
+            }
+
+            for (int r = 0; r < 8; r++) ptrs[r] = ptrs[r+1];
+            p += PXSTRIDE(stride);
+        }
+    }
+}
+
+static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
+                              const pixel (*left)[4],
+                              const pixel *lpf, const int w, int h,
+                              const WienerParams *params,
+                              const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+{
+    wiener_multi(p, stride, left, lpf, w, h, params->multi.filters.user, NULL,
+                 params->multi.subclass_lut, params->multi.noskip_mask, params->multi.base_q,
+                 edges HIGHBD_TAIL_SUFFIX);
+}
+
+static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
+                        const pixel (*left)[4],
+                        const pixel *lpf, const int w, int h,
+                        const WienerParams *params,
+                        const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+{
+    wiener_multi(p, stride, left, lpf, w, h, NULL, params->multi.filters.pretrained,
+                 params->multi.subclass_lut, params->multi.noskip_mask, params->multi.base_q,
+                 edges HIGHBD_TAIL_SUFFIX);
 }
 
 static void wiener_filter_h(uint16_t *dst, const pixel (*left)[4],
@@ -1486,7 +1714,9 @@ vert_1:
 COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext *const c,
                                                  const int bpc)
 {
-    c->ns_wiener = ns_wiener_y_c;
+    c->ns_wiener_single = ns_wiener_single_y_c;
+    c->ns_wiener_multi = ns_wiener_multi_c;
+    c->pc_wiener = pc_wiener_c;
 
     c->wiener[0] = c->wiener[1] = wiener_c;
     c->sgr[0] = sgr_5x5_c;

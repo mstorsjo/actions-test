@@ -326,6 +326,10 @@ struct Dav2dFrameContext {
         int lr_buf_plane_sz[2]; /* (stride*sbh*4) << sb128 if n_tc > 1, else stride*4 */
         int re_sz /* h */;
         ALIGN(Av2FilterLUT thr_lut, 16);
+        int base_q;
+        const uint8_t *ns_subclass_lut;
+        const uint8_t *pc_subclass_lut;
+        const int16_t (*pc_filters)[13];
         uint8_t *tx_lpf_right_edge[2];
         uint8_t *cdef_line_buf, *lr_line_buf;
         pixel *cdef_line[2 /* pre, post */][3 /* plane */];
@@ -369,10 +373,6 @@ struct Dav2dFrameContext {
         int (*lowest_pixel_mem)[7][2];
         int lowest_pixel_mem_sz;
     } tile_thread;
-
-    struct {
-        int8_t filter[3][16][32];
-    } ns_wiener;
 };
 
 struct Dav2dTileState {

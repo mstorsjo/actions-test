@@ -2260,6 +2260,11 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     if (eob != -1) {
+        const int mask_idx = bx4 >> 4;
+        const int mask = ((1 << t_dim->w) - 1) << (bx4 & 0xf);
+        for (int y = 0; y < t_dim->h; y++)
+            t->lf_mask->lr_noskip_mask[by4 + y][mask_idx] |= mask;
+
         if (stx) {
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 coef_dump(cf, 8, 8, 3, "dq");

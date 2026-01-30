@@ -1574,13 +1574,16 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                         if (!rpd->frame_filters_on && p)
                             rpd = &refhdr->restoration.p[3 - p].ns; // U <-> V
                         if (!rpd->frame_filters_on) goto error;
+                        pd->num_classes_idx = rpd->num_classes_idx;
                         pd->num_classes = rpd->num_classes;
                     } else {
                         const int val = dav2d_get_bits(gb, 3);
+                        pd->num_classes_idx = val;
                         pd->num_classes =
                             1 + val + imax(val - 3, 0) + imax(val - 5, 0) * 2;
                     }
                 } else {
+                    pd->num_classes_idx = 0;
                     pd->num_classes = 1;
                 }
             }

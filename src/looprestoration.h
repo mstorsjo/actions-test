@@ -54,6 +54,21 @@ typedef union LooprestorationParams {
     } sgr;
 } LooprestorationParams;
 
+typedef union WienerParams {
+    struct {
+        const int8_t *filter;
+    } single;
+    struct {
+        union {
+            const int8_t (*user)[18];
+            const int16_t (*pretrained)[13];
+        } filters;
+        const uint8_t *subclass_lut;
+        const uint16_t (*noskip_mask)[12];
+        int base_q;
+    } multi;
+} WienerParams;
+
 // Although the spec applies restoration filters over 4x4 blocks,
 // they can be applied to a bigger surface.
 //    * w is constrained by the restoration unit size (w <= 256)
@@ -69,17 +84,18 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_lr_filter_fn(*looprestorationfilter_fn);
 
-
 #define decl_wiener_filter_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const_left_pixel_row left, \
             const pixel *lpf, int w, int h, \
-            const int8_t *coeffs, \
+            const WienerParams *params, \
             enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
 typedef struct Dav2dLoopRestorationDSPContext {
-    wienerfilter_fn ns_wiener;
+    wienerfilter_fn ns_wiener_single;
+    wienerfilter_fn ns_wiener_multi;
+    wienerfilter_fn pc_wiener;
 
     looprestorationfilter_fn wiener[2]; /* 7-tap, 5-tap */
     looprestorationfilter_fn sgr[3]; /* 5x5, 3x3, mix */

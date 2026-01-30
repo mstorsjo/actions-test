@@ -481,7 +481,7 @@ typedef struct Dav2dFrameHeader {
             uint8_t /*enum Dav2dRestorationType*/ type;
             struct Dav2dNSWienerPlane {
                 uint8_t frame_filters_on;
-                uint8_t num_classes, temporal, refidx;
+                uint8_t num_classes_idx, num_classes, temporal, refidx;
                 int8_t filter[16][18];
             } ns;
         } p[3 /* plane */];

@@ -39,6 +39,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                       const Av2RestorationUnit *const lr, enum LrEdgeFlags edges)
 {
     const Dav2dDSPContext *const dsp = f->dsp;
+    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[0].ns;
     const int chroma = !!plane;
     const int ss_ver = chroma & (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
     const ptrdiff_t stride = f->cur.p.stride[chroma];
@@ -51,26 +52,68 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     int stripe_h = imin((64 - 8 * !y) >> ss_ver, row_h - y);
 
     wienerfilter_fn wiener_fn;
-    const int8_t *wiener_filter;
+    WienerParams wiener_params;
+    uint16_t noskip_mask[64 + 2][12];
+    int multi_wiener = 0;
 
-    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[0].ns;
-    if (lr->type == DAV2D_RESTORATION_NS_WIENER && pd->num_classes == 1) {
-        wiener_fn = dsp->lr.ns_wiener;
-        if (pd->frame_filters_on)
-            wiener_filter = f->frame_hdr->restoration.p[0].ns.filter[0];
-        else
-            wiener_filter = lr->ns_filter[0];
+    if (lr->type == DAV2D_RESTORATION_NS_WIENER) {
+        if (pd->frame_filters_on) {
+            if (pd->num_classes == 1) {
+                wiener_fn = dsp->lr.ns_wiener_single;
+                wiener_params.single.filter = pd->filter[0];
+            } else {
+                multi_wiener = 1;
+                wiener_fn = dsp->lr.ns_wiener_multi;
+                wiener_params.multi.base_q = f->lf.base_q;
+                wiener_params.multi.subclass_lut = f->lf.ns_subclass_lut;
+                wiener_params.multi.filters.user = pd->filter;
+            }
+        } else {
+            wiener_fn = dsp->lr.ns_wiener_single;
+            wiener_params.single.filter = lr->ns_filter[0];
+        }
+    } else if (lr->type == DAV2D_RESTORATION_PC_WIENER) {
+        multi_wiener = 1;
+        wiener_fn = dsp->lr.pc_wiener;
+        wiener_params.multi.base_q = f->lf.base_q;
+        wiener_params.multi.subclass_lut = f->lf.pc_subclass_lut;
+        wiener_params.multi.filters.pretrained = f->lf.pc_filters;
     } else {
         return;
+    }
+
+    if (multi_wiener) {
+        wiener_params.multi.noskip_mask = noskip_mask;
+        // TODO: The below is a bit hacky to make wiener work over full restoration widths.
+        //       We should refactor restoration to work over blocks 64 pixels wide at a time instead.
+        for (int by = y >> 2, r = 0; by < row_h >> 2; by++, r++) {
+            // Iterate with sb64 precision, otherwise the coded wouldn't support unit sizes of 64 or 128
+            for (int sb64x = x >> 6, c = 0; sb64x < (x + unit_w + 63) >> 6; sb64x++, c++) {
+                int by_idx = by & 63;
+                int sb256_idx = f->sb256w * (by >> 6) + (sb64x >> 2);
+                uint16_t* noskip_row = f->lf.mask[sb256_idx].lr_noskip_mask[by_idx];
+                noskip_mask[r][c] = noskip_row[sb64x & 3];
+            }
+            // extend masks on the right edge
+            if (!(edges & LR_HAVE_RIGHT) && unit_w & 63) {
+                const int c = unit_w >> 6;
+                const int shift = ((unit_w >> 2) & 15) - 1;
+                const int mask = noskip_mask[r][c];
+                const int edge = mask >> shift;
+                noskip_mask[r][c] |= edge << (shift + 1);
+            }
+        }
     }
 
     while (y + stripe_h <= row_h) {
         // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
-        wiener_fn(p, stride, left, lpf, unit_w, stripe_h, wiener_filter, edges HIGHBD_CALL_SUFFIX);
-
+        wiener_fn(p, stride, left, lpf, unit_w, stripe_h, &wiener_params, edges HIGHBD_CALL_SUFFIX);
         left += stripe_h;
         y += stripe_h;
+        if (multi_wiener) {
+            wiener_params.multi.noskip_mask += stripe_h >> 2;
+        }
         p += stripe_h * PXSTRIDE(stride);
         edges |= LR_HAVE_TOP;
         stripe_h = imin(64 >> ss_ver, row_h - y);
@@ -111,8 +154,8 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     // TODO Support chroma subsampling.
     const int shift_hor = 8 - ss_hor;
 
-    /* maximum sbrow height is 128 + 8 rows offset */
-    ALIGN_STK_16(pixel, pre_lr_border, 2, [128 + 8][4]);
+    /* maximum sbrow height is 256 + 8 rows offset */
+    ALIGN_STK_16(pixel, pre_lr_border, 2, [256 + 8][4]);
     const Av2RestorationUnit *lr[2];
 
     enum LrEdgeFlags edges = (y > 0 ? LR_HAVE_TOP : 0) | LR_HAVE_RIGHT;

@@ -122,6 +122,32 @@ static void init_deblock_lut(const Dav2dSequenceHeader *const seq_hdr,
     }
 }
 
+static inline void init_wiener(Dav2dFrameContext *const f) {
+    const enum Dav2dRestorationType type = f->frame_hdr->restoration.p[0].type;
+    if (type == DAV2D_RESTORATION_NONE) return;
+
+    int qidx = f->frame_hdr->quant.yac;
+
+    f->lf.base_q = dq_lookup(f->seq_hdr->hbd, f->frame_hdr->quant.yac);
+    int idx = 3;
+    if (qidx < 130) {
+        idx = 0;
+    } else if (qidx < 190) {
+        idx = 1;
+    } else if (qidx < 220) {
+        idx = 2;
+    }
+    if (type == DAV2D_RESTORATION_NS_WIENER || type == DAV2D_RESTORATION_SWITCHABLE) {
+        int num_classes_idx = f->frame_hdr->restoration.p[0].ns.num_classes_idx;
+        if (num_classes_idx)
+            f->lf.ns_subclass_lut = dav2d_pc_wiener_sub_classify_ns[idx][num_classes_idx - 1];
+    }
+    if (type == DAV2D_RESTORATION_PC_WIENER || type == DAV2D_RESTORATION_SWITCHABLE) {
+        f->lf.pc_subclass_lut = dav2d_pc_wiener_sub_classify[idx];
+        f->lf.pc_filters = dav2d_pc_wiener_filters[idx];
+    }
+}
+
 static inline void read_amvd(Dav2dTileState *const ts, mv *const mv) {
     const int joint = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                           ts->cdf.m.amvd_joint, 3);
@@ -4645,6 +4671,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         }
         f->lf.lr_mask_sz = lr_mask_sz;
     }
+    init_wiener(f);
     f->lf.restore_planes =
         ((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE) << 0) +
         ((f->frame_hdr->restoration.p[1].type != DAV2D_RESTORATION_NONE) << 1) +
