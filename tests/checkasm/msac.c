@@ -321,6 +321,8 @@ void checkasm_check_msac(void) {
         c.decode_bool_adapt     = dav2d_msac_decode_bool_adapt_neon;
         c.decode_bool_bypass    = dav2d_msac_decode_bool_bypass_neon;
         c.decode_bools_bypass   = dav2d_msac_decode_bools_bypass_neon;
+        c.decode_unary_bypass6  = dav2d_msac_decode_unary_bypass_neon;
+        c.decode_unary_bypass21  = dav2d_msac_decode_unary_bypass21_neon;
     }
 #elif ARCH_X86_64
     if (dav2d_get_cpu_flags() & DAV2D_X86_CPU_FLAG_SSE2) {

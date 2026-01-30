@@ -38,11 +38,18 @@ unsigned dav2d_msac_decode_bool_equi_neon(MsacContext *s);
 unsigned dav2d_msac_decode_bool_neon(MsacContext *s, unsigned f);
 unsigned dav2d_msac_decode_bool_bypass_neon(MsacContext *s);
 unsigned dav2d_msac_decode_bools_bypass_neon(MsacContext *s, unsigned n_bits);
+unsigned dav2d_msac_decode_unary_bypass_neon(MsacContext *s, unsigned max_bits);
+
+static inline unsigned dav2d_msac_decode_unary_bypass21_neon(MsacContext *s) {
+  return dav2d_msac_decode_unary_bypass_neon(s, 21);
+}
 
 #if ARCH_AARCH64
 #define dav2d_msac_decode_bool_adapt     dav2d_msac_decode_bool_adapt_neon
 #define dav2d_msac_decode_bool_bypass    dav2d_msac_decode_bool_bypass_neon
 #define dav2d_msac_decode_bools_bypass   dav2d_msac_decode_bools_bypass_neon
+#define dav2d_msac_decode_unary_bypass6  dav2d_msac_decode_unary_bypass_neon
+#define dav2d_msac_decode_unary_bypass21  dav2d_msac_decode_unary_bypass21_neon
 #endif
 
 #endif /* DAV2D_SRC_ARM_MSAC_H */
