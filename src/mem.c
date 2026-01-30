@@ -1,6 +1,6 @@
 /*
- * Copyright © 2020, VideoLAN and dav2d authors
- * Copyright © 2020, Two Orioles, LLC
+ * Copyright © 2020-2026, VideoLAN and dav2d authors
+ * Copyright © 2020-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

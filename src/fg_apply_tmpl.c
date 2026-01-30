@@ -1,7 +1,7 @@
 /*
- * Copyright © 2018, Niklas Haas
- * Copyright © 2018, VideoLAN and dav2d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2026, Niklas Haas
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

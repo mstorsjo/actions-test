@@ -1,7 +1,7 @@
 /*
- * Copyright © 2019, VideoLAN and dav2d authors
- * Copyright © 2019, Two Orioles, LLC
- * Copyright © 2019, James Almer <jamrial@gmail.com>
+ * Copyright © 2019-2026, VideoLAN and dav2d authors
+ * Copyright © 2019-2026, Two Orioles, LLC
+ * Copyright © 2019-2026, James Almer <jamrial@gmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
