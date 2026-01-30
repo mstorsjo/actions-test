@@ -171,10 +171,6 @@ bilin_h_shuf4:  db  0,  1,  1,  2,  2,  3,  3,  4,  8,  9,  9, 10, 10, 11, 11, 1
 bilin_v_shuf4:  db  0,  4,  1,  5,  2,  6,  3,  7,  4,  8,  5,  9,  6, 10,  7, 11
 blend_shuf:     db  0,  1,  0,  1,  0,  1,  0,  1,  2,  3,  2,  3,  2,  3,  2,  3
 rescale_mul:    dd  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
-resize_permA:   dd  0,  2,  4,  6,  8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
-resize_permB:   dd  1,  3,  5,  7,  9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31
-resize_permC:   dd  0,  4,  8, 12
-resize_shuf:    db  0,  0,  0,  0,  0,  1,  2,  3,  4,  5,  6,  7,  7,  7,  7,  7
 pb_02461357:    db  0,  2,  4,  6,  1,  3,  5,  7
 
 wm_420_perm64:  dq 0xfedcba9876543210
@@ -203,7 +199,6 @@ pd_512:             dd 512
 cextern mc_subpel_filters
 %define subpel_filters (mangle(private_prefix %+ _mc_subpel_filters)-8)
 cextern mc_warp_filter
-cextern resize_filter
 
 %macro BASE_JMP_TABLE 3-*
     %xdefine %1_%2_table (%%table - %3)
@@ -5436,89 +5431,6 @@ cglobal blend_h_8bpc, 3, 7, 6, dst, ds, tmp, w, h, mask
     add                dstq, dsq
     inc                  hq
     jl .w128
-    RET
-
-cglobal resize_8bpc, 6, 12, 19, dst, dst_stride, src, src_stride, \
-                                dst_w, h, src_w, dx, mx0
-    sub          dword mx0m, 4<<14
-    sub        dword src_wm, 8
-    mov                  r6, ~0
-    vpbroadcastd         m5, dxm
-    vpbroadcastd         m8, mx0m
-    vpbroadcastd         m6, src_wm
-    kmovq                k3, r6
- DEFINE_ARGS dst, dst_stride, src, src_stride, dst_w, h, x
-    LEA                  r7, $$
-%define base r7-$$
-    vpbroadcastd         m3, [base+pw_m256]
-    vpbroadcastd         m7, [base+pd_63]
-    vbroadcasti32x4     m15, [base+pb_8x0_8x8]
-    vpdpwssd             m8, m5, [base+rescale_mul] ; mx+dx*[0-15]
-    pslld                m5, 4                      ; dx*16
-    pslld                m6, 14
-    pxor                 m2, m2
-    mova                m16, [base+resize_permA]
-    mova                m17, [base+resize_permB]
-    mova               xm18, [base+resize_permC]
-.loop_y:
-    xor                  xd, xd
-    mova                 m4, m8     ; per-line working version of mx
-.loop_x:
-    pmaxsd               m0, m4, m2
-    psrad                m9, m4, 8  ; filter offset (unmasked)
-    pminsd               m0, m6     ; iclip(mx, 0, src_w-8)
-    psubd                m1, m4, m0 ; pshufb offset
-    psrad                m0, 14     ; clipped src_x offset
-    psrad                m1, 14     ; pshufb edge_emu offset
-    vptestmd             k4, m1, m1
-    pand                 m9, m7     ; filter offset (masked)
-    ktestw               k4, k4
-    jz .load
-    vextracti32x8      ym12, m0, 1
-    vextracti32x8      ym13, m1, 1
-    kmovq                k1, k3
-    kmovq                k2, k3
-    vpgatherdq      m10{k1}, [srcq+ym0]
-    vpgatherdq      m11{k2}, [srcq+ym12]
-    kmovq                k1, k3
-    kmovq                k2, k3
-    vpgatherdq      m14{k1}, [base+resize_shuf+4+ym1]
-    vpgatherdq       m0{k2}, [base+resize_shuf+4+ym13]
-    mova                m12, m16
-    mova                m13, m17
-    paddb               m14, m15
-    paddb                m0, m15
-    pshufb              m10, m14
-    pshufb              m11, m0
-    vpermi2d            m12, m10, m11
-    vpermi2d            m13, m10, m11
-    jmp .filter
-.load:
-    kmovq                k1, k3
-    kmovq                k2, k3
-    vpgatherdd      m12{k1}, [srcq+m0+0]
-    vpgatherdd      m13{k2}, [srcq+m0+4]
-.filter:
-    kmovq                k1, k3
-    kmovq                k2, k3
-    vpgatherdd      m10{k1}, [base+resize_filter+m9*8+0]
-    vpgatherdd      m11{k2}, [base+resize_filter+m9*8+4]
-    mova                m14, m2
-    vpdpbusd            m14, m12, m10
-    vpdpbusd            m14, m13, m11
-    packssdw            m14, m14
-    pmulhrsw            m14, m3
-    packuswb            m14, m14
-    vpermd              m14, m18, m14
-    mova          [dstq+xq], xm14
-    paddd                m4, m5
-    add                  xd, 16
-    cmp                  xd, dst_wd
-    jl .loop_x
-    add                dstq, dst_strideq
-    add                srcq, src_strideq
-    dec                  hd
-    jg .loop_y
     RET
 
 %endif ; ARCH_X86_64

@@ -117,12 +117,6 @@ void (name)(intptr_t bw, intptr_t bh, intptr_t iw, intptr_t ih, intptr_t x, intp
             pixel *dst, ptrdiff_t dst_stride, const pixel *src, ptrdiff_t src_stride)
 typedef decl_emu_edge_fn(*emu_edge_fn);
 
-#define decl_resize_fn(name) \
-void (name)(pixel *dst, ptrdiff_t dst_stride, \
-            const pixel *src, ptrdiff_t src_stride, \
-            int dst_w, int h, int src_w, int dx, int mx HIGHBD_DECL_SUFFIX)
-typedef decl_resize_fn(*resize_fn);
-
 #define decl_morph_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, int alpha, int beta, \
             int w, int h HIGHBD_DECL_SUFFIX)
@@ -186,7 +180,6 @@ typedef struct Dav2dMCDSPContext {
     ext_warp4x4_fn ext_warp4x4;
     ext_warp4x4t_fn ext_warp4x4t;
     emu_edge_fn emu_edge;
-    resize_fn resize;
     morph_fn morph;
     opfl_derive_mv_fn opfl_derive_mv;
     sad_refine_mv_fn sad_refine_mv;

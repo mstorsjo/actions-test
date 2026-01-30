@@ -232,8 +232,7 @@ struct Dav2dFrameContext {
     Dav2dRef *frame_hdr_ref;
     Dav2dFrameHeader *frame_hdr;
     Dav2dThreadPicture refp[7];
-    Dav2dPicture cur; // during block coding / reconstruction
-    Dav2dThreadPicture sr_cur; // after super-resolution upscaling
+    Dav2dThreadPicture cur;
     Dav2dRef *mvs_ref;
     refmvs_temporal_block *mvs, *ref_mvs[7];
     Dav2dRef *ref_mvs_ref[7];

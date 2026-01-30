@@ -755,11 +755,11 @@ static NOINLINE void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *con
                                              const Dav2dWarpedMotionParams *const wmp)
 {
     const Dav2dFrameContext *const f = t->f;
-    assert(f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400);
-    if (f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I444)
+    assert(f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400);
+    if (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I444)
         affine_lowest_px_luma(t, dst, b_dim, wmp);
     else
-        affine_lowest_px(t, dst, b_dim, wmp, f->cur.p.layout & DAV2D_PIXEL_LAYOUT_I420, 1);
+        affine_lowest_px(t, dst, b_dim, wmp, f->cur.p.p.layout & DAV2D_PIXEL_LAYOUT_I420, 1);
 }
 #endif
 
@@ -773,7 +773,7 @@ static void read_tx_part(Dav2dTaskContext *const t,
     const int bw4 = b_dim[0], bh4 = b_dim[1];
 
     b->tx_part = TX_PARTITION_NONE;
-    b->uvtx = dav2d_max_txfm_size_for_bs[bs][f->cur.p.layout];
+    b->uvtx = dav2d_max_txfm_size_for_bs[bs][f->cur.p.p.layout];
     if (f->frame_hdr->segmentation.lossless[b->seg_id] || b->skip_txfm) {
         // FIXME I believe lossless can be wht as well as idtx?
     } else {
@@ -1165,7 +1165,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     if (b->skip_mode) {
         b->intra = 0;
     } else if (IS_INTER_OR_SWITCH(f->frame_hdr) && !t->intra_region) {
-        if (f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400 && lbs != cbs) {
+        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 && lbs != cbs) {
             // mixed-intra/inter regions in inter frames with chroma planes
             // of different sizes (in AVM language: with offsets) are inter
             b->intra = 0;
@@ -1293,7 +1293,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (!((t->bx | t->by) & (gdf_bs - 1))) {
             int idx = ((t->by & 16) >> 3) + ((t->bx & 16) >> 4);
             if (f->frame_hdr->gdf.enabled == DAV2D_ADAPTIVE &&
-                imax(f->cur.p.w, f->cur.p.h) > 4 * gdf_bs)
+                imax(f->cur.p.p.w, f->cur.p.p.h) > 4 * gdf_bs)
             {
                 for (int y = 0; y < bh4; y += gdf_bs, idx += 2) {
                     for (int x = 0; x < bw4; x += gdf_bs) {
@@ -3084,7 +3084,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
     {
         dav2d_create_lf_mask(t->lf_mask, b, t->bx, t->by, f->bw, f->bh,
-                             f->cur.p.layout,
+                             f->cur.p.p.layout,
                              &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                              has_chroma ? &t->a->tx_lpf_uv[cbx4] : NULL,
                              has_chroma ? &t->l.tx_lpf_uv[cby4] : NULL,
@@ -3105,7 +3105,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
     }
-    if (f->seq_hdr->sdp && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400 &&
+    if (f->seq_hdr->sdp && f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 &&
         cbs == BS_INVALID)
     {
         uint8_t *dirmap = &t->luma_intra_dir_mode_map[(t->by & 15) * 16 +
@@ -3240,17 +3240,17 @@ static int checked_decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const uint8_t *const b_dim = dav2d_block_dimensions[bs[i]];
             const int bw4 = b_dim[0], bh4 = b_dim[1];
             const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
-            const ptrdiff_t stride = f->cur.stride[i];
+            const ptrdiff_t stride = f->cur.p.stride[i];
             int bx = i ? t->cbx : t->bx, by = i ? t->cby : t->by;
 
             for (int p = i; p < 1 + i * 2; p++) {
-                const int ss_ver = p && f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-                const int ss_hor = p && f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+                const int ss_ver = p && f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+                const int ss_hor = p && f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
                 const int width  = w4 << (2 - ss_hor + (bw4 == ss_hor));
                 const int height = h4 << (2 - ss_ver + (bh4 == ss_ver));
                 bx &= ~ss_hor; by &= ~ss_ver;
 
-                const uint8_t *data = f->cur.data[p] + (by << (2 - ss_ver)) * stride +
+                const uint8_t *data = f->cur.p.data[p] + (by << (2 - ss_ver)) * stride +
                                       (bx << (2 - ss_hor + !!f->seq_hdr->hbd));
 
                 for (int y = 0; y < height; data += stride, y++) {
@@ -3514,7 +3514,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     if ((bs == BS_128x128 || bs == BS_256x256) &&
                         have_v_split && have_h_split)
                     {
-                        assert(lbs == cbs || f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I400);
+                        assert(lbs == cbs || f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400);
                         const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
                         const int is_square =
                             dav2d_msac_decode_bool_adapt(&ts->msac,
@@ -3522,7 +3522,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         if (is_square)
                             bp = PARTITION_SPLIT;
                     } else if (imax(bw4, bh4) >= 32) {
-                        assert(lbs == cbs || f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I400);
+                        assert(lbs == cbs || f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400);
                         assert(bw4 != bh4);
                         bp = bw4 > bh4 ? PARTITION_V : PARTITION_H;
                     }
@@ -3963,7 +3963,7 @@ static void setup_tile(Dav2dTileState *const ts,
     const int row_sb_end = f->frame_hdr->tiling.t.row_start_sb[tile_row + 1];
     const int sb_shift = f->sb_shift;
 
-    const uint8_t *const size_mul = ss_size_mul[f->cur.p.layout];
+    const uint8_t *const size_mul = ss_size_mul[f->cur.p.p.layout];
     for (int p = 0; p < 2; p++) {
         ts->frame_thread[p].pal_idx = f->frame_thread.pal_idx ?
             &f->frame_thread.pal_idx[(size_t)tile_start_off * size_mul[1] / 8] :
@@ -4146,7 +4146,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     const Dav2dFrameContext *const f = t->f;
     const enum BlockSize root_bs = f->root_bs;
     const enum BlockSize c_root_bs =
-        f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I400 ? BS_INVALID : root_bs;
+        f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400 ? BS_INVALID : root_bs;
     Dav2dTileState *const ts = t->ts;
     const Dav2dContext *const c = f->c;
     const int sb_step = f->sb_step;
@@ -4243,7 +4243,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             t->cby = t->by;
             if (f->frame_hdr->tip.apply_filter) {
                 dav2d_create_lf_mask(t->lf_mask, &b, t->bx, t->by, f->bw, f->bh,
-                                     f->cur.p.layout,
+                                     f->cur.p.p.layout,
                                      &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                      &t->a->tx_lpf_uv[bx4], &t->l.tx_lpf_uv[by4],
                                      f->frame_hdr, f->seq_hdr);
@@ -4333,7 +4333,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     int align_h = (f->bh + 63) & ~63;
     memcpy(&f->lf.tx_lpf_right_edge[0][align_h * tile_col + t->by],
            &t->l.tx_lpf_y[t->by & 0x30], sb_step);
-    const int ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     align_h >>= ss_ver;
     memcpy(&f->lf.tx_lpf_right_edge[1][align_h * tile_col + (t->by >> ss_ver)],
            &t->l.tx_lpf_uv[(t->by & 0x30) >> ss_ver], sb_step >> ss_ver);
@@ -4395,7 +4395,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
 
     const int num_sb256 = f->sb256w * f->sb256h;
-    const uint8_t *const size_mul = ss_size_mul[f->cur.p.layout];
+    const uint8_t *const size_mul = ss_size_mul[f->cur.p.p.layout];
     const int hbd = !!f->seq_hdr->hbd;
     if (c->n_fc > 1) {
         const unsigned sb_step4 = f->sb_step * 4;
@@ -4495,7 +4495,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
 
     // update allocation of block contexts for above
-    ptrdiff_t y_stride = f->cur.stride[0], uv_stride = f->cur.stride[1];
+    ptrdiff_t y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
     if (y_stride * f->sbh * 4 != f->lf.cdef_buf_plane_sz[0] ||
         uv_stride * f->sbh * 8 != f->lf.cdef_buf_plane_sz[1] ||
         f->sbh != f->lf.cdef_buf_sbh)
@@ -4538,7 +4538,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
     const int sb256 = f->frame_hdr->sb128;
     const int num_lines = c->n_tc > 1 ? f->sbh * 4 << sb256 : 20;
-    y_stride = f->sr_cur.p.stride[0], uv_stride = f->sr_cur.p.stride[1];
+    y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
         uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1])
     {
@@ -4663,13 +4663,13 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
      * avoid having additional in-loop branches in various places. We never
      * dereference those pointers so it doesn't really matter what they
      * point at, as long as the pointers are valid. */
-    const int has_chroma = f->cur.p.layout != DAV2D_PIXEL_LAYOUT_I400;
-    f->lf.p[0] = f->cur.data[0];
-    f->lf.p[1] = f->cur.data[has_chroma ? 1 : 0];
-    f->lf.p[2] = f->cur.data[has_chroma ? 2 : 0];
-    f->lf.sr_p[0] = f->sr_cur.p.data[0];
-    f->lf.sr_p[1] = f->sr_cur.p.data[has_chroma ? 1 : 0];
-    f->lf.sr_p[2] = f->sr_cur.p.data[has_chroma ? 2 : 0];
+    const int has_chroma = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400;
+    f->lf.p[0] = f->cur.p.data[0];
+    f->lf.p[1] = f->cur.p.data[has_chroma ? 1 : 0];
+    f->lf.p[2] = f->cur.p.data[has_chroma ? 2 : 0];
+    f->lf.sr_p[0] = f->cur.p.data[0];
+    f->lf.sr_p[1] = f->cur.p.data[has_chroma ? 1 : 0];
+    f->lf.sr_p[2] = f->cur.p.data[has_chroma ? 2 : 0];
 
     retval = 0;
 error:
@@ -4778,7 +4778,7 @@ error:
 void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
     const Dav2dContext *const c = f->c;
 
-    if (f->sr_cur.p.data[0])
+    if (f->cur.p.data[0])
         atomic_init(&f->task_thread.error, 0);
 
     if (c->n_fc > 1 && retval && f->frame_thread.cf) {
@@ -4792,15 +4792,14 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
             {
                 retval = DAV2D_ERR(EINVAL);
                 atomic_store(&f->task_thread.error, 1);
-                atomic_store(&f->sr_cur.progress[1], FRAME_ERROR);
+                atomic_store(&f->cur.progress[1], FRAME_ERROR);
             }
             dav2d_thread_picture_unref(&f->refp[i]);
         }
         dav2d_ref_dec(&f->ref_mvs_ref[i]);
     }
 
-    dav2d_picture_unref_internal(&f->cur);
-    dav2d_thread_picture_unref(&f->sr_cur);
+    dav2d_thread_picture_unref(&f->cur);
     dav2d_cdf_thread_unref(&f->in_cdf);
     if (f->frame_hdr && f->use_pri_sec_cdf) {
         dav2d_cdf_thread_unref(&f->src_cdf[0]);
@@ -5100,20 +5099,19 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     // allocate frame
     res = dav2d_thread_picture_alloc(c, f, bpc);
     if (res < 0) goto error;
-    dav2d_picture_ref(&f->cur, &f->sr_cur.p);
 
     // move f->cur into output queue
     struct OutputQueue *q = NULL;
     if (f->frame_hdr->show_frame || c->output_invisible_frames) {
-        q = dav2d_queue_output(c, &f->sr_cur);
+        q = dav2d_queue_output(c, &f->cur);
 #if 0
-        c->event_flags |= dav2d_picture_get_event_flags(&f->sr_cur);
+        c->event_flags |= dav2d_picture_get_event_flags(&f->cur);
 #endif
     }
 
     // ss_ver is set for 4:2:0, and ss_hor for 4:2:0 & 4:2:2
-    f->ss_ver = f->cur.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-    f->ss_hor = f->cur.p.layout - 1 < (unsigned) DAV2D_PIXEL_LAYOUT_I444 - 1;
+    f->ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    f->ss_hor = f->cur.p.p.layout - 1 < (unsigned) DAV2D_PIXEL_LAYOUT_I444 - 1;
     f->root_bs = (const uint8_t[]) { BS_64x64, BS_128x128,
                                      BS_256x256 }[f->frame_hdr->sb128];
     f->bw = ((f->frame_hdr->width + 7) >> 3) << 1;
@@ -5124,7 +5122,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     f->sb_step = 16 << f->frame_hdr->sb128;
     f->sbh = (f->bh + f->sb_step - 1) >> f->sb_shift;
     f->b4_stride = (f->bw + 63) & ~63;
-    f->bitdepth_max = (1 << f->cur.p.bpc) - 1;
+    f->bitdepth_max = (1 << f->cur.p.p.bpc) - 1;
     atomic_init(&f->task_thread.error, 0);
     const int uses_2pass = c->n_fc > 1;
     const int cols = f->frame_hdr->tiling.t.cols;
@@ -5142,7 +5140,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         }
         f->mvs = f->mvs_ref->data;
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
-            const int poc = f->cur.frame_hdr->frame_offset;
+            const int poc = f->cur.p.frame_hdr->frame_offset;
             // we use -2 here so it doesn't match b->ref==-1, which means intra
             int furthest_future_refidx = -2;
             for (int i = 0; i < 7; i++) {
@@ -5293,7 +5291,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         if (refresh_frame_flags & (1 << i)) {
             if (c->refs[i].p.p.frame_hdr)
                 dav2d_thread_picture_unref(&c->refs[i].p);
-            dav2d_thread_picture_ref(&c->refs[i].p, &f->sr_cur);
+            dav2d_thread_picture_ref(&c->refs[i].p, &f->cur);
 
             dav2d_cdf_thread_unref(&c->cdf[i]);
             if (!f->frame_hdr->disable_cdf_update) {
@@ -5355,8 +5353,7 @@ error:
         dav2d_ref_dec(&f->ref_mvs_ref[i]);
     }
     if (q) q->res = res;
-    dav2d_picture_unref_internal(&f->cur);
-    dav2d_thread_picture_unref(&f->sr_cur);
+    dav2d_thread_picture_unref(&f->cur);
     dav2d_ref_dec(&f->cur_segmap_ref);
     dav2d_ref_dec(&f->prev_segmap_ref);
     dav2d_ref_dec(&f->mvs_ref);

@@ -192,7 +192,7 @@ void dav2d_picture_copy_props(Dav2dPicture *const p,
 int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f,
                                const int bpc)
 {
-    Dav2dThreadPicture *const p = &f->sr_cur;
+    Dav2dThreadPicture *const p = &f->cur;
 
     const int res = picture_alloc(c, &p->p, f->frame_hdr->width, f->frame_hdr->height,
                                   f->seq_hdr, f->seq_hdr_ref,

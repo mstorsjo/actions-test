@@ -64,7 +64,6 @@ blend_shuf:     db  0,  1,  0,  1,  0,  1,  0,  1,  2,  3,  2,  3,  2,  3,  2,  
 pb_8x0_8x8:     db  0,  0,  0,  0,  0,  0,  0,  0,  8,  8,  8,  8,  8,  8,  8,  8
 bdct_lb_dw:     db  0,  0,  0,  0,  4,  4,  4,  4,  8,  8,  8,  8, 12, 12, 12, 12
 wswap:          db  2,  3,  0,  1,  6,  7,  4,  5, 10, 11,  8,  9, 14, 15, 12, 13
-resize_shuf:    db  0,  0,  0,  0,  0,  1,  2,  3,  4,  5,  6,  7,  7,  7,  7,  7
 rescale_mul:    dd  0,  1,  2,  3,  4,  5,  6,  7
 
 wm_420_sign:    dd 0x01020102, 0x01010101
@@ -91,7 +90,6 @@ pq_0x40000000:   dq 0x40000000
 
 cextern mc_subpel_filters
 cextern mc_warp_filter2
-cextern resize_filter
 cextern z_filter_s
 
 %define subpel_filters (mangle(private_prefix %+ _mc_subpel_filters)-8)
@@ -5427,140 +5425,6 @@ cglobal emu_edge_8bpc, 10, 13, 1, bw, bh, iw, ih, x, y, dst, dstride, src, sstri
     jl .top_x_loop
 
 .end:
-    RET
-
-cglobal resize_8bpc, 6, 12, 16, dst, dst_stride, src, src_stride, \
-                                dst_w, h, src_w, dx, mx0
-    sub          dword mx0m, 4<<14
-    sub        dword src_wm, 8
-    vpbroadcastd         m5, dxm
-    vpbroadcastd         m8, mx0m
-    vpbroadcastd         m6, src_wm
-
-    DEFINE_ARGS dst, dst_stride, src, src_stride, dst_w, h, x
-    LEA                  r7, $$
-%define base r7-$$
-
-    vpbroadcastd        xm3, [base+pw_m256]
-    vpbroadcastd         m7, [base+pd_63]
-    vbroadcasti128      m15, [base+pb_8x0_8x8]
-    pmaddwd              m2, m5, [base+rescale_mul] ; dx*[0,1,2,3,4,5,6,7]
-    pslld                m5, 3                      ; dx*8
-    pslld                m6, 14
-    paddd                m8, m2                     ; mx+[0..7]*dx
-    pxor                 m2, m2
-
-    ; m2 = 0, m3 = pmulhrsw constant for x=(x+64)>>7
-    ; m8 = mx+[0..7]*dx, m5 = dx*8, m6 = src_w, m7 = 0x3f, m15=0,8
-
-.loop_y:
-    xor                  xd, xd
-    mova                 m4, m8                     ; per-line working version of mx
-
-.loop_x:
-    pmaxsd               m0, m4, m2
-    psrad                m9, m4, 8                  ; filter offset (unmasked)
-    pminsd               m0, m6                     ; iclip(mx, 0, src_w-8)
-    psubd                m1, m4, m0                 ; pshufb offset
-    psrad                m0, 14                     ; clipped src_x offset
-    psrad                m1, 14                     ; pshufb edge_emu offset
-    pand                 m9, m7                     ; filter offset (masked)
-
-    ; load source pixels - this ugly code is vpgatherdq emulation since
-    ; directly using vpgatherdq on Haswell is quite a bit slower :(
-    movd                r8d, xm0
-    pextrd              r9d, xm0, 1
-    pextrd             r10d, xm0, 2
-    pextrd             r11d, xm0, 3
-    vextracti128        xm0, m0, 1
-    movq               xm12, [srcq+r8]
-    movq               xm13, [srcq+r10]
-    movhps             xm12, [srcq+r9]
-    movhps             xm13, [srcq+r11]
-    movd                r8d, xm0
-    pextrd              r9d, xm0, 1
-    pextrd             r10d, xm0, 2
-    pextrd             r11d, xm0, 3
-    vinserti128         m12, [srcq+r8], 1
-    vinserti128         m13, [srcq+r10], 1
-    vpbroadcastq        m10, [srcq+r9]
-    vpbroadcastq        m11, [srcq+r11]
-    vpblendd            m12, m10, 11000000b
-    vpblendd            m13, m11, 11000000b
-
-    ; if no emulation is required, we don't need to shuffle or emulate edges
-    ; this also saves 2 quasi-vpgatherdqs
-    vptest               m1, m1
-    jz .filter
-
-    movq                 r9, xm1
-    pextrq              r11, xm1, 1
-    movsxd               r8, r9d
-    sar                  r9, 32
-    movsxd              r10, r11d
-    sar                 r11, 32
-    vextracti128        xm1, m1, 1
-    movq               xm14, [base+resize_shuf+4+r8]
-    movq                xm0, [base+resize_shuf+4+r10]
-    movhps             xm14, [base+resize_shuf+4+r9]
-    movhps              xm0, [base+resize_shuf+4+r11]
-    movq                 r9, xm1
-    pextrq              r11, xm1, 1
-    movsxd               r8, r9d
-    sar                  r9, 32
-    movsxd              r10, r11d
-    sar                 r11, 32
-    vinserti128         m14, [base+resize_shuf+4+r8], 1
-    vinserti128          m0, [base+resize_shuf+4+r10], 1
-    vpbroadcastq        m10, [base+resize_shuf+4+r9]
-    vpbroadcastq        m11, [base+resize_shuf+4+r11]
-    vpblendd            m14, m10, 11000000b
-    vpblendd             m0, m11, 11000000b
-
-    paddb               m14, m15
-    paddb                m0, m15
-    pshufb              m12, m14
-    pshufb              m13, m0
-
-.filter:
-    movd                r8d, xm9
-    pextrd              r9d, xm9, 1
-    pextrd             r10d, xm9, 2
-    pextrd             r11d, xm9, 3
-    vextracti128        xm9, m9, 1
-    movq               xm10, [base+resize_filter+r8*8]
-    movq               xm11, [base+resize_filter+r10*8]
-    movhps             xm10, [base+resize_filter+r9*8]
-    movhps             xm11, [base+resize_filter+r11*8]
-    movd                r8d, xm9
-    pextrd              r9d, xm9, 1
-    pextrd             r10d, xm9, 2
-    pextrd             r11d, xm9, 3
-    vinserti128         m10, [base+resize_filter+r8*8], 1
-    vinserti128         m11, [base+resize_filter+r10*8], 1
-    vpbroadcastq        m14, [base+resize_filter+r9*8]
-    vpbroadcastq         m1, [base+resize_filter+r11*8]
-    vpblendd            m10, m14, 11000000b
-    vpblendd            m11, m1, 11000000b
-
-    pmaddubsw           m12, m10
-    pmaddubsw           m13, m11
-    phaddw              m12, m13
-    vextracti128       xm13, m12, 1
-    phaddsw            xm12, xm13
-    pmulhrsw           xm12, xm3                    ; x=(x+64)>>7
-    packuswb           xm12, xm12
-    movq          [dstq+xq], xm12
-
-    paddd                m4, m5
-    add                  xd, 8
-    cmp                  xd, dst_wd
-    jl .loop_x
-
-    add                dstq, dst_strideq
-    add                srcq, src_strideq
-    dec                  hd
-    jg .loop_y
     RET
 
 %macro W_MASK 4-5 0 ; dst, mask, tmp_offset[1-2], 4:4:4

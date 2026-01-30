@@ -101,7 +101,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                              const int sbrow_start, const int sby)
 {
     Dav2dFrameContext *const f = (Dav2dFrameContext *)tc->f;
-    const int bitdepth_min_8 = BITDEPTH == 8 ? 0 : f->cur.p.bpc - 8;
+    const int bitdepth_min_8 = BITDEPTH == 8 ? 0 : f->cur.p.p.bpc - 8;
     const Dav2dDSPContext *const dsp = f->dsp;
     enum CdefEdgeFlags edges = CDEF_HAVE_BOTTOM | (by_start > 0 ? CDEF_HAVE_TOP : 0);
     pixel *ptrs[3] = { p[0], p[1], p[2] };
@@ -109,7 +109,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
     const int sb64w = (f->bw + sbsz - 1) >> 4;
     const int damping = f->frame_hdr->cdef.damping + bitdepth_min_8;
     const int on_skip_tx = f->frame_hdr->cdef.on_skiptx;
-    const enum Dav2dPixelLayout layout = f->cur.p.layout;
+    const enum Dav2dPixelLayout layout = f->cur.p.p.layout;
     const int uv_idx = DAV2D_PIXEL_LAYOUT_I444 - layout;
     const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
@@ -118,8 +118,8 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
     const uint8_t *uv_dir = uv_dirs[layout == DAV2D_PIXEL_LAYOUT_I422];
     const int have_tt = f->c->n_tc > 1;
     const int sb128 = f->frame_hdr->sb128;
-    const ptrdiff_t y_stride = PXSTRIDE(f->cur.stride[0]);
-    const ptrdiff_t uv_stride = PXSTRIDE(f->cur.stride[1]);
+    const ptrdiff_t y_stride = PXSTRIDE(f->cur.p.stride[0]);
+    const ptrdiff_t uv_stride = PXSTRIDE(f->cur.p.stride[1]);
 
     for (int bit = 0, by = by_start; by < by_end; by += 2, edges |= CDEF_HAVE_TOP) {
         const int tf = tc->top_pre_cdef_toggle;
@@ -135,7 +135,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 f->lf.cdef_line[!tf][1] + have_tt * sby * 8 * uv_stride,
                 f->lf.cdef_line[!tf][2] + have_tt * sby * 8 * uv_stride
             };
-            backup2lines(cdef_top_bak, ptrs, f->cur.stride, layout);
+            backup2lines(cdef_top_bak, ptrs, f->cur.p.stride, layout);
         }
 
         ALIGN_STK_16(pixel, lr_bak, 2 /* idx */, [3 /* plane */][8 /* y */][2 /* x */]);
@@ -169,7 +169,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 if (do_left && edges & CDEF_HAVE_LEFT) {
                     // we didn't backup the prefilter data because it wasn't
                     // there, so do it here instead
-                    backup2x8(lr_bak[bit], iptrs, f->cur.stride, 0, layout, do_left);
+                    backup2x8(lr_bak[bit], iptrs, f->cur.p.stride, 0, layout, do_left);
                 }
 
                 enum CdefEdgeFlags sb_edges = edges;
@@ -194,7 +194,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                     bot = iptrs[0] + 8 * y_stride;
                 }
 
-                dsp->ccso.prep[0](ccso_lut_idx[0], 64, iptrs[0], f->cur.stride[0], lr_bak[bit][0],
+                dsp->ccso.prep[0](ccso_lut_idx[0], 64, iptrs[0], f->cur.p.stride[0], lr_bak[bit][0],
                                   top, bot, max_band, ext_filter, quant, edge_cfl, bo_only,
                                   w, 8, sb_edges HIGHBD_CALL_SUFFIX);
             }
@@ -249,17 +249,17 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 if (do_left && edges & CDEF_HAVE_LEFT) {
                     // we didn't backup the prefilter data because it wasn't
                     // there, so do it here instead
-                    backup2x8(lr_bak[bit], bptrs, f->cur.stride, 0, layout, do_left);
+                    backup2x8(lr_bak[bit], bptrs, f->cur.p.stride, 0, layout, do_left);
                 }
                 if (edges & CDEF_HAVE_RIGHT) {
                     // backup pre-filter data for next iteration
-                    backup2x8(lr_bak[!bit], bptrs, f->cur.stride, 8, layout, flag);
+                    backup2x8(lr_bak[!bit], bptrs, f->cur.p.stride, 8, layout, flag);
                 }
 
                 int dir;
                 unsigned variance;
                 if (y_pri_lvl || uv_pri_lvl)
-                    dir = dsp->cdef.dir(bptrs[0], f->cur.stride[0],
+                    dir = dsp->cdef.dir(bptrs[0], f->cur.p.stride[0],
                                         &variance HIGHBD_CALL_SUFFIX);
 
                 const pixel *top, *bot;
@@ -284,11 +284,11 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 if (y_pri_lvl) {
                     const int adj_y_pri_lvl = adjust_strength(y_pri_lvl, variance);
                     if (adj_y_pri_lvl || y_sec_lvl)
-                        dsp->cdef.fb[0](bptrs[0], f->cur.stride[0], lr_bak[bit][0],
+                        dsp->cdef.fb[0](bptrs[0], f->cur.p.stride[0], lr_bak[bit][0],
                                         top, bot, adj_y_pri_lvl, y_sec_lvl,
                                         dir, damping, edges HIGHBD_CALL_SUFFIX);
                 } else if (y_sec_lvl)
-                    dsp->cdef.fb[0](bptrs[0], f->cur.stride[0], lr_bak[bit][0],
+                    dsp->cdef.fb[0](bptrs[0], f->cur.p.stride[0], lr_bak[bit][0],
                                     top, bot, 0, y_sec_lvl, 0, damping,
                                     edges HIGHBD_CALL_SUFFIX);
 
@@ -316,7 +316,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                         top = &f->lf.cdef_line[tf][pl][have_tt * offset + (bx * 4 >> ss_hor)];
                         bot = bptrs[pl] + (8 >> ss_ver) * uv_stride;
                     }
-                    dsp->cdef.fb[uv_idx](bptrs[pl], f->cur.stride[1],
+                    dsp->cdef.fb[uv_idx](bptrs[pl], f->cur.p.stride[1],
                                          lr_bak[bit][pl], top, bot,
                                          uv_pri_lvl, uv_sec_lvl, uvdir,
                                          damping - 1, edges HIGHBD_CALL_SUFFIX);
@@ -336,11 +336,11 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO)
             {
                 if (!(prev_flag & BACKUP_2X8_Y) && (sbx + 1) * sbsz < f->bw) {
-                    backup2x8(lr_bak[bit], iptrs, f->cur.stride, sbsz * 4, layout, BACKUP_2X8_Y);
+                    backup2x8(lr_bak[bit], iptrs, f->cur.p.stride, sbsz * 4, layout, BACKUP_2X8_Y);
                     prev_flag |= BACKUP_2X8_Y;
                 }
                 const int w = imin(sbsz, f->bw - sbx * sbsz) * 4;
-                dsp->ccso.add(iptrs[0], f->cur.stride[0], ccso_lut_idx[0], 64,
+                dsp->ccso.add(iptrs[0], f->cur.p.stride[0], ccso_lut_idx[0], 64,
                               f->frame_hdr->ccso.p[0].filter_off, w, 8
                               HIGHBD_CALL_SUFFIX);
             }
@@ -349,9 +349,9 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
             iptrs[2] += sbsz * 4 >> ss_hor;
         }
 
-        ptrs[0] += 8 * PXSTRIDE(f->cur.stride[0]);
-        ptrs[1] += 8 * PXSTRIDE(f->cur.stride[1]) >> ss_ver;
-        ptrs[2] += 8 * PXSTRIDE(f->cur.stride[1]) >> ss_ver;
+        ptrs[0] += 8 * PXSTRIDE(f->cur.p.stride[0]);
+        ptrs[1] += 8 * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver;
+        ptrs[2] += 8 * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver;
         tc->top_pre_cdef_toggle ^= 1;
     }
 }

@@ -949,34 +949,6 @@ static void emu_edge_c(const intptr_t bw, const intptr_t bh,
     }
 }
 
-static void resize_c(pixel *dst, const ptrdiff_t dst_stride,
-                     const pixel *src, const ptrdiff_t src_stride,
-                     const int dst_w, int h, const int src_w,
-                     const int dx, const int mx0 HIGHBD_DECL_SUFFIX)
-{
-    do {
-        int mx = mx0, src_x = -1;
-        for (int x = 0; x < dst_w; x++) {
-            const int8_t *const F = dav2d_resize_filter[mx >> 8];
-            dst[x] = iclip_pixel((-(F[0] * src[iclip(src_x - 3, 0, src_w - 1)] +
-                                    F[1] * src[iclip(src_x - 2, 0, src_w - 1)] +
-                                    F[2] * src[iclip(src_x - 1, 0, src_w - 1)] +
-                                    F[3] * src[iclip(src_x + 0, 0, src_w - 1)] +
-                                    F[4] * src[iclip(src_x + 1, 0, src_w - 1)] +
-                                    F[5] * src[iclip(src_x + 2, 0, src_w - 1)] +
-                                    F[6] * src[iclip(src_x + 3, 0, src_w - 1)] +
-                                    F[7] * src[iclip(src_x + 4, 0, src_w - 1)]) +
-                                  64) >> 7);
-            mx += dx;
-            src_x += mx >> 14;
-            mx &= 0x3fff;
-        }
-
-        dst += PXSTRIDE(dst_stride);
-        src += PXSTRIDE(src_stride);
-    } while (--h);
-}
-
 static void morph_c(pixel *dst, const ptrdiff_t dst_stride,
                     const int alpha, const int beta,
                     const int w, const int h HIGHBD_DECL_SUFFIX)
@@ -1182,7 +1154,6 @@ COLD void bitfn(dav2d_mc_dsp_init)(Dav2dMCDSPContext *const c) {
     c->ext_warp4x4 = ext_warp4x4_c;
     c->ext_warp4x4t = ext_warp4x4t_c;
     c->emu_edge = emu_edge_c;
-    c->resize   = resize_c;
     c->morph    = morph_c;
     c->opfl_derive_mv = opfl_derive_mv_c;
     c->sad_refine_mv = sad_refine_mv_c;

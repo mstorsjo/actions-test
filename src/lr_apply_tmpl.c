@@ -40,8 +40,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
 {
     const Dav2dDSPContext *const dsp = f->dsp;
     const int chroma = !!plane;
-    const int ss_ver = chroma & (f->sr_cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
-    const ptrdiff_t stride = f->sr_cur.p.stride[chroma];
+    const int ss_ver = chroma & (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
+    const ptrdiff_t stride = f->cur.p.stride[chroma];
     const int sby = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver + f->frame_hdr->sb128);
     const int have_tt = f->c->n_tc > 1;
     const pixel *lpf = f->lf.lr_lpf_line[plane] +
@@ -90,9 +90,9 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
                      const int w, const int h, const int row_h, const int plane)
 {
     const int chroma = !!plane;
-    const int ss_ver = chroma & (f->sr_cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
-    const int ss_hor = chroma & (f->sr_cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444);
-    const ptrdiff_t p_stride = f->sr_cur.p.stride[chroma];
+    const int ss_ver = chroma & (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
+    const int ss_hor = chroma & (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444);
+    const ptrdiff_t p_stride = f->cur.p.stride[chroma];
 
     const int unit_size_log2 = f->frame_hdr->restoration.unit_size[!!plane];
     const int unit_size = 1 << unit_size_log2;
@@ -152,7 +152,7 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
 {
     // TODO: strips starting at each tile row need to be shorted, not just the first row.
     const int offset_y = 8 * !!sby;
-    const ptrdiff_t *const dst_stride = f->sr_cur.p.stride;
+    const ptrdiff_t *const dst_stride = f->cur.p.stride;
     const int restore_planes = f->lf.restore_planes;
     const int not_last = sby + 1 < f->sbh;
 
@@ -167,10 +167,10 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
     }
 #if 0
     if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
-        const int ss_ver = f->sr_cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-        const int ss_hor = f->sr_cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
-        const int h = (f->sr_cur.p.p.h + ss_ver) >> ss_ver;
-        const int w = (f->sr_cur.p.p.w + ss_hor) >> ss_hor;
+        const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+        const int h = (f->cur.p.p.h + ss_ver) >> ss_ver;
+        const int w = (f->cur.p.p.w + ss_hor) >> ss_hor;
         const int next_row_y = (sby + 1) << ((6 - ss_ver) + f->frame_hdr->sb128);
         const int row_h = imin(next_row_y - (8 >> ss_ver) * not_last, h);
         const int offset_uv = offset_y >> ss_ver;
