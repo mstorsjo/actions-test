@@ -89,9 +89,9 @@ COLD void dav2d_default_settings(Dav2dSettings *const s) {
 
 static void close_internal(Dav2dContext **const c_out, int flush);
 
+#if defined(__linux__) && HAVE_DLSYM && defined(__GLIBC__)
 NO_SANITIZE("cfi-icall") // CFI is broken with dlsym()
 static COLD size_t get_stack_size_internal(const pthread_attr_t *const thread_attr) {
-#if defined(__linux__) && HAVE_DLSYM && defined(__GLIBC__)
     /* glibc has an issue where the size of the TLS is subtracted from the stack
      * size instead of allocated separately. As a result the specified stack
      * size may be insufficient when used in an application with large amounts
@@ -101,9 +101,11 @@ static COLD size_t get_stack_size_internal(const pthread_attr_t *const thread_at
         dlsym(RTLD_DEFAULT, "__pthread_get_minstack");
     if (get_minstack)
         return get_minstack(thread_attr) - PTHREAD_STACK_MIN;
-#endif
     return 0;
 }
+#else
+#define get_stack_size_internal(attr) (0)
+#endif
 
 static COLD void get_num_threads(Dav2dContext *const c, const Dav2dSettings *const s,
                                  unsigned *n_tc, unsigned *n_fc)
