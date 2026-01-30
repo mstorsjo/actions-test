@@ -1,18 +1,18 @@
-From 47fed87356774b41a377bb54940cb9552604c50e Mon Sep 17 00:00:00 2001
+From 3826f4d75ad58d8b2e29ae28fc45df3f7dc57985 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
 
 ---
- av2/common/idct.c         |  19 +++++-
+ av2/common/idct.c         |  19 +++-
  av2/common/idct.h         |   7 +-
- av2/common/reconintra.c   | 138 ++++++++++++++++++++++++++++++++++++--
- av2/decoder/decodeframe.c |  36 +++++++++-
+ av2/common/reconintra.c   | 182 ++++++++++++++++++++++++++++++++++++--
+ av2/decoder/decodeframe.c |  36 +++++++-
  av2/encoder/encodemb.c    |  10 +--
  av2/encoder/tpl_model.c   |   2 +-
- av2/encoder/tx_search.c   |   8 +--
- avm/debug.h               |  49 ++++++++++++++
- 8 files changed, 247 insertions(+), 22 deletions(-)
+ av2/encoder/tx_search.c   |   8 +-
+ avm/debug.h               |  49 ++++++++++
+ 8 files changed, 291 insertions(+), 22 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af6944168..699c7c3b2f 100644
@@ -104,7 +104,7 @@ index c5c7647c4f..37a23f92a5 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av2/common/reconintra.c b/av2/common/reconintra.c
-index 27fbd5045e..4f295e4e28 100644
+index 27fbd5045e..50d2e94267 100644
 --- a/av2/common/reconintra.c
 +++ b/av2/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -148,7 +148,7 @@ index 27fbd5045e..4f295e4e28 100644
 -      avm_memset16(dst, val, txwpx);
 -      dst += dst_stride;
 +      avm_memset16(&dst[i * dst_stride], val, txwpx);
-     }
++    }
 +#if DEBUG_B_PIXELS
 +    if (BLOCK_TO_DEBUG) {
 +      if (0 || plane == AVM_PLANE_Y) {
@@ -167,7 +167,7 @@ index 27fbd5045e..4f295e4e28 100644
 +        }
 +        hex_dump(dst, dst_stride, txwpx, txhpx, pred_names[plane], hbd);
 +      }
-+    }
+     }
 +#endif
      return;
    }
@@ -200,55 +200,99 @@ index 27fbd5045e..4f295e4e28 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1279,6 +1311,72 @@ static void build_intra_predictors_high(
+@@ -1279,6 +1311,116 @@ static void build_intra_predictors_high(
      }
    }
  
 +#if DEBUG_BLOCK_INFO
-+  if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-+    // Not sure, why but HOR pred requires TL (when it doesn't?)
-+    int is_just_hor = p_angle == 180 && !use_intra_dip;
-+    int print_l = need_left;
-+    int print_t = need_above;
-+    int print_tl = need_above_left && !is_just_hor;
-+    if (mode == DC_PRED && !use_intra_dip) {
-+      print_l = !!n_left_px;
-+      print_t = !!n_top_px;
-+      print_tl = !!n_left_px && !!n_top_px;
-+    }
-+    if (is_dr_mode && (mrl_index /* i.e. no ibp */ || tx_size == TX_4X4 ||
-+                       (p_angle >= 90 && p_angle <= 180)))
-+    {
-+      if (p_angle < 90)
-+        print_l = 0;
-+      else if (p_angle == 90)
-+        print_l = print_tl = 0;
-+      else if (p_angle == 180)
-+        print_t = print_tl = 0;
-+      else if (p_angle > 180)
-+        print_t = 0;
++  if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS && plane == AVM_PLANE_Y) {
++    int print_t = 0, print_l = 0, print_tl = 0;
++    int print_t2 = 0, print_l2 = 0, print_tl2 = 0;
++    switch (mode) {
++    case DC_PRED:
++      if (use_intra_dip) {
++        print_t = txwpx + (txwpx >> 2);
++        print_l = txhpx + (txhpx >> 2);
++        print_tl = 1;
++      } else {
++        print_t = n_top_px ? txwpx : 0;
++        print_l = n_left_px ? txhpx : 0;
++      }
++      break;
++    case PAETH_PRED:
++      print_t = n_top_px ? txwpx : 0;
++      print_l = n_left_px ? txhpx : 0;
++      print_tl = n_top_px && n_left_px;
++      break;
++    case SMOOTH_PRED:
++      print_t = txwpx + 1;
++      print_l = txhpx + 1;
++      break;
++    case SMOOTH_H_PRED:
++      print_t = -1; // top-right only
++      print_l = txhpx;
++      break;
++    case SMOOTH_V_PRED:
++      print_t = txwpx;
++      print_l = -1; // bottom-left only
++      break;
++    default:
++      assert(is_dr_mode);
++      const int ibp = apply_ibp && !mrl_index;
++      if (p_angle == 90 || (p_angle < 90 && !ibp && !n_top_px)) { // v
++        print_t = txwpx;
++      } else if (p_angle < 90) { // z1
++        print_tl = 1;
++        print_t = txwpx + txhpx;
++        if (ibp)
++          print_l = txwpx + txhpx;
++      } else if (p_angle < 180) { // z2
++        print_tl = 1;
++        print_t = txwpx;
++        print_l = txhpx;
++      } else if (p_angle == 180 || (p_angle > 180 && !ibp && !n_left_px)) { // h
++        print_l = txhpx;
++      } else if (p_angle > 180) { // z3
++        print_tl = 1;
++        print_l = txwpx + txhpx;
++        if (ibp)
++          print_t = txwpx + txhpx;
++      }
++      if (xd->mi[0]->multi_line_mrl && tx_size != TX_4X4) {
++        print_t2 = print_t;
++        print_tl2 = print_tl;
++        print_l2 = print_l;
++      }
++      if (mrl_index && print_tl && (p_angle < 90 || p_angle > 180) /* mode is z1/3 */) {
++        if (print_t) print_t += mrl_index * 2;
++        if (print_l) print_l += mrl_index * 2;
++      }
++      break;
 +    }
 +    const char *pix_fmt = hbd ? " %03x" : " %02x";
 +    if (0 || plane == AVM_PLANE_Y) {
-+      if (print_l) {
++      if (print_l > 0) {
 +        printf("l\n");
-+        for (int x = num_left_pixels_needed - 1; x >= 0; x--)
++        for (int x = print_l - 1; x >= 0; x--)
 +          printf(pix_fmt, left_col_1st[x]);
 +        printf("\n");
-+        if (xd->mi[0]->multi_line_mrl && tx_size != TX_4X4) {
++        if (print_l2) {
 +          printf("l2\n");
-+          for (int x = num_left_pixels_needed - 1; x >= 0; x--)
++          for (int x = print_l2 - 1; x >= 0; x--)
 +            printf(pix_fmt, left_col_2nd[x]);
 +          printf("\n");
 +        }
++      } else if (print_l < 0) {
++        printf("bl\n");
++        printf(pix_fmt, left_col_1st[txhpx]);
++        printf("\n");
 +      }
-+      if (print_t) {
-+        hex_dump(above_row_1st, num_top_pixels_needed,
-+                 num_top_pixels_needed, 1, "t", hbd);
-+        if (xd->mi[0]->multi_line_mrl && tx_size != TX_4X4) {
-+          hex_dump(above_row_2nd, num_top_pixels_needed,
-+                 num_top_pixels_needed, 1, "t2", hbd);
-+        }
++      if (print_t > 0) {
++        hex_dump(above_row_1st, 0, print_t, 1, "t", hbd);
++        if (print_t2)
++          hex_dump(above_row_2nd, 0, print_t2, 1, "t2", hbd);
++      } else if (print_t < 0) {
++        hex_dump(&above_row_1st[txwpx], 0, 1, 1, "tr", hbd);
 +      }
 +      if (print_tl) {
 +        if (mrl_index) {
@@ -262,7 +306,7 @@ index 27fbd5045e..4f295e4e28 100644
 +        } else {
 +          hex_dump(&above_row_1st[-1], 0, mrl_index + 1, 1, "tl", hbd);
 +        }
-+        if (xd->mi[0]->multi_line_mrl && tx_size != TX_4X4) {
++        if (print_tl2) {
 +          hex_dump(&above_row_2nd[-1], 0, 1, 1, "tl2", hbd);
 +        }
 +      }
@@ -273,7 +317,7 @@ index 27fbd5045e..4f295e4e28 100644
    if (use_intra_dip) {
      av2_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1287,6 +1385,13 @@ static void build_intra_predictors_high(
+@@ -1287,6 +1429,13 @@ static void build_intra_predictors_high(
                                     mbmi->intra_dip_features
  #endif  // CONFIG_DIP_EXT_PRUNING
      );
@@ -287,7 +331,7 @@ index 27fbd5045e..4f295e4e28 100644
      return;
    }
  
-@@ -1406,6 +1511,14 @@ static void build_intra_predictors_high(
+@@ -1406,6 +1555,14 @@ static void build_intra_predictors_high(
        }
      }
  
@@ -302,7 +346,7 @@ index 27fbd5045e..4f295e4e28 100644
      return;
    }
    // predict
-@@ -1427,6 +1540,13 @@ static void build_intra_predictors_high(
+@@ -1427,6 +1584,13 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -316,7 +360,7 @@ index 27fbd5045e..4f295e4e28 100644
  }
  
  #define ARITHMETIC_LEFT_SHIFT(x, shift) \
-@@ -1455,6 +1575,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1455,6 +1619,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          dst[r * dst_stride + c] = palette[map[(r + y) * wpx + c + x]];
        }
      }
@@ -329,7 +373,7 @@ index 27fbd5045e..4f295e4e28 100644
      return;
    }
  
-@@ -1509,7 +1635,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1509,7 +1679,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  

@@ -2146,7 +2146,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         const int sbsz = f->sb_step;
         const int mrl_idx = b->mrl_index;
         const int mrl_mul = b->multi_mrl && tx != (int) TX_4X4;
-        pixel *const edge = bitfn(t->scratch.edge) + (mrl_idx ? 384 : 128);
+        pixel *const edge = bitfn(t->scratch.edge) + 128 + !!mrl_idx * 9;
 
         const int is_hv5 = (t->by > t->pb.row_start || t->bx > t->pb.col_start) &&
             (b->tx_part == TX_PARTITION_H5 || b->tx_part == TX_PARTITION_V5);

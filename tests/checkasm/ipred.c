@@ -78,15 +78,14 @@ static int gen_z_max_wh(const int sz) {
 static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
-    ALIGN_STK_64(pixel, topleft_buf, 644 + 1 + 644 + 32 + 1,);
-    pixel *const topleft = topleft_buf + 384;
+    ALIGN_STK_64(pixel, topleft_buf, 64 * 8 + 2 * 1 + 2 * 9,);
 
     int bitdepth_max;
     if (BITDEPTH == 16)
         bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
     else
         bitdepth_max = (1 << BITDEPTH) - 1;
-    for (int i = 0; i < 644 + 1 + 644 + 32 + 1; i++)
+    for (int i = 0; i < 64 * 8 + 2 * 1 + 2 * 9; i++)
         topleft_buf[i] = rnd() & bitdepth_max;
 
     declare_func(void, pixel *dst, ptrdiff_t stride, const pixel *topleft,
@@ -112,6 +111,7 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
                             maxh = gen_z_max_wh(h);
                         } else if (mode == DIP_PRED) /* dip_idx */
                             a = (rnd() % 5) | (rnd() & 16);
+                        pixel *const topleft = topleft_buf + 128 + 9;
 
                         CLEAR_PIXEL_RECT(c_dst);
                         CLEAR_PIXEL_RECT(a_dst);

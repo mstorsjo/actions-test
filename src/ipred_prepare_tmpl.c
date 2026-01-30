@@ -36,13 +36,12 @@
 #include "src/debug.h"
 #include "src/ipred_prepare.h"
 
-static const uint8_t mode_conv[N_INTRA_PRED_MODES]
-                              [2 /* have_left */][2 /* have_top */] =
+static const uint8_t mode_conv[2 /* is_paeth */][2 /* have_left */][2 /* have_top */] =
 {
-    [DC_PRED]    = { { DC_128_PRED,  TOP_DC_PRED },
-                     { LEFT_DC_PRED, DC_PRED     } },
-    [PAETH_PRED] = { { DC_128_PRED,  VERT_PRED   },
-                     { HOR_PRED,     PAETH_PRED  } },
+    [0 /*DC_PRED*/]    = { { DC_128_PRED,  TOP_DC_PRED },
+                           { LEFT_DC_PRED, DC_PRED     } },
+    [1 /*PAETH_PRED*/] = { { DC_128_PRED,  VERT_PRED   },
+                           { HOR_PRED,     PAETH_PRED  } },
 };
 
 typedef struct EdgeMask {
@@ -54,7 +53,7 @@ typedef struct EdgeMask {
 } EdgeMask;
 
 static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
-    [DC_PRED]       = { .needs_top  = 1, .needs_left = 1, .needs_topleft = 1 },
+    [DC_PRED]       = { .needs_top  = 1, .needs_left = 1 },
     [VERT_PRED]     = { .needs_top  = 1 },
     [HOR_PRED]      = { .needs_left = 1 },
     [LEFT_DC_PRED]  = { .needs_left = 1 },
@@ -65,10 +64,10 @@ static const EdgeMask intra_prediction_edges[N_IMPL_INTRA_PRED_MODES] = {
     [Z2_PRED]       = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
     [Z3_PRED]       = { .needs_left = 1, .needs_bottomleft = 1,
                         .needs_topleft = 1 },
-    [SMOOTH_PRED]   = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1,
-                        .needs_topright = 1, .needs_bottomleft= 1 },
-    [SMOOTH_V_PRED] = { .needs_left = 1, .needs_top = 1, .needs_bottomleft= 1 },
-    [SMOOTH_H_PRED] = { .needs_left = 1, .needs_top = 1, .needs_topright = 1 },
+    [SMOOTH_PRED]   = { .needs_left = 1, .needs_top = 1,
+                        .needs_topright = 1, .needs_bottomleft = 1 },
+    [SMOOTH_V_PRED] = { .needs_top = 1, .needs_bottomleft = 1 },
+    [SMOOTH_H_PRED] = { .needs_left = 1, .needs_topright = 1 },
     [PAETH_PRED]    = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
     [DIP_PRED]      = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1,
                         .needs_topright = 1, .needs_bottomleft= 1 }
@@ -117,27 +116,23 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
             mode = *angle > 180 && (have_left || apply_ibp) ? Z3_PRED : HOR_PRED;
         break;
     }
+    case PAETH_PRED:
     case DC_PRED:
-        mode = apply_dip ? DIP_PRED : mode_conv[mode][have_left][have_top];
+        mode = apply_dip ? DIP_PRED : mode_conv[mode != DC_PRED][have_left][have_top];
         break;
     default:
         break;
     }
+    assert(!mrl_idx || is_dir);
 
-    // FIXME SMOOTH predictors don't need all of the edge pixels
     EdgeMask e = intra_prediction_edges[mode];
-    if ((mode == Z1_PRED || mode == Z3_PRED) && apply_ibp) {
-        e.needs_top = 1;
-        e.needs_left = 1;
-        e.needs_topleft = 1;
-        e.needs_bottomleft = 1;
-        e.needs_topright = 1;
-    }
+    if ((mode == Z1_PRED || mode == Z3_PRED) && apply_ibp)
+        e = intra_prediction_edges[DIP_PRED]; // all edges
 
     const pixel *dst_top, *dst_top2;
     ptrdiff_t top_stride;
-    if (have_top &&
-        (e.needs_top || e.needs_topleft || (e.needs_left && !have_left)))
+    if (have_top && ((e.needs_top | e.needs_topleft | e.needs_topright) ||
+                     ((e.needs_left | e.needs_bottomleft) && !have_left)))
     {
         if (prefilter_toplevel_sb_edge) {
             dst_top = dst_top2 = &prefilter_toplevel_sb_edge[x * 4];
@@ -150,88 +145,132 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     }
 
     const int tw = tw4 << 2, th = th4 << 2;
-    // Safe maximum size for edge buffers
-    const int e_stride = (tw + th + (mrl_idx << 1) + 3) * 2;
+    // in case of multi-mrl: ptr1 will point to the mrl_idx line, which
+    // contains one topleft pixel, mrl_idx pixels between top/left and
+    // top-most left pixel, then width pixels above, followed by height
+    // pixels and 2*mrl_idx pixels top/right. Then the left edge of the
+    // adjacent (non-mrl_idx) line, which contains width+height pixels.
+    const int diag_mrl_idx = (unsigned) mode - Z1_PRED <= 2U ? mrl_idx : 0;
+    const int e_stride = (tw + th) * 2 + diag_mrl_idx * 3 + 1;
     if (e.needs_left) {
-        const int sz = th + (apply_dip ? (th >> 2) :
-            ((e.needs_bottomleft ? tw : 3) + (mrl_idx << 1)));
-        pixel *const left = &topleft_out[-(mrl_idx + sz)];
-        pixel *const left2 = &topleft_out[-(sz + e_stride)];
+        int sz = th, sz2 = th;
+        if (e.needs_bottomleft) {
+            sz += apply_dip ? th >> 2 : is_dir ? tw + 2 * diag_mrl_idx : 1 /* smooth */;
+            sz2 = sz - 2 * diag_mrl_idx;
+        }
+        pixel *const left = &topleft_out[-(diag_mrl_idx + 1)];
+        pixel *const left2 = &topleft_out[e_stride - 1];
 
         if (have_left) {
             int px_have = imin(th, (h - y) << 2);
             int i;
             for (i = 0; i < px_have; i++)
-                left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
+                left[-i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
             if (e.needs_bottomleft && n_bl > 0) {
-                px_have += n_bl << 2;
+                px_have += imin(n_bl << 2, sz - th);
                 for (; i < px_have; i++)
-                    left[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
+                    left[-i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
             }
             if (px_have < sz)
-                pixel_set(left, left[sz - px_have], sz - px_have);
+                pixel_set(&left[1 - sz], left[1 - i], sz - px_have);
             if (mrl_mul) {
+                px_have = imin(px_have, sz2);
                 for (int i = 0; i < px_have; i++)
-                    left2[sz - 1 - i] = dst[PXSTRIDE(stride) * i - 1];
-                if (px_have < sz)
-                    pixel_set(left2, left2[sz - px_have], sz - px_have);
+                    left2[-i] = dst[PXSTRIDE(stride) * i - 1];
+                if (px_have < sz2)
+                    pixel_set(&left2[1 - sz2], left2[1 - i], sz2 - px_have);
             }
         } else {
-            pixel_set(left, have_top ? *dst_top : ((1 << bitdepth) >> 1) + 1, sz);
+            pixel_set(&left[1 - sz], have_top ? *dst_top : ((1 << bitdepth) >> 1) + 1, sz);
             if (mrl_mul)
-                pixel_set(left2, have_top ? *dst_top2 :
-                                 ((1 << bitdepth) >> 1) + 1, sz);
+                pixel_set(&left2[1 - sz2], have_top ? *dst_top2 :
+                                 ((1 << bitdepth) >> 1) + 1, sz2);
         }
 
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
-            hex_dump(left, 0, sz, 1, "l");
-            if (mrl_mul) {
-                hex_dump(left2, 0, sz, 1, "l2");
-            }
+            hex_dump(&left[1 - sz], 0, sz, 1, "l");
+            if (mrl_mul)
+                hex_dump(&left2[1 - sz2], 0, sz2, 1, "l2");
         }
+#endif
+    } else if (e.needs_bottomleft) {
+        assert(mode == SMOOTH_V_PRED);
+        pixel *const bottom_left = &topleft_out[-(1 + th)];
+
+        if (!have_left) {
+            *bottom_left = have_top ? *dst_top : ((1 << bitdepth) >> 1) + 1;
+        } else if (n_bl <= 0) {
+            *bottom_left = dst[PXSTRIDE(stride) * (imin(th, (h - y) << 2) - 1) - 1];
+        } else {
+            *bottom_left = dst[PXSTRIDE(stride) * th - 1];
+        }
+
+#if DEBUG_BLOCK_INFO
+        if (print_dbg)
+            hex_dump(bottom_left, 0, 1, 1, "bl");
 #endif
     }
 
     if (e.needs_top) {
-        const int sz = tw + (apply_dip ? (tw >> 2) :
-            ((e.needs_topright ? th : 0) + (mrl_idx << 1)));
-        pixel *const top = &topleft_out[mrl_idx + 1];
-        pixel *const top2 = &topleft_out[1 - e_stride];
+        int sz = tw, sz2 = tw;
+        if (e.needs_topright) {
+            sz += apply_dip ? tw >> 2 : is_dir ? th + 2 * diag_mrl_idx : 1 /* smooth */;
+            sz2 = sz - 2 * diag_mrl_idx;
+        }
+        pixel *const top = &topleft_out[diag_mrl_idx + 1];
+        pixel *const top2 = &topleft_out[e_stride + 1];
 
         if (have_top) {
             int px_have = imin(tw, (w - x) << 2);
             pixel_copy(top, dst_top, px_have);
             if (e.needs_topright && n_tr > 0) {
-                px_have += n_tr << 2;
-                pixel_copy(top + tw, dst_top + tw, n_tr << 2);
+                px_have += imin(n_tr << 2, sz - tw);
+                pixel_copy(top + tw, dst_top + tw, px_have - tw);
             }
             if (px_have < sz)
                 pixel_set(top + px_have, top[px_have - 1], sz - px_have);
             if (mrl_mul) {
+                px_have = imin(px_have, sz2);
                 pixel_copy(top2, dst_top2, px_have);
-                if (px_have < sz)
-                    pixel_set(top2 + px_have, top2[px_have - 1], sz - px_have);
+                if (px_have < sz2)
+                    pixel_set(top2 + px_have, top2[px_have - 1], sz2 - px_have);
             }
         } else {
             pixel_set(top, have_left ? dst[-(1 + mrl_idx)] :
                       ((1 << bitdepth) >> 1) - 1, sz);
             if (mrl_mul)
                 pixel_set(top2, have_left ? dst[-1] :
-                          ((1 << bitdepth) >> 1) - 1, sz);
+                          ((1 << bitdepth) >> 1) - 1, sz2);
         }
 
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
             hex_dump(top, 0, sz, 1, "t");
-            if (mrl_mul) {
-                hex_dump(top2, 0, sz, 1, "t2");
-            }
+            if (mrl_mul)
+                hex_dump(top2, 0, sz2, 1, "t2");
         }
+#endif
+    } else if (e.needs_topright) {
+        assert(mode == SMOOTH_H_PRED);
+        pixel *const top_right = &topleft_out[1 + tw];
+
+        if (!have_top) {
+            *top_right = have_left ? dst[-1] : ((1 << bitdepth) >> 1) - 1;
+        } else if (n_tr <= 0) {
+            *top_right = dst_top[imin(tw, (w - x) << 2) - 1];
+        } else {
+            *top_right = dst_top[tw];
+        }
+
+#if DEBUG_BLOCK_INFO
+        if (print_dbg)
+            hex_dump(top_right, 0, 1, 1, "tr");
 #endif
     }
 
     if (e.needs_topleft) {
+        assert(diag_mrl_idx == mrl_idx);
         if (have_top && have_left) {
             for (int i = -mrl_idx; i < 0; i++)
                 topleft_out[i] = dst_top[-(mrl_idx + 1) + (-i) *
@@ -246,21 +285,20 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                 v = have_top ? *dst_top : (1 << bitdepth) >> 1;
             pixel_set(&topleft_out[-mrl_idx], v, 2 * mrl_idx + 1);
         }
-        topleft_out[-e_stride] =
+        topleft_out[e_stride] =
             have_left ? have_top ? dst_top2[-1] : dst[-1] :
                         have_top ? *dst_top2 : (1 << bitdepth) >> 1;
 
 #if DEBUG_BLOCK_INFO
         if (print_dbg) {
             hex_dump(&topleft_out[-mrl_idx], 0, 2 * mrl_idx + 1, 1, "tl");
-            if (mrl_mul) {
-                hex_dump(&topleft_out[-e_stride], 0, 1, 1, "tl2");
-            }
+            if (mrl_mul)
+                hex_dump(&topleft_out[e_stride], 0, 1, 1, "tl2");
         }
 #endif
 
-        if (is_dir && *angle != 90 && *angle != 180 && e.needs_top &&
-            e.needs_left && !mrl_idx && enable_edge_filter && tw + th >= 24)
+        if ((unsigned) mode - Z1_PRED <= 2U &&
+            !mrl_idx && enable_edge_filter && tw + th >= 24)
         {
             const int c = topleft_out[0] +
                 (topleft_out[-1] + topleft_out[0] + topleft_out[1]) * 5;

@@ -325,14 +325,13 @@ static void ipred_v_c(pixel *dst, const ptrdiff_t stride,
                       const int max_width, const int max_height
                       HIGHBD_DECL_SUFFIX)
 {
-    const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
-    const pixel *const top = &topleft[mrl_idx + 1];
+    const pixel *const top = &topleft[1];
 
     if (mrl_mul) {
         // Safe maximum size for edge buffers
-        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
-        const pixel *const top2 = &topleft[1 - e_stride];
+        const int e_stride = (width + height) * 2 + 1;
+        const pixel *const top2 = &topleft[1 + e_stride];
         for (int x = 0; x < width; x++) {
             dst[x] = (top[x] + top2[x] + 1) >> 1;
         }
@@ -357,14 +356,13 @@ static void ipred_h_c(pixel *dst, const ptrdiff_t stride,
                       const int max_width, const int max_height
                       HIGHBD_DECL_SUFFIX)
 {
-    const int mrl_idx = (angle & ANGLE_MRL_IDX_MASK) >> ANGLE_MRL_IDX_SHIFT;
     const int mrl_mul = !!(angle & ANGLE_MULTI_MRL_FLAG);
-    const pixel *left = &topleft[-(mrl_idx + 1)];
+    const pixel *left = &topleft[-1];
 
     if (mrl_mul) {
         // Safe maximum size for edge buffers
-        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
-        const pixel *left2 = &topleft[-(1 + e_stride)];
+        const int e_stride = (width + height) * 2 + 1;
+        const pixel *left2 = &topleft[e_stride - 1];
         for (int y = 0; y < height; y++) {
             const int v = (left[-y] + left2[-y] + 1) >> 1;
             pixel_set(dst, v, width);
@@ -585,8 +583,8 @@ static void ipred_z1_c(pixel *dst, const ptrdiff_t stride,
     assert(angle < 90);
 
     if (mrl_mul) {
-        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
-        const pixel *tl2 = &topleft_in[-e_stride];
+        const int e_stride = (width + height) * 2 + mrl_idx * 3 + 1;
+        const pixel *tl2 = &topleft_in[e_stride];
         pixel tmp[64 * 64];
         assert(is_luma);
         ipred_z1_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
@@ -693,8 +691,8 @@ static void ipred_z2_c(pixel *dst, const ptrdiff_t stride,
     assert(angle > 90 && angle < 180);
 
     if (mrl_mul) {
-        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
-        const pixel *tl2 = &topleft_in[-e_stride];
+        const int e_stride = (width + height) * 2 + mrl_idx * 3 + 1;
+        const pixel *tl2 = &topleft_in[e_stride];
         pixel tmp[64 * 64];
         assert(is_luma);
         ipred_z2_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
@@ -808,8 +806,8 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
     assert(angle > 180);
 
     if (mrl_mul) {
-        const int e_stride = (width + height + (mrl_idx << 1) + 3) * 2;
-        const pixel *tl2 = &topleft_in[-e_stride];
+        const int e_stride = (width + height) * 2 + mrl_idx * 3 + 1;
+        const pixel *tl2 = &topleft_in[e_stride];
         pixel tmp[64 * 64];
         assert(is_luma);
         ipred_z3_c(tmp, 64 * sizeof(pixel), topleft_in, width, height,
