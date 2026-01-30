@@ -505,7 +505,7 @@ int dav2d_apply_grain(Dav2dContext *const c, Dav2dPicture *const out,
         return 0;
     }
 
-    int res = dav2d_picture_alloc_copy(c, out, in->p.w, in);
+    int res = dav2d_picture_alloc_copy(c, out, in);
     if (res < 0) goto error;
 
     if (c->n_tc > 1) {

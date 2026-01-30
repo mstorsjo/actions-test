@@ -236,12 +236,12 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     return res;
 }
 
-int dav2d_picture_alloc_copy(Dav2dContext *const c, Dav2dPicture *const dst, const int w,
+int dav2d_picture_alloc_copy(Dav2dContext *const c, Dav2dPicture *const dst,
                              const Dav2dPicture *const src)
 {
     Dav2dMemPoolBuffer *const buf = (Dav2dMemPoolBuffer *)src->ref->const_data;
     struct pic_ctx_context *const pic_ctx = buf->data;
-    const int res = picture_alloc(c, dst, w, src->p.h,
+    const int res = picture_alloc(c, dst, src->p.w, src->p.h,
                                   src->seq_hdr, src->seq_hdr_ref,
                                   src->frame_hdr, src->frame_hdr_ref,
                                   src->p.bpc, &src->m, &pic_ctx->allocator,

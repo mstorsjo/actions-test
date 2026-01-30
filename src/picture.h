@@ -74,12 +74,8 @@ int dav2d_thread_picture_alloc(Dav2dContext *c, Dav2dFrameContext *f, const int 
 
 /**
  * Allocate a picture with identical metadata to an existing picture.
- * The width is a separate argument so this function can be used for
- * super-res, where the width changes, but everything else is the same.
- * For the more typical use case of allocating a new image of the same
- * dimensions, use src->p.w as width.
  */
-int dav2d_picture_alloc_copy(Dav2dContext *c, Dav2dPicture *dst, const int w,
+int dav2d_picture_alloc_copy(Dav2dContext *c, Dav2dPicture *dst,
                              const Dav2dPicture *src);
 
 /**
