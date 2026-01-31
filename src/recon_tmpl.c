@@ -1552,17 +1552,17 @@ static ALWAYS_INLINE int get_mask(uint8_t *const mask, const ptrdiff_t stride,
 }
 
 static void update_temporal(refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
-                            const int w8, const int h8, const int8_t refs[2],
+                            const int w8, const int h8, const union refpair ref,
                             const union mv mv[2], const int swap)
 {
     refmvs_temporal_block t_src;
-    t_src.ref.ref[0] = refs[swap] + 1;
-    t_src.ref.ref[1] = refs[!swap] + 1;
+    t_src.ref.ref[0] = ref.ref[swap];
+    t_src.ref.ref[1] = ref.ref[!swap];
     t_src.mv.mv[0] = quantize_mv(mv[swap]);
     t_src.mv.mv[1] = quantize_mv(mv[!swap]);
     if (t_src.mv.mv[0].n == INVALID_TRAJ) {
         if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-            t_src.ref.pair = 0;
+            t_src.ref.pair = -1;
         } else {
             t_src.mv.mv[0] = t_src.mv.mv[1];
             t_src.ref.ref[0] = t_src.ref.ref[1];
@@ -1666,20 +1666,20 @@ static int tip_pred(Dav2dTaskContext *const t,
     const int opfl = f->seq_hdr->tip_refine_mv &&
         (f->frame_hdr->tip.frame_mode == 1 ||
          f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
-    const uint8_t *const refs = f->frame_hdr->tip.refs;
+    const union refpair ref = f->rf.tip.ref;
     const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
-                       f->refdist[refs[0]] == -f->refdist[refs[1]];
+                       f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
     const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                            ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
     ptrdiff_t off_y = 0;
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8 &&
-        !f->svc[refs[0]][0].scale && !f->svc[refs[1]][0].scale;
+        !f->svc[ref.ref[0]][0].scale && !f->svc[ref.ref[1]][0].scale;
     const int w = f->bw * 4, h = f->bh * 4;
     if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
     int have_bacp = 0;
 
-    const Dav2dThreadPicture *const refp[2] = { &f->refp[refs[0]], &f->refp[refs[1]] };
+    const Dav2dThreadPicture *const refp[2] = { &f->refp[ref.ref[0]], &f->refp[ref.ref[1]] };
     pixel *p[2];
     ptrdiff_t p_stride;
     int8_t d[2];
@@ -1687,16 +1687,16 @@ static int tip_pred(Dav2dTaskContext *const t,
         p[0] = bitfn(t->scratch.p)[0];
         p[1] = bitfn(t->scratch.p)[1];
         p_stride = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
-        const int d0 = f->absrefdist[refs[0]], d1 = f->absrefdist[refs[1]];
-        d[0] = apply_sign(1 + (d0 > d1), -f->refdist[refs[0]]);
-        d[1] = apply_sign(1 + (d1 > d0), -f->refdist[refs[1]]);
+        const int d0 = f->absrefdist[ref.ref[0]], d1 = f->absrefdist[ref.ref[1]];
+        d[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
+        d[1] = apply_sign(1 + (d1 > d0), -f->refdist[ref.ref[1]]);
     }
 
     union mv (*rmv_line)[2][2] = t->rmv;
     const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == 1 /* reference */ ? 6 : 15;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
-    const int t_swap = !!(f->rf.ref_flip & (1ULL << (refs[0] * 8 + refs[1])));
+    const int t_swap = !!(f->rf.ref_flip & (1ULL << (ref.ref[0] * 8 + ref.ref[1])));
     for (int y = 0, yy = 0; y < h4; y += step, yy++, rmv_line += 8) {
         const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
         for (int x = 0, xx = 0; x < w4; x += step, xx++) {
@@ -1706,7 +1706,7 @@ static int tip_pred(Dav2dTaskContext *const t,
             union mv (*const rmv)[2] = rmv_line[xx], *const cmv = rmv[0];
             int left[2], top[2];
             for (int i = 0; i < 2; i++) {
-                const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
+                const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
                 rmv[1][i].y = cmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
                 rmv[1][i].x = cmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                 top[i] = t->by * 4 + y * 4 + (cmv[i].y >> 3) - 3;
@@ -1719,7 +1719,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                     mc(t, p[i], NULL, p_stride,
                        step + 2, step + 2, t->bx + x, t->by + y, 0,
                        (union mv) { .y = cmv[i].y - 32, .x = cmv[i].x - 32 },
-                       refp[i], refs[i], DAV2D_FILTER_BILINEAR,
+                       refp[i], ref.ref[i], DAV2D_FILTER_BILINEAR,
                        iclip(left[i], 0, w - 1), iclip(left[i] + 7 + step * 4, 1, w),
                        iclip(top[i], 0, h - 1), iclip(top[i] + 7 + step * 4, 1, h));
                 int dy, dx;
@@ -1773,7 +1773,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                             .x = (cmv[1].x + (dd.d[1].x > 0)) >> 1 },
                 };
                 update_temporal(&t_dst[x >> 1], t_stride, step >> 1, step >> 1,
-                                (const int8_t *) refs, dmv, t_swap);
+                                ref, dmv, t_swap);
                 if (bacp)
                     have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
                                           cmv, 4, 4, step, step, w, h);
@@ -1782,13 +1782,13 @@ static int tip_pred(Dav2dTaskContext *const t,
                 for (int i = 0; i < 2; i++)
                     mc(t, NULL, &tmp[i][off_y + x * 4], bw4 * 4,
                        step, step, t->bx + x, t->by + y, 0,
-                       cmv[i], refp[i], refs[i], b->filter,
+                       cmv[i], refp[i], ref.ref[i], b->filter,
                        0, f->bw * 4, 0, f->bh * 4);
                 // when refinement is disabled, each sub-block in the temporal
                 // MV buffer gets its own 8x8 tip MV even if the tip blocksize
                 // is 16x16 (see #945)
                 update_temporal(&t_dst[x >> 1], t_stride, step >> 1,
-                                step >> 1, (const int8_t *) refs, cmv, t_swap);
+                                step >> 1, ref, cmv, t_swap);
                 if (step == 4 && f->frame_hdr->tip.frame_mode == 1 /* reference */) {
                     union mv dmv[2];
                     for (int p = 1; p < 4; p++) {
@@ -1796,13 +1796,13 @@ static int tip_pred(Dav2dTaskContext *const t,
                                                ((p & 2) >> 1) * t_stride].mv;
                         if (tmv.y == INVALID_MV) tmv.n = 0;
                         for (int i = 0; i < 2; i++) {
-                            const mv tipmv = scale_mv(tmv, f->rf.tip_sf[i]);
+                            const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
                             dmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
                             dmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                         }
                         update_temporal(&t_dst[((p & 2) >> 1) * t_stride +
                                                (x >> 1) + (p & 1)], t_stride, 1,
-                                        1, (const int8_t *) refs, dmv, t_swap);
+                                        1, ref, dmv, t_swap);
                     }
                 }
                 if (bacp)
@@ -1822,7 +1822,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                      const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav2dFrameContext *const f = t->f;
-    assert(!f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale);
+    assert(!f->svc[b->ref.ref[0]][0].scale && !f->svc[b->ref.ref[1]][0].scale);
     const int refine = b->comp_type == COMP_INTER_AVG && b->refine_mv;
     const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
     assert(opfl || refine);
@@ -1831,8 +1831,8 @@ static int opfl_pred(Dav2dTaskContext *const t,
     pixel *p[2] = { bitfn(t->scratch.p)[0], bitfn(t->scratch.p)[1] };
     const ptrdiff_t p_stride = ((bw4 + refine * 2) * 4 * sizeof(pixel) + 63) & ~63;
 
-    const Dav2dThreadPicture *refp[2] = { &f->refp[b->ref[0]],
-                                          &f->refp[b->ref[1]] };
+    const Dav2dThreadPicture *refp[2] = { &f->refp[b->ref.ref[0]],
+                                          &f->refp[b->ref.ref[1]] };
     int top[2] = { t->by * 4 + (b->mv[0].y >> 3) - 3,
                    t->by * 4 + (b->mv[1].y >> 3) - 3 };
 
@@ -1844,10 +1844,10 @@ static int opfl_pred(Dav2dTaskContext *const t,
 
     // FIXME namespace opfl symbols
     // find reduced distance as inverse weights
-    const int d0 = f->absrefdist[b->ref[0]], d1 = f->absrefdist[b->ref[1]];
+    const int d0 = f->absrefdist[b->ref.ref[0]], d1 = f->absrefdist[b->ref.ref[1]];
     const int8_t d[2] = {
-        apply_sign(1 + (d0 > d1), -f->refdist[b->ref[0]]),
-        apply_sign(1 + (d1 > d0), -f->refdist[b->ref[1]]),
+        apply_sign(1 + (d0 > d1), -f->refdist[b->ref.ref[0]]),
+        apply_sign(1 + (d1 > d0), -f->refdist[b->ref.ref[1]]),
     };
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
     union OpflMvDeltaBlock dd[2 * 2];
@@ -1855,7 +1855,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
     union mv (*rmv_line)[2][2] = t->rmv;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
-    const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref[0] * 8 + b->ref[1])));
+    const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref.ref[0] * 8 + b->ref.ref[1])));
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4);
     for (int y = 0; y < h4; y += sh4, rmv_line += (1 + opfl) * 8) {
         int left[2] = { t->bx * 4 + (b->mv[0].x >> 3) - 3,
@@ -1866,7 +1866,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                     mc(t, p[n], NULL, p_stride, sw4 + 2, sh4 + 2,
                        t->bx + x, t->by + y, 0,
                        (union mv) { .y = b->mv[n].y - 32, .x = b->mv[n].x - 32 },
-                       refp[n], b->ref[n], DAV2D_FILTER_BILINEAR,
+                       refp[n], b->ref.ref[n], DAV2D_FILTER_BILINEAR,
                        iclip(left[n], 0, w - 1), iclip(left[n] + 4 * sw4 + 7, 1, w),
                        iclip(top[n], 0, h - 1), iclip(top[n] + 4 * sh4 + 7, 1, h));
                 struct OpflOffset o;
@@ -1908,8 +1908,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                                         .x = (mv[1].x + (dd[0].d[1].x > 0)) >> 1 },
                             };
                             update_temporal(&t_dst[((x + bx) >> 1) + !!by * t_stride],
-                                            t_stride, 1, 1,
-                                            (const int8_t *) b->ref, dmv, t_swap);
+                                            t_stride, 1, 1, b->ref, dmv, t_swap);
                             if (bacp)
                                 have_bacp |= get_mask(mask, bw4 * 4, t->bx, x + bx,
                                                       t->by, y + by, mv, 4, 4, 2, 2, w, h);
@@ -1925,13 +1924,13 @@ static int opfl_pred(Dav2dTaskContext *const t,
                     for (int i = 0; i < 2; i++)
                         mc(t, NULL, &tmp[i][(y * 4 * bw4 + x) * 4], bw4 * 4,
                            sw4, sh4, t->bx + x, t->by + y, 0,
-                           mv[i], refp[i], b->ref[i], b->filter,
+                           mv[i], refp[i], b->ref.ref[i], b->filter,
                            iclip(left[i], 0, w - 1),
                            iclip(left[i] + sw4 * 4 + 7, 1, w),
                            iclip(top[i], 0, h - 1),
                            iclip(top[i] + sh4 * 4 + 7, 1, h));
                     update_temporal(&t_dst[x >> 1], t_stride, sw4 >> 1, sh4 >> 1,
-                                    (const int8_t *) b->ref, mv, t_swap);
+                                    b->ref, mv, t_swap);
                     scaleup_8pel_mv_for_chroma(mv, f->cur.p.p.layout);
                     if (bacp)
                         have_bacp |= get_mask(mask, bw4 * 4, t->bx, x,
@@ -1944,7 +1943,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
             assert(opfl);
             for (int n = 0; n < 2; n++)
                 mc(t, p[n], NULL, p_stride, bw4, sh4, t->bx, t->by + y,
-                   0, b->mv[n], refp[n], b->ref[n], DAV2D_FILTER_BILINEAR,
+                   0, b->mv[n], refp[n], b->ref.ref[n], DAV2D_FILTER_BILINEAR,
                    0, w, 0, h);
             struct OpflRegressionData res[2 * 8];
             f->dsp->mc.opfl_derive_mv(res, p[0], p_stride, p[1], p_stride,
@@ -1978,7 +1977,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                         };
                         update_temporal(&t_dst[(bx >> 1) + !!by * t_stride],
                                         t_stride, bs >> 1, bs >> 1,
-                                        (const int8_t *) b->ref, dmv, t_swap);
+                                        b->ref, dmv, t_swap);
                     } else {
                         assert(b->bs == BS_8x8);
                         ddl++;
@@ -2000,8 +1999,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                 dmv[1].x = (b->mv[1].x * 8 + tmp + 3 + (tmp > 0)) >> 3;
                 tmp = dd[0].d[1].y + dd[1].d[1].y + dd[2].d[1].y + dd[3].d[1].y;
                 dmv[1].y = (b->mv[1].y * 8 + tmp + 3 + (tmp > 0)) >> 3;
-                update_temporal(t_dst, t_stride, 1, 1,
-                                (const int8_t *) b->ref, dmv, t_swap);
+                update_temporal(t_dst, t_stride, 1, 1, b->ref, dmv, t_swap);
             }
         }
         for (int n = 0; n < 2; n++)
@@ -2018,8 +2016,8 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
 {
     const Dav2dFrameContext *const f = t->f;
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
-    const int tip = b->ref[0] == TIP_FRAME;
-    const int8_t *const ref = tip ? (const int8_t *) f->frame_hdr->tip.refs : b->ref;
+    const int tip = b->ref.ref[0] == TIP_FRAME;
+    const union refpair ref = tip ? f->rf.tip.ref : b->ref;
     int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
     union mv (*rmv_line)[2][2] = t->rmv;
     const ptrdiff_t stride = bw4 * 4 >> ss_hor;
@@ -2049,7 +2047,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                 mc_opfl(t, &tmp[i][uvoff + (x * 4 >> ss_hor)], stride,
                         sw4 >> ss_hor, sh4 >> ss_ver,
                         (t->cbx + x) >> ss_hor, (t->cby + y) >> ss_ver,
-                        1 + plane, rmv[0][i], &f->refp[ref[i]], b->filter,
+                        1 + plane, rmv[0][i], &f->refp[ref.ref[i]], b->filter,
                         iclip(left, 0, w - 1), iclip(right, 1, w),
                         iclip(top, 0, h - 1), iclip(bottom, 1, h));
             }
@@ -2838,24 +2836,24 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             hex_dump(dst, f->cur.p.stride[0], bw4 * 4, bh4 * 4, "y-pred");
         }
     } else if (!b->intra) {
-        if (b->ref[1] == -1 && b->ref[0] != TIP_FRAME) {
-            const Dav2dThreadPicture *const refp = &f->refp[b->ref[0]];
+        if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
+            const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
             if (!f->frame_hdr->force_integer_mv &&
-                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
                  (b->motion_mode >= MM_WARP_CAUSAL &&
                   t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, dst, NULL, f->cur.p.stride[0], b_dim, 0, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
-                                &f->frame_hdr->gmv[b->ref[0]]);
+                                &f->frame_hdr->gmv[b->ref.ref[0]]);
             } else {
                 mc(t, dst, NULL, f->cur.p.stride[0], bw4, bh4,
-                   t->bx, t->by, 0, b->mv[0], refp, b->ref[0], b->filter,
+                   t->bx, t->by, 0, b->mv[0], refp, b->ref.ref[0], b->filter,
                    0, f->bw * 4, 0, f->bh * 4);
             }
             if (b->bawp[0]) {
                 bawp(t, b->bawp[0], b->mv[0], dst, f->cur.p.stride[0],
-                     refp, b->ref[0], bw4, bh4, w4, h4, b->bs);
+                     refp, b->ref.ref[0], bw4, bh4, w4, h4, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 iiblend(t, b, dst, f->cur.p.stride[0], 0, bw4, bh4, t->by, t->bx, bs);
             }
@@ -2863,7 +2861,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
             int bacp;
 
-            if (b->ref[0] == TIP_FRAME) {
+            if (b->ref.ref[0] == TIP_FRAME) {
                 bacp = tip_pred(t, tmp, b, bw4, bh4, w4, h4);
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
@@ -2873,21 +2871,22 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 bacp = 2 * (f->seq_hdr->imp_msk_bld &&
                             b->motion_mode != MM_WARP_CAUSAL &&
                             b->inter_mode != GLOBALMV_GLOBALMV &&
-                            !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale);
+                            !f->svc[b->ref.ref[0]][0].scale &&
+                            !f->svc[b->ref.ref[1]][0].scale);
                 for (int i = 0; i < 2; i++) {
-                    const Dav2dThreadPicture *const refp = &f->refp[b->ref[i]];
+                    const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[i]];
 
                     if ((b->inter_mode == GLOBALMV_GLOBALMV &&
-                         f->gmv_warp_allowed[b->ref[i]]) ||
+                         f->gmv_warp_allowed[b->ref.ref[i]]) ||
                         (b->motion_mode == MM_WARP_CAUSAL &&
                          t->warpmv[i].type > DAV2D_WM_TYPE_INVALID))
                     {
                         warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
                                     b->motion_mode >= MM_WARP_CAUSAL ?
-                                        &t->warpmv[i] : &f->frame_hdr->gmv[b->ref[i]]);
+                                        &t->warpmv[i] : &f->frame_hdr->gmv[b->ref.ref[i]]);
                     } else {
                         mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
-                           b->mv[i], refp, b->ref[i], b->filter,
+                           b->mv[i], refp, b->ref.ref[i], b->filter,
                            0, f->bw * 4, 0, f->bh * 4);
                     }
                     if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
@@ -2916,7 +2915,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
             default: assert(0);
             case COMP_INTER_NONE:
-                assert(b->ref[0] == TIP_FRAME);
+                assert(b->ref.ref[0] == TIP_FRAME);
                 // fall-through
             case COMP_INTER_AVG: {
                 const int wt = b->cwp_idx;
@@ -3177,7 +3176,7 @@ chroma: {}
                 // grab ref/MV from spatial refmvs
                 const refmvs_block *const r2 = &r[x];
                 if (r2->ox4 || r2->oy4) continue;
-                const int ref = r2->ref.ref[0] - 1;
+                const int ref = r2->ref.ref[0];
                 const union mv mv = r2->mv[0];
                 const Dav2dThreadPicture *const refp = &f->refp[ref];
                 const uint8_t *const sdim = dav2d_block_dimensions[r2->bs];
@@ -3194,21 +3193,21 @@ chroma: {}
                 hex_dump(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
                          stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
                          pl ? "v-pred" : "u-pred");
-    } else if (b->ref[1] == -1 && b->ref[0] != TIP_FRAME) {
-        const Dav2dThreadPicture *const refp = &f->refp[b->ref[0]];
+    } else if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
+        const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
         for (int pl = 0; pl < 2; pl++) {
             if (!f->frame_hdr->force_integer_mv &&
-                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
                  (b->motion_mode >= MM_WARP_CAUSAL &&
                   t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
                             NULL, stride, cb_dim, 1 + pl, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
-                                &f->frame_hdr->gmv[b->ref[0]]);
+                                &f->frame_hdr->gmv[b->ref.ref[0]]);
             } else {
                 mc(t, ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff, NULL, stride,
-                   cbw4, cbh4, t->cbx, t->cby, 1 + pl, b->mv[0], refp, b->ref[0],
+                   cbw4, cbh4, t->cbx, t->cby, 1 + pl, b->mv[0], refp, b->ref.ref[0],
                    b->filter, 0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
             }
             if (b->bawp[1]) {
@@ -3226,7 +3225,7 @@ chroma: {}
     } else /* compound-inter */ {
         int16_t (*tmp)[64 * 64] = t->scratch.compinter;
         for (int pl = 0, bacp, bacpu; pl < 2; pl++, bacpu = bacp, bacp = 0) {
-            if (b->ref[0] == TIP_FRAME) {
+            if (b->ref.ref[0] == TIP_FRAME) {
                 const int opfl = f->seq_hdr->tip_refine_mv &&
                     (f->frame_hdr->tip.frame_mode == 1 ||
                      f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
@@ -3244,22 +3243,23 @@ chroma: {}
                     bacp = 2 * (f->seq_hdr->imp_msk_bld &&
                                 b->motion_mode != MM_WARP_CAUSAL &&
                                 b->inter_mode != GLOBALMV_GLOBALMV &&
-                                !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale);
+                                !f->svc[b->ref.ref[0]][0].scale &&
+                                !f->svc[b->ref.ref[1]][0].scale);
                 for (int i = 0; i < 2; i++) {
-                    const Dav2dThreadPicture *const refp = &f->refp[b->ref[i]];
+                    const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[i]];
                     if ((b->inter_mode == GLOBALMV_GLOBALMV &&
-                         f->gmv_warp_allowed[b->ref[i]]) ||
+                         f->gmv_warp_allowed[b->ref.ref[i]]) ||
                         (b->motion_mode == MM_WARP_CAUSAL &&
                          t->warpmv[i].type > DAV2D_WM_TYPE_INVALID))
                     {
                         warp_affine(t, NULL, tmp[i], cbw4 * 4 >> ss_hor,
                                     cb_dim, 1 + pl, refp,
                                     b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[i] :
-                                        &f->frame_hdr->gmv[b->ref[i]]);
+                                        &f->frame_hdr->gmv[b->ref.ref[i]]);
                     } else {
                         mc(t, NULL, tmp[i], cbw4 * 4 >> ss_hor, cbw4, cbh4,
                            t->cbx, t->cby, 1 + pl, b->mv[i],
-                           refp, b->ref[i], b->filter,
+                           refp, b->ref.ref[i], b->filter,
                            0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
                     }
                 }
@@ -3284,7 +3284,7 @@ chroma: {}
             }
             default: assert(0);
             case COMP_INTER_NONE:
-                assert(b->ref[0] == TIP_FRAME);
+                assert(b->ref.ref[0] == TIP_FRAME);
                 // fall-through
             case COMP_INTER_AVG: {
                 const int wt = b->cwp_idx;

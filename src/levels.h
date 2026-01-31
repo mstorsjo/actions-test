@@ -272,11 +272,18 @@ typedef union mv {
         int32_t y, x;
     };
     uint64_t n;
-} mv;
+} ALIGN(mv, 8);
+CHECK_SIZE(mv, 8);
 #define INVALID_MV 0x200000 // applied to mv.y
 #define COPY2MV(dst, src) memcpy(dst, src, 2 * sizeof(union mv))
 #define CMP2MV(src1, src2) memcmp(src1, src2, 2 * sizeof(union mv))
 #define ZERO2MV(dst) memset(dst, 0, 2 * sizeof(union mv))
+
+PACKED(typedef union refpair {
+    int8_t ref[2];
+    int16_t pair;
+}) ALIGN(refpair, 2);
+CHECK_SIZE(refpair, 2);
 
 enum MotionMode {
     MM_TRANSLATION,
@@ -327,7 +334,8 @@ typedef struct Av2Block {
                 };
             };
             uint8_t comp_type, inter_mode, motion_mode, warp_ii;
-            int8_t cwp_idx, ref[2];
+            int8_t cwp_idx;
+            union refpair ref;
             uint8_t bawp[2], filter;
             uint8_t refine_mv; // 1 = enabled, 2 = implicitly enabled
         }; // inter

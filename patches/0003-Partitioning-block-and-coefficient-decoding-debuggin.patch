@@ -1,4 +1,4 @@
-From 3bd6b4568d9454bfb984a9fd1e4a0cca6aceec37 Mon Sep 17 00:00:00 2001
+From 86f630d4be04142451b9890536000618a7317b0a Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -35,7 +35,7 @@ index 060e8ef70b..546a157ffb 100644
        const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
        const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av2/common/mvref_common.c b/av2/common/mvref_common.c
-index cada655229..5fd40cbb63 100644
+index cada655229..eaa70cf9e1 100644
 --- a/av2/common/mvref_common.c
 +++ b/av2/common/mvref_common.c
 @@ -12,6 +12,8 @@
@@ -548,7 +548,7 @@ index cada655229..5fd40cbb63 100644
 +                                   cand_idx,
 +                                   this_refmv[candidate_ref_idx0].as_mv.row,
 +                                   this_refmv[candidate_ref_idx0].as_mv.col,
-+                                   1 + rf[candidate_ref_idx0],
++                                   rf[candidate_ref_idx0],
 +                                   mi_row_cand - mi_row, mi_col_cand - mi_col);
                  break;
                }
@@ -563,7 +563,7 @@ index cada655229..5fd40cbb63 100644
 +                                 *single_mv_count,
 +                                 this_refmv[candidate_ref_idx0].as_mv.row,
 +                                 this_refmv[candidate_ref_idx0].as_mv.col,
-+                                 1 + rf[candidate_ref_idx0],
++                                 rf[candidate_ref_idx0],
 +                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
                ++(*single_mv_count);
              }
@@ -578,7 +578,7 @@ index cada655229..5fd40cbb63 100644
 +                                 *single_mv_count,
 +                                 this_refmv[candidate_ref_idx0].as_mv.row,
 +                                 this_refmv[candidate_ref_idx0].as_mv.col,
-+                                 1 + rf[candidate_ref_idx0],
++                                 rf[candidate_ref_idx0],
 +                                 mi_row_cand - mi_row, mi_col_cand - mi_col);
                ++(*single_mv_count);
              }

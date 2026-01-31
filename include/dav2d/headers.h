@@ -427,7 +427,7 @@ typedef struct Dav2dFrameHeader {
             int8_t y, x;
         } gmv;
         uint8_t subpel_filter;
-        uint8_t refs[2];
+        int8_t ref[2];
     } tip;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {

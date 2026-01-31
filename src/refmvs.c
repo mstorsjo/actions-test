@@ -192,13 +192,13 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                   struct refmvs_state *const st,
                                   const int weight, const refmvs_block *const b,
                                   ptrdiff_t off_y_8x8, ptrdiff_t off_x_8x8,
-                                  const union refmvs_refpair ref, const mv gmv[2])
+                                  const union refpair ref, const mv gmv[2])
 {
     if (*st->cnt >= 6) return;
     if (b->mv[0].y == INVALID_MV) return; // intra block, no intrabc
 
     const refmvs_frame *const rf = rt->rf;
-    if (b->ref.ref[0] - 1 == TIP_FRAME) {
+    if (b->ref.ref[0] == TIP_FRAME) {
         const int tip16 = rf->frm_hdr->tip.frame_mode == 2 ?
             !rf->seq_hdr->tip_refine_mv ||
                 rf->frm_hdr->tip.subpel_filter != DAV2D_FILTER_8TAP_SHARP :
@@ -213,7 +213,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
     const ptrdiff_t off_8x8 = rf->rp_stride * off_y_8x8 + off_x_8x8;
 
     if (ref.ref[1] == -1) {
-        for (int n = 0; n < 2; n++) {
+        const int num = 1 + (ref.ref[0] >= 0);
+        for (int n = 0; n < num; n++) {
             if (b->ref.ref[n] == ref.ref[0]) {
                 const mv cand_mv = ((b->mf & 1) && gmv[0].y != INVALID_MV) ?
                                    gmv[0] : b->mv[n];
@@ -221,12 +222,12 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                            y_off, x_off, "spc", n)
                                    st->mv, st->cnt, 6, weight, cand_mv,
                                    y_off, x_off, &st->iter_cntr, 16);
-            } else if (b->ref.ref[0] - 1 == TIP_FRAME &&
-                       rf->frm_hdr->tip.refs[n] == ref.ref[0] - 1)
+            } else if (b->ref.ref[0] == TIP_FRAME &&
+                       rf->tip.ref.ref[n] == ref.ref[0])
             {
                 union mv tmv = rt->rp_proj[off_8x8].mv;
                 if (tmv.y == INVALID_MV) tmv.n = 0;
-                const mv tipmv = scale_mv(tmv, rf->tip_sf[n]);
+                const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                 const mv cand_mv = (mv) {
                     .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
                     .x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff),
@@ -235,15 +236,14 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                            y_off, x_off, "tip-spc", n)
                                    st->mv, st->cnt, 6, weight, cand_mv,
                                    y_off, x_off, &st->iter_cntr, 16);
-            } else if (ref.ref[0] - 1 == TIP_FRAME &&
-                       b->ref.ref[0] - 1 == rf->frm_hdr->tip.refs[0] &&
-                       b->ref.ref[1] - 1 == rf->frm_hdr->tip.refs[1])
+            } else if (ref.ref[0] == TIP_FRAME &&
+                       b->ref.pair == rf->tip.ref.pair)
             {
                 const mv in_delta = (mv) {
                     .y = b->mv[0].y - b->mv[1].y,
                     .x = b->mv[0].x - b->mv[1].x,
                 };
-                const mv out_delta = scale_mv(in_delta, rf->tip_sf[0]);
+                const mv out_delta = scale_mv(in_delta, rf->tip.sf[0]);
                 const mv cand_mv = (mv) {
                     .y = iclip(b->mv[0].y - out_delta.y, -0xffff, 0xffff),
                     .x = iclip(b->mv[0].x - out_delta.x, -0xffff, 0xffff),
@@ -254,29 +254,29 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                    0, 0, &st->drvd_iter_cntr, 2);
                 break;
             } else if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
-                       ref.ref[0] - 1U < TIP_FRAME &&
-                       (b->ref.ref[0] - 1U == TIP_FRAME ||
-                        b->ref.ref[n] - 1U < TIP_FRAME) &&
-                       rt->rp_traj[ref.ref[0] - 1][st->b8x8].y != INVALID_MV &&
-                       rt->rp_traj[b->ref.ref[0] - 1 == TIP_FRAME ?
-                                   rf->frm_hdr->tip.refs[n] :
-                                   b->ref.ref[n] - 1][st->b8x8].y != INVALID_MV)
+                       (unsigned) ref.ref[0] < TIP_FRAME &&
+                       (b->ref.ref[0] == TIP_FRAME ||
+                        (unsigned) b->ref.ref[n] < TIP_FRAME) &&
+                       rt->rp_traj[ref.ref[0]][st->b8x8].y != INVALID_MV &&
+                       rt->rp_traj[b->ref.ref[0] == TIP_FRAME ?
+                                   rf->tip.ref.ref[n] :
+                                   b->ref.ref[n]][st->b8x8].y != INVALID_MV)
             {
                 mv a_mv, b_mv;
-                if (b->ref.ref[0] - 1 == TIP_FRAME) {
-                    a_mv = rt->rp_traj[rf->frm_hdr->tip.refs[n]][st->b8x8];
+                if (b->ref.ref[0] == TIP_FRAME) {
+                    a_mv = rt->rp_traj[rf->tip.ref.ref[n]][st->b8x8];
                     union mv tmv = rt->rp_proj[off_8x8].mv;
                     if (tmv.y == INVALID_MV) tmv.n = 0;
-                    const mv tipmv = scale_mv(tmv, rf->tip_sf[n]);
+                    const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                     b_mv = (mv) {
                         .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
                         .x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff),
                     };
                 } else {
-                    a_mv = rt->rp_traj[b->ref.ref[n] - 1][st->b8x8];
+                    a_mv = rt->rp_traj[b->ref.ref[n]][st->b8x8];
                     b_mv = b->mv[n];
                 }
-                const mv c_mv = rt->rp_traj[ref.ref[0] - 1][st->b8x8];
+                const mv c_mv = rt->rp_traj[ref.ref[0]][st->b8x8];
                 const mv cand_mv = (mv) {
                     .y = iclip(b_mv.y + c_mv.y - a_mv.y, -0xffff, 0xffff),
                     .x = iclip(b_mv.x + c_mv.x - a_mv.x, -0xffff, 0xffff),
@@ -285,44 +285,43 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                            y_off, x_off, "mvtj-spc", n)
                                    st->dr, &st->drvd_cnt, 4, weight, cand_mv,
                                    0, 0, &st->drvd_iter_cntr, 2);
-            } else if (ref.ref[0] - 1U < (unsigned) TIP_FRAME && b->ref.ref[0] > 0 &&
-                       rf->ref_sign[ref.ref[0] - 1] ==
-                           rf->ref_sign[b->ref.ref[0] - 1U == TIP_FRAME ?
-                                            rf->frm_hdr->tip.refs[n] :
-                                            b->ref.ref[n] - 1])
+            } else if ((unsigned) ref.ref[0] < TIP_FRAME && b->ref.ref[0] >= 0 &&
+                       rf->ref_sign[ref.ref[0]] ==
+                           rf->ref_sign[b->ref.ref[0] == TIP_FRAME ?
+                                            rf->tip.ref.ref[n] :
+                                            b->ref.ref[n]])
             {
                 mv cand_mv;
                 int den;
-                if (b->ref.ref[0] - 1U == TIP_FRAME) {
+                if ((unsigned) b->ref.ref[0] == TIP_FRAME) {
                     union mv tmv = rt->rp_proj[off_8x8].mv;
                     if (tmv.y == INVALID_MV) tmv.n = 0;
-                    const mv tipmv = scale_mv(tmv, rf->tip_sf[n]);
+                    const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                     cand_mv = (mv) {
                         .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
                         .x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff),
                     };
-                    den = rf->abspocdiff[rf->frm_hdr->tip.refs[n]];
+                    den = rf->abspocdiff[rf->tip.ref.ref[n]];
                 } else {
                     cand_mv = b->mv[n];
-                    den = rf->abspocdiff[b->ref.ref[n] - 1];
+                    den = rf->abspocdiff[b->ref.ref[n]];
                 }
-                cand_mv = dav2d_mv_projection(cand_mv, rf->abspocdiff[ref.ref[0] - 1],
+                cand_mv = dav2d_mv_projection(cand_mv, rf->abspocdiff[ref.ref[0]],
                                               den, -0xffff, 0xffff);
                 add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "lnr-spc", n)
                                    st->dr, &st->drvd_cnt, 4, weight, cand_mv,
                                    0, 0, &st->drvd_iter_cntr, 2);
             }
-            if (b->ref.ref[1] < 0 && b->ref.ref[0] - 1 != TIP_FRAME) break;
+            if (b->ref.ref[1] < 0 && b->ref.ref[0] != TIP_FRAME) break;
         }
-    } else if (b->ref.ref[0] - 1 == TIP_FRAME &&
-               ref.ref[0] - 1 == rf->frm_hdr->tip.refs[0] &&
-               ref.ref[1] - 1 == rf->frm_hdr->tip.refs[1])
+    } else if (b->ref.ref[0] == TIP_FRAME &&
+               ref.pair == rf->tip.ref.pair)
     {
         mv tmv = rt->rp_proj[off_8x8].mv;
         if (tmv.y == INVALID_MV) tmv.n = 0;
-        const mv tip0mv = scale_mv(tmv, rf->tip_sf[0]);
-        const mv tip1mv = scale_mv(tmv, rf->tip_sf[1]);
+        const mv tip0mv = scale_mv(tmv, rf->tip.sf[0]);
+        const mv tip1mv = scale_mv(tmv, rf->tip.sf[1]);
         const union mv cand_mv[2] = {
             [0] = {
                 .y = iclip(tip0mv.y + b->mv[0].y, -0xffff, 0xffff),
@@ -347,14 +346,14 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                            cand_mv, &st->iter_cntr, 16);
     } else {
         if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
-            b->ref.ref[0] - 1 != TIP_FRAME && ref.ref[0] != ref.ref[1] &&
-            rt->rp_traj[ref.ref[0] - 1][st->b8x8].y != INVALID_MV &&
-            rt->rp_traj[ref.ref[1] - 1][st->b8x8].y != INVALID_MV)
+            b->ref.ref[0] != TIP_FRAME && ref.ref[0] != ref.ref[1] &&
+            rt->rp_traj[ref.ref[0]][st->b8x8].y != INVALID_MV &&
+            rt->rp_traj[ref.ref[1]][st->b8x8].y != INVALID_MV)
         {
-            const mv b1_mv = rt->rp_traj[ref.ref[0] - 1][st->b8x8];
-            const mv b2_mv = rt->rp_traj[ref.ref[1] - 1][st->b8x8];
-            for (int n = 0; n < 2 && b->ref.ref[n] > 0; n++) {
-                const mv a_mv = rt->rp_traj[b->ref.ref[n] - 1][st->b8x8];
+            const mv b1_mv = rt->rp_traj[ref.ref[0]][st->b8x8];
+            const mv b2_mv = rt->rp_traj[ref.ref[1]][st->b8x8];
+            for (int n = 0; n < 2 && b->ref.ref[n] >= 0; n++) {
+                const mv a_mv = rt->rp_traj[b->ref.ref[n]][st->b8x8];
                 if (a_mv.y == INVALID_MV) continue;
                 const union mv cand_mv[2] = {
                     [0] = {
@@ -373,7 +372,6 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                            y_off, x_off, "mvtj-spc")
                                    st->dr, &st->drvd_cnt, 4, weight, 8,
                                    cand_mv, &st->drvd_iter_cntr, 2);
-                if (b->ref.ref[1] <= 0) break;
             }
         }
 
@@ -446,30 +444,30 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
                                   struct refmvs_state *const st,
                                   const ptrdiff_t off_8x8,
                                   DB_ARGS(const int x_off, const int y_off)
-                                  const union refmvs_refpair ref)
+                                  const union refpair ref)
 {
     const refmvs_frame *const rf = rt->rf;
 
-    if (ref.ref[0] - 1 == TIP_FRAME || !ref.ref[0] /* intrabc */) return 0;
-    union mv mv = rt->rp_traj[ref.ref[0] - 1][off_8x8];
+    if ((unsigned) ref.ref[0] >= TIP_FRAME) return 0;
+    union mv mv = rt->rp_traj[ref.ref[0]][off_8x8];
     if (mv.y == INVALID_MV) {
         mv = rt->rp_proj[off_8x8].mv;
         if (mv.y == INVALID_MV) return 0;
-        mv = dav2d_mv_projection(mv, rf->pocdiff[ref.ref[0] - 1],
+        mv = dav2d_mv_projection(mv, rf->pocdiff[ref.ref[0]],
                                  rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
     }
 
     if (ref.ref[1] == -1) {
-        const int weight = 1 + (rf->abspocdiff[ref.ref[0] - 1] <= 2);
+        const int weight = 1 + (rf->abspocdiff[ref.ref[0]] <= 2);
         return add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4, y_off, x_off, "tpl", 0)
                                   st->mv, st->cnt, 6, weight, mv, 0, 0,
                                   &st->iter_cntr, 16);
     }
-    union mv mv2 = rt->rp_traj[ref.ref[1] - 1][off_8x8];
+    union mv mv2 = rt->rp_traj[ref.ref[1]][off_8x8];
     if (mv2.y == INVALID_MV) {
         mv2 = rt->rp_proj[off_8x8].mv;
         if (mv2.y == INVALID_MV) return 0;
-        mv2 = dav2d_mv_projection(mv2, rf->pocdiff[ref.ref[1] - 1],
+        mv2 = dav2d_mv_projection(mv2, rf->pocdiff[ref.ref[1]],
                                   rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
     }
     const union mv cand_mv[2] = { [0] = mv, [1] = mv2 };
@@ -563,7 +561,7 @@ static ALWAYS_INLINE mv get_warpmv_proj(const refmvs_block *const r,
 
 void dav2d_refmvs_find(const refmvs_tile *const rt,
                        refmvs_candidate mvstack[6], int32_t (*const warp)[7],
-                       int *const cnt, const union refmvs_refpair ref,
+                       int *const cnt, const union refpair ref,
                        const enum BlockSize bs, const int skip_mode,
                        const int by4, const int bx4)
 {
@@ -572,26 +570,26 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     const int bw4 = b_dim[0], w4 = imin(bw4, rt->tile_col.end - bx4);
     const int bh4 = b_dim[1], h4 = imin(bh4, rt->tile_row.end - by4);
     mv gmv[2];
-    const int comp = ref.ref[1] > 0;
+    const int comp = ref.ref[1] >= 0;
 
     DEBUG_REFMV_printf("setup_ref_mv_list(%d,%d) for y=%d,x=%d\n",
-                       ref.ref[0] - 1, ref.ref[1] - (ref.ref[1] >= 0), by4, bx4);
+                       ref.ref[0], ref.ref[1], by4, bx4);
 
     *cnt = 0;
     if (warp) cnt[1] = 0;
-    assert(ref.ref[0] >=  0 && ref.ref[0] <= 8 &&
-           ref.ref[1] >= -1 && ref.ref[1] <= 7);
-    gmv[0] = (unsigned) (ref.ref[0] - 1) >= (unsigned) TIP_FRAME ? (mv) { .n = 0 } :
-             get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[0] - 1],
+    assert(ref.ref[0] >= -1 && ref.ref[0] <= TIP_FRAME &&
+           ref.ref[1] >= -1 && ref.ref[1] < TIP_FRAME);
+    gmv[0] = (unsigned) ref.ref[0] >= TIP_FRAME ? (mv) { .n = 0 } :
+             get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[0]],
                         bx4, by4, bw4, bh4, rf->iw4, rf->ih4, rf->frm_hdr);
     if (comp) {
-        gmv[1] = get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[1] - 1],
+        gmv[1] = get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[1]],
                             bx4, by4, bw4, bh4, rf->iw4, rf->ih4, rf->frm_hdr);
         DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d, y2=%d,x2=%d\n",
                            gmv[0].y, gmv[0].x, gmv[1].y, gmv[1].x);
     } else {
         gmv[1].n = 0;
-        if (ref.ref[0] > 0)
+        if (ref.ref[0] >= 0)
             DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d\n", gmv[0].y, gmv[0].x);
     }
 
@@ -889,13 +887,13 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 
     DEBUG_REFMV_printf("Derived Spatial MVP & refbank [%d|%d]\n",
                        *cnt, warp ? cnt[1] : 0);
-    const int lim = 1 + (ref.ref[0] ? rf->frm_hdr->max_drl_bits :
-                                      rf->frm_hdr->max_bvp_drl_bits);
+    const int lim = 1 + (ref.ref[0] >= 0 ? rf->frm_hdr->max_drl_bits :
+                                            rf->frm_hdr->max_bvp_drl_bits);
     if (ref.ref[1] != -1 && *cnt < lim)
         add_derived(DB_ARGS(rf, "derived") &st, lim, 1);
     if (rf->seq_hdr->refmv_bank) {
-        const int c = ref.ref[1] == -1 ? (ref.ref[0] - 1U <= 5U ? ref.ref[0] - 1 : 8) :
-                      (ref.ref[0] == 1 && ref.ref[1] <= 2) ? 5 + ref.ref[1] : 8;
+        const int c = ref.ref[1] == -1 ? ((unsigned) ref.ref[0] <= 5U ? ref.ref[0] : 8) :
+                      (!ref.ref[0] && ref.ref[1] < 2) ? 6 + ref.ref[1] : 8;
         const int sz = rt->bank.size[c], idx = rt->bank.idx[c];
         const int start = sz + idx - 1;
         for (int n = 0; n < sz && *cnt < lim; n++) {
@@ -936,7 +934,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
                                comp ? mv[1].x : 0, 0);
             COPY2MV(mvstack[last].mv, mv);
             mvstack[last].weight = 0;
-            if (ref.ref[1] > 0)
+            if (ref.ref[1] >= 0)
                 mvstack[last].cwp_idx = rt->bank.cwp_idx[c - 6][bank_idx];
             mvstack[last].y_off = mvstack[last].x_off = 0;
             *cnt = last + 1;
@@ -950,14 +948,14 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
         union mv *const mv = mvstack[n].mv;
         mv[0].y = iclip(mv[0].y, miny, maxy);
         mv[0].x = iclip(mv[0].x, minx, maxx);
-        if (ref.ref[1] > 0) {
+        if (ref.ref[1] >= 0) {
             mv[1].y = iclip(mv[1].y, miny, maxy);
             mv[1].x = iclip(mv[1].x, minx, maxx);
         }
     }
 
     DEBUG_REFMV_printf("GMVs [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
-    if (*cnt < 6 && ref.ref[0] > 0) {
+    if (*cnt < 6 && ref.ref[0] >= 0) {
         int last = *cnt;
         RDB_ONLY(int did_check = 0;)
         if (st.iter_cntr < 16) {
@@ -999,7 +997,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
                         const int yidx = ext_mvp[n].y, xidx = ext_mvp[n].x;
                         st.dr[n].mv[0].y = mvstack[yidx].mv[0].y;
                         st.dr[n].mv[0].x = mvstack[xidx].mv[0].x;
-                        if (ref.ref[1] > 0) {
+                        if (ref.ref[1] >= 0) {
                             st.dr[n].mv[1].y = mvstack[yidx].mv[1].y;
                             st.dr[n].mv[1].x = mvstack[xidx].mv[1].x;
                         }
@@ -1009,22 +1007,22 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
                     st.drvd_cnt = n;
                     if (*cnt == 2) break;
                 }
-                add_derived(DB_ARGS(rf, "insert_cand") &st, 6, ref.ref[1] > 0);
+                add_derived(DB_ARGS(rf, "insert_cand") &st, 6, ref.ref[1] >= 0);
             }
         }
     }
 
     if (warp && cnt[1] < 4) {
-        assert(ref.ref[0] > 0 && ref.ref[0] <= 7 && ref.ref[1] == -1);
+        assert((unsigned) ref.ref[0] < TIP_FRAME && ref.ref[1] == -1);
 
         DEBUG_REFMV_printf("Warp bank [%d|%d]\n", *cnt, cnt[1]);
-        const int sz = rt->warp.size[ref.ref[0] - 1];
-        const int idx = rt->warp.idx[ref.ref[0] - 1];
+        const int sz = rt->warp.size[ref.ref[0]];
+        const int idx = rt->warp.idx[ref.ref[0]];
         const int start = sz + idx - 1;
         for (int n = 0; n < sz && cnt[1] < 4; n++) {
             const int32_t *const mat =
-                rt->warp.mat[ref.ref[0] - 1][(start - n) & 3];
-            warp[cnt[1]][6] = rt->warp.type[ref.ref[0] - 1][(start - n) & 3];
+                rt->warp.mat[ref.ref[0]][(start - n) & 3];
+            warp[cnt[1]][6] = rt->warp.type[ref.ref[0]][(start - n) & 3];
             DEBUG_REFMV_printf("Bank[%d/%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
                                n, cnt[1], mat[0], mat[1], mat[2],
                                mat[3], mat[4], mat[5], warp[cnt[1]][6]);
@@ -1033,8 +1031,8 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 
         DEBUG_REFMV_printf("Warp gmv [%d|%d]\n", *cnt, cnt[1]);
         if (cnt[1] < 4) {
-            const int32_t *const mat = rf->frm_hdr->gmv[ref.ref[0] - 1].matrix;
-            warp[cnt[1]][6] = rf->frm_hdr->gmv[ref.ref[0] - 1].type;
+            const int32_t *const mat = rf->frm_hdr->gmv[ref.ref[0]].matrix;
+            warp[cnt[1]][6] = rf->frm_hdr->gmv[ref.ref[0]].type;
             DEBUG_REFMV_printf("GMV[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
                                cnt[1], mat[0], mat[1], mat[2],
                                mat[3], mat[4], mat[5], warp[cnt[1]][6]);
@@ -1057,7 +1055,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 
     // default intrabc refs
     int n_refmvs = *cnt;
-    if (!ref.ref[0]) {
+    if (ref.ref[0] == -1) {
         DEBUG_REFMV_printf("Intrabc defaults [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
 
         if (n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
@@ -1225,7 +1223,7 @@ static void debug_refbank(const refmvs_tile *const rt, const int c,
     const int start = idx + sz - 1;
     for (int n = 0; n < sz; n++) {
         const int idx = (start - n) & 3;
-        const refmvs_refpair ref = rt->bank.ref[idx];
+        const union refpair ref = rt->bank.ref[idx];
         const int comp = c - 6U < 2U || (c == 8 && ref.ref[1] != -1);
         DEBUG_REFMV_printf("refbank[%d/%d,c=%d]: mv=y:%d,x:%d,y2=%d,x2=%d,r=%d,%d\n",
                            n, sz, c,
@@ -1233,8 +1231,8 @@ static void debug_refbank(const refmvs_tile *const rt, const int c,
                            rt->bank.mv[c][idx][0].x,
                            comp ? rt->bank.mv[c][idx][1].y : 0,
                            comp ? rt->bank.mv[c][idx][1].x : 0,
-                           c < 6 ? c : c < 8 ? 0 : ref.ref[0] - 1,
-                           c < 6 ? -1 : c < 8 ? c - 6 : ref.ref[1] - (ref.ref[1] > 0));
+                           c < 6 ? c : c < 8 ? 0 : ref.ref[0],
+                           c < 6 ? -1 : c < 8 ? c - 6 : ref.ref[1]);
     }
 }
 #else
@@ -1243,24 +1241,23 @@ static void debug_refbank(const refmvs_tile *const rt, const int c,
 
 static void refmvs_bank_add(refmvs_tile *const rt,
                             DB_ONLY(const int by4, const int bx4)
-                            const int8_t ref[2], const union mv mv[2],
+                            const union refpair ref, const union mv mv[2],
                             const int cwp_idx)
 {
     RDB_ONLY(const refmvs_frame *const rf = rt->rf);
 
     rt->bank.hits[0]++;
 
-    const int c = ref[1] == -1 ? ((unsigned) ref[0] <= 5U ? ref[0] : 8) :
-                  (!ref[0] && ref[1] <= 1) ? 6 + ref[1] : 8;
+    const int c = ref.ref[1] == -1 ? ((unsigned) ref.ref[0] <= 5U ? ref.ref[0] : 8) :
+                  (!ref.ref[0] && ref.ref[1] <= 1) ? 6 + ref.ref[1] : 8;
     const int sz = rt->bank.size[c], idx = rt->bank.idx[c];
-    const int comp = ref[1] != -1;
+    const int comp = ref.ref[1] != -1;
     int n;
     for (n = 0; n < sz; n++) {
         const int i = (idx + n) & 3;
         if (mv[0].n == rt->bank.mv[c][i][0].n &&
             mv[comp].n == rt->bank.mv[c][i][comp].n &&
-            (c < 8 || (ref[0] + 1 == rt->bank.ref[i].ref[0] &&
-                       ref[comp] + 1 == rt->bank.ref[i].ref[comp])))
+            (c < 8 || ref.pair == rt->bank.ref[i].pair))
         {
             break;
         }
@@ -1275,20 +1272,20 @@ static void refmvs_bank_add(refmvs_tile *const rt,
         if (from != to) {
             union mv mv_bak[2];
             COPY2MV(mv_bak, rt->bank.mv[c][from]);
-            refmvs_refpair ref_bak = rt->bank.ref[from];
+            union refpair ref_bak = rt->bank.ref[from];
             const int cwp_idx = rt->bank.cwp_idx[imax(0, c - 6)][from];
             for (int n1 = from, n2 = (n1 + 1) & 3; n1 != to;
                  n1 = n2, n2 = (n2 + 1) & 3)
             {
                 COPY2MV(rt->bank.mv[c][n1], rt->bank.mv[c][n2]);
                 if (c == 8)
-                    rt->bank.ref[n1].pair = rt->bank.ref[n2].pair;
+                    rt->bank.ref[n1] = rt->bank.ref[n2];
                 if (c >= 6)
                     rt->bank.cwp_idx[c - 6][n1] = rt->bank.cwp_idx[c - 6][n2];
             }
             COPY2MV(rt->bank.mv[c][to], mv_bak);
             if (c == 8)
-                rt->bank.ref[to].pair = ref_bak.pair;
+                rt->bank.ref[to] = ref_bak;
             if (c >= 6)
                 rt->bank.cwp_idx[c - 6][to] = cwp_idx;
         }
@@ -1298,11 +1295,9 @@ static void refmvs_bank_add(refmvs_tile *const rt,
 
     const int tgt = sz == 4 ? rt->bank.idx[c]++ & 3 : rt->bank.size[c]++;
     COPY2MV(rt->bank.mv[c][tgt], mv);
-    if (c == 8) {
-        rt->bank.ref[tgt].ref[0] = ref[0] + 1;
-        rt->bank.ref[tgt].ref[1] = ref[1] + (ref[1] >= 0);
-    }
-    if (ref[1] != -1)
+    if (c == 8)
+        rt->bank.ref[tgt] = ref;
+    if (ref.ref[1] != -1)
         rt->bank.cwp_idx[c - 6][tgt] = cwp_idx;
     DEBUG_REFMV_printf("Adding new refbank entry in %d | remain=%d|hits=%d|%d\n",
                        tgt, rt->bank.avail, rt->bank.hits[1], rt->bank.hits[0]);
@@ -1330,7 +1325,7 @@ void dav2d_refmvs_bank_add(refmvs_tile *const rt, const enum BlockSize bs,
     rt->bank.hits[1]++;
     rt->bank.avail--;
     refmvs_bank_add(rt, DB_ONLY(by4, bx4) b->ref, b->mv,
-                    b->ref[1] == -1 ? 0 : b->cwp_idx);
+                    b->ref.ref[1] == -1 ? 0 : b->cwp_idx);
 }
 
 void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
@@ -1338,7 +1333,7 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     for (int y = by & 63; y < (by & 63) + rt->rf->sbsz; y++) {
         for (int x = bx & 127; x < (bx & 127) + rt->rf->sbsz; x++) {
             rt->r[y * 128 + x].mv[0].y = INVALID_MV;
-            rt->r[y * 128 + x].ref.ref[0] = -1;
+            rt->r[y * 128 + x].ref.pair = -1;
         }
     }
 
@@ -1361,11 +1356,9 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     for (int x = bx, sz4, hits = 0; x < end_x4; x += sz4) {
         const refmvs_block *const r = &rt->ra[x >> 1];
         sz4 = dav2d_block_dimensions[r->bs][0];
-        if (r->ref.ref[0] == -1) continue;
+        if (r->mv[0].y == INVALID_MV) continue;
         if (rf->seq_hdr->refmv_bank) {
-            int8_t ref[2];
-            ref[0] = r->ref.ref[0] - 1;
-            ref[1] = r->ref.ref[1] - (r->ref.ref[1] > 0);
+            union refpair ref = r->ref;
             refmvs_bank_add(rt, DB_ONLY(by, x) ref,
                             r->mf & 2 ? r->lmv : r->mv, r->mf >> 2);
         }
@@ -1374,7 +1367,7 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
             wmp.type = r->warp_type;
             if (wmp.type != DAV2D_WM_TYPE_INVALID) {
                 memcpy(wmp.matrix, r->m, sizeof(int32_t) * 6);
-                dav2d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0] - 1);
+                dav2d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0]);
             }
         }
         if (++hits == 4) break;
@@ -1413,9 +1406,9 @@ static void tip_projection(const refmvs_frame *const rf,
                 const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_proj[pos].mv;
                 if (mv.y == INVALID_MV) continue;
-                rp_proj[pos].mv = dav2d_mv_projection(mv, rf->tip_delta,
+                rp_proj[pos].mv = dav2d_mv_projection(mv, rf->tip.delta,
                                                       rp_proj[pos].ref, -2047, 2047);
-                rp_proj[pos].ref = rf->tip_delta;
+                rp_proj[pos].ref = rf->tip.delta;
             }
         }
     }
@@ -1441,7 +1434,7 @@ static void fill_holes(const refmvs_frame *const rf,
 #define copy(off) do { \
                 if (rp_proj[pos + off].mv.y == INVALID_MV) { \
                     rp_proj[pos + off].mv = mv; \
-                    rp_proj[pos + off].ref = rf->tip_delta; \
+                    rp_proj[pos + off].ref = rf->tip.delta; \
                 } \
             } while (0)
                 if (x - tmvp_sample_step >= sx)
@@ -1498,7 +1491,7 @@ static void smoothen(const refmvs_frame *const rf,
 #undef add
                 if (!first_line) {
                     rp_proj[pos - tmvp_sample_step * stride].mv = mv_line[x - sx];
-                    rp_proj[pos - tmvp_sample_step * stride].ref = rf->tip_delta;
+                    rp_proj[pos - tmvp_sample_step * stride].ref = rf->tip.delta;
                 }
                 if (sum_n) {
                     mv_line[x - sx].y = (int)((int64_t) sum_y * idiv[sum_n - 1] +
@@ -1514,7 +1507,7 @@ static void smoothen(const refmvs_frame *const rf,
             const ptrdiff_t pos_base = ((y - tmvp_sample_step) & (sbsz8 - 1)) * stride;
             for (int x = sx; x < xend; x += tmvp_sample_step) {
                 rp_proj[pos_base + x].mv = mv_line[x - sx];
-                rp_proj[pos_base + x].ref = rf->tip_delta;
+                rp_proj[pos_base + x].ref = rf->tip.delta;
             }
         }
     }
@@ -1851,16 +1844,16 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 const ptrdiff_t pos = (y & (sbsz8 - 1)) * stride + x;
                 const refmvs_temporal_block *rb = &r[pos];
                 const int b_ref = rb->ref.ref[ref_sign];
-                if (!b_ref) continue;
-                const int ref2idx = rf->mfmv_ref2idx[n][b_ref - 1];
+                if (b_ref == -1) continue;
+                const int ref2idx = rf->mfmv_ref2idx[n][b_ref];
                 mv b_mv = dequantize_mv(rb->mv.mv[ref_sign]);
                 if (b_mv.y == INVALID_MV) continue;
                 if (rf->seq_hdr->mv_traj && ref2idx != -1)
                     check_traj_intersect(rf, rp_traj, rp_map,
                                          ref, ref2idx, y, x, b_mv);
-                int ref2ref = rf->mfmv_ref2ref[n][b_ref - 1];
+                int ref2ref = rf->mfmv_ref2ref[n][b_ref];
                 if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
-                const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref - 1][0]);
+                const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref][0]);
                 int y1 = y - apply_sign(abs(mv1.y) >> 6, mv1.y);
                 if (y1 < 0 || y1 >= rf->ih8) continue;
                 y1 &= mask;
@@ -1891,7 +1884,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     do /* so we can "break" out of it, saves indentation */ {
                         if (ref2idx < 0) break;
                         const mv mv2 =
-                            scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref - 1][1]);
+                            scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref][1]);
                         rp_traj[ref2idx][pos1].y = iclip(mv2.y, -2047, 2047);
                         rp_traj[ref2idx][pos1].x = iclip(mv2.x, -2047, 2047);
                         int y2 = y + apply_sign(abs(b_mv.y) >> 6, b_mv.y);
@@ -2088,20 +2081,21 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     rf->ref_flip = flipmask;
 
     // tip setup
+    memcpy(rf->tip.ref.ref, frm_hdr->tip.ref, 2);
     if (rf->frm_hdr->tip.frame_mode) {
-        const unsigned tip0poc = ref_poc[frm_hdr->tip.refs[0]];
-        const unsigned tip1poc = ref_poc[frm_hdr->tip.refs[1]];
+        const unsigned tip0poc = ref_poc[rf->tip.ref.ref[0]];
+        const unsigned tip1poc = ref_poc[rf->tip.ref.ref[1]];
         const int d2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                     tip1poc, tip0poc);
-        rf->tip_delta = d2;
+        rf->tip.delta = d2;
         assert(d2 > 0);
-        const int d1 = rf->pocdiff[frm_hdr->tip.refs[0]];
+        const int d1 = rf->pocdiff[rf->tip.ref.ref[0]];
         const int dv = div_mult[imin(abs(d2), 31)];
-        rf->tip_sf[0] = imin(abs(d1), 31) * dv;
-        if ((d1 < 0) ^ (d2 < 0)) rf->tip_sf[0] *= -1;
-        const int d3 = rf->pocdiff[frm_hdr->tip.refs[1]];
-        rf->tip_sf[1] = imin(abs(d3), 31) * dv;
-        if ((d3 < 0) ^ (d2 < 0)) rf->tip_sf[1] *= -1;
+        rf->tip.sf[0] = imin(abs(d1), 31) * dv;
+        if ((d1 < 0) ^ (d2 < 0)) rf->tip.sf[0] *= -1;
+        const int d3 = rf->pocdiff[rf->tip.ref.ref[1]];
+        rf->tip.sf[1] = imin(abs(d3), 31) * dv;
+        if ((d3 < 0) ^ (d2 < 0)) rf->tip.sf[1] *= -1;
     }
 
     // temporal MV setup
@@ -2138,20 +2132,20 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         for (int n = 0; n < frm_hdr->n_ref_frames; n++)
             if (!rp_ref[n]) ref_done[n][0] = ref_done[n][1] = 1;
 
-        if (seq_hdr->tip && (rf->ref_sign[frm_hdr->tip.refs[0]] ||
-                             rf->ref_sign[frm_hdr->tip.refs[1]]))
+        if (seq_hdr->tip && (rf->ref_sign[rf->tip.ref.ref[0]] ||
+                             rf->ref_sign[rf->tip.ref.ref[1]]))
         {
-            const int o = rev_topo_order[frm_hdr->tip.refs[0]] >
-                              rev_topo_order[frm_hdr->tip.refs[1]];
+            const int o = rev_topo_order[rf->tip.ref.ref[0]] >
+                              rev_topo_order[rf->tip.ref.ref[1]];
             const int dir = get_poc_diff(seq_hdr->order_hint_n_bits,
-                                         ref_poc[frm_hdr->tip.refs[!o]],
-                                         ref_poc[frm_hdr->tip.refs[o]]) < 0;
+                                         ref_poc[rf->tip.ref.ref[!o]],
+                                         ref_poc[rf->tip.ref.ref[o]]) < 0;
             rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
-                .ref = frm_hdr->tip.refs[!o],
-                .tgt = frm_hdr->tip.refs[o],
+                .ref = rf->tip.ref.ref[!o],
+                .tgt = rf->tip.ref.ref[o],
                 .dir = dir,
             };
-            ref_done[frm_hdr->tip.refs[!o]][dir] = 1;
+            ref_done[rf->tip.ref.ref[!o]][dir] = 1;
         }
         // adjacent refs
         for (int n = 0; n < 2; n++) {
@@ -2353,7 +2347,7 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             s_src->oy4--;
             t_dst[x >> 1].mv.n = t_src->mv.n;
             t_dst[x >> 1].ref.pair = t_src->mv.n == INVALID_TRAJ * 0x10001U ?
-                                     0 : t_src->ref.pair;
+                                      -1 : t_src->ref.pair;
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
         }
@@ -2418,15 +2412,15 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             s_src->oy4--;
             if (t_src->mv.mv[0].n == INVALID_TRAJ) {
                 if (t_src->mv.mv[1].n == INVALID_TRAJ) {
-                    t_dst[x >> 1].ref.pair = 0;
+                    t_dst[x >> 1].ref.pair = -1;
                 } else {
                     t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = t_src->ref.ref[1] * 0x101U;
+                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101U;
                 }
             } else {
                 if (t_src->mv.mv[1].n == INVALID_TRAJ) {
                     t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = t_src->ref.ref[0] * 0x101U;
+                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101U;
                 } else {
                     t_dst[x >> 1] = *t_src;
                 }
@@ -2473,18 +2467,18 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 const int m = t_src->mv.mv[idx].n;
                 t_dst[x >> 1].mv.n = m * 0x10001U;
                 t_dst[x >> 1].ref.pair =
-                    (m != INVALID_TRAJ) * t_src->ref.ref[idx] * 0x101U;
+                    (m == INVALID_TRAJ) ? -1 : (uint8_t) t_src->ref.ref[idx] * 0x101U;
             } else if (t_src->mv.mv[0].n == INVALID_TRAJ) {
                 if (t_src->mv.mv[1].n == INVALID_TRAJ) {
                     t_dst[x >> 1].mv.n = INVALID_TRAJ * 0x10001U;
-                    t_dst[x >> 1].ref.pair = 0;
+                    t_dst[x >> 1].ref.pair = -1;
                 } else {
                     t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = t_src->ref.ref[1] * 0x101U;
+                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101U;
                 }
             } else if (t_src->mv.mv[1].n == INVALID_TRAJ) {
                 t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
-                t_dst[x >> 1].ref.pair = t_src->ref.ref[0] * 0x101U;
+                t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101U;
             } else {
                 t_dst[x >> 1] = *t_src;
             }

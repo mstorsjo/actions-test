@@ -55,12 +55,6 @@ PACKED(typedef struct refmvs_sngl_mv_block {
 }) refmvs_sngl_mv_block;
 CHECK_SIZE(refmvs_sngl_mv_block, 9);
 
-PACKED(typedef union refmvs_refpair {
-    int8_t ref[2]; // [0] = 0: intra=1, [1] = -1: comp=0
-    uint16_t pair;
-}) ALIGN(refmvs_refpair, 2);
-CHECK_SIZE(refmvs_refpair, 2);
-
 PACKED(typedef struct refmvs_temporal_block {
     union {
         union qmv {
@@ -71,7 +65,7 @@ PACKED(typedef struct refmvs_temporal_block {
         } mv[2];
         uint32_t n;
     } mv;
-    refmvs_refpair ref;
+    union refpair ref;
 }) ALIGN(refmvs_temporal_block, 2);
 CHECK_SIZE(refmvs_temporal_block, 6);
 
@@ -79,7 +73,7 @@ CHECK_SIZE(refmvs_temporal_block, 6);
 // from the (separately stored) warp matrix.
 typedef struct refmvs_block {
     union mv mv[2];
-    refmvs_refpair ref;
+    union refpair ref;
     uint8_t bs;
     int8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2-7: cwp_idx
     uint8_t ox4, oy4; // distance to top/left coordinates (in 4px units) of this block
@@ -97,8 +91,11 @@ typedef struct refmvs_frame {
     int sbsz /* in 4px units */;
     int mfmv_sbsz8, mfmv_edge, mfmv_k_shift;
     int use_ref_frame_mvs;
-    int32_t tip_sf[2];
-    int8_t tip_delta;
+    struct {
+        int32_t sf[2];
+        refpair ref;
+        int8_t delta;
+    } tip;
     uint8_t ref_sign[7];
     int8_t pocdiff[7];
     uint64_t ref_flip;
@@ -140,7 +137,7 @@ typedef struct refmvs_tile {
     struct {
         union mv mv[9][4][2];
         int8_t cwp_idx[3 /* class-6 */][4];
-        refmvs_refpair ref[4];
+        union refpair ref[4];
         uint8_t size[9], idx[9];
         uint8_t hits[2 /* sb, b */], avail;
     } bank;
@@ -258,7 +255,7 @@ int dav2d_refmvs_warp_add(refmvs_tile *rt, const Dav2dWarpedMotionParams *const 
 
 // call for each block
 void dav2d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],
-                       int32_t (*warp)[7], int *cnt, const refmvs_refpair ref,
+                       int32_t (*warp)[7], int *cnt, const union refpair ref,
                        enum BlockSize bs, int skip_mode, int by4, int bx4);
 
 void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *dsp);

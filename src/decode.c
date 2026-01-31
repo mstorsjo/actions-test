@@ -253,7 +253,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
 #define add_sample(dx, dy, sx, sy, rp) do { \
     const union mv *const rmv = (rp)->mf & 2 ? (rp)->lmv : (rp)->mv; \
     for (int n = 0; n < 2; n++) { \
-        if ((rp)->ref.ref[n] != ref + 1) continue; \
+        if ((rp)->ref.ref[n] != ref) continue; \
         pts[np][0][0] = 16 * (2 * (dx) + sx * bs(rp)[0]) - 8; \
         pts[np][0][1] = 16 * (2 * dy + sy * bs(rp)[1]) - 8; \
         pts[np][1][0] = pts[np][0][0] + rmv[n].x; \
@@ -355,10 +355,10 @@ static void extend_warpmv(Dav2dTaskContext *const t,
         else
             memcpy(m, r->m, sizeof(*m) * 6);
     } else if (r->mf & 1) {
-        memcpy(m, t->f->frame_hdr->gmv[b->ref[0]].matrix, sizeof(*m) * 6);
+        memcpy(m, t->f->frame_hdr->gmv[b->ref.ref[0]].matrix, sizeof(*m) * 6);
     } else {
         memcpy(&m[2], &dav2d_default_wm_params.matrix[2], sizeof(*m) * 4);
-        const int ref = r->ref.ref[0] - 1 != b->ref[0];
+        const int ref = r->ref.ref[0] != b->ref.ref[0];
         m[0] = r->mv[ref].x * (1 << 13);
         m[1] = r->mv[ref].y * (1 << 13);
     }
@@ -561,7 +561,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     refmvs_temporal_block t_src;
-    t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref[0] + 1;
+    t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref.ref[0];
     s_src.ref.ref[1] = -1;
     s_src.mv[1].y = INVALID_MV;
     s_src.bs = bs;
@@ -585,7 +585,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
         s_src.mf = b->inter_mode == GLOBALMV;
         // this is invalid for TIP, but that will be overwritten in tip_pred()
         t_src.mv.mv[0] = t_src.mv.mv[1] = quantize_mv(b->mv[0]);
-        if (t_src.mv.mv[0].n == INVALID_TRAJ) t_src.ref.pair = 0;
+        if (t_src.mv.mv[0].n == INVALID_TRAJ) t_src.ref.pair = -1;
         f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
     }
 }
@@ -599,7 +599,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
-        .ref.ref = { 0, -1 },
+        .ref.pair = -1,
         .mv[0] = b->mv[0],
         .mv[1].y = INVALID_MV,
         .bs = bs,
@@ -608,7 +608,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     refmvs_temporal_block t_src = {
-        .ref.pair = 0,
+        .ref.pair = -1,
         .mv.n = INVALID_TRAJ * 0x10001U,
     };
     f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
@@ -626,12 +626,12 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(s_src, 16);
-    const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref[0] * 8 + b->ref[1])));
+    const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref.ref[0] * 8 + b->ref.ref[1])));
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     refmvs_temporal_block t_src;
-    s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref[0] + 1;
-    s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref[1] + 1;
+    s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref.ref[0];
+    s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref.ref[1];
     s_src.bs = bs;
     s_src.subpel_filter = b->filter;
     s_src.mf = b->cwp_idx << 2;
@@ -666,7 +666,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         if (!mask) {
             if (t_src.mv.mv[0].n == INVALID_TRAJ) {
                 if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-                    t_src.ref.pair = 0;
+                    t_src.ref.pair = -1;
                 } else {
                     t_src.mv.mv[0] = t_src.mv.mv[1];
                     t_src.ref.ref[0] = t_src.ref.ref[1];
@@ -692,7 +692,7 @@ static inline void splat_intraref(const Dav2dContext *const c,
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
-        .ref.ref = { -1, -1 },
+        .ref.pair = -1,
         .mv[0].y = INVALID_MV,
         .mv[1].y = INVALID_MV,
         .bs = bs,
@@ -701,7 +701,7 @@ static inline void splat_intraref(const Dav2dContext *const c,
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     refmvs_temporal_block t_src = {
-        .ref.pair = 0,
+        .ref.pair = -1,
         .mv.n = INVALID_TRAJ * 0x10001U,
     };
     c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
@@ -1025,13 +1025,13 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 #if 0
                 refmvs_block *const r = &t->rt.r[(t->by & 31) + 5 + bh4 - 1][t->bx];
                 for (int x = 0; x < bw4; x++) {
-                    r[x].ref.ref[0] = b->ref[0] + 1;
+                    r[x].ref.ref[0] = b->ref.ref[0];
                     r[x].mv.mv[0] = b->mv[0];
                     r[x].bs = bs;
                 }
                 refmvs_block *const *rr = &t->rt.r[(t->by & 31) + 5];
                 for (int y = 0; y < bh4 - 1; y++) {
-                    rr[y][t->bx + bw4 - 1].ref.ref[0] = b->ref[0] + 1;
+                    rr[y][t->bx + bw4 - 1].ref.ref[0] = b->ref.ref[0];
                     rr[y][t->bx + bw4 - 1].mv.mv[0] = b->mv[0];
                     rr[y][t->bx + bw4 - 1].bs = bs;
                 }
@@ -1802,7 +1802,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         refmvs_candidate mvstack[6];
         int n_mvs;
         dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
-                          (union refmvs_refpair) { .ref = { 0, -1 }},
+                          (union refpair) { .pair = -1 },
                           bs, 0, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
         if (BLOCK_TO_DEBUG) {
@@ -1820,7 +1820,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         for (drl_idx = 0; drl_idx < f->frame_hdr->max_bvp_drl_bits; drl_idx++)
             if (!dav2d_msac_decode_bool_bypass(&ts->msac)) break;
 
-        b->ref[0] = b->ref[1] = -1;
+        b->ref.pair = -1;
         b->mv[0] = mvstack[drl_idx].mv[0];
         if (!b->mv[0].n) {
             // I don't know if this can actually happen, but AVM has code here
@@ -2022,18 +2022,17 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             DEBUG_BLOCK_printf("%*sPost-drl[%d,%d]: r=%d\n",
                                depth, "", drl_idx, drl_idx, ts->msac.rng);
 
-            b->ref[0] = f->skip_mode_refs[0];
-            b->ref[1] = f->skip_mode_refs[1];
+            b->ref.pair = f->skip_mode_refs.pair;
             for (int n = 0; n < idx; n++) {
                 if (nx[n]->ref[0][xoff[n]] == TIP_FRAME) {
-                    b->ref[0] = imin(f->frame_hdr->tip.refs[0],
-                                     f->frame_hdr->tip.refs[1]);
-                    b->ref[1] = imax(f->frame_hdr->tip.refs[0],
-                                     f->frame_hdr->tip.refs[1]);
+                    b->ref.ref[0] = imin(f->rf.tip.ref.ref[0],
+                                          f->rf.tip.ref.ref[1]);
+                    b->ref.ref[1] = imax(f->rf.tip.ref.ref[0],
+                                          f->rf.tip.ref.ref[1]);
                     break;
                 } else if (nx[n]->ref[1][xoff[n]] != -1) {
-                    b->ref[0] = nx[n]->ref[0][xoff[n]];
-                    b->ref[1] = nx[n]->ref[1][xoff[n]];
+                    b->ref.ref[0] = nx[n]->ref[0][xoff[n]];
+                    b->ref.ref[1] = nx[n]->ref[1][xoff[n]];
                     break;
                 } else if (nx[n]->ref[0][xoff[n]] != -1) break;
             }
@@ -2043,13 +2042,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             refmvs_candidate mvstack[6];
             int n_mvs;
-            dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs,
-                              (union refmvs_refpair) { .ref = {
-                                    b->ref[0] + 1, b->ref[1] + 1 }},
+            dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs, b->ref,
                               bs, 1, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
-                printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
+                printf("%*sfind_mv_refs(%d,%d)\n", depth, "",
+                       b->ref.ref[0], b->ref.ref[1]);
                 for (int n = 0; n < n_mvs; n++)
                     printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
                            depth + 1, "", n, n_mvs, mvstack[n].mv[0].y,
@@ -2091,7 +2089,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         bit = dav2d_msac_decode_bool_adapt(&ts->msac, cdf);
                     }
                     if (bit) {
-                        b->ref[n++] = i;
+                        b->ref.ref[n++] = i;
                         if (n == 2) break;
                         dir = f->refdir[i];
                     }
@@ -2105,29 +2103,29 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     }
                 }
                 if (n < 2) {
-                    b->ref[1] = n_refs - 1;
-                    if (!n) b->ref[0] = n_refs - 1 - (same_refs < n_refs);
+                    b->ref.ref[1] = n_refs - 1;
+                    if (!n) b->ref.ref[0] = n_refs - 1 - (same_refs < n_refs);
                 }
             } else {
-                b->ref[0] = b->ref[1] = 0;
+                b->ref.pair = 0;
             }
             DEBUG_BLOCK_printf("%*sPost-ref[%d,%d]: r=%d\n",
-                               depth, "", b->ref[0], b->ref[1], ts->msac.rng);
+                               depth, "", b->ref.ref[0], b->ref.ref[1], ts->msac.rng);
 
             const int have_top_right = t->bx + bw4 <= ts->tiling.col_end;
             const int have_bottom_left = t->by + bh4 <= ts->tiling.row_end;
             const int comp_ctx =
                 get_compref_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
                                 have_top_right, have_bottom_left, b_dim,
-                                b->ref, f->frame_hdr->tip.refs);
-            if (b->ref[0] == b->ref[1]) {
+                                b->ref, f->rf.tip.ref);
+            if (b->ref.ref[0] == b->ref.ref[1]) {
                 b->inter_mode = NEARMV_NEARMV +
                     dav2d_msac_decode_symbol_adapt4(&ts->msac,
                         ts->cdf.m.comp_mode_sameref[comp_ctx], 3);
                 b->inter_mode += b->inter_mode > NEARMV_NEWMV; // skip newmv_nearmv
             } else {
                 const int joint_ctx =
-                    f->refdist[b->ref[0]] != -f->refdist[b->ref[1]];
+                    f->refdist[b->ref.ref[0]] != -f->refdist[b->ref.ref[1]];
                 if (dav2d_msac_decode_bool_adapt(&ts->msac,
                            ts->cdf.m.comp_mode_joint[joint_ctx]))
                 {
@@ -2139,8 +2137,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
             }
             if (f->frame_hdr->opfl_refine_type == 1 /* switchable */ &&
-                b->inter_mode != GLOBALMV_GLOBALMV &&
-                imin(bw4, bh4) >= 2 && f->refdir[b->ref[0]] != f->refdir[b->ref[1]])
+                b->inter_mode != GLOBALMV_GLOBALMV && imin(bw4, bh4) >= 2 &&
+                f->refdir[b->ref.ref[0]] != f->refdir[b->ref.ref[1]])
             {
                 const int ctx = b->inter_mode > NEARMV_NEARMV;
                 if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
@@ -2172,8 +2170,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 };
                 const int mode_ctx = amvd_mode_context[b->inter_mode - NEARMV_NEWMV];
                 const int ctx =
-                    (nx[0]->ref[0][xoff[0]] == b->ref[0] && nx[0]->amvd[xoff[0]]) +
-                    (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
+                    (nx[0]->ref[0][xoff[0]] == b->ref.ref[0] && nx[0]->amvd[xoff[0]]) +
+                    (nx[1]->ref[0][xoff[1]] == b->ref.ref[0] && nx[1]->amvd[xoff[1]]);
                 amvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[mode_ctx][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=%d|%d,%d]: r=%d\n",
@@ -2184,13 +2182,11 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             int n_mvs[2];
             if (b->inter_mode > NEARMV_NEWMV) {
                 dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
-                                  (union refmvs_refpair) { .ref = {
-                                      b->ref[0] + 1, b->ref[1] + 1 } },
-                                  bs, 0, t->by, t->bx);
-            } else if (b->ref[0] == b->ref[1]) {
+                                  b->ref, bs, 0, t->by, t->bx);
+            } else if (b->ref.ref[0] == b->ref.ref[1]) {
                 dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
-                                  (union refmvs_refpair) { .ref = {
-                                      b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
+                                  (union refpair) { .ref = {
+                                      b->ref.ref[0], -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
                     mvstack[n].mv[1] = mvstack[n].mv[0];
                     mvstack[n].weight *= 0x11;
@@ -2198,12 +2194,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 n_mvs[1] = n_mvs[0];
             } else {
                 dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
-                                  (union refmvs_refpair) { .ref = {
-                                      b->ref[0] + 1, -1 } }, bs, 0, t->by, t->bx);
+                                  (union refpair) { .ref = {
+                                      b->ref.ref[0], -1 } }, bs, 0, t->by, t->bx);
                 refmvs_candidate mvstack2[6];
                 dav2d_refmvs_find(&t->rt, mvstack2, NULL, &n_mvs[1],
-                                  (union refmvs_refpair) { .ref = {
-                                      b->ref[1] + 1, -1 } }, bs, 0, t->by, t->bx);
+                                  (union refpair) { .ref = {
+                                      b->ref.ref[1], -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
                     mvstack[n].mv[1] = mvstack2[n].mv[0];
                     mvstack[n].weight = (mvstack[n].weight & 0xf) |
@@ -2212,7 +2208,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
-                printf("%*sfind_mv_refs(%d,%d)\n", depth, "", b->ref[0], b->ref[1]);
+                printf("%*sfind_mv_refs(%d,%d)\n", depth, "",
+                       b->ref.ref[0], b->ref.ref[1]);
                 if (b->inter_mode <= NEARMV_NEWMV) {
                     for (int drl = 0; drl < 2; drl++)
                         for (int n = 0; n < n_mvs[drl]; n++)
@@ -2243,11 +2240,11 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             if (b->inter_mode == NEWMV_NEWMV && imin(bw4, bh4) > 1 &&
-                !f->frame_hdr->force_integer_mv && b->ref[0] != b->ref[1] &&
+                !f->frame_hdr->force_integer_mv && b->ref.ref[0] != b->ref.ref[1] &&
                 f->frame_hdr->opfl_refine_type != 2 /* always */)
             {
                 const int is_sb_boundary = !(t->by & (f->sb_step - 1));
-                const int ref1 = b->ref[0], ref2 = b->ref[1];
+                const int ref1 = b->ref.ref[0], ref2 = b->ref.ref[1];
 #define match_ref(dir, off, refidx) \
                 (t->dir ref[0][off] == refidx || t->dir ref[1][off] == refidx)
 #define match_refs(refidx) \
@@ -2295,7 +2292,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         }
                     }
                     drl_idx[r] = n;
-                    n = b->inter_mode == NEARMV_NEARMV && b->ref[0] == b->ref[1] ?
+                    n = b->inter_mode == NEARMV_NEARMV && b->ref.ref[0] == b->ref.ref[1] ?
                         drl_idx[0] + (drl_idx[0] < max_drl_bits) : 0;
                     ctx = imin(n, 2);
                 }
@@ -2334,10 +2331,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (b->inter_mode == JOINT_NEWMV ||
                     b->inter_mode == OPFL_JOINT_NEWMV)
                 {
-                    refdist[0] = f->absrefdist[b->ref[0]];
-                    refdist[1] = f->absrefdist[b->ref[1]];
+                    refdist[0] = f->absrefdist[b->ref.ref[0]];
+                    refdist[1] = f->absrefdist[b->ref.ref[1]];
                     start = refdist[0] < refdist[1];
-                    if (f->refdir[b->ref[0]] ^ f->refdir[b->ref[1]])
+                    if (f->refdir[b->ref.ref[0]] ^ f->refdir[b->ref.ref[1]])
                         refdist[1] = -refdist[1];
                     end = start + 1;
                 }
@@ -2414,16 +2411,16 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     }
                 }
             } else {
-                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]], t->bx, t->by,
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref.ref[0]], t->bx, t->by,
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
-                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[1]], t->bx, t->by,
+                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv[b->ref.ref[1]], t->bx, t->by,
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
             }
 
             if (f->seq_hdr->refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
                 b->inter_mode != GLOBALMV_GLOBALMV &&
-                f->refdist[b->ref[0]] == -f->refdist[b->ref[1]] &&
-                !f->svc[b->ref[0]][0].scale && !f->svc[b->ref[1]][0].scale &&
+                f->refdist[b->ref.ref[0]] == -f->refdist[b->ref.ref[1]] &&
+                !f->svc[b->ref.ref[0]][0].scale && !f->svc[b->ref.ref[1]][0].scale &&
                 (f->frame_hdr->opfl_refine_type != 1 /* switchable */ ||
                  !((1 << b->inter_mode) & ((1 << NEARMV_NEWMV) |
                                            (1 << NEWMV_NEARMV) |
@@ -2448,14 +2445,14 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->motion_mode == MM_WARP_CAUSAL) {
                 for (int i = 0; i < 2; i++)
                     derive_warpmv(t, have_top, have_left, bw4, bh4, w4, h4,
-                                  b->ref[i], b->mv[i], &t->warpmv[i]);
+                                  b->ref.ref[i], b->mv[i], &t->warpmv[i]);
             }
 
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
                 !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
                 (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1 ||
-                 f->frame_hdr->gmv[b->ref[0]].type == DAV2D_WM_TYPE_TRANSLATION ||
-                 f->frame_hdr->gmv[b->ref[1]].type == DAV2D_WM_TYPE_TRANSLATION);
+                 f->frame_hdr->gmv[b->ref.ref[0]].type == DAV2D_WM_TYPE_TRANSLATION ||
+                 f->frame_hdr->gmv[b->ref.ref[1]].type == DAV2D_WM_TYPE_TRANSLATION);
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
@@ -2471,7 +2468,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 const int cctx0 = comptype_ctx(0), cctx1 = comptype_ctx(1);
 #undef comptype_ctx
                 const int ctx = cctx0 + cctx1 + (cctx0 && cctx1) +
-                    (f->absrefdist[b->ref[0]] == f->absrefdist[b->ref[1]]) * 6;
+                    (f->absrefdist[b->ref.ref[0]] == f->absrefdist[b->ref.ref[1]]) * 6;
                 const int has_mask = dav2d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.comp_type_masked[ctx]);
                 if (has_mask) {
@@ -2514,8 +2511,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     { 8, 12, 4, 10, 6 },
                     { 8, 12, 4, 20, -4 },
                 };
-                b->cwp_idx = cwp_weighting_factor[!(f->refdir[b->ref[0]] ^
-                                                    f->refdir[b->ref[1]])][n];
+                b->cwp_idx = cwp_weighting_factor[!(f->refdir[b->ref.ref[0]] ^
+                                                    f->refdir[b->ref.ref[1]])][n];
                 DEBUG_BLOCK_printf("%*sPost-compweightpred_idx[%d]: r=%d\n",
                                    depth, "", b->cwp_idx, ts->msac.rng);
             }
@@ -2526,11 +2523,11 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if ((f->frame_hdr->segmentation.d.globalmv_mask |
                  f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id))
             {
-                b->ref[0] = 0;
+                b->ref.ref[0] = 0;
             } else {
                 if (is_tip) {
                     static const int8_t tip_wts[] = { 8,  12, 16, 18, 20, 4, 6, -4 };
-                    b->ref[0] = TIP_FRAME;
+                    b->ref.ref[0] = TIP_FRAME;
                     b->cwp_idx = tip_wts[f->frame_hdr->tip.global_wtd_idx];
                 } else {
                     const int n_refs = f->frame_hdr->n_ref_frames;
@@ -2557,18 +2554,18 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             }
                         } while (++i < n_refs - 1);
                     }
-                    b->ref[0] = i;
+                    b->ref.ref[0] = i;
                 }
                 DEBUG_BLOCK_printf("%*sPost-ref[%d,-1]: r=%d\n",
-                                   depth, "", b->ref[0], ts->msac.rng);
+                                   depth, "", b->ref.ref[0], ts->msac.rng);
             }
-            b->ref[1] = -1;
+            b->ref.ref[1] = -1;
 
             const int have_top_right = t->bx + bw4 <= ts->tiling.col_end;
             const int have_bottom_left = t->by + bh4 <= ts->tiling.row_end;
             const int sngl_ctx =
                 get_snglref_ctx(t->a, &t->l, by4, bx4, have_top, have_left,
-                                have_top_right, have_bottom_left, b_dim, b->ref[0]);
+                                have_top_right, have_bottom_left, b_dim, b->ref.ref[0]);
             const int is_sb_boundary = !(t->by & (f->sb_step - 1));
 
             if ((f->frame_hdr->segmentation.d.globalmv_mask |
@@ -2589,7 +2586,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                      is_sb_boundary ? ((t->bx + bw4 - 2) & ~1) <
                                         ts->tiling.col_end : have_top_right,
                                         have_bottom_left,
-                                     is_sb_boundary, b_dim, b->ref[0]);
+                                     is_sb_boundary, b_dim, b->ref.ref[0]);
                     allow_warp = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                               ts->cdf.m.warp[ctx]);
                 }
@@ -2609,8 +2606,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             if (f->seq_hdr->adaptive_mvd && b->inter_mode == NEWMV) {
                 const int ctx =
-                    (nx[0]->ref[0][xoff[0]] == b->ref[0] && nx[0]->amvd[xoff[0]]) +
-                    (nx[1]->ref[0][xoff[1]] == b->ref[0] && nx[1]->amvd[xoff[1]]);
+                    (nx[0]->ref[0][xoff[0]] == b->ref.ref[0] && nx[0]->amvd[xoff[0]]) +
+                    (nx[1]->ref[0][xoff[1]] == b->ref.ref[0] && nx[1]->amvd[xoff[1]]);
                 amvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.amvd[4][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=4|%d,%d]: r=%d\n",
@@ -2621,19 +2618,19 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             int32_t warp[4][7];
             int n_mvs[2];
             dav2d_refmvs_find(&t->rt, mvstack,
-                              b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV ?
+                              b->ref.ref[0] != TIP_FRAME && b->inter_mode > NEWMV ?
                                   warp : NULL, n_mvs,
-                              (union refmvs_refpair) { .ref = { b->ref[0] + 1, -1 }},
+                              (union refpair) { .ref = { b->ref.ref[0], -1 }},
                               bs, 0, t->by, t->bx);
 #if DEBUG_BLOCK_INFO
             if (BLOCK_TO_DEBUG) {
-                printf("%*sfind_mv_refs(%d,-1)\n", depth, "", b->ref[0]);
+                printf("%*sfind_mv_refs(%d,-1)\n", depth, "", b->ref.ref[0]);
                 for (int n = 0; n < n_mvs[0]; n++)
                     printf("%*smv[%d/%d]: y=%d,x=%d,w=%d,y_off=%d,x_off=%d\n",
                            depth + 1, "", n, n_mvs[0], mvstack[n].mv[0].y,
                            mvstack[n].mv[0].x, mvstack[n].weight,
                            mvstack[n].y_off, mvstack[n].x_off);
-                if (b->ref[0] != TIP_FRAME && b->inter_mode > NEWMV)
+                if (b->ref.ref[0] != TIP_FRAME && b->inter_mode > NEWMV)
                     for (int n = 0; n < n_mvs[1]; n++)
                         printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d, t=%d\n",
                                depth + 1, "", n, n_mvs[1],
@@ -2650,7 +2647,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 // block-adaptive weighted prediction
                 if (f->frame_hdr->bawp &&
                     b->inter_mode != GLOBALMV &&
-                    imin(bw4, bh4) >= 2 && !f->svc[b->ref[0]][0].scale)
+                    imin(bw4, bh4) >= 2 && !f->svc[b->ref.ref[0]][0].scale)
                 {
                     b->bawp[0] = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                               ts->cdf.m.bawp[0]);
@@ -2702,7 +2699,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 // motion mode
                 b->motion_mode = MM_WARP_DELTA;
                 if (b->inter_mode == WARPNEWMV) {
-                    const int ref = b->ref[0];
+                    const int ref = b->ref.ref[0];
 #define match_ref(dir, off) \
                     (t->dir ref[0][off] == ref || t->dir ref[1][off] == ref)
                     const int has_cs_ext = match_ref(l., by4) ||
@@ -2852,7 +2849,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                        ts->msac.rng);
                 }
             } else {
-                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref[0]], t->bx, t->by,
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref.ref[0]], t->bx, t->by,
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
             }
 
@@ -2905,7 +2902,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     DAV2D_WM_TYPE_INVALID : warp_type(t->warpmv[0].matrix);
             } else if (b->motion_mode == MM_WARP_CAUSAL) {
                 derive_warpmv(t, have_top, have_left, bw4, bh4, w4, h4,
-                              b->ref[0], b->mv[0], &t->warpmv[0]);
+                              b->ref.ref[0], b->mv[0], &t->warpmv[0]);
             } else if (b->motion_mode == MM_WARP_EXTEND) {
                 int y_off = 0, x_off = 0; // invalid
                 if (mvstack[drl_idx].x_off == -1 ||
@@ -2922,7 +2919,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         r = &t->rt.r[((t->by + y_off) & 63) * 128 +
                                      ((t->bx + x_off) & 127)];
                     }
-                    if (r->ref.ref[0] - 1 == TIP_FRAME)
+                    if (r->ref.ref[0] == TIP_FRAME)
                         x_off = y_off = 0;
                 }
                 const int bx4_lmt_aligned = bx4 & ~is_sb_boundary;
@@ -2930,26 +2927,26 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (x_off || y_off) {
                     /* do nothing */
                 } else if (have_bottom_left &&
-                           (t->l.ref[0][by4 + bh4 - 1] == b->ref[0] ||
-                            t->l.ref[1][by4 + bh4 - 1] == b->ref[0]))
+                           (t->l.ref[0][by4 + bh4 - 1] == b->ref.ref[0] ||
+                            t->l.ref[1][by4 + bh4 - 1] == b->ref.ref[0]))
                 {
                     y_off = bh4 - 1;
                     x_off = -1;
                 } else if (have_top_right &&
-                           (t->a->ref[0][bx4_rmt_aligned] == b->ref[0] ||
-                            t->a->ref[1][bx4_rmt_aligned] == b->ref[0]))
+                           (t->a->ref[0][bx4_rmt_aligned] == b->ref.ref[0] ||
+                            t->a->ref[1][bx4_rmt_aligned] == b->ref.ref[0]))
                 {
                     y_off = -1;
                     x_off = bx4_rmt_aligned - bx4;
                 } else if (have_left &&
-                           (t->l.ref[0][by4] == b->ref[0] ||
-                            t->l.ref[1][by4] == b->ref[0]))
+                           (t->l.ref[0][by4] == b->ref.ref[0] ||
+                            t->l.ref[1][by4] == b->ref.ref[0]))
                 {
                     y_off = 0;
                     x_off = -1;
                 } else if (have_top &&
-                           (t->a->ref[0][bx4_lmt_aligned] == b->ref[0] ||
-                            t->a->ref[1][bx4_lmt_aligned] == b->ref[0]))
+                           (t->a->ref[0][bx4_lmt_aligned] == b->ref.ref[0] ||
+                            t->a->ref[1][bx4_lmt_aligned] == b->ref.ref[0]))
                 {
                     y_off = -1;
                     x_off = bx4_lmt_aligned - bx4;
@@ -2982,11 +2979,11 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
                 (b->inter_mode != GLOBALMV || imin(bw4, bh4) == 1 ||
-                 f->frame_hdr->gmv[b->ref[0]].type == DAV2D_WM_TYPE_TRANSLATION);
+                 f->frame_hdr->gmv[b->ref.ref[0]].type == DAV2D_WM_TYPE_TRANSLATION);
         }
 
         // subpel filter
-        if (b->skip_mode || b->ref[0] == TIP_FRAME || b->refine_mv ||
+        if (b->skip_mode || b->ref.ref[0] == TIP_FRAME || b->refine_mv ||
             b->inter_mode >= OPFL_NEARMV_NEARMV)
         {
             assert(!has_subpel_filter);
@@ -3021,10 +3018,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             int res = 0;
             if (t->warpmv[0].type != DAV2D_WM_TYPE_INVALID)
                 res = dav2d_refmvs_warp_add(&t->rt, t->warpmv,
-                                            DB_ONLY(t->by, t->bx) b->ref[0]);
+                                            DB_ONLY(t->by, t->bx) b->ref.ref[0]);
             if (!res && is_comp && t->warpmv[1].type != DAV2D_WM_TYPE_INVALID)
                 dav2d_refmvs_warp_add(&t->rt, &t->warpmv[1],
-                                      DB_ONLY(t->by, t->bx) b->ref[1]);
+                                      DB_ONLY(t->by, t->bx) b->ref.ref[1]);
         }
         if (is_comp)
             splat_tworef_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
@@ -3060,8 +3057,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             rep_macro(edge->mrl, off, 0); \
             rep_macro(edge->multi_mrl, off, 0); \
             rep_macro(edge->dip, off, 0); \
-            rep_macro(edge->ref[0], off, b->ref[0]); \
-            rep_macro(edge->ref[1], off, ((uint8_t) b->ref[1])); \
+            rep_macro(edge->ref[0], off, ((uint8_t) b->ref.ref[0])); \
+            rep_macro(edge->ref[1], off, ((uint8_t) b->ref.ref[1])); \
             rep_macro(edge->motion_mode, off, b->motion_mode); \
             rep_macro(edge->amvd, off, amvd); \
             rep_macro(edge->mvprec, off, mvprec_def)
@@ -3143,15 +3140,15 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (b->comp_type == COMP_INTER_NONE) {
             // y
             if (imin(bw4, bh4) > 1 &&
-                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
                  (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV2D_WM_TYPE_TRANSLATION)))
             {
-                affine_lowest_px_luma(t, &lowest_px[b->ref[0]][0], b_dim,
+                affine_lowest_px_luma(t, &lowest_px[b->ref.ref[0]][0], b_dim,
                                       b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
-                                      &f->frame_hdr->gmv[b->ref[0]]);
+                                      &f->frame_hdr->gmv[b->ref.ref[0]]);
             } else {
-                mc_lowest_px(&lowest_px[b->ref[0]][0], t->by, bh4, b->mv[0].y,
-                             0, &f->svc[b->ref[0]][1]);
+                mc_lowest_px(&lowest_px[b->ref.ref[0]][0], t->by, bh4, b->mv[0].y,
+                             0, &f->svc[b->ref.ref[0]][1]);
             }
 
             // uv
@@ -3189,45 +3186,45 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                      t->by - 1, bh4, rr->mv.mv[0].y, ss_ver,
                                      &f->svc[rr->ref.ref[0] - 1][1]);
                     }
-                    mc_lowest_px(&lowest_px[b->ref[0]][1], t->by, bh4,
-                                 b->mv[0].y, ss_ver, &f->svc[b->ref[0]][1]);
+                    mc_lowest_px(&lowest_px[b->ref.ref[0]][1], t->by, bh4,
+                                 b->mv[0].y, ss_ver, &f->svc[b->ref.ref[0]][1]);
                 } else {
                     if (imin(cbw4, cbh4) > 1 &&
-                        ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref[0]]) ||
+                        ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
                          (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV2D_WM_TYPE_TRANSLATION)))
                     {
-                        affine_lowest_px_chroma(t, &lowest_px[b->ref[0]][1], b_dim,
+                        affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[0]][1], b_dim,
                                                 b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
-                                                &f->frame_hdr->gmv[b->ref[0]]);
+                                                &f->frame_hdr->gmv[b->ref.ref[0]]);
                     } else {
-                        mc_lowest_px(&lowest_px[b->ref[0]][1],
+                        mc_lowest_px(&lowest_px[b->ref.ref[0]][1],
                                      t->by & ~ss_ver, bh4 << (bh4 == ss_ver),
-                                     b->mv[0].y, ss_ver, &f->svc[b->ref[0]][1]);
+                                     b->mv[0].y, ss_ver, &f->svc[b->ref.ref[0]][1]);
                     }
                 }
             }
         } else {
             // y
             for (int i = 0; i < 2; i++) {
-                if (b->inter_mode == GLOBALMV_GLOBALMV && f->gmv_warp_allowed[b->ref[i]]) {
-                    affine_lowest_px_luma(t, &lowest_px[b->ref[i]][0], b_dim,
-                                          &f->frame_hdr->gmv[b->ref[i]]);
+                if (b->inter_mode == GLOBALMV_GLOBALMV && f->gmv_warp_allowed[b->ref.ref[i]]) {
+                    affine_lowest_px_luma(t, &lowest_px[b->ref.ref[i]][0], b_dim,
+                                          &f->frame_hdr->gmv[b->ref.ref[i]]);
                 } else {
-                    mc_lowest_px(&lowest_px[b->ref[i]][0], t->by, bh4,
-                                 b->mv[i].y, 0, &f->svc[b->ref[i]][1]);
+                    mc_lowest_px(&lowest_px[b->ref.ref[i]][0], t->by, bh4,
+                                 b->mv[i].y, 0, &f->svc[b->ref.ref[i]][1]);
                 }
             }
 
             // uv
             if (has_chroma) for (int i = 0; i < 2; i++) {
                 if (b->inter_mode == GLOBALMV_GLOBALMV &&
-                    imin(cbw4, cbh4) > 1 && f->gmv_warp_allowed[b->ref[i]])
+                    imin(cbw4, cbh4) > 1 && f->gmv_warp_allowed[b->ref.ref[i]])
                 {
-                    affine_lowest_px_chroma(t, &lowest_px[b->ref[i]][1], b_dim,
-                                            &f->frame_hdr->gmv[b->ref[i]]);
+                    affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[i]][1], b_dim,
+                                            &f->frame_hdr->gmv[b->ref.ref[i]]);
                 } else {
-                    mc_lowest_px(&lowest_px[b->ref[i]][1], t->by, bh4,
-                                 b->mv[i].y, ss_ver, &f->svc[b->ref[i]][1]);
+                    mc_lowest_px(&lowest_px[b->ref.ref[i]][1], t->by, bh4,
+                                 b->mv[i].y, ss_ver, &f->svc[b->ref.ref[i]][1]);
                 }
             }
         }
@@ -4244,8 +4241,8 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                 .mv[0].y = f->frame_hdr->tip.gmv.y,
                 .mv[0].x = f->frame_hdr->tip.gmv.x,
                 .inter_mode = NEARMV,
-                .ref[0] = TIP_FRAME,
-                .ref[1] = -1,
+                .ref.ref[0] = TIP_FRAME,
+                .ref.ref[1] = -1,
                 .motion_mode = MM_TRANSLATION,
                 .filter = f->frame_hdr->tip.subpel_filter,
                 .cwp_idx = 8,
@@ -5298,10 +5295,10 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     }
 
     // skipmode
-    f->skip_mode_refs[0] = 0;
-    f->skip_mode_refs[1] = f->frame_hdr->skip_mode_enabled &&
-                           f->frame_hdr->n_ref_frames > 1 &&
-                           abs(f->absrefdist[0] - f->absrefdist[1]) <= 1;
+    f->skip_mode_refs.ref[0] = 0;
+    f->skip_mode_refs.ref[1] = f->frame_hdr->skip_mode_enabled &&
+                                f->frame_hdr->n_ref_frames > 1 &&
+                                abs(f->absrefdist[0] - f->absrefdist[1]) <= 1;
 
     // update references etc.
     const unsigned refresh_frame_flags = f->frame_hdr->refresh_frame_flags;

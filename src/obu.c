@@ -837,7 +837,7 @@ static void find_tip_ref_frames(const Dav2dContext *const c,
     // tip
     const int n_refs = hdr->n_ref_frames;
     if (n_refs == 1) {
-        hdr->tip.refs[0] = hdr->tip.refs[1] = 0;
+        hdr->tip.ref[0] = hdr->tip.ref[1] = 0;
         return;
     }
 
@@ -858,16 +858,16 @@ static void find_tip_ref_frames(const Dav2dContext *const c,
     }
     if (n_past == n_refs) {
         // all refs are in the past, select nearest (last) 2
-        hdr->tip.refs[0] = order[n_refs - 1];
-        hdr->tip.refs[1] = order[n_refs - 2];
+        hdr->tip.ref[0] = order[n_refs - 1];
+        hdr->tip.ref[1] = order[n_refs - 2];
     } else if (!n_past) {
         // all refs are in the future, select nearest (first) 2
-        hdr->tip.refs[0] = order[0];
-        hdr->tip.refs[1] = order[1];
+        hdr->tip.ref[0] = order[0];
+        hdr->tip.ref[1] = order[1];
     } else {
         // temporally mixed refs, select the closest to the current one
-        hdr->tip.refs[0] = order[n_past - 1];
-        hdr->tip.refs[1] = order[n_past];
+        hdr->tip.ref[0] = order[n_past - 1];
+        hdr->tip.ref[1] = order[n_past];
     }
 }
 
@@ -1214,9 +1214,9 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                 // FIXME yac and (sometimes) u/v ac delta
             } else {
                 const Dav2dFrameHeader *const ref1hdr =
-                    c->refs[hdr->refidx[hdr->tip.refs[0]]].p.p.frame_hdr;
+                    c->refs[hdr->refidx[hdr->tip.ref[0]]].p.p.frame_hdr;
                 const Dav2dFrameHeader *const ref2hdr =
-                    c->refs[hdr->refidx[hdr->tip.refs[1]]].p.p.frame_hdr;
+                    c->refs[hdr->refidx[hdr->tip.ref[1]]].p.p.frame_hdr;
                 hdr->quant.yac = (ref1hdr->quant.yac + ref2hdr->quant.yac + 1) >> 1;
             }
 

@@ -238,13 +238,13 @@ void dav2d_create_lf_mask_luma(Av2Filter *const lflvl,
     int subpu_sz = 0;
     if (b->intra || !frame_hdr->loopfilter.lf_sub_pu) {
         /* do nothing */
-    } else if (b->ref[0] == TIP_FRAME) {
+    } else if (b->ref.ref[0] == TIP_FRAME) {
         const int opfl = seq_hdr->tip_refine_mv &&
             (frame_hdr->tip.frame_mode == 1 ||
              frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
         subpu_sz = 2 << (frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                          ((!opfl && imin(bw4, bh4) >= 4) || lbs == BS_256x256));
-    } else if (b->ref[1] != -1) {
+    } else if (b->ref.ref[1] != -1) {
         if (b->inter_mode >= OPFL_NEARMV_NEARMV) {
             subpu_sz = 2 - (lbs == BS_8x8);
         } else if (b->refine_mv && b->comp_type == COMP_INTER_AVG) {

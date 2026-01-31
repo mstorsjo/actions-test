@@ -118,9 +118,9 @@ static inline int get_partition2_ctx(const BlockContext *const a,
 }
 
 static inline int get_filter_ctx(const BlockContext *nb[2],
-                                 const int boff[2], const int8_t refs[2])
+                                 const int boff[2], const union refpair r)
 {
-    const int ref = refs[0], comp = refs[1] != -1;
+    const int ref = r.ref[0], comp = r.ref[1] != -1;
     const int flt0 = (boff[0] != -1 && (nb[0]->ref[0][boff[0]] == ref ||
                                         nb[0]->ref[1][boff[0]] == ref)) ?
                      nb[0]->filter[boff[0]] : DAV2D_N_SWITCHABLE_FILTERS;
@@ -260,7 +260,8 @@ static inline int get_compref_ctx(const BlockContext *const a,
                                   const int have_top_right,
                                   const int have_bottom_left,
                                   const uint8_t *const b_dim,
-                                  const int8_t ref[2], const uint8_t tipref[2])
+                                  const union refpair ref,
+                                  const union refpair tip)
 {
     int row = 0, col = 0, newmv = 0;
 
@@ -275,11 +276,11 @@ static inline int get_compref_ctx(const BlockContext *const a,
                          (1 << OPFL_JOINT_NEWMV))
 #define add_matching(dir, cnt, idx) do { \
     if (dir->ref[0][idx] == TIP_FRAME && \
-        tipref[0] == ref[0] && tipref[1] == ref[1]) \
+        tip.ref[0] == ref.ref[0] && tip.ref[1] == ref.ref[1]) \
     { \
         cnt++; \
         newmv += dir->mode[idx] == NEWMV; \
-    } else if (dir->ref[0][idx] == ref[0] && dir->ref[1][idx] == ref[1]) { \
+    } else if (dir->ref[0][idx] == ref.ref[0] && dir->ref[1][idx] == ref.ref[1]) { \
         cnt++; \
         newmv += !!((1 << dir->mode[idx]) & NEWMV_MODE_MASK); \
     } \
