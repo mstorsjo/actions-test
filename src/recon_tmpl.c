@@ -2484,44 +2484,40 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
     int angle = (const uint8_t[4]) { 0, 90, 180, 0 }[b->interintra_mode];
     int n_tr = 0, n_bl = 0;
     const int chroma = !!plane;
-    const int bx4 = bx & 63, by4 = by & 63, sbsz = f->sb_step;
-    if (by > ts->tiling.row_start) {
-        int w = imin(bw4, ts->tiling.col_end - bx - bw4);
-        if (!(by & (sbsz - 1))) {
-            // top sb boundary
-            n_tr = w;
-        } else {
-            const int end = imin((bx + sbsz) & ~(sbsz - 1),
-                                 ts->tiling.col_end);
-            w = imin(w, end - t->bx - bw4);
-            if (!w) {
-                // right sb or tile/frame boundary
-                n_tr = 0;
+    if (m == SMOOTH_PRED) {
+        const int bx4 = bx & 63, by4 = by & 63, sbsz = f->sb_step;
+        if (by > ts->tiling.row_start) {
+            int w = imin(bw4, ts->tiling.col_end - bx - bw4);
+            if (!(by & (sbsz - 1))) {
+                // top sb boundary
+                n_tr = w;
             } else {
-                const int xpos = (bx4 + bw4) & 63;
-                const unsigned bits = (unsigned) (t->is_coded[chroma][by4 - 1] >> xpos);
-                n_tr = imin(ctz(0x10000 | ~bits), w);
+                const int end = imin((bx + sbsz) & ~(sbsz - 1),
+                                     ts->tiling.col_end);
+                w = imin(w, end - t->bx - bw4);
+                if (!w) {
+                    // right sb or tile/frame boundary
+                    n_tr = 0;
+                } else {
+                    // smooth pred uses 1px max
+                    n_tr = (t->is_coded[chroma][by4 - 1] >> (bx4 + bw4)) & 1;
+                }
             }
         }
-    }
 
-    if (bx > ts->tiling.col_start) {
-        const int end = imin((by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
-        const int h = imin(bh4, end - by - bh4);
-        if (!h) {
-            // bottom sb or tile/frame boundary
-            n_bl = 0;
-        } else if (!(bx & (sbsz - 1))) {
-            // left sb boundary
-            n_bl = h;
-        } else {
-            const uint64_t mask = 1ULL << ((bx4 - 1) & 63);
-            int y;
-            for (y = 0; y < h; y++) {
-                if (!(t->is_coded[chroma][by4 + y + bh4] & mask))
-                    break;
+        if (bx > ts->tiling.col_start) {
+            const int end = imin((by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
+            const int h = imin(bh4, end - by - bh4);
+            if (!h) {
+                // bottom sb or tile/frame boundary
+                n_bl = 0;
+            } else if (!(bx & (sbsz - 1))) {
+                // left sb boundary
+                n_bl = h;
+            } else {
+                // smooth pred uses 1px max
+                n_bl = (t->is_coded[chroma][by4 + bh4] >> (bx4 - 1)) & 1;
             }
-            n_bl = y;
         }
     }
     const int ss_hor = chroma * f->ss_hor, ss_ver = chroma * f->ss_ver;
