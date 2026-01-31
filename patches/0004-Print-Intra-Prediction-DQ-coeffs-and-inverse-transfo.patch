@@ -1,4 +1,4 @@
-From 3826f4d75ad58d8b2e29ae28fc45df3f7dc57985 Mon Sep 17 00:00:00 2001
+From b0efc565b777e1408df86537511d6ccceb760779 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -6,13 +6,13 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
 ---
  av2/common/idct.c         |  19 +++-
  av2/common/idct.h         |   7 +-
- av2/common/reconintra.c   | 182 ++++++++++++++++++++++++++++++++++++--
+ av2/common/reconintra.c   | 189 ++++++++++++++++++++++++++++++++++++--
  av2/decoder/decodeframe.c |  36 +++++++-
- av2/encoder/encodemb.c    |  10 +--
+ av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 8 files changed, 291 insertions(+), 22 deletions(-)
+ 8 files changed, 298 insertions(+), 22 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af6944168..699c7c3b2f 100644
@@ -104,7 +104,7 @@ index c5c7647c4f..37a23f92a5 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av2/common/reconintra.c b/av2/common/reconintra.c
-index 27fbd5045e..50d2e94267 100644
+index 27fbd5045e..df4e86259b 100644
 --- a/av2/common/reconintra.c
 +++ b/av2/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -200,7 +200,7 @@ index 27fbd5045e..50d2e94267 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1279,6 +1311,116 @@ static void build_intra_predictors_high(
+@@ -1279,6 +1311,123 @@ static void build_intra_predictors_high(
      }
    }
  
@@ -238,7 +238,10 @@ index 27fbd5045e..50d2e94267 100644
 +      break;
 +    default:
 +      assert(is_dr_mode);
-+      const int ibp = apply_ibp && !mrl_index;
++      const int tl_filter = !disable_edge_filter && !mrl_index &&
++        p_angle != 90 && p_angle != 180 && need_above && need_left &&
++        txwpx + txhpx >= 24;
++      const int ibp = apply_ibp && !mrl_index && !(angle_delta & 1);
 +      if (p_angle == 90 || (p_angle < 90 && !ibp && !n_top_px)) { // v
 +        print_t = txwpx;
 +      } else if (p_angle < 90) { // z1
@@ -246,6 +249,8 @@ index 27fbd5045e..50d2e94267 100644
 +        print_t = txwpx + txhpx;
 +        if (ibp)
 +          print_l = txwpx + txhpx;
++        else if (tl_filter)
++          print_l = 1;
 +      } else if (p_angle < 180) { // z2
 +        print_tl = 1;
 +        print_t = txwpx;
@@ -257,6 +262,8 @@ index 27fbd5045e..50d2e94267 100644
 +        print_l = txwpx + txhpx;
 +        if (ibp)
 +          print_t = txwpx + txhpx;
++        else if (tl_filter)
++          print_t = 1;
 +      }
 +      if (xd->mi[0]->multi_line_mrl && tx_size != TX_4X4) {
 +        print_t2 = print_t;
@@ -317,7 +324,7 @@ index 27fbd5045e..50d2e94267 100644
    if (use_intra_dip) {
      av2_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1287,6 +1429,13 @@ static void build_intra_predictors_high(
+@@ -1287,6 +1436,13 @@ static void build_intra_predictors_high(
                                     mbmi->intra_dip_features
  #endif  // CONFIG_DIP_EXT_PRUNING
      );
@@ -331,7 +338,7 @@ index 27fbd5045e..50d2e94267 100644
      return;
    }
  
-@@ -1406,6 +1555,14 @@ static void build_intra_predictors_high(
+@@ -1406,6 +1562,14 @@ static void build_intra_predictors_high(
        }
      }
  
@@ -346,7 +353,7 @@ index 27fbd5045e..50d2e94267 100644
      return;
    }
    // predict
-@@ -1427,6 +1584,13 @@ static void build_intra_predictors_high(
+@@ -1427,6 +1591,13 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -360,7 +367,7 @@ index 27fbd5045e..50d2e94267 100644
  }
  
  #define ARITHMETIC_LEFT_SHIFT(x, shift) \
-@@ -1455,6 +1619,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1455,6 +1626,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          dst[r * dst_stride + c] = palette[map[(r + y) * wpx + c + x]];
        }
      }
@@ -373,7 +380,7 @@ index 27fbd5045e..50d2e94267 100644
      return;
    }
  
-@@ -1509,7 +1679,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1509,7 +1686,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  

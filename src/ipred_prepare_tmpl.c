@@ -81,7 +81,7 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                                   const pixel *const dst,
                                   const ptrdiff_t stride,
                                   const pixel *prefilter_toplevel_sb_edge,
-                                  enum IntraPredMode mode, int *const angle,
+                                  enum IntraPredMode mode,
                                   const int tw4, const int th4,
                                   const int intra_flags,
                                   pixel *const topleft_out HIGHBD_DECL_SUFFIX)
@@ -90,6 +90,7 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     assert(y < h && x < w);
     int is_dir = 0;
     const int enable_edge_filter = !!(intra_flags & ANGLE_USE_EDGE_FILTER_FLAG);
+    const int angle = intra_flags & 511;
     const int apply_dip = !!(intra_flags & ANGLE_DIP_FLAG);
     const int apply_ibp = !!(intra_flags & ANGLE_IBP_FLAG);
     const int mrl_idx =
@@ -98,6 +99,7 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     const int have_left = !!(intra_flags & ANGLE_HAS_LEFT_FLAG);
     const int have_top = !!(intra_flags & ANGLE_HAS_TOP_FLAG);
 
+    int tl_filter = 0;
     switch (mode) {
     case VERT_PRED:
     case HOR_PRED:
@@ -108,15 +110,18 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     case HOR_UP_PRED:
     case VERT_LEFT_PRED: {
         is_dir = 1;
-        if (*angle <= 90)
-            mode = *angle < 90 && (have_top || apply_ibp) ? Z1_PRED : VERT_PRED;
-        else if (*angle < 180)
+        if (angle <= 90)
+            mode = angle < 90 && (have_top || apply_ibp) ? Z1_PRED : VERT_PRED;
+        else if (angle < 180)
             mode = Z2_PRED;
         else
-            mode = *angle > 180 && (have_left || apply_ibp) ? Z3_PRED : HOR_PRED;
+            mode = angle > 180 && (have_left || apply_ibp) ? Z3_PRED : HOR_PRED;
+        tl_filter = (unsigned) mode - Z1_PRED <= 2U && have_left && have_top &&
+                    !mrl_idx && enable_edge_filter && tw4 + th4 >= 6;
         break;
     }
     case PAETH_PRED:
+        assert(!apply_dip);
     case DC_PRED:
         mode = apply_dip ? DIP_PRED : mode_conv[mode != DC_PRED][have_left][have_top];
         break;
@@ -152,8 +157,8 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
     // adjacent (non-mrl_idx) line, which contains width+height pixels.
     const int diag_mrl_idx = (unsigned) mode - Z1_PRED <= 2U ? mrl_idx : 0;
     const int e_stride = (tw + th) * 2 + diag_mrl_idx * 3 + 1;
-    if (e.needs_left) {
-        int sz = th, sz2 = th;
+    if (e.needs_left || tl_filter) {
+        int sz = e.needs_left ? th : 1, sz2 = th;
         if (e.needs_bottomleft) {
             sz += apply_dip ? th >> 2 : is_dir ? tw + 2 * diag_mrl_idx : 1 /* smooth */;
             sz2 = sz - 2 * diag_mrl_idx;
@@ -162,7 +167,7 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         pixel *const left2 = &topleft_out[e_stride - 1];
 
         if (have_left) {
-            int px_have = imin(th, (h - y) << 2);
+            int px_have = e.needs_left ? imin(th, (h - y) << 2) : 1;
             int i;
             for (i = 0; i < px_have; i++)
                 left[-i] = dst[PXSTRIDE(stride) * i - 1 - mrl_idx];
@@ -212,8 +217,8 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
 #endif
     }
 
-    if (e.needs_top) {
-        int sz = tw, sz2 = tw;
+    if (e.needs_top || tl_filter) {
+        int sz = e.needs_top ? tw : 1, sz2 = tw;
         if (e.needs_topright) {
             sz += apply_dip ? tw >> 2 : is_dir ? th + 2 * diag_mrl_idx : 1 /* smooth */;
             sz2 = sz - 2 * diag_mrl_idx;
@@ -222,7 +227,7 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         pixel *const top2 = &topleft_out[e_stride + 1];
 
         if (have_top) {
-            int px_have = imin(tw, (w - x) << 2);
+            int px_have = e.needs_top ? imin(tw, (w - x) << 2) : 1;
             pixel_copy(top, dst_top, px_have);
             if (e.needs_topright && n_tr > 0) {
                 px_have += imin(n_tr << 2, sz - tw);
@@ -297,9 +302,7 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         }
 #endif
 
-        if ((unsigned) mode - Z1_PRED <= 2U &&
-            !mrl_idx && enable_edge_filter && tw + th >= 24)
-        {
+        if (tl_filter) {
             const int c = topleft_out[0] +
                 (topleft_out[-1] + topleft_out[0] + topleft_out[1]) * 5;
             topleft_out[0] = (c + 8) >> 4;

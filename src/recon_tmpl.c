@@ -2201,16 +2201,18 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const int sby = t->by >> f->sb_shift;
             top_sb_edge += f->sb256w * 256 * (sby - 1);
         }
-        const int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 && !mrl_idx;
+        int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 &&
+                        !mrl_idx;
         const int dip = b->dip - 1;
         const int sm_top = t->pb.is_sm.a;
         const int sm_left = t->pb.is_sm.l;
         const int is_sm_flag = apply_ibp ?
-            ((sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
-             (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG)) :
-                (sm_top | sm_left) *
-                    (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
-        int intra_flags = ANGLE_IS_LUMA | is_sm_flag |
+            (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
+            (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
+            (sm_top | sm_left) * (ANGLE_SMOOTH_TOP_EDGE_FLAG |
+                                  ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+        if (b->y_angle & 1) apply_ibp = 0;
+        const int intra_flags = ANGLE_IS_LUMA | is_sm_flag |
             (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
             (apply_ibp ? ANGLE_IBP_FLAG : 0) |
             (mrl_idx << ANGLE_MRL_IDX_SHIFT) |
@@ -2222,10 +2224,8 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         const enum IntraPredMode m = bytefn(dav2d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS) t->bx, t->by,
             ts->tiling.col_end, ts->tiling.row_end, n_tr, n_bl, dst,
-            f->cur.p.stride[0], top_sb_edge, b->y_mode, &angle,
-            t_dim->w, t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
-        // FIXME remove this flag before calling prepare_intra_edges()
-        if (b->y_angle & 1) intra_flags &= ~ANGLE_IBP_FLAG;
+            f->cur.p.stride[0], top_sb_edge, b->y_mode, t_dim->w, t_dim->h,
+            angle | intra_flags, edge HIGHBD_CALL_SUFFIX);
 
         dsp->ipred.intra_pred[m](dst, f->cur.p.stride[0],
                                  edge, tw, th, angle | intra_flags,
@@ -2527,28 +2527,30 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
         const int sby = by >> f->sb_shift;
         top_sb_edge += f->sb256w * 256 * (sby - 1);
     }
-    const int intra_flags = ANGLE_IBP_FLAG /* for dc */ |
+    const int ssbw4 = bw4 >> ss_hor;
+    const int ssbh4 = bh4 >> ss_ver;
+    const int apply_ibp = f->seq_hdr->ibp && imax(ssbw4, ssbh4) > 1;
+    const int intra_flags =
+        (apply_ibp ? ANGLE_IBP_FLAG /* for dc */ : 0) |
         ((bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
         ((by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
     m = bytefn(dav2d_prepare_intra_edges)(
             DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             bx >> ss_hor, by >> ss_ver,
             ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-            n_tr >> ss_hor, n_bl >> ss_ver, dst, stride, top_sb_edge, m, &angle,
-            bw4 >> ss_hor, bh4 >> ss_ver, intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
-    dsp->ipred.intra_pred[m](tmp, 4 * bw4 * sizeof(pixel) >> ss_hor,
-                             tl_edge, bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver,
+            n_tr >> ss_hor, n_bl >> ss_ver, dst, stride, top_sb_edge, m,
+            ssbw4, ssbh4, angle | intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
+    dsp->ipred.intra_pred[m](tmp, 4 * ssbw4 * sizeof(pixel),
+                             tl_edge, ssbw4 * 4, ssbh4 * 4,
                              intra_flags, 0, 0 HIGHBD_CALL_SUFFIX);
     if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-        hex_dump(tmp, bw4 * 4 * sizeof(pixel) >> ss_hor,
-                 bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver, "intra-pred");
-        hex_dump(dst, stride,
-                 bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver, "inter-pred");
+        hex_dump(tmp, ssbw4 * 4 * sizeof(pixel), ssbw4 * 4, ssbh4 * 4, "intra-pred");
+        hex_dump(dst, stride, ssbw4 * 4, ssbh4 * 4, "inter-pred");
     }
     const uint8_t *const mask = b->wedge_idx == -1 ?
-        II_MASK(ss_bs, bw4 >> ss_hor, bh4 >> ss_ver, b->interintra_mode) :
+        II_MASK(ss_bs, ssbw4, ssbh4, b->interintra_mode) :
         WEDGE_MASK(ss_bs, bw4, bh4, b->wedge_idx, ss_hor + ss_ver);
-    dsp->mc.blend(dst, stride, tmp, bw4 * 4 >> ss_hor, bh4 * 4 >> ss_ver, mask);
+    dsp->mc.blend(dst, stride, tmp, ssbw4 * 4, ssbh4 * 4, mask);
 }
 
 static inline void
@@ -2666,7 +2668,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             const enum IntraPredMode m = bytefn(dav2d_prepare_intra_edges)(
                 DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
                 ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-                0, 0, src, cstride, ctop_sb_edge, DC_PRED, NULL,
+                0, 0, src, cstride, ctop_sb_edge, DC_PRED,
                 uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
             dsp->ipred.cfl_pred[m](dst, cstride, edge, ctw, cth, ac, alpha HIGHBD_CALL_SUFFIX);
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
@@ -3365,7 +3367,7 @@ chroma: {}
             const int is_sm_flag = (sm_top | sm_left) *
                 (ANGLE_SMOOTH_TOP_EDGE_FLAG | ANGLE_SMOOTH_LEFT_EDGE_FLAG);
             int intra_flags = is_sm_flag |
-                ANGLE_IBP_FLAG |
+                (apply_ibp ? ANGLE_IBP_FLAG : 0) |
                 (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
                 ((t->cbx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
                 ((t->cby > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
@@ -3377,11 +3379,9 @@ chroma: {}
                 // (decode coefs of both planes first then pred + itx)
                 DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
                 ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-                n_tr, n_bl, dst, stride, top_sb_edge, uv_mode,
-                &angle, uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
+                n_tr, n_bl, dst, stride, top_sb_edge, uv_mode, uv_t_dim->w,
+                uv_t_dim->h, angle | intra_flags, edge HIGHBD_CALL_SUFFIX);
 
-            // FIXME remove this flag before calling prepare_intra_edges()
-            if (!apply_ibp) intra_flags &= ~ANGLE_IBP_FLAG;
             dsp->ipred.intra_pred[m](dst, stride,
                                      edge, ctw, cth, angle | intra_flags,
                                      4 * f->bw - 4 * t->cbx,
