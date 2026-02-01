@@ -2013,7 +2013,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
 }
 
 static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
-                      const int plane, const int step,
+                      const int plane, const int step, const int window_pad,
                       const int bw4, const int bh4)
 {
     const Dav2dFrameContext *const f = t->f;
@@ -2032,15 +2032,18 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
 
     const int w = f->bw * 4 >> ss_hor, h = f->bw * 4 >> ss_hor;
     const int sw4 = imin(bw4, step), sh4 = imin(bh4, step);
-    const int hhtaps = 2 + 2 * (sw4 > 1 + ss_hor), hvtaps = 2 + 2 * (sh4 > 1 + ss_ver);
+    const int hhtaps = (window_pad >> ss_hor) + 2 + 2 * (sw4 > 1 + ss_hor);
+    const int hvtaps = (window_pad >> ss_ver) + 2 + 2 * (sh4 > 1 + ss_ver);
     for (int y = 0; y < bh4; y += step) {
         for (int x = 0, xx = 0; x < bw4; x += step, xx++) {
             union mv (*const rmv)[2] = rmv_line[xx];
             for (int i = 0; i < 2; i++) {
-                int top = ((t->by + y) * 4 >> ss_ver) + (rmv[tip][i].y >> 4);
-                int left = ((t->bx + x) * 4 >> ss_hor) + (rmv[tip][i].x >> 4);
+                int top = ((t->by + y) * 4 >> ss_ver) +
+                          ((tip ? rmv[1][i].y : b->mv[i].y) >> 4);
+                int left = ((t->bx + x) * 4 >> ss_hor) +
+                           ((tip ? rmv[1][i].x : b->mv[i].x) >> 4);
                 const int bottom = top + (4 * sh4 >> ss_ver) + hvtaps;
-                const int right = left + (4 * sw4 >> ss_ver) + hhtaps;
+                const int right = left + (4 * sw4 >> ss_hor) + hhtaps;
                 top -= hvtaps - 1;
                 left -= hhtaps - 1;
                 mc_opfl(t, &tmp[i][uvoff + (x * 4 >> ss_hor)], stride,
@@ -3229,12 +3232,13 @@ chroma: {}
                      f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
                 const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                                        ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
-                bacp = rmv_uvpred(t, b, pl, step, cbw4, cbh4);
+                bacp = rmv_uvpred(t, b, pl, step, 0, cbw4, cbh4);
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
             {
+                const int refine = b->comp_type == COMP_INTER_AVG && b->refine_mv;
                 const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
-                bacp = rmv_uvpred(t, b, pl, 4 >> opfl, cbw4, cbh4);
+                bacp = rmv_uvpred(t, b, pl, 4 >> opfl, refine ? 4 : 0, cbw4, cbh4);
             } else {
                 if (!pl)
                     bacp = 2 * (f->seq_hdr->imp_msk_bld &&
