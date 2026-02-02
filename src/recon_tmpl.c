@@ -2620,8 +2620,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             pixel *dst = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
             pixel *const edge = bitfn(t->scratch.edge) + 128;
-            const pixel *const ctop_sb_edge = is_top_sb_edge ?
-                f->ipred_edge[pl] + ((sby - 1) * f->sb256w * 256 >> ss_hor) : NULL;
+            const pixel *const ctop_sb_edge = !is_top_sb_edge ? NULL :
+                f->ipred_edge[pl] + ((sby - 1) * f->sb256w * 256 >> ss_hor);
             const pixel *const src = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
 
@@ -2691,9 +2691,9 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         }
     } else { // CFL MHCCP
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
-        uint16_t luma[256*130];
-        int refw = ctw, refh = cth, luma_stride;
-        uint16_t imat[2][CFL_MAX_EDGE_SAMPLES];
+        ALIGN(pixel luma[CFL_MHCCP_MAX_LUMA_SIZE], 64);
+        int refw = ctw, refh = cth, luma_top_stride;
+        uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES];
         int32_t mat[3][3] = { 0 };
         int n_tr = 0, n_bl = 0;
         if (has_top) {
@@ -2734,19 +2734,19 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         refw = imin(refw, 128 >> ss_hor);
         refh = imin(refh, (128 >> ss_ver) - 2 * has_top);
 
-        const int wl2 = 31 - clz(refw);
-        luma_stride = 1 << (wl2 + !!(refw & ((1 << wl2) - 1)) + 1);
+        luma_top_stride = (refw * sizeof(pixel) + 63) & ~63;
         const int edge_flags = (has_top ? CFL_HAS_TOP : 0) |
                                (has_left ? CFL_HAS_LEFT : 0) |
                                (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
-        dsp->ipred.cfl_gen_y[layout][filter_type](luma, luma_stride,
+        dsp->ipred.cfl_gen_y[layout][filter_type](luma, luma_top_stride,
                                                   y_src, ytop_sb_edge, ystride,
                                                   refw, refh, ctw, cth,
                                                   edge_flags | b->cfl_mh_dir);
         refh += has_top;
         if (has_top || has_left)
-            dsp->ipred.cfl_gen_mat[b->cfl_mh_dir](mat, imat, luma, luma_stride,
-                                              refw, refh, edge_flags HIGHBD_CALL_SUFFIX);
+            dsp->ipred.cfl_gen_mat[b->cfl_mh_dir](
+                    mat, imat, luma, luma_top_stride,
+                    refw, refh, edge_flags HIGHBD_CALL_SUFFIX);
 
         for (int pl = 1; pl <= 2; pl++) {
             int alpha[3] = { 0 };
@@ -2764,10 +2764,10 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             }
             const int n_top = has_top ? has_top + (b->cfl_mh_dir == CFL_DIR_TOP) : 0;
             const int n_left = has_left ? has_left + (b->cfl_mh_dir == CFL_DIR_LEFT) : 0;
-            const uint16_t *const src = luma + n_top * (luma_stride >> 1) + n_left;
-            dsp->ipred.cfl_mhccp_pred[b->cfl_mh_dir](chroma, cstride, src, luma_stride,
-                                                     ctw, cth, alpha, edge_flags
-                                                     HIGHBD_CALL_SUFFIX);
+            const pixel *const src = luma + n_top * PXSTRIDE(luma_top_stride);
+            dsp->ipred.cfl_mhccp_pred[b->cfl_mh_dir](chroma, cstride, src,
+                                                     luma_top_stride, ctw, cth,
+                                                     alpha, edge_flags HIGHBD_CALL_SUFFIX);
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 hex_dump(chroma, cstride, ctw, cth, pl == 1 ? "u-intra-pred" : "v-intra-pred");
             }

@@ -109,8 +109,17 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
 /* CFL MHCCP */
 
+/*
+ * max luma size
+ * = 2 * align64(max_top_w) + max_bl_size + 2 * max_left
+ * = 2 * align64(130) + 64 * 64 + 2 * 128
+ * = 2 * 192 + 2^12 + 256
+ * = 384 + 4096 + 256 = 4736
+ */
+#define CFL_MHCCP_MAX_LUMA_SIZE 4736
+
 #define decl_cfl_gen_y_fn(name) \
-void (name)(uint16_t *dst, int dst_stride, \
+void (name)(pixel *dst, ptrdiff_t dst_top_stride, \
             const pixel *src, const pixel *top_sb_edge, ptrdiff_t src_stride, \
             int refw, int refh, int tw, int th, int flags)
 typedef decl_cfl_gen_y_fn(*cfl_gen_y_fn);
@@ -121,12 +130,12 @@ typedef decl_cfl_gen_y_fn(*cfl_gen_y_fn);
  *  = 2tl+128a+128tr+64l+64bl   = 2tl+64a+64tr+128l+128bl
  *  = 386
  */
-#define CFL_MAX_EDGE_SAMPLES 386
+#define CFL_MHCCP_MAX_EDGE_SAMPLES 386
 
 #define decl_cfl_gen_mat_fn(name) \
-void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES], \
-            const uint16_t *y, int ystride, int refw, int refh, int edge_flags \
-            HIGHBD_DECL_SUFFIX)
+void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
+            const pixel *y, ptrdiff_t y_top_stride, int refw, int refh, \
+            int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_gen_mat_fn(*cfl_gen_mat_fn);
 
 /*
@@ -135,8 +144,8 @@ typedef decl_cfl_gen_mat_fn(*cfl_gen_mat_fn);
 #define decl_cfl_calc_alphas_fn(name) \
 void (name)(int alpha[3], const pixel *c, const pixel *top_sb_edge, \
             ptrdiff_t stride, int w, int h, int32_t mat[3][3], \
-            const uint16_t imat[2][CFL_MAX_EDGE_SAMPLES], int edge_flags \
-            HIGHBD_DECL_SUFFIX)
+            const uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
+            int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_calc_alphas_fn(*cfl_calc_alphas_fn);
 
 /*
@@ -145,8 +154,9 @@ typedef decl_cfl_calc_alphas_fn(*cfl_calc_alphas_fn);
  *            alpha[2] << (bd/2)
  */
 #define decl_cfl_mhccp_pred_fn(name) \
-void (name)(pixel *dst, ptrdiff_t dst_stride, const uint16_t *src, int src_stride, \
-            int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX)
+void (name)(pixel *dst, ptrdiff_t dst_stride, const pixel *src, \
+            ptrdiff_t src_top_stride, int w, int h, const int alpha[3], \
+            int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mhccp_pred_fn(*cfl_mhccp_pred_fn);
 
 /*
