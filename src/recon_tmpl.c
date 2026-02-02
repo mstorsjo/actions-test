@@ -1167,8 +1167,8 @@ void bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
                         uint8_t cf_ctx = 0x40;
                         enum TxfmType txtp;
                         if (!b->intra)
-                            txtp = t->scratch.txtp_map[((t->by + (y << ss_ver)) & 15) * 16 +
-                                                       ((t->bx + (x << ss_hor)) & 15)];
+                            txtp = t->txtp_map[((t->by + (y << ss_ver)) & 15) * 16 +
+                                               ((t->bx + (x << ss_hor)) & 15)];
                         const int eob =
                             decode_coefs(t, &t->a->ccoef[pl][cbx4 + x],
                                          &t->l.ccoef[pl][cby4 + y], b->uvtx, bs,
@@ -2139,7 +2139,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->w, f->bw - t->bx));
     dav2d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
-    t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xff;
+    t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xff;
 
     pixel *dst = ((pixel *) f->cur.p.data[0]) +
         4 * (t->by * PXSTRIDE(f->cur.p.stride[0]) + t->bx);
@@ -3405,6 +3405,7 @@ chroma: {}
     } else {
         const int cctx = f->seq_hdr->cctx &&
             (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
+        const enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
         enum TxfmType txtp[2];
         int eob[2];
         uint8_t cf_ctx[2];
@@ -3412,7 +3413,7 @@ chroma: {}
         int cctx_type;
         // decode coefficients
         for (int pl = 0; pl < 2; pl++) {
-            txtp[pl] = t->scratch.txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+            txtp[pl] = y_txtp;
             eob[pl] = decode_coefs(t, DB_ONLY(depth + 1)
                                    &t->a->ccoef[pl][cbx4], &t->l.ccoef[pl][cby4],
                                    uvtx, b->bs, b, pl + 1,

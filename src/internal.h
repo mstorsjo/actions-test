@@ -453,10 +453,7 @@ struct Dav2dTaskContext {
             };
         };
         struct {
-            union {
-                int16_t ac[64 * 64]; // intra-only
-                uint8_t txtp_map[16 * 16]; // inter-only
-            };
+            int16_t ac[64 * 64]; // intra-only
             uint8_t pal_idx_y[64 * 64];
             union {
                 struct {
@@ -480,6 +477,7 @@ struct Dav2dTaskContext {
         };
     } scratch;
 
+    uint8_t txtp_map[16 * 16]; // inter-only
     union {
         Dav2dWarpedMotionParams warpmv[2];
         // refined mvs after tip/opfl/refinemv
