@@ -2685,17 +2685,20 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         int n_tr = 0, n_bl = 0;
         if (has_top) {
             const int csbsz = sbsz >> ss_hor;
-            const int end = imin((ssbx + csbsz) & ~(csbsz - 1),
-                                 ts->tiling.col_end >> ss_hor);
-            const int w = imin(ctw4, end - ssbx - ctw4);
+            const int tile_end = ts->tiling.col_end >> ss_hor;
+            int w = imin(ctw4, tile_end - ssbx - ctw4);
             if (is_top_sb_edge) {
-                n_tr = ctw4;
-            } else if (!w) { // right sb boundary
-                n_tr = 0;
+                n_tr = w;
             } else {
-                const unsigned bits = (unsigned)
-                    (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
-                n_tr = imin(ctz(~bits), w);
+                const int end = imin((ssbx + csbsz) & ~(csbsz - 1), tile_end);
+                w = imin(ctw4, end - ssbx - ctw4);
+                if (!w) { // right sb boundary
+                    n_tr = 0;
+                } else {
+                    const unsigned bits = (unsigned)
+                        (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
+                    n_tr = imin(ctz(0x10000 | ~bits), w);
+                }
             }
             refw += n_tr * 4;
         }
