@@ -4631,17 +4631,24 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
     }
 
-    const int ipred_edge_sz = f->sbh * f->sb256w << hbd;
+    const int plane_mul = 1 + (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400 ?
+                               0 : 2 >> f->ss_hor);
+    const int ipred_edge_plane_sz = f->sbh * f->sb256w * 256 << hbd;
+    const int ipred_edge_sz = ipred_edge_plane_sz * plane_mul;
     if (ipred_edge_sz != f->ipred_edge_sz) {
         dav2d_free_aligned(f->ipred_edge[0]);
         uint8_t *ptr = f->ipred_edge[0] =
-            dav2d_alloc_aligned(ALLOC_IPRED, ipred_edge_sz * 256 * 3, 64);
+            dav2d_alloc_aligned(ALLOC_IPRED, ipred_edge_sz, 64);
         if (!ptr) {
             f->ipred_edge_sz = 0;
             goto error;
         }
-        f->ipred_edge[1] = ptr + ipred_edge_sz * 256 * 1;
-        f->ipred_edge[2] = ptr + ipred_edge_sz * 256 * 2;
+        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+            ptr += ipred_edge_plane_sz;
+            f->ipred_edge[1] = ptr;
+            ptr += ipred_edge_plane_sz >> f->ss_hor;
+            f->ipred_edge[2] = ptr;
+        }
         f->ipred_edge_sz = ipred_edge_sz;
     }
 

@@ -2526,7 +2526,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
     if (!(t->by & (f->sb_step - 1))) {
         top_sb_edge = f->ipred_edge[plane];
         const int sby = by >> f->sb_shift;
-        top_sb_edge += f->sb256w * 256 * (sby - 1);
+        top_sb_edge += f->sb256w * 256 * (sby - 1) >> ss_hor;
     }
     const int ssbw4 = bw4 >> ss_hor;
     const int ssbh4 = bh4 >> ss_ver;
@@ -3941,7 +3941,7 @@ void bytefn(dav2d_backup_ipred_edge)(Dav2dTaskContext *const t) {
         const ptrdiff_t uv_off = (x_off * 4 >> ss_hor) +
             (((t->by + f->sb_step) * 4 >> ss_ver) - 1) * PXSTRIDE(f->cur.p.stride[1]);
         for (int pl = 1; pl <= 2; pl++)
-            pixel_copy(&f->ipred_edge[pl][sby_off + (x_off * 4 >> ss_hor)],
+            pixel_copy(&f->ipred_edge[pl][(sby_off + x_off * 4) >> ss_hor],
                        &((const pixel *) f->cur.p.data[pl])[uv_off],
                        4 * (ts->tiling.col_end - x_off) >> ss_hor);
     }
