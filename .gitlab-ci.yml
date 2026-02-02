@@ -60,6 +60,8 @@ build-debian:
           sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' avm/debug.h
           sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' avm/debug.h
           sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' avm/debug.h
+          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' av2/common/mvref_common.c
+          sed -i 's|cm->current_frame.frame_number == 0|cm->current_frame.frame_number <= 4|' avm/debug.h
           git diff
         - |
           mkdir x86-64
@@ -73,35 +75,22 @@ build-debian:
           sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
           sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/debug.h
           sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
-          git diff
-        - meson setup build --buildtype debugoptimized -Dtrim_dsp=false && ninja -C build
-        - meson test -v -C build
-        - |
-          for sdp in 0 1; do
-              file="media/avm-v13.0.0-bus.64x64.l1.sdp${sdp}.obu"
-              avm/x86-64/avmdec $file -o /dev/null > avm.log
-              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet > dav2d.log
-              diff -uw {avm,dav2d}.log
-              wc -l avm.log
-          done
-        - |
-          cd avm
-          sed -i 's|#define DEBUG_B_PIXELS 1|#define DEBUG_B_PIXELS 0|' avm/debug.h
-          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' av2/common/mvref_common.c
-          sed -i 's|cm->current_frame.frame_number == 0|cm->current_frame.frame_number <= 4|' avm/debug.h
-          git diff
-        - cd x86-64 && make -j$(nproc) avmdec && cd ../..
-        - |
-          sed -i 's|#define DEBUG_B_PIXELS 1|#define DEBUG_B_PIXELS 0|' src/debug.h
           sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' src/refmvs.c
           sed -i 's|frame_offset == 0|frame_offset <= 4|' src/debug.h
           git diff
+        - meson setup build --buildtype debugoptimized -Dtrim_dsp=false && ninja -C build
+        - meson test -v -C build
         - ninja -C build
         - |
-          for f in l5 l5.opfl0-refinemv0; do
-              file="media/avm-v13.0.0-bus.64x64.${f}.obu"
-              avm/x86-64/avmdec $file -o /dev/null > avm.log
-              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet > dav2d.log
+          files=(
+              "./media/avm-v13.0.0-bus.64x64.l1.sdp0.obu"
+              "./media/avm-v13.0.0-bus.64x64.l1.sdp1.obu"
+              "./media/avm-v13.0.0-bus.64x64.l5.obu"
+              "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
+          )
+          for file in "${files[@]}"; do
+              avm/x86-64/avmdec $file -o /dev/null --inloopfilters=deblock+cdef+ccso > avm.log
+              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet --inloopfilters=deblock+cdef+ccso > dav2d.log
               diff -uw {avm,dav2d}.log
               wc -l avm.log
           done

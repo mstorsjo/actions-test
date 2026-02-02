@@ -2538,7 +2538,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
         ((bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
         ((by > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
     m = bytefn(dav2d_prepare_intra_edges)(
-            DB_ONLY(BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+            DB_ONLY(!plane && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             bx >> ss_hor, by >> ss_ver,
             ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
             n_tr >> ss_hor, n_bl >> ss_ver, dst, stride, top_sb_edge, m,
@@ -2546,9 +2546,9 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
     dsp->ipred.intra_pred[m](tmp, 4 * ssbw4 * sizeof(pixel),
                              tl_edge, ssbw4 * 4, ssbh4 * 4,
                              intra_flags, 0, 0 HIGHBD_CALL_SUFFIX);
-    if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-        hex_dump(tmp, ssbw4 * 4 * sizeof(pixel), ssbw4 * 4, ssbh4 * 4, "intra-pred");
-        hex_dump(dst, stride, ssbw4 * 4, ssbh4 * 4, "inter-pred");
+    if (!plane && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+        hex_dump(tmp, ssbw4 * 4 * sizeof(pixel), ssbw4 * 4, ssbh4 * 4, "y-intra-pred");
+        if (0) hex_dump(dst, stride, ssbw4 * 4, ssbh4 * 4, "inter-pred");
     }
     const uint8_t *const mask = b->wedge_idx == -1 ?
         II_MASK(ss_bs, ssbw4, ssbh4, b->interintra_mode) :

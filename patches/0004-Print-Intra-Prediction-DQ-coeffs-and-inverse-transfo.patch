@@ -1,4 +1,4 @@
-From b0efc565b777e1408df86537511d6ccceb760779 Mon Sep 17 00:00:00 2001
+From 462ff108134fc7487b7c58334e6643ce0fbdcd6a Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -390,7 +390,7 @@ index 27fbd5045e..df4e86259b 100644
        disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 7ed02bef13..93278555eb 100644
+index 7ed02bef13..7815d61799 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -207,11 +207,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -401,7 +401,7 @@ index 7ed02bef13..93278555eb 100644
 +#if DEBUG_BLOCK_INFO
 +  const int mi_row = dcb->xd.mi_row;
 +  const int mi_col = dcb->xd.mi_col;
-+  const int print = BLOCK_TO_DEBUG && DEBUG_B_PIXELS;
++  const int print = BLOCK_TO_DEBUG && DEBUG_B_PIXELS && eob > 0;
 +  if (print && (0 || plane == AVM_PLANE_Y) && !(tx_type >> 4)) {
 +    coef_dump_transpose(dqcoeff, AVMMIN(tx_size_wide[tx_size], 32),
 +                        AVMMIN(tx_size_high[tx_size], 32), 3, "dq");
