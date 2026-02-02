@@ -1293,6 +1293,7 @@ cfl_gen_mat_fn(t, CFL_DIR_TOP)
 cfl_gen_mat_fn(l, CFL_DIR_LEFT)
 
 static void get_div_scale_sh(int d, int *scale, int *sh) {
+    d = imax(1, abs(d));
     *sh = ulog2(d);
     // 1. Normalize D into fixed-point format with 14 fractional bits.
     const int nsh = *sh - 14;
