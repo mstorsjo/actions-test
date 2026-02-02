@@ -3165,6 +3165,18 @@ chroma: {}
     if (intra) {
         if (can_cfl)
             cfl(t, b, cbs, uv_t_dim, can_cfl);
+    } else if (b->intrabc) {
+        for (int pl = 0; pl < 2; pl++) {
+            mc(t, ((pixel *)f->cur.p.data[1 + pl]) + uvdstoff, NULL,
+               stride, cbw4, cbh4, t->cbx, t->cby, 1 + pl,
+               b->mv[0], &f->cur, 0 /* unused */, DAV2D_FILTER_BILINEAR,
+               0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
+            // FIXME morph_pred?
+            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+                hex_dump(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
+                         stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                         pl ? "v-pred" : "u-pred");
+        }
     } else if (cbs != lbs) {
         // sub8x8 coding
         const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
