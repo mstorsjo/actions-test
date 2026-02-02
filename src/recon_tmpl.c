@@ -2028,7 +2028,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
     int have_bacp = 0;
 
-    const int w = f->bw * 4 >> ss_hor, h = f->bw * 4 >> ss_hor;
+    const int w = f->bw * 4 >> ss_hor, h = f->bh * 4 >> ss_hor;
     const int sw4 = imin(bw4, step), sh4 = imin(bh4, step);
     const int hhtaps = (window_pad >> ss_hor) + 2 + 2 * (sw4 > 1 + ss_hor);
     const int hvtaps = (window_pad >> ss_ver) + 2 + 2 * (sh4 > 1 + ss_ver);
