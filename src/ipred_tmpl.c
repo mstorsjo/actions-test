@@ -1433,7 +1433,7 @@ cfl_mhccp_pred_c(pixel *dst, const ptrdiff_t dst_stride,
                                  mul32(alpha[1], v1, 16) + a2v2);
         }
         src += src_stride;
-        dst += dst_stride;
+        dst += PXSTRIDE(dst_stride);
     }
 }
 
