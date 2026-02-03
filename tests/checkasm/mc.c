@@ -626,12 +626,6 @@ static void check_emuedge(Dav2dMCDSPContext *const c) {
     report("emu_edge");
 }
 
-static int get_upscale_x0(const int in_w, const int out_w, const int step) {
-    const int err = out_w * step - (in_w << 14);
-    const int x0 = (-((out_w - in_w) << 13) + (out_w >> 1)) / out_w + 128 - (err >> 1);
-    return x0 & 0x3fff;
-}
-
 void bitfn(checkasm_check_mc)(void) {
     Dav2dMCDSPContext c;
     bitfn(dav2d_mc_dsp_init)(&c);
