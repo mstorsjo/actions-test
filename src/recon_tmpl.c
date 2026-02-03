@@ -2601,11 +2601,11 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
 
         const int cbw4 = (dav2d_block_dimensions[bs][0] + ss_hor) >> ss_hor;
         const int cbh4 = (dav2d_block_dimensions[bs][1] + ss_ver) >> ss_ver;
-        const int wpad = uv_t_dim->w > cbw4 ? uv_t_dim->w - cbw4 : cbw4 - ctw4;
-        const int hpad = uv_t_dim->h > cbh4 ? uv_t_dim->h - cbh4 : cbh4 - cth4;
+        const int wpad = cbw4 - ctw4;
+        const int hpad = cbh4 - cth4;
         const int dc = (!has_top && !left) ? 4 << f->cur.p.p.bpc :
             dsp->ipred.cfl_dc[layout](y_edge, top, left, ystride,
-                                      wpad << ss_hor, hpad << ss_ver,
+                                      wpad, hpad,
                                       top ? ctw << ss_hor : 0,
                                       left ? cth << ss_ver : 0, filter_type);
         dsp->ipred.cfl_ac[layout](ac, dc, y_src, ystride, wpad, hpad, ctw, cth,
