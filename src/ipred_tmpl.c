@@ -1157,7 +1157,7 @@ cfl_gen_y_420_c(uint16_t *dst, const int dst_stride,
 
     // l+blk
     const ptrdiff_t b = src_stride;
-    const pixel *top = top_sb_edge ? top_sb_edge - n_left * 2 : src - src_stride;
+    const pixel *top = src;
     for (int y = 0; y < th; y++) {
         for (int x = 0; x < n_left + tw; x++) {
             const int c = x * 2, r = c + 1;
