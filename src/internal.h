@@ -425,7 +425,7 @@ struct Dav2dTaskContext {
             } is_sm[2 /* luma, chroma */];
             struct {
                 int alpha, beta;
-            } bawp;
+            } bawp[3 /* plane */];
         };
     } pb;
     refmvs_tile rt;

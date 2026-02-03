@@ -2343,43 +2343,47 @@ static void bawp(Dav2dTaskContext *const t,
                  pixel *const dst, const ptrdiff_t stride,
                  const Dav2dThreadPicture *const refp, const int refidx,
                  const int bw4, const int bh4, const int w4, const int h4,
-                 const enum BlockSize sb_bs)
+                 const int plane, const enum BlockSize sb_bs)
 {
     const Dav2dFrameContext *const f = t->f;
+    const int chroma = !!plane;
+    const int ss_hor = f->ss_hor * chroma, ss_ver = f->ss_ver * chroma;
+    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
     const Dav2dDSPContext *const dsp = f->dsp;
     const uint8_t *const sb_dim = dav2d_block_dimensions[sb_bs];
-    if ((sb_dim[0] > 16 && t->bx & (sb_dim[0] - 1)) ||
-        (sb_dim[1] > 16 && t->by & (sb_dim[1] - 1)))
+    const int bx = chroma ? t->cbx : t->bx, by = chroma ? t->cby : t->by;
+    if ((sb_dim[0] > (16 << ss_hor) && bx & (sb_dim[0] - 1)) ||
+        (sb_dim[1] > (16 << ss_ver) && by & (sb_dim[1] - 1)))
     {
-        const int alpha = t->pb.bawp.alpha, beta = t->pb.bawp.beta;
+        const int alpha = t->pb.bawp[plane].alpha, beta = t->pb.bawp[plane].beta;
         if (alpha != 256 || beta)
-            dsp->mc.morph(dst, f->cur.p.stride[0], alpha, beta,
-                          bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+            dsp->mc.morph(dst, stride, alpha, beta,
+                          bw4 * h_mul, bh4 * v_mul HIGHBD_CALL_SUFFIX);
         return;
     }
     // defaults
-    t->pb.bawp.alpha = 256;
-    t->pb.bawp.beta = 0;
+    t->pb.bawp[plane].alpha = 256;
+    t->pb.bawp[plane].beta = 0;
     Dav2dTileState *const ts = t->ts;
     int tile_top_edge, tile_left_edge, tile_bottom_edge, tile_right_edge;
     if (refp == &f->cur) {
-        tile_top_edge = ts->tiling.row_start * 4;
-        tile_left_edge = ts->tiling.col_start * 4;
-        tile_bottom_edge = ts->tiling.row_end * 4;
-        tile_right_edge = ts->tiling.col_end * 4;
+        tile_top_edge = ts->tiling.row_start * v_mul;
+        tile_left_edge = ts->tiling.col_start * h_mul;
+        tile_bottom_edge = ts->tiling.row_end * v_mul;
+        tile_right_edge = ts->tiling.col_end * h_mul;
     } else {
         tile_top_edge = tile_left_edge = 0;
-        tile_bottom_edge = f->bh * 4;
-        tile_right_edge = f->bw * 4;
+        tile_bottom_edge = f->bh * v_mul;
+        tile_right_edge = f->bw * h_mul;
     }
-    const int mvx = (mv.x + 3 + (mv.x >= 0)) >> 3;
-    const int mvy = (mv.y + 3 + (mv.y >= 0)) >> 3;
-    const int ref_y = (t->by * 4 + mvy);
-    const int ref_x = (t->bx * 4 + mvx);
+    const int mvx = (mv.x + 3 + (mv.x >= 0)) >> (3 + ss_hor);
+    const int mvy = (mv.y + 3 + (mv.y >= 0)) >> (3 + ss_ver);
+    const int ref_y = (by * v_mul + mvy);
+    const int ref_x = (bx * h_mul + mvx);
     const int ref_tmplt_x = ref_x - 1;
     const int ref_tmplt_y = ref_y - 1;
-    const int ref_bottom_edge = ref_y + h4 * 4;
-    const int ref_right_edge = ref_x + w4 * 4;
+    const int ref_bottom_edge = ref_y + h4 * v_mul;
+    const int ref_right_edge = ref_x + w4 * h_mul;
 
     const int can_morph =
         ref_bottom_edge <= tile_bottom_edge &&
@@ -2402,16 +2406,16 @@ static void bawp(Dav2dTaskContext *const t,
             { { 0, 4 }, { 3, 3 }, { 4, 4 } },
         }
     };
-    const int have_left = t->bx > ts->tiling.col_start;
-    const int have_above = t->by > ts->tiling.row_start;
-    const int lw4 = imin(ulog2(w4), 2), lh4 = imin(ulog2(h4), 2);
+    const int have_left = bx > ts->tiling.col_start;
+    const int have_above = by > ts->tiling.row_start;
+    const int lw4 = imin(ulog2(w4) - ss_hor, 2), lh4 = imin(ulog2(h4) - ss_ver, 2);
     const int idx = have_above && have_left;
     const int n_above_l2 = have_above * n_edge_samples[idx][lh4][lw4][0];
     const int n_left_l2 = have_left * n_edge_samples[idx][lh4][lw4][1];
 
     const pixel *const ref =
-        &((const pixel *) refp->p.data[0])[ref_y * PXSTRIDE(refp->p.stride[0]) +
-                                           ref_x];
+        &((const pixel *) refp->p.data[plane])[ref_y * PXSTRIDE(refp->p.stride[chroma]) +
+                                               ref_x];
 
     assert(n_above_l2 == 0 || n_left_l2 == 0 || n_above_l2 == n_left_l2);
     const int count_l2 =
@@ -2423,8 +2427,8 @@ static void bawp(Dav2dTaskContext *const t,
         assert(step > 0);
         const int start = step >> 1;
         for (int i = start; i < bw; i += step) {
-            const int x = ref[i - PXSTRIDE(refp->p.stride[0])];
-            const int y = dst[i - PXSTRIDE(f->cur.p.stride[0])];
+            const int x = ref[i - PXSTRIDE(refp->p.stride[chroma])];
+            const int y = dst[i - PXSTRIDE(stride)];
             sum_x += x;
             sum_y += y;
             sum_xy += x * y;
@@ -2438,8 +2442,8 @@ static void bawp(Dav2dTaskContext *const t,
         assert(step > 0);
         const int start = step >> 1;
         for (int i = start; i < bh; i += step) {
-            const int x = ref[(i * PXSTRIDE(refp->p.stride[0])) - 1];
-            const int y = dst[(i * PXSTRIDE(f->cur.p.stride[0])) - 1];
+            const int x = ref[(i * PXSTRIDE(refp->p.stride[chroma])) - 1];
+            const int y = dst[(i * PXSTRIDE(stride)) - 1];
             sum_x += x;
             sum_y += y;
             sum_xy += x * y;
@@ -2468,11 +2472,11 @@ static void bawp(Dav2dTaskContext *const t,
     } else {
         beta = -128;
     }
-    t->pb.bawp.alpha = alpha;
-    t->pb.bawp.beta = beta;
+    t->pb.bawp[plane].alpha = alpha;
+    t->pb.bawp[plane].beta = beta;
 
-    dsp->mc.morph(dst, f->cur.p.stride[0], alpha, beta,
-                  bw4 * 4, bh4 * 4 HIGHBD_CALL_SUFFIX);
+    dsp->mc.morph(dst, stride, alpha, beta,
+                  bw4 * h_mul, bh4 * v_mul HIGHBD_CALL_SUFFIX);
 }
 
 static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
@@ -2841,7 +2845,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
            0, f->bw * 4, 0, f->bh * 4);
         if (b->morph_pred)
             bawp(t, 1, b->mv[0], dst, f->cur.p.stride[0],
-                 &f->cur, 0 /* unused */, bw4, bh4, w4, h4, b->bs);
+                 &f->cur, 0 /* unused */, bw4, bh4, w4, h4, 0, b->bs);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(dst, f->cur.p.stride[0], bw4 * 4, bh4 * 4, "y-pred");
         }
@@ -2863,7 +2867,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
             if (b->bawp[0]) {
                 bawp(t, b->bawp[0], b->mv[0], dst, f->cur.p.stride[0],
-                     refp, b->ref.ref[0], bw4, bh4, w4, h4, b->bs);
+                     refp, b->ref.ref[0], bw4, bh4, w4, h4, 0, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 iiblend(t, b, dst, f->cur.p.stride[0], 0, bw4, bh4, t->by, t->bx, bs);
             }
@@ -3218,30 +3222,29 @@ chroma: {}
     } else if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
         const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
         for (int pl = 0; pl < 2; pl++) {
+            pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff;
             if (!f->frame_hdr->force_integer_mv &&
                 ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
                  (b->motion_mode >= MM_WARP_CAUSAL &&
                   t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
-                warp_affine(t, ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
-                            NULL, stride, cb_dim, 1 + pl, refp,
+                warp_affine(t, dst, NULL, stride, cb_dim, 1 + pl, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
                                 &f->frame_hdr->gmv[b->ref.ref[0]]);
             } else {
-                mc(t, ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff, NULL, stride,
+                mc(t, dst, NULL, stride,
                    cbw4, cbh4, t->cbx, t->cby, 1 + pl, b->mv[0], refp, b->ref.ref[0],
                    b->filter, 0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
             }
             if (b->bawp[1]) {
-                DEBUG_BLOCK_printf("bawp\n");
+                bawp(t, 1, b->mv[0], dst, f->cur.p.stride[1],
+                     refp, b->ref.ref[0], cbw4, cbh4, w4, h4, pl + 1, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
-                iiblend(t, b, ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
-                        stride, 1 + pl, cbw4, cbh4, t->cby, t->cbx,
+                iiblend(t, b, dst, stride, 1 + pl, cbw4, cbh4, t->cby, t->cbx,
                         b->wedge_idx == -1 ? dav2d_ss_bs[cbs][f->cur.p.p.layout - 1] : cbs);
             }
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-                hex_dump(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
-                         stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                hex_dump(dst, stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
                          pl ? "v-pred" : "u-pred");
         }
     } else /* compound-inter */ {
