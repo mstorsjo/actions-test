@@ -2329,10 +2329,10 @@ static inline int derive_alpha(const int num, const int den, int alpha) {
         const int shift_add = shift_d - shift_n - 8;
         if (shift_add <= 1) {
             const int shift0 = 9 + 7 + shift_add;
-            alpha = shift0 < 0 ? max :
+            const int tmp_alpha = shift0 < 0 ? max :
                 imin((dav2d_div_recip[f_d] * f_n) >> shift0, max);
-            if (!alpha) return 1 << 8;
-            alpha = apply_sign(alpha, num);
+            if (tmp_alpha)
+                alpha = apply_sign(tmp_alpha, num);
         }
     }
     return alpha;
