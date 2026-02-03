@@ -1692,18 +1692,18 @@ static int tip_pred(Dav2dTaskContext *const t,
         d[1] = apply_sign(1 + (d1 > d0), -f->refdist[ref.ref[1]]);
     }
 
-    union mv (*rmv_line)[2][2] = t->rmv;
+    union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
     const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == 1 /* reference */ ? 6 : 15;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (ref.ref[0] * 8 + ref.ref[1])));
-    for (int y = 0, yy = 0; y < h4; y += step, yy++, rmv_line += 8) {
+    for (int y = 0, yy = 0; y < h4; y += step, yy++, rmv_line += 16 * step >> 1) {
         const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
-        for (int x = 0, xx = 0; x < w4; x += step, xx++) {
+        for (int x = 0; x < w4; x += step) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
             mv tmv = t->rt.rp_proj[off_8x8].mv;
             if (tmv.y == INVALID_MV) tmv.n = 0;
-            union mv (*const rmv)[2] = rmv_line[xx], *const cmv = rmv[0];
+            union mv (*const rmv)[2] = rmv_line[x >> 1], *const cmv = rmv[0];
             int left[2], top[2];
             for (int i = 0; i < 2; i++) {
                 const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
@@ -1852,12 +1852,12 @@ static int opfl_pred(Dav2dTaskContext *const t,
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
     union OpflMvDeltaBlock dd[2 * 2];
 
-    union mv (*rmv_line)[2][2] = t->rmv;
+    union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref.ref[0] * 8 + b->ref.ref[1])));
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4);
-    for (int y = 0; y < h4; y += sh4, rmv_line += (1 + opfl) * 8) {
+    for (int y = 0; y < h4; y += sh4, rmv_line += 16 * sh4 >> 1) {
         int left[2] = { t->bx * 4 + (b->mv[0].x >> 3) - 3,
                         t->bx * 4 + (b->mv[1].x >> 3) - 3 };
         if (refine) {
@@ -1888,7 +1888,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                     for (int by = 0; by < sh4; by += 2) {
                         for (int bx = 0; bx < sw4; bx += 2, r++) {
                             opfl_mv_adj(r, dd, d);
-                            union mv *const mv = rmv_line[!!by * 8 + ((x + bx) >> 1)][0];
+                            union mv *const mv = rmv_line[!!by * 16 + ((x + bx) >> 1)][0];
                             mv[0].y = b->mv[0].y * 2 + dd[0].d[0].y + dy * 16;
                             mv[0].x = b->mv[0].x * 2 + dd[0].d[0].x + dx * 16;
                             mv[1].y = b->mv[1].y * 2 + dd[0].d[1].y - dy * 16;
@@ -1916,7 +1916,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                         }
                     }
                 } else {
-                    union mv *const mv = rmv_line[x >> 2][0];
+                    union mv *const mv = rmv_line[x >> 1][0];
                     mv[0].y = b->mv[0].y + dy * 8;
                     mv[0].x = b->mv[0].x + dx * 8;
                     mv[1].y = b->mv[1].y - dy * 8;
@@ -1955,7 +1955,13 @@ static int opfl_pred(Dav2dTaskContext *const t,
                 const struct OpflRegressionData *r = r_line;
                 for (int bx = 0, xx = 0; bx < w4; bx += bs, r++, xx++) {
                     opfl_mv_adj(r, ddl, d);
-                    union mv *const mv = rmv_line[!!by * 8 + xx][0];
+                    union mv mv_8x8[2];
+                    // for 8x8, the opfl blocksize is 4x4; for inter, we
+                    // only need to store the first (top/left) one, and
+                    // the rest can be discarded. (Not sure if this is
+                    // true for 422/444, but it's definitely true for 420.)
+                    union mv *const mv = bs == 1 && (bx || by) ? mv_8x8 :
+                                         rmv_line[!!by * 16 + xx][0];
                     mv[0].y = b->mv[0].y * 2 + ddl->d[0].y;
                     mv[0].x = b->mv[0].x * 2 + ddl->d[0].x;
                     mv[1].y = b->mv[1].y * 2 + ddl->d[1].y;
@@ -2019,7 +2025,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     const int tip = b->ref.ref[0] == TIP_FRAME;
     const union refpair ref = tip ? f->rf.tip.ref : b->ref;
     int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
-    union mv (*rmv_line)[2][2] = t->rmv;
+    union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
     const ptrdiff_t stride = bw4 * 4 >> ss_hor;
     ptrdiff_t uvoff = 0;
 
@@ -2032,9 +2038,9 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     const int sw4 = imin(bw4, step), sh4 = imin(bh4, step);
     const int hhtaps = (window_pad >> ss_hor) + 2 + 2 * (sw4 > 1 + ss_hor);
     const int hvtaps = (window_pad >> ss_ver) + 2 + 2 * (sh4 > 1 + ss_ver);
-    for (int y = 0; y < bh4; y += step) {
-        for (int x = 0, xx = 0; x < bw4; x += step, xx++) {
-            union mv (*const rmv)[2] = rmv_line[xx];
+    for (int y = 0; y < bh4; y += step, rmv_line += 16 * step >> 1) {
+        for (int x = 0; x < bw4; x += step) {
+            union mv (*const rmv)[2] = rmv_line[x >> 1];
             for (int i = 0; i < 2; i++) {
                 int top = ((t->by + y) * 4 >> ss_ver) +
                           ((tip ? rmv[1][i].y : b->mv[i].y) >> 4);
@@ -2058,7 +2064,6 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                                       rmv[0], 4, 4, step >> ss_hor, step >> ss_ver,
                                       f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
         }
-        rmv_line += 8;
         uvoff += step * 4 * stride >> ss_ver;
     }
     return bacp && have_bacp;
@@ -3182,7 +3187,7 @@ chroma: {}
                          stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
                          pl ? "v-pred" : "u-pred");
         }
-    } else if (cbs != lbs) {
+    } else if (cbs != lbs && imin(bw4, bh4) < 16) {
         // sub8x8 coding
         const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
         ptrdiff_t uvoff = uvdstoff;

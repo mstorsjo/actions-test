@@ -481,7 +481,7 @@ struct Dav2dTaskContext {
     union {
         Dav2dWarpedMotionParams warpmv[2];
         // refined mvs after tip/opfl/refinemv
-        union mv rmv[8 * 8 /* y * 8 + x */][2 /* refined, tmv */][2 /* ref */];
+        union mv rmv[16 * 16 /* y * 16 + x */][2 /* refined, tmv */][2 /* ref */];
     };
     Av2Filter *lf_mask;
     int top_pre_cdef_toggle;
