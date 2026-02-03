@@ -2683,7 +2683,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         }
     } else { // CFL MHCCP
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
-        uint16_t luma[CFL_MAX_EDGE_SAMPLES + 64 * 64];
+        uint16_t luma[256*130];
         int refw = ctw, refh = cth, luma_stride;
         uint16_t imat[2][CFL_MAX_EDGE_SAMPLES];
         int32_t mat[3][3] = { 0 };
