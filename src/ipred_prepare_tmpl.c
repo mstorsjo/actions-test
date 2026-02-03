@@ -120,10 +120,12 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
                     !mrl_idx && enable_edge_filter && tw4 + th4 >= 6;
         break;
     }
+    case DC_PRED:
+        mode = apply_dip ? DIP_PRED : mode_conv[0][have_left][have_top];
+        break;
     case PAETH_PRED:
         assert(!apply_dip);
-    case DC_PRED:
-        mode = apply_dip ? DIP_PRED : mode_conv[mode != DC_PRED][have_left][have_top];
+        mode = mode_conv[1][have_left][have_top];
         break;
     default:
         break;
