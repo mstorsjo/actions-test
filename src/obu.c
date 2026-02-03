@@ -768,7 +768,7 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
         r->poc = refhdr->frame_offset;
         r->pocdiff = get_poc_diff(seqhdr->order_hint_n_bits, poc, r->poc);
         r->qidx = refhdr->quant.yac;
-        const unsigned tdist = abs(r->pocdiff) + mlayer - r->mlayer;
+        const int tdist = abs(r->pocdiff) + mlayer - r->mlayer;
         r->score = have_fwd_refs ? (tdist << 6) :
                    128 - (128 >> (imin(tdist, 6))) + imax(tdist - 6, 0);
         r->score += r->res_ratio_log2 * (1 << 5) + r->qidx;
@@ -1483,7 +1483,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             hdr->loopfilter.delta_q_y[0] = dav2d_get_bits(gb, bits) - off;
         if (hdr->loopfilter.level_y[1])
             hdr->loopfilter.delta_q_y[1] = dav2d_get_bit(gb) ?
-                                           dav2d_get_bits(gb, bits) - off :
+                                           (int)dav2d_get_bits(gb, bits) - off :
                                            hdr->loopfilter.delta_q_y[0];
         if (hdr->loopfilter.level_u && dav2d_get_bit(gb))
             hdr->loopfilter.delta_q_u = dav2d_get_bits(gb, bits) - off;

@@ -2467,18 +2467,18 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 const int m = t_src->mv.mv[idx].n;
                 t_dst[x >> 1].mv.n = m * 0x10001U;
                 t_dst[x >> 1].ref.pair =
-                    (m == INVALID_TRAJ) ? -1 : (uint8_t) t_src->ref.ref[idx] * 0x101U;
+                    (m == INVALID_TRAJ) ? -1 : (uint8_t) t_src->ref.ref[idx] * 0x101;
             } else if (t_src->mv.mv[0].n == INVALID_TRAJ) {
                 if (t_src->mv.mv[1].n == INVALID_TRAJ) {
                     t_dst[x >> 1].mv.n = INVALID_TRAJ * 0x10001U;
                     t_dst[x >> 1].ref.pair = -1;
                 } else {
                     t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101U;
+                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101;
                 }
             } else if (t_src->mv.mv[1].n == INVALID_TRAJ) {
                 t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
-                t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101U;
+                t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101;
             } else {
                 t_dst[x >> 1] = *t_src;
             }
