@@ -1229,7 +1229,8 @@ cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES],
 
     int n = 0;
     if (has_t) {
-        for (int i = !dir_l && !has_l; i < refw - 1 - (dir_l && !has_l); i++, n++) {
+        const int start = !dir_l && !has_l;
+        for (int i = start; i < refw - 1 - !start; i++, n++) {
             const int v0 = y[i];
             const int v1 = SQRND(y[dir_t * ystride + i + dir_l]);
             imat[0][n] = v0;
@@ -1249,7 +1250,8 @@ cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MAX_EDGE_SAMPLES],
     // general part, altho it will probably be faster to not care and just
     // store 2px in the general part anyways.
     if (has_l) {
-        for (int i = 1; i < refh - 1; i++, n++) {
+        const int start = dir_t && !has_t;
+        for (int i = 1 - start; i < refh - start - 1; i++, n++) {
             const int v0 = y[i * ystride];
             const int v1 = SQRND(y[(i + dir_t) * ystride + dir_l]);
             imat[0][n] = v0;
@@ -1360,7 +1362,8 @@ cfl_calc_alphas_c(int alpha[3], const pixel *const c,
     if (has_t) {
         const pixel *const top = top_sb_edge ?
             top_sb_edge - has_l : c - PXSTRIDE(stride) - has_l;
-        for (int i = !has_l; i < refw - 1; i++, n++) {
+        const int start = !has_l;
+        for (int i = start; i < refw - 1 - !start; i++, n++) {
             alpha[0] += imat[0][n] * top[i];
             alpha[1] += imat[1][n] * top[i];
             alpha[2] += top[i] << (bd - 1);

@@ -2725,8 +2725,10 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                         break;
             }
             refh += n_bl * 4;
-            refw++;
+            refw += 2;
         }
+        refw = imin(refw, 128 >> ss_hor);
+        refh = imin(refh, (128 >> ss_ver) - 2 * has_top);
 
         const int wl2 = 31 - clz(refw);
         luma_stride = 1 << (wl2 + !!(refw & ((1 << wl2) - 1)) + 1);
