@@ -3361,16 +3361,21 @@ chroma: {}
             int n_tr = 0, n_bl = 0;
             if (t->cby > ts->tiling.row_start) {
                 const int csbsz = sbsz >> ss_hor;
-                const int end = imin((ssbx + csbsz) & ~(csbsz - 1),
-                                     ts->tiling.col_end >> ss_hor);
-                const int w = imin(ctw4, end - ssbx - ctw4);
-                if (!(t->cby & (sbsz - 1)) || !w) {
-                    // top or right sb boundary
-                    n_tr = w;
+                const int tile_end = ts->tiling.col_end >> ss_hor;
+                int w = imin(ctw4, tile_end - ssbx - ctw4);
+                if (!(t->cby & (sbsz - 1))) {
+                    n_tr = w; // top sb boundary
                 } else {
-                    const unsigned bits = (unsigned)
-                        (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
-                    n_tr = imin(ctz(0x10000 | ~bits), w);
+                    const int end = imin((ssbx + csbsz) & ~(csbsz - 1), tile_end);
+                    int w = imin(ctw4, end - ssbx - ctw4);
+                    if (!w) {
+                        // right sb boundary
+                        n_tr = w;
+                    } else {
+                        const unsigned bits = (unsigned)
+                            (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
+                        n_tr = imin(ctz(0x10000 | ~bits), w);
+                    }
                 }
             }
             if (t->cbx > ts->tiling.col_start) {
