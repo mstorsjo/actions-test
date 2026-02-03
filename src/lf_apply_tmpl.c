@@ -427,7 +427,7 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
             tile_col++;
             tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] * sbsz;
         }
-        filter_plane_cols_uv(f, have_left, lflvl[x].filter_uv[0],
+        filter_plane_cols_uv(f, have_left, &lflvl[x >> 2].filter_uv[0][(x & 3) * 16],
                              &p[1][uv_off], &p[2][uv_off], f->cur.p.stride[1],
                              (imin(16, f->bw - x * 16) + ss_hor) >> ss_hor,
                              starty4 >> ss_ver, uv_endy4,
