@@ -2419,7 +2419,7 @@ static void bawp(Dav2dTaskContext *const t,
     };
     const int have_left = bx > ts->tiling.col_start;
     const int have_above = by > ts->tiling.row_start;
-    const int lw4 = imin(ulog2(w4) - ss_hor, 2), lh4 = imin(ulog2(h4) - ss_ver, 2);
+    const int lw4 = imin(ulog2(w4), 2) - ss_hor, lh4 = imin(ulog2(h4), 2) - ss_ver;
     const int idx = have_above && have_left;
     const int n_above_l2 = have_above * n_edge_samples[idx][lh4][lw4][0];
     const int n_left_l2 = have_left * n_edge_samples[idx][lh4][lw4][1];
