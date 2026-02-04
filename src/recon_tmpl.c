@@ -2020,7 +2020,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
 
 static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                       const int plane, const int r_step, const int o_step,
-                      const int bw4, const int bh4)
+                      int bw4, int bh4)
 {
     assert(r_step >= o_step);
     const Dav2dFrameContext *const f = t->f;
@@ -2042,6 +2042,8 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     const int ow4 = imin(bw4, o_step), oh4 = imin(bh4, o_step);
     const int hhtaps = 2 + 2 * (rw4 > 1 + ss_hor);
     const int hvtaps = 2 + 2 * (rh4 > 1 + ss_ver);
+    bh4 = imin(bh4, f->bh - t->cby);
+    bw4 = imin(bw4, f->bw - t->cbx);
     for (int y = 0; y < bh4; y += rh4, rmv_line += 16 * r_step >> 1) {
         for (int x = 0; x < bw4; x += rw4) {
             union mv (*const rmv)[2] = rmv_line[x >> 1];
@@ -2839,8 +2841,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     cbs2[0] = !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
                     // reconstruction should be done with the last luma 64x64,
                     // so that COMP_INTER_SEG or refine-mv work correctly
-                    cbs2[1] = (bw4 == 16 || (x & ss_hor) == ss_hor) &&
-                              (bh4 == 16 || (y & ss_ver) == ss_ver) ?
+                    cbs2[1] = (!ss_hor || t->bx + step >= x_end) &&
+                              (!ss_ver || t->by + step >= y_end) ?
                               cbs2i : BS_INVALID;
                 }
                 const int res = bytefn(dav2d_recon_b)(t, DB_ONLY(depth) lbs2, cbs2, b);
