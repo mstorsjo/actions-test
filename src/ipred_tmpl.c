@@ -115,11 +115,13 @@ cfl_pred(pixel *dst, const ptrdiff_t stride,
     }
 }
 
-static unsigned dc_gen_top(const pixel *const topleft, const int width) {
-    unsigned dc = width >> 1;
-    for (int i = 0; i < width; i++)
+static unsigned dc_gen_top(const pixel *const topleft,
+                           const int width, const int skip)
+{
+    unsigned dc = width >> (1 + skip);
+    for (int i = 0; i < width; i += 1 + skip)
        dc += topleft[1 + i];
-    return dc >> ctz(width);
+    return dc >> ctz(width >> skip);
 }
 
 static void ipred_dc_top_c(pixel *dst, const ptrdiff_t stride,
@@ -128,7 +130,7 @@ static void ipred_dc_top_c(pixel *dst, const ptrdiff_t stride,
                            const int max_width, const int max_height
                            HIGHBD_DECL_SUFFIX)
 {
-    const unsigned dc = dc_gen_top(topleft, width);
+    const unsigned dc = dc_gen_top(topleft, width, 0);
 
     if (a & ANGLE_IBP_FLAG) {
         const int h = height >> 2;
@@ -153,15 +155,17 @@ static void ipred_cfl_top_c(pixel *dst, const ptrdiff_t stride,
                             const int16_t *ac, const int alpha
                             HIGHBD_DECL_SUFFIX)
 {
-    cfl_pred(dst, stride, width, height, dc_gen_top(topleft, width), ac, alpha
-             HIGHBD_TAIL_SUFFIX);
+    cfl_pred(dst, stride, width, height, dc_gen_top(topleft, width, width >= 64),
+             ac, alpha HIGHBD_TAIL_SUFFIX);
 }
 
-static unsigned dc_gen_left(const pixel *const topleft, const int height) {
-    unsigned dc = height >> 1;
-    for (int i = 0; i < height; i++)
+static unsigned dc_gen_left(const pixel *const topleft,
+                            const int height, const int skip)
+{
+    unsigned dc = height >> (1 + skip);
+    for (int i = 0; i < height; i += 1 + skip)
        dc += topleft[-(1 + i)];
-    return dc >> ctz(height);
+    return dc >> ctz(height >> skip);
 }
 
 static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
@@ -170,7 +174,7 @@ static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
                             const int max_width, const int max_height
                             HIGHBD_DECL_SUFFIX)
 {
-    const unsigned dc = dc_gen_left(topleft, height);
+    const unsigned dc = dc_gen_left(topleft, height, 0);
 
     if (a & ANGLE_IBP_FLAG) {
         const int w = width >> 2;
@@ -196,19 +200,9 @@ static void ipred_cfl_left_c(pixel *dst, const ptrdiff_t stride,
                              const int16_t *ac, const int alpha
                              HIGHBD_DECL_SUFFIX)
 {
-    const unsigned dc = dc_gen_left(topleft, height);
+    const unsigned dc = dc_gen_left(topleft, height, height >= 64);
     cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
-
-#if BITDEPTH == 8
-#define MULTIPLIER_1x2 0x5556
-#define MULTIPLIER_1x4 0x3334
-#define BASE_SHIFT 16
-#else
-#define MULTIPLIER_1x2 0xAAAB
-#define MULTIPLIER_1x4 0x6667
-#define BASE_SHIFT 17
-#endif
 
 static inline unsigned fast_div32_dc(const unsigned num, const unsigned den) {
     assert(den > 0 && den <= 255);
@@ -221,17 +215,18 @@ static inline unsigned fast_div32_dc(const unsigned num, const unsigned den) {
 }
 
 static unsigned dc_gen(const pixel *const topleft,
-                       const int width, const int height
+                       const int width, const int height,
+                       const int hskip, const int vskip
                        HIGHBD_DECL_SUFFIX)
 {
-    const int n_pel = width + height;
+    const int n_pel = (width >> hskip) + (height >> vskip);
     unsigned dc = 0;
-    for (int i = 0; i < width; i++)
+    for (int i = 0; i < width; i += 1 + hskip)
        dc += topleft[i + 1];
-    for (int i = 0; i < height; i++)
+    for (int i = 0; i < height; i += 1 + vskip)
        dc += topleft[-(i + 1)];
-    if (width == height)
-        return (dc + width) >> ctz(n_pel);
+    if (!(n_pel & (n_pel - 1)))
+        return (dc + (width >> hskip)) >> ctz(n_pel);
 
     return iclip_pixel(fast_div32_dc(dc, n_pel));
 }
@@ -242,7 +237,7 @@ static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
                        const int max_width, const int max_height
                        HIGHBD_DECL_SUFFIX)
 {
-    const unsigned dc = dc_gen(topleft, width, height HIGHBD_TAIL_SUFFIX);
+    const unsigned dc = dc_gen(topleft, width, height, 0, 0 HIGHBD_TAIL_SUFFIX);
 
     if (a & ANGLE_IBP_FLAG) {
         pixel *const p_dst = dst;
@@ -283,7 +278,8 @@ static void ipred_cfl_c(pixel *dst, const ptrdiff_t stride,
                         const int16_t *ac, const int alpha
                         HIGHBD_DECL_SUFFIX)
 {
-    unsigned dc = dc_gen(topleft, width, height HIGHBD_TAIL_SUFFIX);
+    unsigned dc = dc_gen(topleft, width, height, width >= 64, height >= 64
+                         HIGHBD_TAIL_SUFFIX);
     cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
 
@@ -925,13 +921,15 @@ static int cfl_dc_420(uint16_t *const edge,
             v = top[imax(0, i - 1)] + 4 * top[i] + top[i + 1] +
                 top[i + -bottom] + top[i + bottom];
             edge[i >> 1] = v;
-            dc += v;
+            if (w < 128 || !(i & 2))
+                dc += v;
         }
         for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
             v = left[-1] + 4 * left[0] + left[1] +
                 left[i ? -PXSTRIDE(stride) : 0] + left[PXSTRIDE(stride)];
             edge[-1 - (i >> 1)] = v;
-            dc += v;
+            if (h < 128 || !(i & 2))
+                dc += v;
         }
     } else if (filter_type & 1) {
         for (int i = 0; i < w; i += 2) {
@@ -939,26 +937,30 @@ static int cfl_dc_420(uint16_t *const edge,
                 top[imax(0, i - 1) + bottom] +
                 2 * top[i + bottom] + top[i + 1 + bottom];
             edge[i >> 1] = v;
-            dc += v;
+            if (w < 128 || !(i & 2))
+                dc += v;
         }
         for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
             v = left[-1] + 2 * left[0] + left[1] + left[-1 + PXSTRIDE(stride)] +
                 2 * left[PXSTRIDE(stride)] + left[1 + PXSTRIDE(stride)];
             edge[-1 - (i >> 1)] = v;
-            dc += v;
+            if (h < 128 || !(i & 2))
+                dc += v;
         }
     } else {
         for (int i = 0; i < w; i += 2) {
             v = (top[i] + top[i + 1] +
                  top[i + bottom] + top[i + 1 + bottom]) << 1;
             edge[i >> 1] = v;
-            dc += v;
+            if (w < 128 || !(i & 2))
+                dc += v;
         }
         for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
             v = (left[0] + left[1] +
                  left[PXSTRIDE(stride)] + left[1 + PXSTRIDE(stride)]) << 1;
             edge[-1 - (i >> 1)] = v;
-            dc += v;
+            if (h < 128 || !(i & 2))
+                dc += v;
         }
     }
     return dc;
@@ -1043,7 +1045,9 @@ static int cfl_dc_##fmt##_c(uint16_t *const edge, \
         edge[-1 - i] = edge[-(ylim >> ss_ver)]; \
         dc += edge[-1 - i]; \
     } \
-    return fast_div32_dc(dc, (w >> ss_hor) + (h >> ss_ver)); \
+    const int ssw = w >> ss_hor, ssh = h >> ss_ver; \
+    const int ssw2 = ssw >> (ssw >= 64), ssh2 = ssh >> (ssh >= 64); \
+    return fast_div32_dc(dc, ssw2 + ssh2); \
 }
 
 cfl_dc_fn(420, 1, 1)
