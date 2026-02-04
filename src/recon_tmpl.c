@@ -1380,15 +1380,16 @@ static void ext_warp(Dav2dTaskContext *const t,
     const int h = f->bh * 4 >> ss_ver;
     const int sw = imin(b_dim[0] * h_mul, 8), hsw = sw >> 1;
     const int sh = imin(b_dim[1] * v_mul, 8), hsh = sh >> 1;
+    const int bx = pl ? t->cbx : t->bx, by = pl ? t->cby : t->by;
 
     for (int y = 0; y < b_dim[1] * v_mul; y += sh) {
-        const int src_y = t->by * 4 + ((y + hsh) << ss_ver);
+        const int src_y = by * 4 + ((y + hsh) << ss_ver);
         const int64_t mat3_y = (int64_t) mat[3] * src_y + mat[0];
         const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
         for (int x = 0; x < b_dim[0] * h_mul; x += sw) {
             // calculate transformation relative to center of 8x8 block in
             // luma pixel units
-            const int src_x = t->bx * 4 + ((x + hsw) << ss_hor);
+            const int src_x = bx * 4 + ((x + hsw) << ss_hor);
             const int64_t mvx = ((int64_t) mat[2] * src_x + mat3_y) >> ss_hor;
             const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
             const int left_window = (int) (mvx >> 16) - hsw - 3;
@@ -1399,11 +1400,11 @@ static void ext_warp(Dav2dTaskContext *const t,
             const int bottom = iclip(top_window + sh + 7, 1, h);
 
             for (int yy = y; yy < y + sh; yy += 4) {
-                const int src_y = t->by * 4 + ((yy + 2) << ss_ver);
+                const int src_y = by * 4 + ((yy + 2) << ss_ver);
                 const int64_t mat3_y = (int64_t) mat[3] * src_y + mat[0];
                 const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
                 for (int xx = x; xx < x + sw; xx += 4) {
-                    const int src_x = t->bx * 4 + ((xx + 2) << ss_hor);
+                    const int src_x = bx * 4 + ((xx + 2) << ss_hor);
                     const int64_t mvx =
                         (((int64_t) mat[2] * src_x + mat3_y) >> ss_hor) + 0x200;
                     const int64_t mvy =
@@ -1468,15 +1469,16 @@ static void warp_affine(Dav2dTaskContext *const t,
     const int32_t *const mat = wmp->matrix;
     const int width = f->bw * 4 >> ss_hor;
     const int height = f->bh * 4 >> ss_ver;
+    const int bx = pl ? t->cbx : t->bx, by = pl ? t->cby : t->by;
 
     for (int y = 0; y < b_dim[1] * v_mul; y += 8) {
-        const int src_y = t->by * 4 + ((y + 4) << ss_ver);
+        const int src_y = by * 4 + ((y + 4) << ss_ver);
         const int64_t mat3_y = (int64_t) mat[3] * src_y + mat[0];
         const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
         for (int x = 0; x < b_dim[0] * h_mul; x += 8) {
             // calculate transformation relative to center of 8x8 block in
             // luma pixel units
-            const int src_x = t->bx * 4 + ((x + 4) << ss_hor);
+            const int src_x = bx * 4 + ((x + 4) << ss_hor);
             const int64_t mvx = ((int64_t) mat[2] * src_x + mat3_y) >> ss_hor;
             const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
 
