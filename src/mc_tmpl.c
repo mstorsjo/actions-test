@@ -753,7 +753,7 @@ static void blend_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *tmp,
 
 static void w_mask_c(pixel *dst, const ptrdiff_t dst_stride,
                      const int16_t *tmp1, const int16_t *tmp2, const int w, int h,
-                     uint8_t *mask, const int sign,
+                     uint8_t *mask, const ptrdiff_t mask_stride, const int sign,
                      const int ss_hor, const int ss_ver HIGHBD_DECL_SUFFIX)
 {
     // store mask at 2x2 resolution, i.e. store 2x1 sum for even rows,
@@ -796,7 +796,7 @@ static void w_mask_c(pixel *dst, const ptrdiff_t dst_stride,
         tmp1 += w;
         tmp2 += w;
         dst += PXSTRIDE(dst_stride);
-        if (!ss_ver || (h & 1)) mask += w >> ss_hor;
+        if (!ss_ver || (h & 1)) mask += mask_stride;
     } while (--h);
 }
 
@@ -804,10 +804,11 @@ static void w_mask_c(pixel *dst, const ptrdiff_t dst_stride,
 static void w_mask_##ssn##_c(pixel *const dst, const ptrdiff_t dst_stride, \
                              const int16_t *const tmp1, const int16_t *const tmp2, \
                              const int w, const int h, uint8_t *mask, \
+                             const ptrdiff_t mask_stride, \
                              const int sign HIGHBD_DECL_SUFFIX) \
 { \
-    w_mask_c(dst, dst_stride, tmp1, tmp2, w, h, mask, sign, ss_hor, ss_ver \
-             HIGHBD_TAIL_SUFFIX); \
+    w_mask_c(dst, dst_stride, tmp1, tmp2, w, h, mask, mask_stride, sign, \
+             ss_hor, ss_ver HIGHBD_TAIL_SUFFIX); \
 }
 
 w_mask_fns(444, 0, 0);

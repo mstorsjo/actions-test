@@ -386,8 +386,8 @@ static void check_w_mask(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(uint8_t, a_mask, 64 * 64,);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const int16_t *tmp1,
-                 const int16_t *tmp2, int w, int h, uint8_t *mask, int sign
-                 HIGHBD_DECL_SUFFIX);
+                 const int16_t *tmp2, int w, int h, uint8_t *mask, ptrdiff_t stride,
+                 int sign HIGHBD_DECL_SUFFIX);
 
     static const uint16_t ss[] = { 444, 422, 420 };
     static const uint8_t ss_hor[] = { 0, 1, 1 };
@@ -408,24 +408,26 @@ static void check_w_mask(Dav2dMCDSPContext *const c) {
                     const int bitdepth_max = 0xff;
 #endif
                     init_tmp(c, c_dst, tmp, bitdepth_max);
+                    const ptrdiff_t mask_stride =
+                        (w == 64 && ss_hor[i] && rnd() & 1) ? w : w >> ss_hor[i];
 
                     CLEAR_PIXEL_RECT(c_dst);
                     CLEAR_PIXEL_RECT(a_dst);
 
                     call_ref(c_dst, c_dst_stride, tmp[0], tmp[1], w, h,
-                             c_mask, sign HIGHBD_TAIL_SUFFIX);
+                             c_mask, mask_stride, sign HIGHBD_TAIL_SUFFIX);
                     call_new(u_dst, a_dst_stride, tmp[0], tmp[1], w, h,
-                             a_mask, sign HIGHBD_TAIL_SUFFIX);
+                             a_mask, mask_stride, sign HIGHBD_TAIL_SUFFIX);
                     checkasm_check_pixel_padded(c_dst, c_dst_stride,
                                                 u_dst, a_dst_stride,
                                                 w, h, "dst");
-                    checkasm_check(uint8_t, c_mask, w >> ss_hor[i],
-                                            a_mask, w >> ss_hor[i],
+                    checkasm_check(uint8_t, c_mask, mask_stride,
+                                            a_mask, mask_stride,
                                             w >> ss_hor[i], h >> ss_ver[i],
                                             "mask");
 
                     bench_new(a_dst, a_dst_stride, tmp[0], tmp[1], w, h,
-                              a_mask, sign HIGHBD_TAIL_SUFFIX);
+                              a_mask, mask_stride, sign HIGHBD_TAIL_SUFFIX);
                 }
             }
     report("w_mask");

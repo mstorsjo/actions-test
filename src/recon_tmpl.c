@@ -2958,10 +2958,14 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 const int chr_layout_idx =
                     f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400 ? 0 :
                     DAV2D_PIXEL_LAYOUT_I444 - f->cur.p.p.layout;
-                uint8_t *const seg_mask = t->scratch.seg_mask;
+                const ptrdiff_t mask_stride =
+                    imin(dav2d_block_dimensions[b->bs][0] * 4 >> f->ss_hor, 64);
+                uint8_t *const seg_mask = imin(bw4, bh4) < 16 ? t->scratch.seg_mask :
+                    &t->scratch.seg_mask[((t->by >> f->ss_ver) & 15) * 4 * mask_stride +
+                                         ((t->bx >> f->ss_hor) & 15) * 4];
                 dsp->mc.w_mask[chr_layout_idx](dst, f->cur.p.stride[0],
                                                tmp[b->mask_sign], tmp[!b->mask_sign],
-                                               bw4 * 4, bh4 * 4, seg_mask,
+                                               bw4 * 4, bh4 * 4, seg_mask, mask_stride,
                                                b->mask_sign HIGHBD_CALL_SUFFIX);
                 break;
             }
@@ -3365,7 +3369,10 @@ chroma: {}
             }
             switch (b->comp_type) {
             case COMP_INTER_SEG: {
-                uint8_t *const seg_mask = t->scratch.seg_mask;
+                const ptrdiff_t mask_stride = cbw4 * 4 >> ss_hor;
+                assert(mask_stride <= 64);
+                uint8_t *const seg_mask = imin(cbw4, cbh4) < 16 ? t->scratch.seg_mask :
+                    &t->scratch.seg_mask[(ssby & 15) * 4 * mask_stride + (ssbx & 15) * 4];
                 dsp->mc.mask(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff, stride,
                              tmp[b->mask_sign], tmp[!b->mask_sign],
                              cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver, seg_mask

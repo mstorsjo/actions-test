@@ -5447,12 +5447,12 @@ ALIGN function_align
     pmulhw               m1, m8
     ret
 
-cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
+cglobal w_mask_420_16bpc, 4, 9, 16, dst, stride, tmp1, tmp2, w, h, mask, mstr, stride3
 %define base r7-w_mask_420_avx2_table
     lea                  r7, [w_mask_420_avx2_table]
     tzcnt                wd, wm
-    mov                 r6d, r8m ; pixel_max
-    movd                xm0, r7m ; sign
+    mov                 r6d, r9m ; pixel_max
+    movd                xm0, r8m ; sign
     movifnidn            hd, hm
     shr                 r6d, 11
     movsxd               wq, [r7+wq*4]
@@ -5461,12 +5461,13 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vpbroadcastd        m12, [base+bidir_rnd+r6*4]
     vpbroadcastd        m13, [base+bidir_mul+r6*4]
     movd               xm14, [base+pw_2]
+    lea            stride3q, [strideq*3]
     mov               maskq, maskmp
     psubw              xm14, xm0
     vpbroadcastw        m14, xm14
     add                  wq, r7
+    mov               mstrq, mstrmp
     call .main
-    lea            stride3q, [strideq*3]
     jmp                  wq
 .w4_loop:
     call .main
@@ -5588,7 +5589,7 @@ cglobal w_mask_420_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
 .w64_loop:
     call .main
     lea                dstq, [dstq+strideq*2]
-    add               maskq, 32
+    add               maskq, mstrq
 .w64:
     paddw                m4, m14
     paddw               m15, m14, m5
@@ -5646,12 +5647,12 @@ ALIGN function_align
     add               tmp2q, 32*4
     ret
 
-cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
+cglobal w_mask_422_16bpc, 4, 9, 16, dst, stride, tmp1, tmp2, w, h, mask, mstr, stride3
 %define base r7-w_mask_422_avx2_table
     lea                  r7, [w_mask_422_avx2_table]
     tzcnt                wd, wm
-    mov                 r6d, r8m ; pixel_max
-    vpbroadcastb        m14, r7m ; sign
+    mov                 r6d, r9m ; pixel_max
+    vpbroadcastb        m14, r8m ; sign
     movifnidn            hd, hm
     shr                 r6d, 11
     movsxd               wq, [r7+wq*4]
@@ -5662,8 +5663,12 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     mova                m15, [base+deint_shuf]
     mov               maskq, maskmp
     add                  wq, r7
-    call .main
+    mov               mstrq, mstrmp
+    mov                 r8d, 32
+    cmp               mstrq, r8
+    cmovb             mstrq, r8
     lea            stride3q, [strideq*3]
+    call .main
     jmp                  wq
 .w4_loop:
     call .main
@@ -5739,10 +5744,13 @@ cglobal w_mask_422_16bpc, 4, 8, 16, dst, stride, tmp1, tmp2, w, h, mask, stride3
     sub                  hd, 2
     jg .w32_loop
     RET
+.w64:
+    mov               mstrq, mstrmp
+    jmp .w64_inner
 .w64_loop:
     call .main
     add                dstq, strideq
-.w64:
+.w64_inner:
     mova        [dstq+32*0], m0
     mova        [dstq+32*1], m1
     mova        [dstq+32*2], m2
@@ -5766,14 +5774,14 @@ ALIGN function_align
     pavgb                m4, m5
     vpermd               m4, m15, m4
     mova            [maskq], m4
-    add               maskq, 32
+    add               maskq, mstrq
     ret
 
 cglobal w_mask_444_16bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
 %define base r7-w_mask_444_avx2_table
     lea                  r7, [w_mask_444_avx2_table]
     tzcnt                wd, wm
-    mov                 r6d, r8m ; pixel_max
+    mov                 r6d, r9m ; pixel_max
     movifnidn            hd, hm
     shr                 r6d, 11
     movsxd               wq, [r7+wq*4]

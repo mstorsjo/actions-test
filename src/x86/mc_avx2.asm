@@ -5441,11 +5441,11 @@ cglobal emu_edge_8bpc, 10, 13, 1, bw, bh, iw, ih, x, y, dst, dstride, src, sstri
     packuswb            m%1, m1
 %endmacro
 
-cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
+cglobal w_mask_420_8bpc, 4, 9, 14, dst, stride, tmp1, tmp2, w, h, mask, mstr, stride3
 %define base r7-w_mask_420_avx2_table
     lea                  r7, [w_mask_420_avx2_table]
     tzcnt                wd, wm
-    mov                 r6d, r7m ; sign
+    mov                 r6d, r8m ; sign
     movifnidn            hd, hm
     movsxd               wq, [r7+wq*4]
     vpbroadcastd         m6, [base+pw_6903] ; ((64 - 38) << 8) + 255 - 8
@@ -5455,6 +5455,7 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add                  wq, r7
     W_MASK                0, 4, 0, 1
     mov               maskq, maskmp
+    mov               mstrq, mstrmp
     lea            stride3q, [strideq*3]
     jmp                  wq
 .w4_loop:
@@ -5601,16 +5602,16 @@ cglobal w_mask_420_8bpc, 4, 8, 14, dst, stride, tmp1, tmp2, w, h, mask, stride3
     packuswb             m4, m5
     vpermd               m4, m9, m4
     mova            [maskq], m4
-    add               maskq, 32
+    add               maskq, mstrq
     dec                  hd
     jg .w64_loop
     RET
 
-cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
+cglobal w_mask_422_8bpc, 4, 9, 11, dst, stride, tmp1, tmp2, w, h, mask, mstr, stride3
 %define base r7-w_mask_422_avx2_table
     lea                  r7, [w_mask_422_avx2_table]
     tzcnt                wd, wm
-    mov                 r6d, r7m ; sign
+    mov                 r6d, r8m ; sign
     movifnidn            hd, hm
     pxor                 m9, m9
     movsxd               wq, dword [r7+wq*4]
@@ -5620,6 +5621,7 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     vpbroadcastd         m8, [base+wm_422_sign+r6*4] ; 128 - sign
     add                  wq, r7
     mov               maskq, maskmp
+    mov               mstrq, mstrmp
     W_MASK                0, 4, 0, 1
     lea            stride3q, [strideq*3]
     jmp                  wq
@@ -5739,7 +5741,7 @@ cglobal w_mask_422_8bpc, 4, 8, 11, dst, stride, tmp1, tmp2, w, h, mask, stride3
     add               tmp2q, 32*4
     W_MASK                0, 4, 0, 1
     add                dstq, strideq
-    add               maskq, 32
+    add               maskq, mstrq
 .w64:
     vpermq               m0, m0, q3120
     mova        [dstq+32*0], m0
