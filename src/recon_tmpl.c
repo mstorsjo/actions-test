@@ -2780,7 +2780,6 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                 alpha[2] = 0x10000;
             }
             const int n_top = has_top ? has_top + (b->cfl_mh_dir == CFL_DIR_TOP) : 0;
-            const int n_left = has_left ? has_left + (b->cfl_mh_dir == CFL_DIR_LEFT) : 0;
             const pixel *const src = luma + n_top * PXSTRIDE(luma_top_stride);
             dsp->ipred.cfl_mhccp_pred[b->cfl_mh_dir](chroma, cstride, src,
                                                      luma_top_stride, ctw, cth,
