@@ -3209,7 +3209,7 @@ chroma: {}
                 const refmvs_block *const r2 = &r[x];
                 if (r2->ox4 || r2->oy4) continue;
                 const int ref = r2->ref.ref[0];
-                const union mv mv = r2->mv[0];
+                const union mv mv = r2->mf & 2 ? r2->lmv[0] : r2->mv[0];
                 const Dav2dThreadPicture *const refp = &f->refp[ref];
                 const uint8_t *const sdim = dav2d_block_dimensions[r2->bs];
                 for (int pl = 0; pl < 2; pl++) {
