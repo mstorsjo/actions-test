@@ -2625,10 +2625,10 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             const pixel *const src = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
 
-            int alpha;
+            int alpha = 0;
             if (b->cfl_type == CFL_EXPLICIT) {
                 alpha = b->cfl_alpha[pl - 1] * 32;
-            } else {
+            } else if (has_top || has_left) {
                 int n_top = 0, n_left = 0;
                 if (has_top && has_left) {
                     if (ctw > 2 * cth) {
