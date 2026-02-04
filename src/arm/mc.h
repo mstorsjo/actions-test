@@ -42,8 +42,6 @@ decl_avg_fn(BF(dav2d_avg, neon));
 decl_w_avg_fn(BF(dav2d_w_avg, neon));
 decl_mask_fn(BF(dav2d_mask, neon));
 decl_blend_fn(BF(dav2d_blend, neon));
-decl_blend_dir_fn(BF(dav2d_blend_h, neon));
-decl_blend_dir_fn(BF(dav2d_blend_v, neon));
 
 decl_w_mask_fn(BF(dav2d_w_mask_444, neon));
 decl_w_mask_fn(BF(dav2d_w_mask_422, neon));
@@ -72,8 +70,6 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
     c->w_avg = BF(dav2d_w_avg, neon);
     c->mask = BF(dav2d_mask, neon);
     c->blend = BF(dav2d_blend, neon);
-    c->blend_h = BF(dav2d_blend_h, neon);
-    c->blend_v = BF(dav2d_blend_v, neon);
     c->w_mask[0] = BF(dav2d_w_mask_444, neon);
     c->w_mask[1] = BF(dav2d_w_mask_422, neon);
     c->w_mask[2] = BF(dav2d_w_mask_420, neon);
