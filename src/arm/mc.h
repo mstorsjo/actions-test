@@ -63,8 +63,8 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
 
     init_8tap_fns(neon);
 
-    init_mc_fn (FILTER_2D_BILINEAR, bilin, neon);
-    init_mct_fn(FILTER_2D_BILINEAR, bilin, neon);
+    init_mc_fn (DAV2D_FILTER_BILINEAR, bilin, neon);
+    init_mct_fn(DAV2D_FILTER_BILINEAR, bilin, neon);
 
     c->avg = BF(dav2d_avg, neon);
     c->w_avg = BF(dav2d_w_avg, neon);

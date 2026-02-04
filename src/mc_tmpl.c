@@ -1130,7 +1130,9 @@ static unsigned sad8x8_c(const pixel *p0, const ptrdiff_t p0_stride,
 }
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64
+#include "src/arm/mc.h"
+#elif ARCH_X86
 #include "src/x86/mc.h"
 #endif
 #endif
@@ -1166,7 +1168,9 @@ COLD void bitfn(dav2d_mc_dsp_init)(Dav2dMCDSPContext *const c) {
     c->sad8x8 = sad8x8_c;
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64
+    mc_dsp_init_arm(c);
+#elif ARCH_X86
     mc_dsp_init_x86(c);
 #endif
 #endif
