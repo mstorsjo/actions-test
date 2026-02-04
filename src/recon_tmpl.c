@@ -2020,7 +2020,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
 
 static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                       const int plane, const int r_step, const int o_step,
-                      int bw4, int bh4)
+                      const int bw4, const int bh4)
 {
     assert(r_step >= o_step);
     const Dav2dFrameContext *const f = t->f;
@@ -2042,10 +2042,10 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     const int ow4 = imin(bw4, o_step), oh4 = imin(bh4, o_step);
     const int hhtaps = 2 + 2 * (rw4 > 1 + ss_hor);
     const int hvtaps = 2 + 2 * (rh4 > 1 + ss_ver);
-    bh4 = imin(bh4, f->bh - t->cby);
-    bw4 = imin(bw4, f->bw - t->cbx);
-    for (int y = 0; y < bh4; y += rh4, rmv_line += 16 * r_step >> 1) {
-        for (int x = 0; x < bw4; x += rw4) {
+    const int h4 = imin(bh4, f->bh - t->cby);
+    const int w4 = imin(bw4, f->bw - t->cbx);
+    for (int y = 0; y < h4; y += rh4, rmv_line += 16 * r_step >> 1) {
+        for (int x = 0; x < w4; x += rw4) {
             union mv (*const rmv)[2] = rmv_line[x >> 1];
             int top[2], left[2], bottom[2], right[2];
             for (int i = 0; i < 2; i++) {
