@@ -108,8 +108,10 @@ function \type\()_8tap_\isa, align=FUNC_ALIGN
 L(\type\()_8tap_v_\isa):
         madd            \my, \my, w11, w10
         movrel          x13, v_tbl_sve
-.ifc \bdmax, w8                                         // put case, but skip
-        ld1r            {v5.8h}, [sp]                   // loading into w8
+.ifc \type, put
+        ld1r            {v5.8h}, [sp]                   // bdmax
+.else
+        ldr             \bdmax, [sp]
 .endif
         sub             \src, \src, \s_strd             // src - s_strd
         ubfx            w11, \my, #7, #7
@@ -1642,9 +1644,9 @@ jumptable prep_tbl
 endjumptable
 
 
-// dst(x0), d_strd(x9), src(x1), s_strd(x2), w(w3), h(w4), mx(w5), my(w6), bdmax(w7)
-// xmx(x5), xmy(x6), ldst(x5), lsrc(x6), wd_strd(w9), ws_strd(w2)
-filter_8tap_fn prep, sve2, x0, x9, x1, x2, w3, w4, w5, w6, w7, x5, x6, x5, x6, w9, w2
+// dst(x0) d_strd(x1) src(x2) s_strd(x3) w(w4) h(w5) mx(w6) my(w7), bdmax(w8)
+// xmx(x6), xmy(x7), ldst(x6), lsrc(x7), wd_strd(w1), ws_strd(w3)
+filter_8tap_fn prep, sve2, x0, x1, x2, x3, w4, w5, w6, w7, w8, x6, x7, x6, x7, w1, w3
 
 // dst(x0) d_strd(x1) src(x2) s_strd(x3) w(w4) h(w5) mx(w6) my(w7), bdmax(w8)
 // xmx(x6), xmy(x7), ldst(x6), lsrc(x7), wd_strd(w1), ws_strd(w3)

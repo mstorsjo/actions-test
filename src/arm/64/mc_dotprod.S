@@ -1854,9 +1854,9 @@ jumptable \type\()_8tap_h_\isa\()_tbl
 endjumptable
 .endm
 
-// dst(x0), d_strd(x7), src(x1), s_strd(x2), w(w3), h(w4), mx(w5), my(w6)
-// xmx(x5), xmy(x6), ldst(x5), lsrc(x6), wd_strd(w7)
-filter_8tap_fn prep, sdot, neon_dotprod, x0, x7, x1, x2, w3, w4, w5, w6, x5, x6, x5, x6, w7
+// dst(x0) d_strd(x1) src(x2) s_strd(x3) w(w4) h(w5) mx(w6) my(w7)
+// xmx(x6), xmy(x7), ldst(x6), lsrc(x7), wd_strd(w1)
+filter_8tap_fn prep, sdot, neon_dotprod, x0, x1, x2, x3, w4, w5, w6, w7, x6, x7, x6, x7, w1
 
 // dst(x0) d_strd(x1) src(x2) s_strd(x3) w(w4) h(w5) mx(w6) my(w7)
 // xmx(x6), xmy(x7), ldst(x6), lsrc(x7), wd_strd(w1)
@@ -1865,9 +1865,9 @@ filter_8tap_fn  put, sdot, neon_dotprod, x0, x1, x2, x3, w4, w5, w6, w7, x6, x7,
 #if HAVE_I8MM
 ENABLE_I8MM
 
-// dst(x0), d_strd(x7), src(x1), s_strd(x2), w(w3), h(w4), mx(w5), my(w6)
-// xmx(x5), xmy(x6), ldst(x5), lsrc(x6), wd_strd(w7)
-filter_8tap_fn prep, usdot, neon_i8mm, x0, x7, x1, x2, w3, w4, w5, w6, x5, x6, x5, x6, w7
+// dst(x0) d_strd(x1) src(x2) s_strd(x3) w(w4) h(w5) mx(w6) my(w7)
+// xmx(x6), xmy(x7), ldst(x6), lsrc(x7), wd_strd(w1)
+filter_8tap_fn prep, usdot, neon_i8mm, x0, x1, x2, x3, w4, w5, w6, w7, x6, x7, x6, x7, w1
 
 // dst(x0) d_strd(x1) src(x2) s_strd(x3) w(w4) h(w5) mx(w6) my(w7)
 // xmx(x6), xmy(x7), ldst(x6), lsrc(x7), wd_strd(w1)

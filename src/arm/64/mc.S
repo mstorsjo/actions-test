@@ -3029,14 +3029,14 @@ make_8tap_fn    prep, smooth_sharp,   SMOOTH,  SHARP,   8tap
 make_8tap_fn    prep, sharp,          SHARP,   SHARP,   8tap
 make_8tap_fn    prep, sharp_regular,  SHARP,   REGULAR, 8tap
 make_8tap_fn    prep, sharp_smooth,   SHARP,   SMOOTH,  8tap
-filter_fn       prep, x0, x7, x1, x2, w3, w4, w5, x5, w6, x6, x8, x9, 6,  8tap
+filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 6,  8tap
 
 make_8tap_fn    prep, regular,        REGULAR, REGULAR, 6tap
 make_8tap_fn    prep, regular_smooth, REGULAR, SMOOTH,  6tap
 make_8tap_fn    prep, smooth,         SMOOTH,  SMOOTH,  6tap
 make_8tap_fn    prep, smooth_regular, SMOOTH,  REGULAR, 6tap
-filter_fn       prep, x0, x7, x1, x2, w3, w4, w5, x5, w6, x6, x8, x9, 6,  6tap
-filter_bilin_fn prep, x0, x7, x1, x2, w3, w4, w5, x5, w6, x6, x8, x9, 6
+filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 6,  6tap
+filter_bilin_fn prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 6
 
 
 .macro load_filter_row dst, src, inc
