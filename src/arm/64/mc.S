@@ -90,20 +90,22 @@ function \type\()_8bpc_neon, export=1
         add             x7,  x0,  x1
         lsl             x1,  x1,  #1
 4:
-        cmp             w5,  #4
+        subs            w5,  w5,  #4
         st1             {v4.s}[0],  [x0], x1
         st1             {v4.s}[1],  [x7], x1
         st1             {v4.s}[2],  [x0], x1
         st1             {v4.s}[3],  [x7], x1
-        b.eq            0f
+        b.le            0f
         \type           v5,  v0,  v1,  v2,  v3
-        cmp             w5,  #8
+        subs            w5,  w5,  #4
         st1             {v5.s}[0],  [x0], x1
         st1             {v5.s}[1],  [x7], x1
         st1             {v5.s}[2],  [x0], x1
         st1             {v5.s}[3],  [x7], x1
-        b.eq            0f
+        b.le            0f
         \type           v4,  v0,  v1,  v2,  v3
+41:
+        subs            w5,  w5,  #8
         st1             {v4.s}[0],  [x0], x1
         st1             {v4.s}[1],  [x7], x1
         \type           v5,  v0,  v1,  v2,  v3
@@ -113,7 +115,9 @@ function \type\()_8bpc_neon, export=1
         st1             {v5.s}[1],  [x7], x1
         st1             {v5.s}[2],  [x0], x1
         st1             {v5.s}[3],  [x7], x1
-        ret
+        b.le            0f
+        \type           v4,  v0,  v1,  v2,  v3
+        b               41b
 80:
         AARCH64_VALID_JUMP_TARGET
         add             x7,  x0,  x1
