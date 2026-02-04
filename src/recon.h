@@ -34,7 +34,7 @@
 
 #define decl_recon_b_fn(name) \
 int (name)(Dav2dTaskContext *t, DB_ONLY(int depth) \
-           enum BlockSize bs, enum BlockSize cbs, Av2Block *b)
+           enum BlockSize bs, const enum BlockSize cbs[2], Av2Block *b)
 typedef decl_recon_b_fn(*recon_b_fn);
 
 #define decl_filter_sbrow_fn(name) \

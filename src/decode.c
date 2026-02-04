@@ -960,7 +960,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     if (t->frame_thread.pass == 2) {
         if (b->intra) {
-            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
+                                (const enum BlockSize[2]){ cbs, cbs }, b);
             if (res < 0) return res;
 
 #define set_ctx(rep_macro) \
@@ -1009,7 +1010,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     debug_warp_matrix(depth, f, t, b, 0);
                 }
             }
-            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
+                                (const enum BlockSize[2]){ cbs, cbs }, b);
             if (res < 0) return res;
 
             BlockContext *edge = t->a;
@@ -1760,7 +1762,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 t->pb.is_sm[1].a = sm_uv_flag(t->a, cbx4);
                 t->pb.is_sm[1].l = sm_uv_flag(&t->l, cby4);
             }
-            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
+                                (const enum BlockSize[2]){ cbs, cbs }, b);
             if (res < 0) return res;
         }
 
@@ -1940,7 +1943,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             f->bd_fn.read_coef_blocks(t, bs, b);
             b->filter = DAV2D_FILTER_BILINEAR;
         } else {
-            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
+                                (const enum BlockSize[2]){ cbs, cbs }, b);
             if (res < 0) return res;
         }
 
@@ -3038,7 +3042,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (t->frame_thread.pass == 1) {
             f->bd_fn.read_coef_blocks(t, bs, b);
         } else {
-            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
+                                (const enum BlockSize[2]){ cbs, cbs }, b);
             if (res < 0) return res;
         }
 
@@ -4267,7 +4272,8 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                                             &t->l.tx_lpf_uv[by4 >> f->ss_ver],
                                             f->frame_hdr, f->seq_hdr);
             }
-            f->bd_fn.recon_b(t, DB_ONLY(0) root_bs, c_root_bs, &b);
+            f->bd_fn.recon_b(t, DB_ONLY(0) root_bs,
+                (const enum BlockSize[2]){ c_root_bs, c_root_bs }, &b);
         } else {
             // Restoration filter
             const int sbsz = f->sb_step * 4;

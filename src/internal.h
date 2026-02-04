@@ -429,9 +429,12 @@ struct Dav2dTaskContext {
         };
     } pb;
     refmvs_tile rt;
+    // chroma backups
+    enum TxfmType chroma_txtp[2];
+    int chroma_eob[2];
     ALIGN(union, 64) {
-        int16_t cf_8bpc [2][32 * 32];
-        int32_t cf_16bpc[2][32 * 32];
+        int16_t cf_8bpc [3][32 * 32];
+        int32_t cf_16bpc[3][32 * 32];
     };
     union {
         uint8_t  al_pal_8bpc [2 /* a/l */][64 /* bx/y4 */][8 /* palette_idx */];

@@ -2025,7 +2025,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     const int tip = b->ref.ref[0] == TIP_FRAME;
     const union refpair ref = tip ? f->rf.tip.ref : b->ref;
     int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
-    union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
+    union mv (*rmv_line)[2][2] = &t->rmv[((t->cby & 31) >> 1) * 16 + ((t->cbx & 31) >> 1)];
     const ptrdiff_t stride = bw4 * 4 >> ss_hor;
     ptrdiff_t uvoff = 0;
 
@@ -2042,9 +2042,9 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
         for (int x = 0; x < bw4; x += step) {
             union mv (*const rmv)[2] = rmv_line[x >> 1];
             for (int i = 0; i < 2; i++) {
-                int top = ((t->by + y) * 4 >> ss_ver) +
+                int top = ((t->cby + y) * 4 >> ss_ver) +
                           ((tip ? rmv[1][i].y : b->mv[i].y) >> 4);
-                int left = ((t->bx + x) * 4 >> ss_hor) +
+                int left = ((t->cbx + x) * 4 >> ss_hor) +
                            ((tip ? rmv[1][i].x : b->mv[i].x) >> 4);
                 const int bottom = top + (4 * sh4 >> ss_ver) + hvtaps;
                 const int right = left + (4 * sw4 >> ss_hor) + hhtaps;
@@ -2059,8 +2059,8 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
             }
             if (bacp)
                 have_bacp |= get_mask(mask, bw4 * 4 >> ss_hor,
-                                      t->bx >> ss_hor, x >> ss_hor,
-                                      t->by >> ss_ver, y >> ss_ver,
+                                      t->cbx >> ss_hor, x >> ss_hor,
+                                      t->cby >> ss_ver, y >> ss_ver,
                                       rmv[0], 4, 4, step >> ss_hor, step >> ss_ver,
                                       f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
         }
@@ -2776,25 +2776,28 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
 }
 
 int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
-                          const enum BlockSize lbs, const enum BlockSize cbs,
+                          const enum BlockSize lbs,
+                          // [0] = coef reading, [1] = reconstruction
+                          const enum BlockSize cbs_stage[2],
                           Av2Block *const b)
 {
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
     const Dav2dDSPContext *const dsp = f->dsp;
+    const enum BlockSize cbs = cbs_stage[cbs_stage[0] == BS_INVALID];
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
+    assert(cbs_stage[0] == cbs_stage[1] ||
+           ((cbs_stage[0] == BS_INVALID || cbs_stage[1] == BS_INVALID) &&
+            (lbs == BS_64x64 && (f->ss_ver || f->ss_hor))));
     assert(bs != BS_INVALID);
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
     const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
-    const uint8_t csplit[6][3] = {
-        [BS_256x256] = {  BS_64x64, BS_128x64, BS_128x128 },
-        [BS_256x128] = {  BS_64x64, BS_128x64, BS_128x128 },
-        [BS_128x256] = {  BS_64x64, BS_128x64, BS_128x128 },
-        [BS_128x128] = {  BS_64x64, BS_128x64, BS_128x128 },
-        [BS_128x64]  = {  BS_64x64, BS_128x64, BS_128x64  },
-        [BS_64x128]  = {  BS_64x64, BS_64x64,  BS_64x128  },
+    const uint8_t csplit[3][3] = {
+        [BS_128x128 - BS_128x128] = {  BS_64x64, BS_128x64, BS_128x128 },
+        [BS_128x64  - BS_128x128] = {  BS_64x64, BS_128x64, BS_128x64  },
+        [BS_64x128  - BS_128x128] = {  BS_64x64, BS_64x64,  BS_64x128  },
     };
     if (imax(bw4, bh4) > 16) {
         assert(bw4 * 2 >= bh4 && bh4 * 2 >= bw4); // 1:2, 1:1 or 2:1 ratios only
@@ -2810,26 +2813,41 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         } else {
             step = 16;
             lbs2 = lbs == BS_INVALID ? BS_INVALID : BS_64x64;
-            cbs2i = cbs == BS_INVALID ? BS_INVALID : csplit[cbs][ss_hor + ss_ver];
+            cbs2i = cbs == BS_INVALID ? BS_INVALID :
+                    csplit[cbs - BS_128x128][ss_hor + ss_ver];
         }
-        for (int y = 0; t->by < y_end; t->cby = t->by += step, y++) {
-            for (int x = 0; t->bx < x_end; t->cbx = t->bx += step, x++) {
-                // FIXME it's possible we can call directly into a sub-function
-                // here that manages one transform-block, since tx_part=none
-                // (at least if not lossless)
-                const enum BlockSize cbs2 = step == 32 ||
-                    !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
+        for (int y = 0; t->by < y_end; t->by += step, y++) {
+            for (int x = 0; t->bx < x_end; t->bx += step, x++) {
+                enum BlockSize cbs2[2];
+                if (step == 32) {
+                    cbs2[0] = cbs2[1] = cbs2i;
+                } else {
+                    // coef reading is done with the first luma 64x64
+                    cbs2[0] = !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
+                    // reconstruction should be done with the last luma 64x64,
+                    // so that COMP_INTER_SEG or refine-mv work correctly
+                    cbs2[1] = (bw4 == 16 || (x & ss_hor) == ss_hor) &&
+                              (bh4 == 16 || (y & ss_ver) == ss_ver) ?
+                              cbs2i : BS_INVALID;
+                }
                 const int res = bytefn(dav2d_recon_b)(t, DB_ONLY(depth) lbs2, cbs2, b);
+                if (step == 32) {
+                    t->cbx += step;
+                } else if ((x & ss_hor) == ss_hor) {
+                    t->cbx += step << ss_hor;
+                }
                 if (res < 0) {
                     t->cbx = t->bx = x_start;
                     t->cby = t->by = y_start;
                     return res;
                 }
-                // FIXME this may be correct only for luma, whereas chroma may
-                // have to be dealt with at 64x64 *subsampled* pixels (i.e.
-                // 128x128 luma pixels for 4:2:0), b/c of chroma-large-tx
             }
             t->cbx = t->bx = x_start;
+            if (step == 32) {
+                t->cby += step;
+            } else if ((y & ss_ver) == ss_ver) {
+                t->cby += step << ss_ver;
+            }
         }
         t->cby = t->by = y_start;
         return 0;
@@ -3179,6 +3197,42 @@ chroma: {}
     if (intra)
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
 
+    if (cbs_stage[0] != BS_INVALID) {
+        if (b->skip_txfm) {
+            for (int pl = 0; pl < 2; pl++) {
+                dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, ctw4);
+                dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, cth4);
+            }
+        } else {
+            const enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+            enum TxfmType *const txtp = t->chroma_txtp;
+            int *const eob = t->chroma_eob;
+            uint8_t cf_ctx[2];
+            coef *const cf[2] = { bitfn(t->cf)[1], bitfn(t->cf)[2] };
+            // decode coefficients
+            for (int pl = 0; pl < 2; pl++) {
+                txtp[pl] = y_txtp;
+                eob[pl] = decode_coefs(t, DB_ONLY(depth + 1)
+                                       &t->a->ccoef[pl][cbx4], &t->l.ccoef[pl][cby4],
+                                       uvtx, b->bs, b, pl + 1,
+                                       cf[pl], &txtp[pl], &cf_ctx[pl]);
+                if (eob[pl] == INT_MIN) return -1;
+                DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
+                                   depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
+                                   uv_t_dim->h * 4,
+                                   dav2d_tx1d_names[txtp[pl] & 7],
+                                   dav2d_tx1d_names[(txtp[pl] >> 5) & 7],
+                                   eob[pl], t->ts->msac.rng);
+                dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx[pl], ctw4);
+                dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx[pl], cth4);
+            }
+        }
+        if (cbs_stage[1] == BS_INVALID) {
+            b->uv_mode = orig_uv_mode;
+            return 0;
+        }
+    }
+
     const int can_cfl = b->uv_mode == CFL_PRED ? b->cfl_type > CFL_EXPLICIT ?
         0x3 : (!!b->cfl_alpha[0]) | (!!b->cfl_alpha[1] << 1) : 0x0;
     if (intra) {
@@ -3435,38 +3489,13 @@ chroma: {}
         }
     }
 
-    if (b->skip_txfm) {
-        for (int pl = 0; pl < 2; pl++) {
-            dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, ctw4);
-            dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, cth4);
-        }
-    } else {
+    if (!b->skip_txfm) {
         const int cctx = f->seq_hdr->cctx &&
             (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
-        const enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
-        enum TxfmType txtp[2];
-        int eob[2];
-        uint8_t cf_ctx[2];
-        coef *const cf[2] = { bitfn(t->cf)[0], bitfn(t->cf)[1] };
-        int cctx_type;
-        // decode coefficients
-        for (int pl = 0; pl < 2; pl++) {
-            txtp[pl] = y_txtp;
-            eob[pl] = decode_coefs(t, DB_ONLY(depth + 1)
-                                   &t->a->ccoef[pl][cbx4], &t->l.ccoef[pl][cby4],
-                                   uvtx, b->bs, b, pl + 1,
-                                   cf[pl], &txtp[pl], &cf_ctx[pl]);
-            if (eob[pl] == INT_MIN) return -1;
-            if (!pl) cctx_type = cctx && eob[0] >= intra ? (txtp[0] >> 8) : 0;
-            DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
-                               depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
-                               uv_t_dim->h * 4,
-                               dav2d_tx1d_names[txtp[pl] & 7],
-                               dav2d_tx1d_names[(txtp[pl] >> 5) & 7],
-                               eob[pl], t->ts->msac.rng);
-            dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx[pl], ctw4);
-            dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx[pl], cth4);
-        }
+        enum TxfmType *const txtp = t->chroma_txtp;
+        int *const eob = t->chroma_eob;
+        coef *const cf[2] = { bitfn(t->cf)[1], bitfn(t->cf)[2] };
+        int cctx_type = cctx && eob[0] >= intra ? (txtp[0] >> 8) : 0;
         if (cctx_type) {
             dsp->itx.cctx(cf[0], cf[1], dav2d_cctx_angle[cctx_type - 1],
                           umin(ctw, 32) * umin(cth, 32) HIGHBD_CALL_SUFFIX);
