@@ -2498,6 +2498,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
     int angle = (const uint8_t[4]) { 0, 90, 180, 0 }[b->interintra_mode];
     int n_tr = 0, n_bl = 0;
     const int chroma = !!plane;
+    const int ss_hor = chroma * f->ss_hor, ss_ver = chroma * f->ss_ver;
     if (m == SMOOTH_PRED) {
         const int bx4 = bx & 63, by4 = by & 63, sbsz = f->sb_step;
         if (by > ts->tiling.row_start) {
@@ -2514,7 +2515,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
                     n_tr = 0;
                 } else {
                     // smooth pred uses 1px max
-                    n_tr = (t->is_coded[chroma][by4 - 1] >> (bx4 + bw4)) & 1;
+                    n_tr = (t->is_coded[chroma][(by4 >> ss_ver) - 1] >> ((bx4 + bw4) >> ss_hor)) & 1;
                 }
             }
         }
@@ -2530,11 +2531,10 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
                 n_bl = h;
             } else {
                 // smooth pred uses 1px max
-                n_bl = (t->is_coded[chroma][by4 + bh4] >> (bx4 - 1)) & 1;
+                n_bl = (t->is_coded[chroma][(by4 + bh4) >> ss_ver] >> ((bx4 - 1) >> ss_hor)) & 1;
             }
         }
     }
-    const int ss_hor = chroma * f->ss_hor, ss_ver = chroma * f->ss_ver;
     const pixel *top_sb_edge = NULL;
     if (!(t->by & (f->sb_step - 1))) {
         top_sb_edge = f->ipred_edge[plane];
@@ -2552,7 +2552,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
             DB_ONLY(!plane && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             bx >> ss_hor, by >> ss_ver,
             ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-            n_tr >> ss_hor, n_bl >> ss_ver, dst, stride, top_sb_edge, m,
+            n_tr, n_bl, dst, stride, top_sb_edge, m,
             ssbw4, ssbh4, angle | intra_flags, tl_edge HIGHBD_CALL_SUFFIX);
     dsp->ipred.intra_pred[m](tmp, 4 * ssbw4 * sizeof(pixel),
                              tl_edge, ssbw4 * 4, ssbh4 * 4,
