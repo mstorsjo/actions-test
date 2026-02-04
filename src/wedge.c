@@ -108,8 +108,8 @@ static void copy2d(uint8_t *dst, const uint8_t *src,
 static void subsample_420(uint8_t *dst, const uint8_t *src,
                           const int w8, const int h8)
 {
-    for (int y = 0; y < h8 * 8; y++) {
-        for (int x = 0; x < w8 * 8; x++)
+    for (int y = 0; y < h8 * 4; y++) {
+        for (int x = 0; x < w8 * 4; x++)
             dst[x] = (src[x * 2 + 0] + src[x * 2 + 1] +
                       src[x * 2 + 0 + w8 * 8] +
                       src[x * 2 + 1 + w8 * 8] + 2) >> 2;
@@ -122,7 +122,7 @@ static void subsample_422(uint8_t *dst, const uint8_t *src,
                           const int w8, const int h8)
 {
     for (int y = 0; y < h8 * 8; y++) {
-        for (int x = 0; x < w8 * 8; x++)
+        for (int x = 0; x < w8 * 4; x++)
             dst[x] = (src[x * 2 + 0] + src[x * 2 + 1] + 1) >> 1;
         dst += w8 * 4;
         src += w8 * 8;
