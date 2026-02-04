@@ -2355,15 +2355,15 @@ static void bawp(Dav2dTaskContext *const t,
     if ((sb_dim[0] > (16 << ss_hor) && bx & (sb_dim[0] - 1)) ||
         (sb_dim[1] > (16 << ss_ver) && by & (sb_dim[1] - 1)))
     {
-        const int alpha = t->pb.bawp[plane].alpha, beta = t->pb.bawp[plane].beta;
+        const int alpha = t->pb.bawp.alpha, beta = t->pb.bawp.beta[plane];
         if (alpha != 256 || beta)
             dsp->mc.morph(dst, stride, alpha, beta,
                           bw4 * h_mul, bh4 * v_mul HIGHBD_CALL_SUFFIX);
         return;
     }
     // defaults
-    t->pb.bawp[plane].alpha = 256;
-    t->pb.bawp[plane].beta = 0;
+    if (!plane) t->pb.bawp.alpha = 256;
+    t->pb.bawp.beta[plane] = 0;
     Dav2dTileState *const ts = t->ts;
     int tile_top_edge, tile_left_edge, tile_bottom_edge, tile_right_edge;
     if (refp == &f->cur) {
@@ -2452,17 +2452,22 @@ static void bawp(Dav2dTaskContext *const t,
     }
 
     int alpha, beta;
-    if (bawp_idx != 1) {
-        assert(bawp_idx & 2);
-        const int idx = (1 + (bawp_idx >> 2) + (f->absrefdist[refidx] > 4)) *
-                         (bawp_idx & 1 ? 1 : -1);
-        alpha = 256 + 16 * idx;
-    } else if (count_l2) {
-        const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
-        const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
-        alpha = derive_alpha(num, den, 256);
+    if (plane) {
+        alpha = t->pb.bawp.alpha;
     } else {
-        alpha = 256;
+        if (bawp_idx != 1) {
+            assert(bawp_idx & 2);
+            const int idx = (1 + (bawp_idx >> 2) + (f->absrefdist[refidx] > 4)) *
+                             (bawp_idx & 1 ? 1 : -1);
+            alpha = 256 + 16 * idx;
+        } else if (count_l2) {
+            const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
+            const int den = sum_x2 - (int)(((int64_t)sum_x * sum_x) >> count_l2);
+            alpha = derive_alpha(num, den, 256);
+        } else {
+            alpha = 256;
+        }
+        t->pb.bawp.alpha = alpha;
     }
 
     if (count_l2) {
@@ -2472,8 +2477,7 @@ static void bawp(Dav2dTaskContext *const t,
     } else {
         beta = -128;
     }
-    t->pb.bawp[plane].alpha = alpha;
-    t->pb.bawp[plane].beta = beta;
+    t->pb.bawp.beta[plane] = beta;
 
     dsp->mc.morph(dst, stride, alpha, beta,
                   bw4 * h_mul, bh4 * v_mul HIGHBD_CALL_SUFFIX);
