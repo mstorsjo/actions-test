@@ -2017,9 +2017,10 @@ static int opfl_pred(Dav2dTaskContext *const t,
 }
 
 static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
-                      const int plane, const int step, const int window_pad,
+                      const int plane, const int r_step, const int o_step,
                       const int bw4, const int bh4)
 {
+    assert(r_step >= o_step);
     const Dav2dFrameContext *const f = t->f;
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
     const int tip = b->ref.ref[0] == TIP_FRAME;
@@ -2035,36 +2036,46 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     int have_bacp = 0;
 
     const int w = f->bw * 4 >> ss_hor, h = f->bh * 4 >> ss_hor;
-    const int sw4 = imin(bw4, step), sh4 = imin(bh4, step);
-    const int hhtaps = (window_pad >> ss_hor) + 2 + 2 * (sw4 > 1 + ss_hor);
-    const int hvtaps = (window_pad >> ss_ver) + 2 + 2 * (sh4 > 1 + ss_ver);
-    for (int y = 0; y < bh4; y += step, rmv_line += 16 * step >> 1) {
-        for (int x = 0; x < bw4; x += step) {
+    const int rw4 = imin(bw4, r_step), rh4 = imin(bh4, r_step);
+    const int ow4 = imin(bw4, o_step), oh4 = imin(bh4, o_step);
+    const int hhtaps = 2 + 2 * (rw4 > 1 + ss_hor);
+    const int hvtaps = 2 + 2 * (rh4 > 1 + ss_ver);
+    for (int y = 0; y < bh4; y += rh4, rmv_line += 16 * r_step >> 1) {
+        for (int x = 0; x < bw4; x += rw4) {
             union mv (*const rmv)[2] = rmv_line[x >> 1];
+            int top[2], left[2], bottom[2], right[2];
             for (int i = 0; i < 2; i++) {
-                int top = ((t->cby + y) * 4 >> ss_ver) +
+                top[i] = ((t->cby + y) * 4 >> ss_ver) +
                           ((tip ? rmv[1][i].y : b->mv[i].y) >> 4);
-                int left = ((t->cbx + x) * 4 >> ss_hor) +
+                left[i] = ((t->cbx + x) * 4 >> ss_hor) +
                            ((tip ? rmv[1][i].x : b->mv[i].x) >> 4);
-                const int bottom = top + (4 * sh4 >> ss_ver) + hvtaps;
-                const int right = left + (4 * sw4 >> ss_hor) + hhtaps;
-                top -= hvtaps - 1;
-                left -= hhtaps - 1;
-                mc_opfl(t, &tmp[i][uvoff + (x * 4 >> ss_hor)], stride,
-                        sw4 >> ss_hor, sh4 >> ss_ver,
-                        (t->cbx + x) >> ss_hor, (t->cby + y) >> ss_ver,
-                        1 + plane, rmv[0][i], &f->refp[ref.ref[i]], b->filter,
-                        iclip(left, 0, w - 1), iclip(right, 1, w),
-                        iclip(top, 0, h - 1), iclip(bottom, 1, h));
+                bottom[i] = iclip(top[i] + (4 * rh4 >> ss_ver) + hvtaps, 1, h);
+                right[i] = iclip(left[i] + (4 * rw4 >> ss_hor) + hhtaps, 1, w);
+                top[i] = iclip(top[i] + 1 - hvtaps, 0, h - 1);
+                left[i] = iclip(left[i] + 1 - hhtaps, 0, w - 1);
             }
-            if (bacp)
-                have_bacp |= get_mask(mask, bw4 * 4 >> ss_hor,
-                                      t->cbx >> ss_hor, x >> ss_hor,
-                                      t->cby >> ss_ver, y >> ss_ver,
-                                      rmv[0], 4, 4, step >> ss_hor, step >> ss_ver,
-                                      f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
+            ptrdiff_t uvoffi = uvoff;
+            for (int by = 0; by < rh4; by += oh4) {
+                for (int bx = 0; bx < rw4; bx += ow4) {
+                    union mv (*const rmv)[2] = rmv_line[!!by * 16 + ((x + bx) >> 1)];
+                    for (int i = 0; i < 2; i++)
+                        mc_opfl(t, &tmp[i][uvoffi + ((x + bx) * 4 >> ss_hor)], stride,
+                                ow4 >> ss_hor, oh4 >> ss_ver,
+                                (t->cbx + x + bx) >> ss_hor,
+                                (t->cby + y + by) >> ss_ver,
+                                1 + plane, rmv[0][i], &f->refp[ref.ref[i]], b->filter,
+                                left[i], right[i], top[i], bottom[i]);
+                    if (bacp)
+                        have_bacp |= get_mask(mask, bw4 * 4 >> ss_hor,
+                                              t->cbx >> ss_hor, (x + bx) >> ss_hor,
+                                              t->cby >> ss_ver, (y + by) >> ss_ver,
+                                              rmv[0], 4, 4, ow4 >> ss_hor, oh4 >> ss_ver,
+                                              f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
+                }
+                uvoffi += oh4 * 4 * stride >> ss_ver;
+            }
         }
-        uvoff += step * 4 * stride >> ss_ver;
+        uvoff += rh4 * 4 * stride >> ss_ver;
     }
     return bacp && have_bacp;
 }
@@ -3315,13 +3326,13 @@ chroma: {}
                      f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
                 const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                                        ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
-                bacp = rmv_uvpred(t, b, pl, step, 0, cbw4, cbh4);
+                bacp = rmv_uvpred(t, b, pl, step, step, cbw4, cbh4);
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
             {
                 const int refine = b->comp_type == COMP_INTER_AVG && b->refine_mv;
                 const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
-                bacp = rmv_uvpred(t, b, pl, 4 >> opfl, refine ? 4 : 0, cbw4, cbh4);
+                bacp = rmv_uvpred(t, b, pl, 2 << refine, 4 >> opfl, cbw4, cbh4);
             } else {
                 if (!pl)
                     bacp = 2 * (f->seq_hdr->imp_msk_bld &&
