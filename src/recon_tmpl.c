@@ -2624,7 +2624,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         const int hpad = cbh4 - cth4;
         const int dc = (!has_top && !left) ? 4 << f->cur.p.p.bpc :
             dsp->ipred.cfl_dc[layout](y_edge, top, left, ystride,
-                                      wpad, hpad,
+                                      top ? wpad : 0, left ? hpad : 0,
                                       top ? ctw << ss_hor : 0,
                                       left ? cth << ss_ver : 0, filter_type);
         dsp->ipred.cfl_ac[layout](ac, dc, y_src, ystride, wpad, hpad, ctw, cth,
