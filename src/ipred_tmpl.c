@@ -1097,7 +1097,7 @@ cfl_ac_c(int16_t *ac, const int dc, const pixel *ypx, const ptrdiff_t stride,
             } else if (!(ss_hor ^ ss_ver)) {
                 const ptrdiff_t bot = x * 2 + PXSTRIDE(stride);
                 if (filter_type & 2) {
-                    const ptrdiff_t top = (y & 63) == 0 ? x * 2 : (x * 2 - PXSTRIDE(stride));
+                    const ptrdiff_t top = (y & 31) == 0 ? x * 2 : (x * 2 - PXSTRIDE(stride));
                     ac[x] = ypx[left] + 4 * ypx[x * 2] + ypx[x * 2 + 1] +
                             ypx[top] + ypx[bot];
                 } else if (filter_type & 1) {
