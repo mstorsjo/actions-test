@@ -2711,7 +2711,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     } else { // CFL MHCCP
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
         ALIGN(pixel luma[CFL_MHCCP_MAX_LUMA_SIZE], 64);
-        int refw = ctw, refh = cth, luma_top_stride;
+        int refw = ctw4 * 4, refh = cth4 * 4, luma_top_stride;
         uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES];
         int32_t mat[3][3] = { 0 };
         int n_tr = 0, n_bl = 0;
