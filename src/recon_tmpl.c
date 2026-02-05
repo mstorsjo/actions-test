@@ -3256,7 +3256,8 @@ chroma: {}
         }
     }
 
-    const int can_cfl = b->uv_mode == CFL_PRED ? b->cfl_type > CFL_EXPLICIT ?
+    const int can_cfl = b->uv_mode == CFL_PRED ?
+        (b->cfl_type > CFL_EXPLICIT || imax(ctw, cth) == 64) ?
         0x3 : (!!b->cfl_alpha[0]) | (!!b->cfl_alpha[1] << 1) : 0x0;
     if (intra) {
         if (can_cfl)

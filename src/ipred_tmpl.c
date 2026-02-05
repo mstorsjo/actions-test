@@ -155,8 +155,12 @@ static void ipred_cfl_top_c(pixel *dst, const ptrdiff_t stride,
                             const int16_t *ac, const int alpha
                             HIGHBD_DECL_SUFFIX)
 {
-    cfl_pred(dst, stride, width, height, dc_gen_top(topleft, width, width >= 64),
-             ac, alpha HIGHBD_TAIL_SUFFIX);
+    const int dc = dc_gen_top(topleft, width, width >= 64);
+    if (!alpha) {
+        splat_dc(dst, stride, width, height, dc);
+        return;
+    }
+    cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
 
 static unsigned dc_gen_left(const pixel *const topleft,
@@ -201,6 +205,10 @@ static void ipred_cfl_left_c(pixel *dst, const ptrdiff_t stride,
                              HIGHBD_DECL_SUFFIX)
 {
     const unsigned dc = dc_gen_left(topleft, height, height >= 64);
+    if (!alpha) {
+        splat_dc(dst, stride, width, height, dc);
+        return;
+    }
     cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
 
@@ -280,12 +288,12 @@ static void ipred_cfl_c(pixel *dst, const ptrdiff_t stride,
 {
     unsigned dc = dc_gen(topleft, width, height, width >= 64, height >= 64
                          HIGHBD_TAIL_SUFFIX);
+    if (!alpha) {
+        splat_dc(dst, stride, width, height, dc);
+        return;
+    }
     cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
-
-#undef MULTIPLIER_1x2
-#undef MULTIPLIER_1x4
-#undef BASE_SHIFT
 
 static void ipred_dc_128_c(pixel *dst, const ptrdiff_t stride,
                            const pixel *const topleft,
@@ -312,6 +320,10 @@ static void ipred_cfl_128_c(pixel *dst, const ptrdiff_t stride,
 #else
     const int dc = 128;
 #endif
+    if (!alpha) {
+        splat_dc(dst, stride, width, height, dc);
+        return;
+    }
     cfl_pred(dst, stride, width, height, dc, ac, alpha HIGHBD_TAIL_SUFFIX);
 }
 
