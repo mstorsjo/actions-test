@@ -3445,7 +3445,7 @@ chroma: {}
             }
 
             int n_tr = 0, n_bl = 0;
-            if (t->cby > ts->tiling.row_start) {
+            if (t->cby > ts->tiling.row_start && ctw < 64) {
                 const int csbsz = sbsz >> ss_hor;
                 const int tile_end = ts->tiling.col_end >> ss_hor;
                 int w = imin(ctw4, tile_end - ssbx - ctw4);
@@ -3464,7 +3464,7 @@ chroma: {}
                     }
                 }
             }
-            if (t->cbx > ts->tiling.col_start) {
+            if (t->cbx > ts->tiling.col_start && cth < 64) {
                 const int csbsz = sbsz >> ss_ver;
                 const int end = imin((ssby + csbsz) & ~(csbsz - 1),
                                      ts->tiling.row_end >> ss_ver);
