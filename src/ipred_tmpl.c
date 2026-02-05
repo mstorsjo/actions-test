@@ -1171,24 +1171,27 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
         const pixel *top = top_sb_edge ?
             top_sb_edge - n_left * 2 : src - n_top * 2 * src_stride;
         const ptrdiff_t b = !top_sb_edge ? src_stride : 0;
+        ptrdiff_t t = n_top == 1 ? -b : 0;
         for (int y = 0; y < n_top; y++) {
             int x = 0;
             for (; x < n_left; x++) {
                 const int c = x * 2, r = c + 1;
                 const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
-                dst_left[x] = filter_type & 2 ? FILTER_CROSS(top, (&top[-b])) :
+                dst_left[x] = filter_type & 2 ? FILTER_CROSS(top, (&top[t])) :
                               filter_type & 1 ? FILTER_RECT(top) :
                               FILTER_CENTER(top);
             }
             for (; x < refw; x++) {
                 const int c = x * 2, r = c + 1;
                 const int l = n_left ? c - 1 : imax(c - 1, 0);
-                dst[x - n_left] = filter_type & 2 ? FILTER_CROSS(top, (&top[-b])) :
+                dst[x - n_left] = filter_type & 2 ? FILTER_CROSS(top, (&top[t])) :
                                   filter_type & 1 ? FILTER_RECT(top) :
                                   FILTER_CENTER(top);
             }
-            if (!top_sb_edge)
+            if (!top_sb_edge) {
                 top += 2 * src_stride;
+                t = -src_stride;
+            }
             dst_left += n_left;
             dst += dst_top_stride;
         }
@@ -1196,7 +1199,8 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
 
     // l+blk
     const ptrdiff_t b = src_stride;
-    const pixel *top = src;
+    const pixel *top = has_t ? top_sb_edge ?
+        top_sb_edge - n_left * 2 : src - src_stride : src;
     for (int y = 0; y < th; y++) {
         int x = 0;
         for (; x < n_left; x++) {
@@ -1230,6 +1234,7 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
                           FILTER_CENTER(src);
         }
         src += src_stride << 1;
+        top = src - src_stride;
         dst_left += n_left;
     }
 }
