@@ -751,71 +751,84 @@ function prep_neon, export=1
 40:
         AARCH64_VALID_JUMP_TARGET
 4:
-        ldr             s0, [x1]
-        ldr             s2, [x1, x2]
-        add             x1, x1, x2, lsl #1
-        ldr             s1, [x1]
-        ldr             s3, [x1, x2]
-        add             x1, x1, x2, lsl #1
+        ldr             s0, [x2]
+        ldr             s2, [x2, x3]
+        add             x2, x2, x3, lsl #1
+        ldr             s1, [x2]
+        ldr             s3, [x2, x3]
+        add             x2, x2, x3, lsl #1
         mov             v0.s[1], v2.s[0]
         mov             v1.s[1], v3.s[0]
         ushll           v0.8h, v0.8b, #4
         ushll           v1.8h, v1.8b, #4
-        subs            w4, w4, #4
-        stp             q0, q1, [x0], #32
+        subs            w5, w5, #4
+        mov             v2.d[0], v0.d[1]
+        mov             v3.d[0], v1.d[1]
+        str             d0, [x0]
+        str             d2, [x0, x1]
+        add             x0, x0, x1, lsl #1
+        str             d1, [x0]
+        str             d3, [x0, x1]
+        add             x0, x0, x1, lsl #1
         b.gt            4b
         ret
 80:
         AARCH64_VALID_JUMP_TARGET
 8:
-        ldr             d0, [x1]
-        ldr             d1, [x1, x2]
-        add             x1, x1, x2, lsl #1
-        ldr             d2, [x1]
-        ldr             d3, [x1, x2]
-        add             x1, x1, x2, lsl #1
+        ldr             d0, [x2]
+        ldr             d1, [x2, x3]
+        add             x2, x2, x3, lsl #1
+        ldr             d2, [x2]
+        ldr             d3, [x2, x3]
+        add             x2, x2, x3, lsl #1
         ushll           v0.8h, v0.8b, #4
         ushll           v1.8h, v1.8b, #4
         umull           v2.8h, v2.8b, v24.8b
         umull           v3.8h, v3.8b, v24.8b
-        subs            w4, w4, #4
-        stp             q0, q1, [x0]
-        stp             q2, q3, [x0, #32]
-        add             x0, x0, #64
+        subs            w5, w5, #4
+        str             q0, [x0]
+        str             q1, [x0, x1]
+        add             x0, x0, x1, lsl #1
+        str             q2, [x0]
+        str             q3, [x0, x1]
+        add             x0, x0, x1, lsl #1
         b.gt            8b
         ret
 160:
         AARCH64_VALID_JUMP_TARGET
 16:
-        ldr             q1, [x1]
-        ldr             q3, [x1, x2]
-        add             x1, x1, x2, lsl #1
+        ldr             q1, [x2]
+        ldr             q3, [x2, x3]
+        add             x2, x2, x3, lsl #1
         ushll           v0.8h, v1.8b, #4
         ushll2          v1.8h, v1.16b, #4
-        ldr             q5, [x1]
-        ldr             q7, [x1, x2]
-        add             x1, x1, x2, lsl #1
+        ldr             q5, [x2]
+        ldr             q7, [x2, x3]
+        add             x2, x2, x3, lsl #1
         umull           v2.8h, v3.8b, v24.8b
         umull2          v3.8h, v3.16b, v24.16b
         ushll           v4.8h, v5.8b, #4
         ushll2          v5.8h, v5.16b, #4
         umull           v6.8h, v7.8b, v24.8b
         umull2          v7.8h, v7.16b, v24.16b
-        subs            w4, w4, #4
+        subs            w5, w5, #4
         stp             q0, q1, [x0]
-        stp             q2, q3, [x0, #32]
-        stp             q4, q5, [x0, #64]
-        stp             q6, q7, [x0, #96]
-        add             x0, x0, #128
+        add             x0, x0, x1
+        stp             q2, q3, [x0]
+        add             x0, x0, x1
+        stp             q4, q5, [x0]
+        add             x0, x0, x1
+        stp             q6, q7, [x0]
+        add             x0, x0, x1
         b.gt            16b
         ret
 320:
         AARCH64_VALID_JUMP_TARGET
 32:
-        ldp             q4, q5, [x1]
-        add             x1, x1, x2
-        ldp             q6, q7, [x1]
-        add             x1, x1, x2
+        ldp             q4, q5, [x2]
+        add             x2, x2, x3
+        ldp             q6, q7, [x2]
+        add             x2, x2, x3
         ushll           v0.8h, v4.8b, #4
         ushll2          v1.8h, v4.16b, #4
         umull           v2.8h, v5.8b, v24.8b
@@ -824,20 +837,21 @@ function prep_neon, export=1
         ushll2          v5.8h, v6.16b, #4
         umull           v6.8h, v7.8b, v24.8b
         umull2          v7.8h, v7.16b, v24.16b
-        subs            w4, w4, #2
+        subs            w5, w5, #2
         stp             q0, q1, [x0]
         stp             q2, q3, [x0, #32]
-        stp             q4, q5, [x0, #64]
-        stp             q6, q7, [x0, #96]
-        add             x0, x0, #128
+        add             x0, x0, x1
+        stp             q4, q5, [x0]
+        stp             q6, q7, [x0, #32]
+        add             x0, x0, x1
         b.gt            32b
         ret
 640:
         AARCH64_VALID_JUMP_TARGET
 64:
-        ldp             q4, q5, [x1]
-        ldp             q6, q7, [x1, #32]
-        add             x1, x1, x2
+        ldp             q4, q5, [x2]
+        ldp             q6, q7, [x2, #32]
+        add             x2, x2, x3
         ushll           v0.8h, v4.8b, #4
         ushll2          v1.8h, v4.16b, #4
         umull           v2.8h, v5.8b, v24.8b
@@ -846,19 +860,19 @@ function prep_neon, export=1
         ushll2          v5.8h, v6.16b, #4
         umull           v6.8h, v7.8b, v24.8b
         umull2          v7.8h, v7.16b, v24.16b
-        subs            w4, w4, #1
+        subs            w5, w5, #1
         stp             q0, q1, [x0]
         stp             q2, q3, [x0, #32]
         stp             q4, q5, [x0, #64]
         stp             q6, q7, [x0, #96]
-        add             x0, x0, #128
+        add             x0, x0, x1
         b.gt            64b
         ret
 1280:
         AARCH64_VALID_JUMP_TARGET
 128:
-        ldp             q28, q29, [x1]
-        ldp             q30, q31, [x1, #32]
+        ldp             q28, q29, [x2]
+        ldp             q30, q31, [x2, #32]
         ushll           v16.8h, v28.8b, #4
         ushll2          v17.8h, v28.16b, #4
         umull           v18.8h, v29.8b, v24.8b
@@ -867,9 +881,9 @@ function prep_neon, export=1
         ushll2          v21.8h, v30.16b, #4
         umull           v22.8h, v31.8b, v24.8b
         umull2          v23.8h, v31.16b, v24.16b
-        ldp             q28, q29, [x1, #64]
-        ldp             q30, q31, [x1, #96]
-        add             x1, x1, x2
+        ldp             q28, q29, [x2, #64]
+        ldp             q30, q31, [x2, #96]
+        add             x2, x2, x3
         stp             q16, q17, [x0]
         stp             q18, q19, [x0, #32]
         stp             q20, q21, [x0, #64]
@@ -882,12 +896,12 @@ function prep_neon, export=1
         ushll2          v21.8h, v30.16b, #4
         umull           v22.8h, v31.8b, v24.8b
         umull2          v23.8h, v31.16b, v24.16b
-        subs            w4, w4, #1
+        subs            w5, w5, #1
         stp             q16, q17, [x0, #128]
         stp             q18, q19, [x0, #160]
         stp             q20, q21, [x0, #192]
         stp             q22, q23, [x0, #224]
-        add             x0, x0, #256
+        add             x0, x0, x1
         b.gt            128b
         ret
 endfunc

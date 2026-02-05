@@ -1475,12 +1475,14 @@ endjumptable
 
 function prep_sve
         movrel          x9, prep_tbl
+        ldr             w10, [sp]                   // bdmax
         mov             w6, #19
         ldrsw           x8, [x9, x8, lsl #2]
-        sub             w6, w6, w7, lsr #8          // 19 - bdmax / 256
+        sub             w6, w6, w10, lsr #8         // 19 - bdmax / 256
         add             x9, x9, x8
         movi            v30.8h, #PREP_BIAS_NEG
         dup             v29.8h, w6                  // 10b: 1 << 4, 12b: 1 << 2
+        lsl             x1, x1, #1
         br              x9
 
         .align JUMP_ALIGN
@@ -1489,13 +1491,15 @@ function prep_sve
 
         .align LOOP_ALIGN
 4:
-        ldr             d0, [x1]
-        ldr             d1, [x1, x2]
-        add             x1, x1, x2, lsl #1
-        subs            w4, w4, #2
+        ldr             d0, [x2]
+        ldr             d1, [x2, x3]
+        add             x2, x2, x3, lsl #1
+        subs            w5, w5, #2
         mad             z0.h, p0/m, z29.h, z30.h
         mad             z1.h, p0/m, z29.h, z30.h
-        stp             d0, d1, [x0], #16
+        str             d0, [x0]
+        str             d1, [x0, x1]
+        add             x0, x0, x1, lsl #1
         b.gt            4b
         ret
 
@@ -1505,12 +1509,13 @@ function prep_sve
 
         .align LOOP_ALIGN
 8:
-        ld1             {v0.8h}, [x1], x2
-        ld1             {v1.8h}, [x1], x2
-        subs            w4, w4, #2
+        ld1             {v0.8h}, [x2], x3
+        ld1             {v1.8h}, [x2], x3
+        subs            w5, w5, #2
         mad             z0.h, p0/m, z29.h, z30.h
         mad             z1.h, p0/m, z29.h, z30.h
-        stp             q0, q1, [x0], #32
+        st1             {v0.8h}, [x0], x1
+        st1             {v1.8h}, [x0], x1
         b.gt            8b
         ret
 
@@ -1520,16 +1525,17 @@ function prep_sve
 
         .align LOOP_ALIGN
 16:
-        ld1             {v0.8h, v1.8h}, [x1], x2
+        ld1             {v0.8h, v1.8h}, [x2], x3
         mad             z0.h, p0/m, z29.h, z30.h
         mad             z1.h, p0/m, z29.h, z30.h
-        subs            w4, w4, #2
-        ld1             {v2.8h, v3.8h}, [x1], x2
+        subs            w5, w5, #2
+        ld1             {v2.8h, v3.8h}, [x2], x3
         mad             z2.h, p0/m, z29.h, z30.h
         mad             z3.h, p0/m, z29.h, z30.h
         stp             q0, q1, [x0]
-        stp             q2, q3, [x0, #32]
-        add             x0, x0, #64
+        add             x0, x0, x1
+        stp             q2, q3, [x0]
+        add             x0, x0, x1
         b.gt            16b
         ret
 
@@ -1539,17 +1545,17 @@ function prep_sve
 
         .align LOOP_ALIGN
 32:
-        ldp             q0, q1, [x1]
+        ldp             q0, q1, [x2]
         mad             z0.h, p0/m, z29.h, z30.h
         mad             z1.h, p0/m, z29.h, z30.h
-        ldp             q2, q3, [x1, #32]
-        subs            w4, w4, #1
+        ldp             q2, q3, [x2, #32]
+        subs            w5, w5, #1
         mad             z2.h, p0/m, z29.h, z30.h
         mad             z3.h, p0/m, z29.h, z30.h
-        add             x1, x1, x2
+        add             x2, x2, x3
         stp             q0, q1, [x0]
         stp             q2, q3, [x0, #32]
-        add             x0, x0, #64
+        add             x0, x0, x1
         b.gt            32b
         ret
 
@@ -1559,25 +1565,25 @@ function prep_sve
 
         .align LOOP_ALIGN
 64:
-        ldp             q0, q1, [x1]
+        ldp             q0, q1, [x2]
         mad             z0.h, p0/m, z29.h, z30.h
         mad             z1.h, p0/m, z29.h, z30.h
-        ldp             q2, q3, [x1, #32]
+        ldp             q2, q3, [x2, #32]
         mad             z2.h, p0/m, z29.h, z30.h
         mad             z3.h, p0/m, z29.h, z30.h
-        ldp             q4, q5, [x1, #64]
+        ldp             q4, q5, [x2, #64]
         mad             z4.h, p0/m, z29.h, z30.h
         mad             z5.h, p0/m, z29.h, z30.h
-        ldp             q6, q7, [x1, #96]
-        add             x1, x1, x2
-        subs            w4, w4, #1
+        ldp             q6, q7, [x2, #96]
+        add             x2, x2, x3
+        subs            w5, w5, #1
         mad             z6.h, p0/m, z29.h, z30.h
         mad             z7.h, p0/m, z29.h, z30.h
         stp             q0, q1, [x0]
         stp             q2, q3, [x0, #32]
         stp             q4, q5, [x0, #64]
         stp             q6, q7, [x0, #96]
-        add             x0, x0, #128
+        add             x0, x0, x1
         b.gt            64b
         ret
 
@@ -1587,32 +1593,32 @@ function prep_sve
 
         .align LOOP_ALIGN
 128:
-        ldp             q0, q1, [x1]
+        ldp             q0, q1, [x2]
         mad             z0.h, p0/m, z29.h, z30.h
         mad             z1.h, p0/m, z29.h, z30.h
-        ldp             q2, q3, [x1, #32]
+        ldp             q2, q3, [x2, #32]
         mad             z2.h, p0/m, z29.h, z30.h
         mad             z3.h, p0/m, z29.h, z30.h
-        ldp             q4, q5, [x1, #64]
+        ldp             q4, q5, [x2, #64]
         mad             z4.h, p0/m, z29.h, z30.h
         mad             z5.h, p0/m, z29.h, z30.h
-        ldp             q6, q7, [x1, #96]
+        ldp             q6, q7, [x2, #96]
         mad             z6.h, p0/m, z29.h, z30.h
         mad             z7.h, p0/m, z29.h, z30.h
-        ldp             q16, q17, [x1, #128]
+        ldp             q16, q17, [x2, #128]
         mad             z16.h, p0/m, z29.h, z30.h
         mad             z17.h, p0/m, z29.h, z30.h
-        ldp             q18, q19, [x1, #160]
+        ldp             q18, q19, [x2, #160]
         mad             z18.h, p0/m, z29.h, z30.h
         mad             z19.h, p0/m, z29.h, z30.h
-        ldp             q20, q21, [x1, #192]
+        ldp             q20, q21, [x2, #192]
         mad             z20.h, p0/m, z29.h, z30.h
         mad             z21.h, p0/m, z29.h, z30.h
-        ldp             q22, q23, [x1, #224]
-        add             x1, x1, x2
+        ldp             q22, q23, [x2, #224]
+        add             x2, x2, x3
         mad             z22.h, p0/m, z29.h, z30.h
         mad             z23.h, p0/m, z29.h, z30.h
-        subs            w4, w4, #1
+        subs            w5, w5, #1
         stp             q0, q1, [x0]
         stp             q2, q3, [x0, #32]
         stp             q4, q5, [x0, #64]
@@ -1621,7 +1627,7 @@ function prep_sve
         stp             q18, q19, [x0, #160]
         stp             q20, q21, [x0, #192]
         stp             q22, q23, [x0, #224]
-        add             x0, x0, #256
+        add             x0, x0, x1
         b.gt            128b
         ret
 endfunc

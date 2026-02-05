@@ -873,48 +873,56 @@ endjumptable
 function prep_16bpc_neon
         movrel          x10, prep_16bpc_tbl
         ldrsw           x9, [x10, x9, lsl #2]
-        dup             v31.8h,  w7   // intermediate_bits
+        dup             v31.8h,  w8   // intermediate_bits
         movi            v30.8h,  #(PREP_BIAS >> 8), lsl #8
         add             x10, x10, x9
         br              x10
 
 40:
         AARCH64_VALID_JUMP_TARGET
-        add             x9,  x1,  x2
-        lsl             x2,  x2,  #1
+        add             x9,  x2,  x3
+        add             x10, x0,  x1
+        lsl             x3,  x3,  #1
+        lsl             x1,  x1,  #1
 4:
-        ld1             {v0.8b},   [x1], x2
-        ld1             {v0.d}[1], [x9], x2
-        subs            w4,  w4,  #2
+        ld1             {v0.4h},   [x2], x3
+        ld1             {v0.d}[1], [x9], x3
+        subs            w5,  w5,  #2
         sshl            v0.8h,   v0.8h,   v31.8h
         sub             v0.8h,   v0.8h,   v30.8h
-        st1             {v0.8h}, [x0], #16
+        st1             {v0.4h},   [x0],  x1
+        st1             {v0.d}[1], [x10], x1
         b.gt            4b
         ret
 80:
         AARCH64_VALID_JUMP_TARGET
-        add             x9,  x1,  x2
-        lsl             x2,  x2,  #1
+        add             x9,  x2,  x3
+        add             x10, x0,  x1
+        lsl             x3,  x3,  #1
+        lsl             x1,  x1,  #1
 8:
-        ld1             {v0.8h}, [x1], x2
-        ld1             {v1.8h}, [x9], x2
-        subs            w4,  w4,  #2
+        ld1             {v0.8h}, [x2], x3
+        ld1             {v1.8h}, [x9], x3
+        subs            w5,  w5,  #2
         sshl            v0.8h,   v0.8h,   v31.8h
         sshl            v1.8h,   v1.8h,   v31.8h
         sub             v0.8h,   v0.8h,   v30.8h
         sub             v1.8h,   v1.8h,   v30.8h
-        st1             {v0.8h, v1.8h}, [x0], #32
+        st1             {v0.8h}, [x0],  x1
+        st1             {v1.8h}, [x10], x1
         b.gt            8b
         ret
 160:
         AARCH64_VALID_JUMP_TARGET
+        add             x10, x0,  x1
+        lsl             x1,  x1,  #1
 16:
-        ldp             q0,  q1,  [x1]
-        add             x1,  x1,  x2
+        ldp             q0,  q1,  [x2]
+        add             x2,  x2,  x3
         sshl            v0.8h,   v0.8h,   v31.8h
-        ldp             q2,  q3,  [x1]
-        add             x1,  x1,  x2
-        subs            w4,  w4,  #2
+        ldp             q2,  q3,  [x2]
+        add             x2,  x2,  x3
+        subs            w5,  w5,  #2
         sshl            v1.8h,   v1.8h,   v31.8h
         sshl            v2.8h,   v2.8h,   v31.8h
         sshl            v3.8h,   v3.8h,   v31.8h
@@ -922,40 +930,41 @@ function prep_16bpc_neon
         sub             v1.8h,   v1.8h,   v30.8h
         sub             v2.8h,   v2.8h,   v30.8h
         sub             v3.8h,   v3.8h,   v30.8h
-        st1             {v0.8h, v1.8h, v2.8h, v3.8h}, [x0], #64
+        st1             {v0.8h, v1.8h}, [x0],  x1
+        st1             {v2.8h, v3.8h}, [x10], x1
         b.gt            16b
         ret
 320:
         AARCH64_VALID_JUMP_TARGET
 32:
-        ldp             q0,  q1,  [x1]
+        ldp             q0,  q1,  [x2]
         sshl            v0.8h,   v0.8h,   v31.8h
-        ldp             q2,  q3,  [x1, #32]
-        add             x1,  x1,  x2
+        ldp             q2,  q3,  [x2, #32]
+        add             x2,  x2,  x3
         sshl            v1.8h,   v1.8h,   v31.8h
         sshl            v2.8h,   v2.8h,   v31.8h
         sshl            v3.8h,   v3.8h,   v31.8h
-        subs            w4,  w4,  #1
+        subs            w5,  w5,  #1
         sub             v0.8h,   v0.8h,   v30.8h
         sub             v1.8h,   v1.8h,   v30.8h
         sub             v2.8h,   v2.8h,   v30.8h
         sub             v3.8h,   v3.8h,   v30.8h
-        st1             {v0.8h, v1.8h, v2.8h, v3.8h}, [x0], #64
+        st1             {v0.8h, v1.8h, v2.8h, v3.8h}, [x0], x1
         b.gt            32b
         ret
 640:
         AARCH64_VALID_JUMP_TARGET
 64:
-        ldp             q0,  q1,  [x1]
-        subs            w4,  w4,  #1
+        ldp             q0,  q1,  [x2]
+        subs            w5,  w5,  #1
         sshl            v0.8h,   v0.8h,   v31.8h
-        ldp             q2,  q3,  [x1, #32]
+        ldp             q2,  q3,  [x2, #32]
         sshl            v1.8h,   v1.8h,   v31.8h
-        ldp             q4,  q5,  [x1, #64]
+        ldp             q4,  q5,  [x2, #64]
         sshl            v2.8h,   v2.8h,   v31.8h
         sshl            v3.8h,   v3.8h,   v31.8h
-        ldp             q6,  q7,  [x1, #96]
-        add             x1,  x1,  x2
+        ldp             q6,  q7,  [x2, #96]
+        add             x2,  x2,  x3
         sshl            v4.8h,   v4.8h,   v31.8h
         sshl            v5.8h,   v5.8h,   v31.8h
         sshl            v6.8h,   v6.8h,   v31.8h
@@ -972,34 +981,34 @@ function prep_16bpc_neon
         sub             v7.8h,   v7.8h,   v30.8h
         stp             q4,  q5,  [x0, #64]
         stp             q6,  q7,  [x0, #96]
-        add             x0,  x0,  x8
+        add             x0,  x0,  x1
         b.gt            64b
         ret
 1280:
         AARCH64_VALID_JUMP_TARGET
 128:
-        ldp             q0,  q1,  [x1]
-        subs            w4,  w4,  #1
+        ldp             q0,  q1,  [x2]
+        subs            w5,  w5,  #1
         sshl            v0.8h,   v0.8h,   v31.8h
-        ldp             q2,  q3,  [x1, #32]
+        ldp             q2,  q3,  [x2, #32]
         sshl            v1.8h,   v1.8h,   v31.8h
-        ldp             q4,  q5,  [x1, #64]
+        ldp             q4,  q5,  [x2, #64]
         sshl            v2.8h,   v2.8h,   v31.8h
         sshl            v3.8h,   v3.8h,   v31.8h
-        ldp             q6,  q7,  [x1, #96]
+        ldp             q6,  q7,  [x2, #96]
         sshl            v4.8h,   v4.8h,   v31.8h
         sshl            v5.8h,   v5.8h,   v31.8h
-        ldp             q16, q17, [x1, #128]
+        ldp             q16, q17, [x2, #128]
         sshl            v6.8h,   v6.8h,   v31.8h
         sshl            v7.8h,   v7.8h,   v31.8h
-        ldp             q18, q19, [x1, #160]
+        ldp             q18, q19, [x2, #160]
         sshl            v16.8h,  v16.8h,  v31.8h
         sshl            v17.8h,  v17.8h,  v31.8h
-        ldp             q20, q21, [x1, #192]
+        ldp             q20, q21, [x2, #192]
         sshl            v18.8h,  v18.8h,  v31.8h
         sshl            v19.8h,  v19.8h,  v31.8h
-        ldp             q22, q23, [x1, #224]
-        add             x1,  x1,  x2
+        ldp             q22, q23, [x2, #224]
+        add             x2,  x2,  x3
         sshl            v20.8h,  v20.8h,  v31.8h
         sshl            v21.8h,  v21.8h,  v31.8h
         sshl            v22.8h,  v22.8h,  v31.8h
@@ -1028,7 +1037,7 @@ function prep_16bpc_neon
         sub             v23.8h,  v23.8h,  v30.8h
         stp             q20, q21, [x0, #192]
         stp             q22, q23, [x0, #224]
-        add             x0,  x0,  x8
+        add             x0,  x0,  x1
         b.gt            128b
         ret
 endfunc
