@@ -1364,8 +1364,8 @@ static void get_div_scale_sh(int d, int *scale, int *sh) {
  * This keeps all intermediates in 32-bit while keeping the mean error low.
  */
 static int mul32(int a, int b, int sh) {
-    const int a2 = ulog2(abs(a)) + 1;
-    const int b2 = ulog2(abs(b)) + 1;
+    const int a2 = ulog2(abs(a | 1)) + 1;
+    const int b2 = ulog2(abs(b | 1)) + 1;
     // 1. Decide how many bits to drop in total to avoid mul overflow
     const int drop = a2 + b2 > 29 ? a2 + b2 - 29 : 0;
     // 2. Split the drop across a and b to minimize error
