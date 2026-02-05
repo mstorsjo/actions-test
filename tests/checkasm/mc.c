@@ -132,6 +132,9 @@ static void check_mct(Dav2dMCDSPContext *const c) {
 #endif
                         generate_mct_input(src_buf, bitdepth_max);
 
+                        memset(c_tmp, 0x77, 64*64*sizeof(int16_t));
+                        memset(a_tmp, 0x77, 64*64*sizeof(int16_t));
+
                         call_ref(c_tmp, w, src, src_stride, w, h,
                                  mx, my HIGHBD_TAIL_SUFFIX);
                         call_new(a_tmp, w, src, src_stride, w, h,
@@ -239,6 +242,9 @@ static void check_mct_scaled(Dav2dMCDSPContext *const c) {
 
                         for (int k = 0; k < (128 + 7) * (128 + 7); k++)
                             src_buf[k] = rnd() & bitdepth_max;
+
+                        memset(c_tmp, 0x77, 64*64*sizeof(int16_t));
+                        memset(a_tmp, 0x77, 64*64*sizeof(int16_t));
 
                         call_ref(c_tmp, w, src, src_stride,
                                  w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
