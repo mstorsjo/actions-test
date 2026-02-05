@@ -2661,6 +2661,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     n_left = has_left ? imin(8, cth) : 0;
                 }
 
+                const int w = (f->bw - t->cbx) * 4 >> ss_hor;
+                const int h = (f->bh - t->cby) * 4 >> ss_ver;
                 int sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
                 if (n_top) {
                     const pixel *const top = is_top_sb_edge ?
@@ -2668,7 +2670,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     const int step = ctw >> ctz(n_top);
                     const int start = step >> 1;
                     for (int i = start; i < ctw; i += step) {
-                        const int l = y_edge[i] >> 3, c = top[i];
+                        const int l = y_edge[i] >> 3, c = top[imin(i, w - 1)];
                         sum_x += l;
                         sum_y += c;
                         sum_xx += l * l;
@@ -2680,7 +2682,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     const int start = step >> 1;
                     for (int i = start; i < cth; i += step) {
                         const int l = y_edge[-1 - i] >> 3;
-                        const int c = src[i * PXSTRIDE(cstride) - 1];
+                        const int c = src[imin(i, h - 1) * PXSTRIDE(cstride) - 1];
                         sum_x += l;
                         sum_y += c;
                         sum_xx += l * l;

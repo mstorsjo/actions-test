@@ -911,6 +911,7 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
 static int cfl_dc_420(uint16_t *const edge,
                       const pixel *const top, const pixel *left,
                       const ptrdiff_t stride, const int w, const int h,
+                      const int skiph, const int skipv,
                       const int filter_type)
 {
     const int is_top_sb_edge = filter_type & CFL_IS_TOP_SB_EDGE;
@@ -921,14 +922,14 @@ static int cfl_dc_420(uint16_t *const edge,
             v = top[imax(0, i - 1)] + 4 * top[i] + top[i + 1] +
                 top[i + -bottom] + top[i + bottom];
             edge[i >> 1] = v;
-            if (w < 128 || !(i & 2))
+            if (!skiph || !(i & 2))
                 dc += v;
         }
         for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
             v = left[-1] + 4 * left[0] + left[1] +
                 left[i ? -PXSTRIDE(stride) : 0] + left[PXSTRIDE(stride)];
             edge[-1 - (i >> 1)] = v;
-            if (h < 128 || !(i & 2))
+            if (!skipv || !(i & 2))
                 dc += v;
         }
     } else if (filter_type & 1) {
@@ -937,14 +938,14 @@ static int cfl_dc_420(uint16_t *const edge,
                 top[imax(0, i - 1) + bottom] +
                 2 * top[i + bottom] + top[i + 1 + bottom];
             edge[i >> 1] = v;
-            if (w < 128 || !(i & 2))
+            if (!skiph || !(i & 2))
                 dc += v;
         }
         for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
             v = left[-1] + 2 * left[0] + left[1] + left[-1 + PXSTRIDE(stride)] +
                 2 * left[PXSTRIDE(stride)] + left[1 + PXSTRIDE(stride)];
             edge[-1 - (i >> 1)] = v;
-            if (h < 128 || !(i & 2))
+            if (!skipv || !(i & 2))
                 dc += v;
         }
     } else {
@@ -952,14 +953,14 @@ static int cfl_dc_420(uint16_t *const edge,
             v = (top[i] + top[i + 1] +
                  top[i + bottom] + top[i + 1 + bottom]) << 1;
             edge[i >> 1] = v;
-            if (w < 128 || !(i & 2))
+            if (!skiph || !(i & 2))
                 dc += v;
         }
         for (int i = 0; i < h; i += 2, left += 2 * PXSTRIDE(stride)) {
             v = (left[0] + left[1] +
                  left[PXSTRIDE(stride)] + left[1 + PXSTRIDE(stride)]) << 1;
             edge[-1 - (i >> 1)] = v;
-            if (h < 128 || !(i & 2))
+            if (!skipv || !(i & 2))
                 dc += v;
         }
     }
@@ -969,6 +970,7 @@ static int cfl_dc_420(uint16_t *const edge,
 static int cfl_dc_422(uint16_t *const edge,
                       const pixel *const top, const pixel *left,
                       const ptrdiff_t stride, const int w, const int h,
+                      const int skiph, const int skipv,
                       const int filter_type)
 {
     int dc = 0, v;
@@ -976,34 +978,40 @@ static int cfl_dc_422(uint16_t *const edge,
         for (int i = 0; i < w; i += 2) {
             v = top[i] << 3;
             edge[i >> 1] = v;
-            dc += v;
+            if (!skiph || !(i & 2))
+                dc += v;
         }
-        for (int i = 0; i < h; i += 2, left += PXSTRIDE(stride)) {
+        for (int i = 0; i < h; i++, left += PXSTRIDE(stride)) {
             v = left[0] << 3;
             edge[-1 - i] = v;
-            dc += v;
+            if (!skipv || !(i & 1))
+                dc += v;
         }
     } else if (filter_type & 1) {
         for (int i = 0; i < w; i += 2) {
             v = (top[imax(0, i - 1)] + 2 * top[i] + top[i + 1]) << 1;
             edge[i >> 1] = v;
-            dc += v;
+            if (!skiph || !(i & 2))
+                dc += v;
         }
-        for (int i = 0; i < h; i += 2, left += PXSTRIDE(stride)) {
+        for (int i = 0; i < h; i++, left += PXSTRIDE(stride)) {
             v = (left[-1] + 2 * left[0] + left[1]) << 1;
             edge[-1 - i] = v;
-            dc += v;
+            if (!skipv || !(i & 1))
+                dc += v;
         }
     } else {
         for (int i = 0; i < w; i += 2) {
             v = (top[i] + top[i + 1]) << 2;
             edge[i >> 1] = v;
-            dc += v;
+            if (!skiph || !(i & 2))
+                dc += v;
         }
-        for (int i = 0; i < h; i += 2, left += PXSTRIDE(stride)) {
+        for (int i = 0; i < h; i++, left += PXSTRIDE(stride)) {
             v = (left[0] + left[1]) << 2;
             edge[-1 - i] = v;
-            dc += v;
+            if (!skipv || !(i & 1))
+                dc += v;
         }
     }
     return dc;
@@ -1012,18 +1020,21 @@ static int cfl_dc_422(uint16_t *const edge,
 static int cfl_dc_444(uint16_t *const edge,
                       const pixel *const top, const pixel *left,
                       const ptrdiff_t stride, const int w, const int h,
+                      const int skiph, const int skipv,
                       const int filter_type)
 {
     int dc = 0, v;
     for (int i = 0; i < w; i++) {
         v = top[i] << 3;
         edge[i] = v;
-        dc += v;
+        if (!skiph || !(i & 1))
+            dc += v;
     }
     for (int i = 0; i < h; i++) {
         v = left[i * PXSTRIDE(stride)] << 3;
         edge[-1 - i] = v;
-        dc += v;
+        if (!skipv || !(i & 1))
+            dc += v;
     }
     return dc;
 }
@@ -1036,18 +1047,20 @@ static int cfl_dc_##fmt##_c(uint16_t *const edge, \
 { \
     const int xlim = w - 4 * (wpad << ss_hor); \
     const int ylim = h - 4 * (hpad << ss_ver); \
-    int dc = cfl_dc_##fmt(edge, top, left, stride, xlim, ylim, filter_type); \
+    const int skiph = (w >> ss_hor) == 64, skipv = (h >> ss_ver) == 64; \
+    int dc = cfl_dc_##fmt(edge, top, left, stride, xlim, ylim, skiph, skipv, filter_type); \
     for (int i = xlim >> ss_hor; i < w >> ss_hor; i++) { \
         edge[i] = edge[(xlim >> ss_hor) - 1]; \
-        dc += edge[i]; \
+        if (!skiph || !(i & 1)) \
+            dc += edge[i]; \
     } \
     for (int i = ylim >> ss_ver; i < h >> ss_ver; i++) { \
         edge[-1 - i] = edge[-(ylim >> ss_ver)]; \
-        dc += edge[-1 - i]; \
+        if (!skipv || !(i & 1)) \
+            dc += edge[-1 - i]; \
     } \
-    const int ssw = w >> ss_hor, ssh = h >> ss_ver; \
-    const int ssw2 = ssw >> (ssw >= 64), ssh2 = ssh >> (ssh >= 64); \
-    return fast_div32_dc(dc, ssw2 + ssh2); \
+    const int ssw = w >> (ss_hor + skiph), ssh = h >> (ss_ver + skipv); \
+    return fast_div32_dc(dc, ssw + ssh); \
 }
 
 cfl_dc_fn(420, 1, 1)
