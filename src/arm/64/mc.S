@@ -41,10 +41,10 @@
 .macro w_avg dst, t0, t1, t2, t3
         ld1             {\t0\().8h,\t1\().8h},   [x2],  #32
         ld1             {\t2\().8h,\t3\().8h},   [x3],  #32
-        sub             \t0\().8h,   \t2\().8h,   \t0\().8h
-        sub             \t1\().8h,   \t3\().8h,   \t1\().8h
-        sqdmulh         \t0\().8h,   \t0\().8h,   v30.8h
-        sqdmulh         \t1\().8h,   \t1\().8h,   v30.8h
+        sub             \t2\().8h,   \t0\().8h,   \t2\().8h
+        sub             \t3\().8h,   \t1\().8h,   \t3\().8h
+        sqdmulh         \t2\().8h,   \t2\().8h,   v30.8h
+        sqdmulh         \t3\().8h,   \t3\().8h,   v30.8h
         add             \t0\().8h,   \t2\().8h,   \t0\().8h
         add             \t1\().8h,   \t3\().8h,   \t1\().8h
         sqrshrun        \dst\().8b,  \t0\().8h,   #4
@@ -72,8 +72,25 @@
 function \type\()_8bpc_neon, export=1
         clz             w4,  w4
 .ifc \type, w_avg
+        // (a * weight + b * (16 - weight) + 128) >> 8
+        // = ((a - b) * weight + (b << 4) + 128) >> 8
+        // = ((a - b) * (weight-16) + (a << 4) + 128) >> 8
+        // = ((b - a) * -weight + (b << 4) + 128) >> 8
+        // = ((((b - a) * (-weight << 11) * 2) >> 16) + b + 8) >> 4
+        // = ((((a - b) * ((weight-16) << 11) * 2) >> 16) + a + 8) >> 4
+        movi            v31.8h, #16
+        cmp             w6, #16
         dup             v30.8h, w6
-        neg             v30.8h, v30.8h
+        b.lt            1f
+        // if weight >= 16
+        sub             v30.8h, v30.8h, v31.8h   // weight - 16
+        b               2f
+1:
+        mov             x7, x2                   // swap tmp1/tmp2
+        mov             x2, x3
+        mov             x3, x7
+        neg             v30.8h, v30.8h           // -weight
+2:
         shl             v30.8h, v30.8h, #11
 .endif
 .ifc \type, mask

@@ -65,8 +65,10 @@
         saddw2          \t0\().4s,  \t0\().4s,  \t2\().8h
         saddw           \d1\().4s,  \d1\().4s,  \t3\().4h
         saddw2          \t1\().4s,  \t1\().4s,  \t3\().8h
-        uzp1            \d0\().8h,  \d0\().8h,  \t0\().8h // Same as xtn, xtn2
-        uzp1            \d1\().8h,  \d1\().8h,  \t1\().8h // Ditto
+        sqxtn           \d0\().4h,  \d0\().4s
+        sqxtn2          \d0\().8h,  \t0\().4s
+        sqxtn           \d1\().4h,  \d1\().4s
+        sqxtn2          \d1\().8h,  \t1\().4s
         srshl           \d0\().8h,  \d0\().8h,  v29.8h // -intermediate_bits
         srshl           \d1\().8h,  \d1\().8h,  v29.8h // -intermediate_bits
         add             \d0\().8h,  \d0\().8h,  v28.8h // PREP_BIAS >> intermediate_bits
