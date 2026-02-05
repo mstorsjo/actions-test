@@ -3198,7 +3198,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     // chroma
 chroma: {}
     const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
-    const int cbw4 = cb_dim[0], cbh4 = cb_dim[1];
+    const int cbw4 = cb_dim[0], cw4 = imin(f->bw - t->cbx, cbw4);
+    const int cbh4 = cb_dim[1], ch4 = imin(f->bh - t->cby, cbh4);
     const enum RectTxfmSize uvtx = dav2d_max_txfm_size_for_bs[cbs][f->cur.p.p.layout];
     const TxfmInfo *const uv_t_dim = &dav2d_txfm_dimensions[uvtx];
     const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
@@ -3274,10 +3275,10 @@ chroma: {}
         // sub8x8 coding
         const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
         ptrdiff_t uvoff = uvdstoff;
-        for (int y = 0; y < cbh4; y++, r += 128,
+        for (int y = 0; y < ch4; y++, r += 128,
              uvoff += 4 * PXSTRIDE(stride) >> ss_ver)
         {
-            for (int x = 0; x < cbw4; x++) {
+            for (int x = 0; x < cw4; x++) {
                 // grab ref/MV from spatial refmvs
                 const refmvs_block *const r2 = &r[x];
                 if (r2->ox4 || r2->oy4) continue;
@@ -3296,7 +3297,7 @@ chroma: {}
         if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             for (int pl = 0; pl < 2; pl++)
                 hex_dump(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
-                         stride, cbw4 * 4 >> ss_hor, cbh4 * 4 >> ss_ver,
+                         stride, cw4 * 4 >> ss_hor, ch4 * 4 >> ss_ver,
                          pl ? "v-pred" : "u-pred");
     } else if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
         const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
@@ -3317,7 +3318,7 @@ chroma: {}
             }
             if (b->bawp[1]) {
                 bawp(t, 1, b->mv[0], dst, f->cur.p.stride[1],
-                     refp, b->ref.ref[0], cbw4, cbh4, w4, h4, pl + 1, b->bs);
+                     refp, b->ref.ref[0], cbw4, cbh4, cw4, ch4, pl + 1, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 iiblend(t, b, dst, stride, 1 + pl, cbw4, cbh4, t->cby, t->cbx,
                         b->wedge_idx == -1 ? dav2d_ss_bs[cbs][f->cur.p.p.layout - 1] : cbs);
