@@ -2397,8 +2397,10 @@ static void bawp(Dav2dTaskContext *const t,
     const int ref_x = (bx * h_mul + mvx);
     const int ref_tmplt_x = ref_x - 1;
     const int ref_tmplt_y = ref_y - 1;
-    const int ref_bottom_edge = ref_y + h4 * v_mul;
-    const int ref_right_edge = ref_x + w4 * h_mul;
+    const int sb_w4 = imin(sb_dim[0], f->bw - bx);
+    const int sb_h4 = imin(sb_dim[1], f->bh - by);
+    const int ref_bottom_edge = ref_y + sb_h4 * v_mul;
+    const int ref_right_edge = ref_x + sb_w4 * h_mul;
 
     const int can_morph =
         ref_bottom_edge <= tile_bottom_edge &&
