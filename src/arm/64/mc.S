@@ -442,7 +442,7 @@ w_mask_fn 420
 function blend_8bpc_neon, export=1
         movrel          x6,  blend_tbl
         clz             w3,  w3
-        sub             w3,  w3,  #26
+        sub             w3,  w3,  #25
         ldrsw           x3,  [x6,  x3,  lsl #2]
         add             x6,  x6,  x3
         movi            v4.16b,  #64
@@ -550,9 +550,52 @@ function blend_8bpc_neon, export=1
         st1             {v27.16b, v28.16b}, [x8],  x1
         b.gt            32b
         ret
+640:
+        AARCH64_VALID_JUMP_TARGET
+        // Reset the destination stride, which is doubled in the prologue,
+        // for the other cases where we write alternating rows with two
+        // pointers.
+        lsr             x1,  x1,  #1
+64:
+        ld1             {v0.16b,  v1.16b,  v2.16b,  v3.16b},  [x5],  #64
+        ld1             {v16.16b, v17.16b, v18.16b, v19.16b}, [x2],  #64
+        ld1             {v20.16b, v21.16b, v22.16b, v23.16b}, [x0]
+        subs            w4,  w4,  #1
+        sub             v5.16b,  v4.16b,  v0.16b
+        sub             v6.16b,  v4.16b,  v1.16b
+        sub             v30.16b, v4.16b,  v2.16b
+        sub             v31.16b, v4.16b,  v3.16b
+        umull           v24.8h,  v16.8b,  v0.8b
+        umlal           v24.8h,  v20.8b,  v5.8b
+        umull2          v26.8h,  v16.16b, v0.16b
+        umlal2          v26.8h,  v20.16b, v5.16b
+        umull           v28.8h,  v17.8b,  v1.8b
+        umlal           v28.8h,  v21.8b,  v6.8b
+        umull2          v7.8h,   v17.16b, v1.16b
+        umlal2          v7.8h,   v21.16b, v6.16b
+        umull           v27.8h,  v18.8b,  v2.8b
+        umlal           v27.8h,  v22.8b,  v30.8b
+        umull2          v1.8h,   v18.16b, v2.16b
+        umlal2          v1.8h,   v22.16b, v30.16b
+        umull           v29.8h,  v19.8b,  v3.8b
+        umlal           v29.8h,  v23.8b,  v31.8b
+        umull2          v21.8h,  v19.16b, v3.16b
+        umlal2          v21.8h,  v23.16b, v31.16b
+        rshrn           v24.8b,  v24.8h,  #6
+        rshrn2          v24.16b, v26.8h,  #6
+        rshrn           v25.8b,  v28.8h,  #6
+        rshrn2          v25.16b, v7.8h,   #6
+        rshrn           v26.8b,  v27.8h,  #6
+        rshrn2          v26.16b, v1.8h,   #6
+        rshrn           v27.8b,  v29.8h,  #6
+        rshrn2          v27.16b, v21.8h,  #6
+        st1             {v24.16b, v25.16b, v26.16b, v27.16b}, [x0],  x1
+        b.gt            64b
+        ret
 endfunc
 
 jumptable blend_tbl
+        .word 640b - blend_tbl
         .word 320b - blend_tbl
         .word 160b - blend_tbl
         .word 80b  - blend_tbl

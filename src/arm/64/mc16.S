@@ -567,7 +567,7 @@ w_mask_fn 420
 function blend_16bpc_neon, export=1
         movrel          x6,  blend_tbl
         clz             w3,  w3
-        sub             w3,  w3,  #26
+        sub             w3,  w3,  #25
         ldrsw           x3,  [x6,  x3,  lsl #2]
         add             x6,  x6,  x3
         add             x8,  x0,  x1
@@ -682,9 +682,48 @@ function blend_16bpc_neon, export=1
         st1             {v0.8h, v1.8h, v2.8h, v3.8h}, [x0], x1
         b.gt            32b
         ret
+640:
+        AARCH64_VALID_JUMP_TARGET
+        subs            x1, x1, #128
+641:
+        mov             w6, #64
+64:
+        ld1             {v16.16b, v17.16b},           [x5], #32
+        ld1             {v4.8h, v5.8h, v6.8h, v7.8h}, [x2], #64
+        subs            w6,  w6,  #32
+        neg             v18.16b, v16.16b          // -m
+        neg             v19.16b, v17.16b
+        sxtl            v16.8h,  v18.8b
+        sxtl2           v17.8h,  v18.16b
+        sxtl            v18.8h,  v19.8b
+        sxtl2           v19.8h,  v19.16b
+        ld1             {v0.8h, v1.8h, v2.8h, v3.8h}, [x0]
+        shl             v16.8h,  v16.8h,  #9      // -m << 9
+        shl             v17.8h,  v17.8h,  #9
+        shl             v18.8h,  v18.8h,  #9
+        shl             v19.8h,  v19.8h,  #9
+        sub             v4.8h,   v0.8h,   v4.8h   // a - b
+        sub             v5.8h,   v1.8h,   v5.8h
+        sub             v6.8h,   v2.8h,   v6.8h
+        sub             v7.8h,   v3.8h,   v7.8h
+        sqrdmulh        v4.8h,   v4.8h,   v16.8h  // ((a-b)*-m + 32) >> 6
+        sqrdmulh        v5.8h,   v5.8h,   v17.8h
+        sqrdmulh        v6.8h,   v6.8h,   v18.8h
+        sqrdmulh        v7.8h,   v7.8h,   v19.8h
+        add             v0.8h,   v0.8h,   v4.8h
+        add             v1.8h,   v1.8h,   v5.8h
+        add             v2.8h,   v2.8h,   v6.8h
+        add             v3.8h,   v3.8h,   v7.8h
+        st1             {v0.8h, v1.8h, v2.8h, v3.8h}, [x0], #64
+        b.gt            64b
+        subs            w4, w4, #1
+        add             x0, x0, x1
+        b.gt            641b
+        ret
 endfunc
 
 jumptable blend_tbl
+        .word 640b - blend_tbl
         .word 320b - blend_tbl
         .word 160b - blend_tbl
         .word 80b  - blend_tbl
