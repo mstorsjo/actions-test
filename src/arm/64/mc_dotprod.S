@@ -104,7 +104,7 @@ make_8tap_fn \type, regular,        REGULAR1, REGULAR1, \isa, jump=0
 function \type\()_8tap_\isa, align=FUNC_ALIGN
         clz             w8, \w
         mov             w11,  #0x4081   // (1 << 14) | (1 << 7) | (1 << 0)
-        sub             w8, w8, #24     // for jump tables
+        sub             w8, w8, #25     // for jump tables
         movrel          x12, X(mc_subpel_filters)
 .ifc \type, prep
         add             \wd_strd, \wd_strd, \wd_strd // d_strd is expressed in int16 units
@@ -1714,7 +1714,6 @@ L(\type\()_8tap_h_\isa):
         .align JUMP_ALIGN
 320:    // H - 32xN+
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         ldr             d26, [\xmx]
 .ifc \type, put
@@ -1850,7 +1849,6 @@ L(\type\()_8tap_h_\isa):
 endfunc
 
 jumptable \type\()_8tap_h_\isa\()_tbl
-        .word 1280b - \type\()_8tap_h_\isa\()_tbl
         .word 640b  - \type\()_8tap_h_\isa\()_tbl
         .word 320b  - \type\()_8tap_h_\isa\()_tbl
         .word 160b  - \type\()_8tap_h_\isa\()_tbl

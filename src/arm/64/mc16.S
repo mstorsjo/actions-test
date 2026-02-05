@@ -148,7 +148,7 @@ function \type\()_16bpc_neon, export=1
         neg             v27.4s,  v27.4s
 .endif
         movrel          x7,  \type\()_tbl
-        sub             w4,  w4,  #24
+        sub             w4,  w4,  #25
         \type           v4,  v5,  v0,  v1,  v2,  v3
         ldrsw           x4,  [x7, x4, lsl #2]
         add             x7,  x7,  x4
@@ -209,33 +209,11 @@ function \type\()_16bpc_neon, export=1
         b.le            0f
         \type           v4,  v5,  v0,  v1,  v2,  v3
         b               64b
-1280:
-        AARCH64_VALID_JUMP_TARGET
-        add             x7,  x0,  #64
-        mov             x8,  #128
-        sub             x1,  x1,  #128
-128:
-        \type           v6,  v7,  v0,  v1,  v2,  v3
-        \type           v16, v17, v0,  v1,  v2,  v3
-        st1             {v4.8h, v5.8h, v6.8h, v7.8h},  [x0], x8
-        \type           v18, v19, v0,  v1,  v2,  v3
-        st1             {v16.8h,v17.8h,v18.8h,v19.8h}, [x7], x8
-        \type           v4,  v5,  v0,  v1,  v2,  v3
-        \type           v6,  v7,  v0,  v1,  v2,  v3
-        \type           v16, v17, v0,  v1,  v2,  v3
-        subs            w5,  w5,  #1
-        st1             {v4.8h, v5.8h, v6.8h, v7.8h},  [x0], x1
-        \type           v18, v19, v0,  v1,  v2,  v3
-        st1             {v16.8h,v17.8h,v18.8h,v19.8h}, [x7], x1
-        b.le            0f
-        \type           v4,  v5,  v0,  v1,  v2,  v3
-        b               128b
 0:
         ret
 endfunc
 
 jumptable \type\()_tbl
-        .word 1280b - \type\()_tbl
         .word 640b  - \type\()_tbl
         .word 320b  - \type\()_tbl
         .word 160b  - \type\()_tbl
@@ -259,7 +237,7 @@ function w_mask_\type\()_16bpc_neon, export=1
         clz             w11, w4
         movrel          x10, w_mask_\type\()_tbl
         dup             v31.8h,  w9   // bitdepth_max
-        sub             w11, w11, #24
+        sub             w11, w11, #25
         clz             w9,  w9       // clz(bitdepth_max)
         ldrsw           x11, [x10,  x11, lsl #2]
         add             x10, x10, x11
@@ -563,7 +541,6 @@ function w_mask_\type\()_16bpc_neon, export=1
 endfunc
 
 jumptable w_mask_\type\()_tbl
-        .word 1280b - w_mask_\type\()_tbl
         .word 640b  - w_mask_\type\()_tbl
         .word 320b  - w_mask_\type\()_tbl
         .word 160b  - w_mask_\type\()_tbl
@@ -830,34 +807,9 @@ function put_16bpc_neon, export=1
         add             x0,  x0,  x1
         b.gt            64b
         ret
-1280:
-        AARCH64_VALID_JUMP_TARGET
-128:
-        ldp             q0,  q1,  [x2]
-        ldp             q2,  q3,  [x2, #32]
-        stp             q0,  q1,  [x0]
-        ldp             q4,  q5,  [x2, #64]
-        stp             q2,  q3,  [x0, #32]
-        ldp             q6,  q7,  [x2, #96]
-        subs            w5,  w5,  #1
-        stp             q4,  q5,  [x0, #64]
-        ldp             q16, q17, [x2, #128]
-        stp             q6,  q7,  [x0, #96]
-        ldp             q18, q19, [x2, #160]
-        stp             q16, q17, [x0, #128]
-        ldp             q20, q21, [x2, #192]
-        stp             q18, q19, [x0, #160]
-        ldp             q22, q23, [x2, #224]
-        stp             q20, q21, [x0, #192]
-        stp             q22, q23, [x0, #224]
-        add             x2,  x2,  x3
-        add             x0,  x0,  x1
-        b.gt            128b
-        ret
 endfunc
 
 jumptable put_16bpc_tbl
-        .word 1280b - put_16bpc_tbl
         .word 640b  - put_16bpc_tbl
         .word 320b  - put_16bpc_tbl
         .word 160b  - put_16bpc_tbl
@@ -984,66 +936,9 @@ function prep_16bpc_neon
         add             x0,  x0,  x1
         b.gt            64b
         ret
-1280:
-        AARCH64_VALID_JUMP_TARGET
-128:
-        ldp             q0,  q1,  [x2]
-        subs            w5,  w5,  #1
-        sshl            v0.8h,   v0.8h,   v31.8h
-        ldp             q2,  q3,  [x2, #32]
-        sshl            v1.8h,   v1.8h,   v31.8h
-        ldp             q4,  q5,  [x2, #64]
-        sshl            v2.8h,   v2.8h,   v31.8h
-        sshl            v3.8h,   v3.8h,   v31.8h
-        ldp             q6,  q7,  [x2, #96]
-        sshl            v4.8h,   v4.8h,   v31.8h
-        sshl            v5.8h,   v5.8h,   v31.8h
-        ldp             q16, q17, [x2, #128]
-        sshl            v6.8h,   v6.8h,   v31.8h
-        sshl            v7.8h,   v7.8h,   v31.8h
-        ldp             q18, q19, [x2, #160]
-        sshl            v16.8h,  v16.8h,  v31.8h
-        sshl            v17.8h,  v17.8h,  v31.8h
-        ldp             q20, q21, [x2, #192]
-        sshl            v18.8h,  v18.8h,  v31.8h
-        sshl            v19.8h,  v19.8h,  v31.8h
-        ldp             q22, q23, [x2, #224]
-        add             x2,  x2,  x3
-        sshl            v20.8h,  v20.8h,  v31.8h
-        sshl            v21.8h,  v21.8h,  v31.8h
-        sshl            v22.8h,  v22.8h,  v31.8h
-        sshl            v23.8h,  v23.8h,  v31.8h
-        sub             v0.8h,   v0.8h,   v30.8h
-        sub             v1.8h,   v1.8h,   v30.8h
-        sub             v2.8h,   v2.8h,   v30.8h
-        sub             v3.8h,   v3.8h,   v30.8h
-        stp             q0,  q1,  [x0]
-        sub             v4.8h,   v4.8h,   v30.8h
-        sub             v5.8h,   v5.8h,   v30.8h
-        stp             q2,  q3,  [x0, #32]
-        sub             v6.8h,   v6.8h,   v30.8h
-        sub             v7.8h,   v7.8h,   v30.8h
-        stp             q4,  q5,  [x0, #64]
-        sub             v16.8h,  v16.8h,  v30.8h
-        sub             v17.8h,  v17.8h,  v30.8h
-        stp             q6,  q7,  [x0, #96]
-        sub             v18.8h,  v18.8h,  v30.8h
-        sub             v19.8h,  v19.8h,  v30.8h
-        stp             q16, q17, [x0, #128]
-        sub             v20.8h,  v20.8h,  v30.8h
-        sub             v21.8h,  v21.8h,  v30.8h
-        stp             q18, q19, [x0, #160]
-        sub             v22.8h,  v22.8h,  v30.8h
-        sub             v23.8h,  v23.8h,  v30.8h
-        stp             q20, q21, [x0, #192]
-        stp             q22, q23, [x0, #224]
-        add             x0,  x0,  x1
-        b.gt            128b
-        ret
 endfunc
 
 jumptable prep_16bpc_tbl
-        .word 1280b - prep_16bpc_tbl
         .word 640b  - prep_16bpc_tbl
         .word 320b  - prep_16bpc_tbl
         .word 160b  - prep_16bpc_tbl
@@ -1312,7 +1207,7 @@ function \type\()_\taps\()_neon
         sub             \bdmax,  \bdmax,  #18  // intermediate_bits = clz(bitdepth_max) - 18
         mov             w12, #6
         tst             \mx, #(0x7f << 14)
-        sub             w9,  w9,  #24
+        sub             w9,  w9,  #25
         add             w13, w12, \bdmax       // 6 + intermediate_bits
         sub             w12, w12, \bdmax       // 6 - intermediate_bits
         movrel          x11, X(mc_subpel_filters), -8
@@ -1550,7 +1445,6 @@ L(\type\()_\taps\()_h):
 endfunc
 
 jumptable \type\()_\taps\()_h_tbl
-        .word 1280b - \type\()_\taps\()_h_tbl
         .word 640b  - \type\()_\taps\()_h_tbl
         .word 320b  - \type\()_\taps\()_h_tbl
         .word 160b  - \type\()_\taps\()_h_tbl
@@ -1842,7 +1736,6 @@ function L(\type\()_\taps\()_v)
 endfunc
 
 jumptable \type\()_\taps\()_v_tbl
-        .word 1280b - \type\()_\taps\()_v_tbl
         .word 640b  - \type\()_\taps\()_v_tbl
         .word 320b  - \type\()_\taps\()_v_tbl
         .word 160b  - \type\()_\taps\()_v_tbl
@@ -2547,7 +2440,6 @@ L(\type\()_\taps\()_filter_8):
 endfunc
 
 jumptable \type\()_\taps\()_hv_tbl
-        .word 1280b - \type\()_\taps\()_hv_tbl
         .word 640b  - \type\()_\taps\()_hv_tbl
         .word 320b  - \type\()_\taps\()_hv_tbl
         .word 160b  - \type\()_\taps\()_hv_tbl
@@ -2578,7 +2470,7 @@ function \type\()_bilin_16bpc_neon, export=1
         clz             w9,  \w
         sub             \bdmax,   \bdmax,  #18 // intermediate_bits = clz(bitdepth_max) - 18
         mov             w11, #4
-        sub             w9,  w9,  #24
+        sub             w9,  w9,  #25
         sub             w11, w11, \bdmax  // 4 - intermediate_bits
         add             w12, \bdmax, #4   // 4 + intermediate_bits
         cbnz            \mx, L(\type\()_bilin_h)
@@ -2755,7 +2647,6 @@ L(\type\()_bilin_h):
 endfunc
 
 jumptable \type\()_bilin_h_tbl
-        .word 1280b - \type\()_bilin_h_tbl
         .word 640b  - \type\()_bilin_h_tbl
         .word 320b  - \type\()_bilin_h_tbl
         .word 160b  - \type\()_bilin_h_tbl
@@ -2954,7 +2845,6 @@ function L(\type\()_bilin_v)
 endfunc
 
 jumptable \type\()_bilin_v_tbl
-        .word 1280b - \type\()_bilin_v_tbl
         .word 640b  - \type\()_bilin_v_tbl
         .word 320b  - \type\()_bilin_v_tbl
         .word 160b  - \type\()_bilin_v_tbl
@@ -3149,7 +3039,6 @@ function L(\type\()_bilin_hv)
 endfunc
 
 jumptable \type\()_bilin_hv_tbl
-        .word 1280b - \type\()_bilin_hv_tbl
         .word 640b  - \type\()_bilin_hv_tbl
         .word 320b  - \type\()_bilin_hv_tbl
         .word 160b  - \type\()_bilin_hv_tbl

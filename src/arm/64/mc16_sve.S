@@ -92,7 +92,7 @@ function \type\()_8tap_\isa, align=FUNC_ALIGN
         clz             w8, \w
         mov             w11, #0x4081                    // (1<<14) | (1<<7) | 1
         ptrue           p0.b, vl16
-        sub             w8, w8, #24                     // for jump tables
+        sub             w8, w8, #25                     // for jump tables
         movrel          x12, X(mc_subpel_filters)
         cbnz            \mx, L(\type\()_8tap_h_hv_\isa)
 .ifc \type, prep
@@ -1347,7 +1347,6 @@ L(\type\()_8tap_h_\isa):
         .align JUMP_ALIGN
 320:    // H - 32xN+
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
 .ifc \type, prep
         add             \wd_strd, \wd_strd, \wd_strd
@@ -1462,7 +1461,6 @@ L(\type\()_8tap_h_\isa):
 endfunc
 
 jumptable \type\()_8tap_h_\isa\()_tbl
-        .word 1280b - \type\()_8tap_h_\isa\()_tbl
         .word 640b  - \type\()_8tap_h_\isa\()_tbl
         .word 320b  - \type\()_8tap_h_\isa\()_tbl
         .word 160b  - \type\()_8tap_h_\isa\()_tbl
@@ -1588,54 +1586,9 @@ function prep_sve
         add             x0, x0, x1
         b.gt            64b
         ret
-
-        .align JUMP_ALIGN
-1280:   // prep - 128xN
-        AARCH64_VALID_JUMP_TARGET
-
-        .align LOOP_ALIGN
-128:
-        ldp             q0, q1, [x2]
-        mad             z0.h, p0/m, z29.h, z30.h
-        mad             z1.h, p0/m, z29.h, z30.h
-        ldp             q2, q3, [x2, #32]
-        mad             z2.h, p0/m, z29.h, z30.h
-        mad             z3.h, p0/m, z29.h, z30.h
-        ldp             q4, q5, [x2, #64]
-        mad             z4.h, p0/m, z29.h, z30.h
-        mad             z5.h, p0/m, z29.h, z30.h
-        ldp             q6, q7, [x2, #96]
-        mad             z6.h, p0/m, z29.h, z30.h
-        mad             z7.h, p0/m, z29.h, z30.h
-        ldp             q16, q17, [x2, #128]
-        mad             z16.h, p0/m, z29.h, z30.h
-        mad             z17.h, p0/m, z29.h, z30.h
-        ldp             q18, q19, [x2, #160]
-        mad             z18.h, p0/m, z29.h, z30.h
-        mad             z19.h, p0/m, z29.h, z30.h
-        ldp             q20, q21, [x2, #192]
-        mad             z20.h, p0/m, z29.h, z30.h
-        mad             z21.h, p0/m, z29.h, z30.h
-        ldp             q22, q23, [x2, #224]
-        add             x2, x2, x3
-        mad             z22.h, p0/m, z29.h, z30.h
-        mad             z23.h, p0/m, z29.h, z30.h
-        subs            w5, w5, #1
-        stp             q0, q1, [x0]
-        stp             q2, q3, [x0, #32]
-        stp             q4, q5, [x0, #64]
-        stp             q6, q7, [x0, #96]
-        stp             q16, q17, [x0, #128]
-        stp             q18, q19, [x0, #160]
-        stp             q20, q21, [x0, #192]
-        stp             q22, q23, [x0, #224]
-        add             x0, x0, x1
-        b.gt            128b
-        ret
 endfunc
 
 jumptable prep_tbl
-        .word 1280b - prep_tbl
         .word 640b  - prep_tbl
         .word 320b  - prep_tbl
         .word 160b  - prep_tbl

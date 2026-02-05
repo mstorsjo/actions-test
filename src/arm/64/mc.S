@@ -97,7 +97,7 @@ function \type\()_8bpc_neon, export=1
         movi            v31.16b, #256-2
 .endif
         movrel          x7,  \type\()_tbl
-        sub             w4,  w4,  #24
+        sub             w4,  w4,  #25
         ldrsw           x4,  [x7, x4, lsl #2]
         \type           v4,  v0,  v1,  v2,  v3
         add             x7,  x7,  x4
@@ -195,29 +195,11 @@ function \type\()_8bpc_neon, export=1
         b.le            0f
         \type           v4, v0,  v1,  v2,  v3
         b               64b
-1280:
-        AARCH64_VALID_JUMP_TARGET
-        add             x7,  x0,  #64
-128:
-        \type           v5,  v0,  v1,  v2,  v3
-        \type           v6,  v0,  v1,  v2,  v3
-        \type           v7,  v0,  v1,  v2,  v3
-        \type           v16, v0,  v1,  v2,  v3
-        \type           v17, v0,  v1,  v2,  v3
-        st1             {v4.16b,v5.16b,v6.16b,v7.16b}, [x0], x1
-        \type           v18, v0,  v1,  v2,  v3
-        \type           v19, v0,  v1,  v2,  v3
-        subs            w5,  w5,  #1
-        st1             {v16.16b,v17.16b,v18.16b,v19.16b}, [x7], x1
-        b.le            0f
-        \type           v4, v0,  v1,  v2,  v3
-        b               128b
 0:
         ret
 endfunc
 
 jumptable \type\()_tbl
-        .word 1280b - \type\()_tbl
         .word 640b  - \type\()_tbl
         .word 320b  - \type\()_tbl
         .word 160b  - \type\()_tbl
@@ -236,7 +218,7 @@ function w_mask_\type\()_8bpc_neon, export=1
         ldr             w11, [sp] // sign
         clz             w8,  w4
         movrel          x9,  w_mask_\type\()_tbl
-        sub             w8,  w8,  #24
+        sub             w8,  w8,  #25
         ldrsw           x8,  [x9,  x8,  lsl #2]
         add             x9,  x9,  x8
         mov             w10, #6903
@@ -343,7 +325,6 @@ function w_mask_\type\()_8bpc_neon, export=1
         st1             {v23.8b},  [x12], x1
         b.gt            8b
         ret
-1280:
 640:
 320:
 160:
@@ -450,7 +431,6 @@ function w_mask_\type\()_8bpc_neon, export=1
 endfunc
 
 jumptable w_mask_\type\()_tbl
-        .word 1280b - w_mask_\type\()_tbl
         .word 640b  - w_mask_\type\()_tbl
         .word 320b  - w_mask_\type\()_tbl
         .word 160b  - w_mask_\type\()_tbl
@@ -710,26 +690,9 @@ function put_neon, export=1
         add             x0, x0, x1
         b.gt            64b
         ret
-1280:
-        AARCH64_VALID_JUMP_TARGET
-128:
-        ldp             q0, q1, [x2]
-        stp             q0, q1, [x0]
-        ldp             q2, q3, [x2, #32]
-        stp             q2, q3, [x0, #32]
-        ldp             q4, q5, [x2, #64]
-        stp             q4, q5, [x0, #64]
-        ldp             q6, q7, [x2, #96]
-        add             x2, x2, x3
-        stp             q6, q7, [x0, #96]
-        subs            w5, w5, #1
-        add             x0, x0, x1
-        b.gt            128b
-        ret
 endfunc
 
 jumptable put_tbl
-        .word 1280b - put_tbl
         .word 640b  - put_tbl
         .word 320b  - put_tbl
         .word 160b  - put_tbl
@@ -868,46 +831,9 @@ function prep_neon, export=1
         add             x0, x0, x1
         b.gt            64b
         ret
-1280:
-        AARCH64_VALID_JUMP_TARGET
-128:
-        ldp             q28, q29, [x2]
-        ldp             q30, q31, [x2, #32]
-        ushll           v16.8h, v28.8b, #4
-        ushll2          v17.8h, v28.16b, #4
-        umull           v18.8h, v29.8b, v24.8b
-        umull2          v19.8h, v29.16b, v24.16b
-        ushll           v20.8h, v30.8b, #4
-        ushll2          v21.8h, v30.16b, #4
-        umull           v22.8h, v31.8b, v24.8b
-        umull2          v23.8h, v31.16b, v24.16b
-        ldp             q28, q29, [x2, #64]
-        ldp             q30, q31, [x2, #96]
-        add             x2, x2, x3
-        stp             q16, q17, [x0]
-        stp             q18, q19, [x0, #32]
-        stp             q20, q21, [x0, #64]
-        stp             q22, q23, [x0, #96]
-        ushll           v16.8h, v28.8b, #4
-        ushll2          v17.8h, v28.16b, #4
-        umull           v18.8h, v29.8b, v24.8b
-        umull2          v19.8h, v29.16b, v24.16b
-        ushll           v20.8h, v30.8b, #4
-        ushll2          v21.8h, v30.16b, #4
-        umull           v22.8h, v31.8b, v24.8b
-        umull2          v23.8h, v31.16b, v24.16b
-        subs            w5, w5, #1
-        stp             q16, q17, [x0, #128]
-        stp             q18, q19, [x0, #160]
-        stp             q20, q21, [x0, #192]
-        stp             q22, q23, [x0, #224]
-        add             x0, x0, x1
-        b.gt            128b
-        ret
 endfunc
 
 jumptable prep_tbl
-        .word 1280b - prep_tbl
         .word 640b  - prep_tbl
         .word 320b  - prep_tbl
         .word 160b  - prep_tbl
@@ -1233,7 +1159,7 @@ function \type\()_\taps\()_neon
 
         clz             w8,  \w
         tst             \mx, #(0x7f << 14)
-        sub             w8,  w8,  #24
+        sub             w8,  w8,  #25
         movrel          x10, X(mc_subpel_filters), -8
         b.ne            L(\type\()_\taps\()_h)
         tst             \my, #(0x7f << 14)
@@ -1391,8 +1317,7 @@ L(\type\()_\taps\()_h):
         ret
 160:
 320:
-640:
-1280:   // 16xN, 32xN, ... h
+640:    // 16xN, 32xN, ... h
         AARCH64_VALID_JUMP_TARGET
         ld1             {v0.8b}, [\xmx]
 .ifc \taps, 6tap
@@ -1496,7 +1421,6 @@ L(\type\()_\taps\()_h):
 endfunc
 
 jumptable \type\()_\taps\()_h_tbl
-        .word 1280b - \type\()_\taps\()_h_tbl
         .word 640b  - \type\()_\taps\()_h_tbl
         .word 320b  - \type\()_\taps\()_h_tbl
         .word 160b  - \type\()_\taps\()_h_tbl
@@ -1705,7 +1629,6 @@ function L(\type\()_\taps\()_v)
 1680:   // 16x8, 16x16, ...
 320:    // 32x8, 32x16, ...
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         ld1             {v0.8b}, [\xmy]
         sub             \src, \src, \s_strd
@@ -1818,7 +1741,6 @@ function L(\type\()_\taps\()_v)
 endfunc
 
 jumptable \type\()_\taps\()_v_tbl
-        .word 1280b - \type\()_\taps\()_v_tbl
         .word 640b  - \type\()_\taps\()_v_tbl
         .word 320b  - \type\()_\taps\()_v_tbl
         .word 160b  - \type\()_\taps\()_v_tbl
@@ -2252,7 +2174,6 @@ L(\type\()_\taps\()_filter_4):
 
 880:    // 8x8, 8x16, ..., 16x8, ..., 32x8, ... hv
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         ld1             {v0.8b},  [\xmx]
         ld1             {v1.8b},  [\xmy]
@@ -2466,7 +2387,6 @@ L(\type\()_\taps\()_filter_8):
 endfunc
 
 jumptable \type\()_\taps\()_hv_tbl
-        .word 1280b - \type\()_\taps\()_hv_tbl
         .word 640b  - \type\()_\taps\()_hv_tbl
         .word 320b  - \type\()_\taps\()_hv_tbl
         .word 160b  - \type\()_\taps\()_hv_tbl
@@ -2491,7 +2411,7 @@ function \type\()_bilin_8bpc_neon, export=1
 .endif
 
         clz             w8,  \w
-        sub             w8,  w8,  #24
+        sub             w8,  w8,  #25
         cbnz            \mx, L(\type\()_bilin_h)
         cbnz            \my, L(\type\()_bilin_v)
         b               \type\()_neon
@@ -2584,8 +2504,7 @@ L(\type\()_bilin_h):
         ret
 160:
 320:
-640:
-1280:   // 16xN, 32xN, ... h
+640:    // 16xN, 32xN, ... h
         AARCH64_VALID_JUMP_TARGET
         add             \ds2,  \dst,  \d_strd
         add             \sr2,  \src,  \s_strd
@@ -2649,7 +2568,6 @@ L(\type\()_bilin_h):
 endfunc
 
 jumptable \type\()_bilin_h_tbl
-        .word 1280b - \type\()_bilin_h_tbl
         .word 640b  - \type\()_bilin_h_tbl
         .word 320b  - \type\()_bilin_h_tbl
         .word 160b  - \type\()_bilin_h_tbl
@@ -2779,7 +2697,6 @@ function L(\type\()_bilin_v)
 160:    // 16xN, 32xN, ...
 320:
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         mov             \my,  \h
 1:
@@ -2836,7 +2753,6 @@ function L(\type\()_bilin_v)
 endfunc
 
 jumptable \type\()_bilin_v_tbl
-        .word 1280b - \type\()_bilin_v_tbl
         .word 640b  - \type\()_bilin_v_tbl
         .word 320b  - \type\()_bilin_v_tbl
         .word 160b  - \type\()_bilin_v_tbl
@@ -2937,7 +2853,6 @@ function L(\type\()_bilin_hv)
 160:
 320:
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         mov             \my,  \h
 
@@ -3002,7 +2917,6 @@ function L(\type\()_bilin_hv)
 endfunc
 
 jumptable \type\()_bilin_hv_tbl
-        .word 1280b - \type\()_bilin_hv_tbl
         .word 640b  - \type\()_bilin_hv_tbl
         .word 320b  - \type\()_bilin_hv_tbl
         .word 160b  - \type\()_bilin_hv_tbl
