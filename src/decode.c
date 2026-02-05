@@ -262,36 +262,50 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
     } \
 } while (0)
 
+    assert(bw4 > 1);
     const Dav2dFrameContext *const f = t->f;
     int have_topleft = 0;
     int have_topright = 0;
-    int odd = 0;
     const int is_not_sb_boundary = t->by & (f->sb_step - 1);
+    int init_odd;
     if (have_top) {
-        int off;
         if (is_not_sb_boundary) {
             ra = &t->rt.r[((t->by - 1) & 63) * 128];
             const refmvs_block *r2 = &ra[(t->bx & 127)];
-            off = -r2->ox4;
+            int off = -r2->ox4;
             have_topleft = !off;
             do {
                 add_sample(off, 0, 1, -1, &r2[off]);
                 off += bs(&r2[off])[0];
             } while (off < w4 && np < 8);
+            have_topright = off <= bw4;
         } else {
             ra = t->rt.ra;
             const refmvs_block *r2 = &ra[t->bx >> 1];
-            off = -r2->ox4;
-            have_topleft = !off;
-            off += off & 1; // to round up (not down) in the right-shifts below
-            odd = t->bx & 1;
+            init_odd = t->bx & 1;
+            have_topleft = 1;
+            // if the block pointed to by our rounded-down top/left coordinate
+            // doesn't intersect with us, skip to the next one. This block will
+            // instead be handled later on as a top/left candidate.
+            int off = bs(r2)[0] <= r2->ox4 + init_odd;
+            // at the top/right edge, we want to include blocks if they
+            // intersect with us. Otherwise, they will be handled as top/right
+            // candidates further down.
+            const int tr_ext = (t->bx + bw4) & (f->sb_step - 1) &&
+                               (ra[(t->bx + bw4) >> 1].ox4 || init_odd);
             do {
-                add_sample(off - r2[off >> 1].ox4 - odd, 0, 1, -1, &r2[off >> 1]);
-                off += imax(2, bs(&r2[off >> 1])[0]);
-            } while (off < w4 && np < 8);
+                const int off8 = (t->bx + off) >> 1, odd = (t->bx + off) & 1;
+                const int ioff = off - ra[off8].ox4 - odd;
+                add_sample(ioff, 0, 1, -1, &ra[off8]);
+                // the +1 prevents us from re-iterating over the same block
+                // multiple times. Since we round down in the indexing a few
+                // lines up and offset from the actual candidate position here,
+                // this happens to work.
+                off = ioff + bs(&ra[off8])[0] + 1;
+            } while (off < bw4 + tr_ext && np < 8);
+            have_topright = 1;
         }
-        have_topright = bw4 <= 16 && off <= bw4 &&
-            t->bx + bw4 < t->ts->tiling.col_end &&
+        have_topright &= bw4 <= 16 && t->bx + bw4 < t->ts->tiling.col_end &&
             (!(t->by & (f->sb_step - 1)) || // top sb boundary
              ((t->bx + bw4) & (f->sb_step - 1) && // right sb boundary
               t->is_coded[0][(t->by - 1) & 63] & (1ULL << ((t->bx + bw4) & 63))));
@@ -315,14 +329,15 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
             add_sample(bw4, 0, 1, -1, &ra[((t->bx + bw4) & 127)]);
     } else {
         if (np < 8 && have_topleft) { // top/left
-            const refmvs_block *const r2 = (t->bx & ~1) & (f->sb_step - 1) ?
-                                           &ra[(t->bx >> 1) - 1] : &t->rt.ra_tl;
-            if (dav2d_block_dimensions[r2->bs][0] == r2->ox4 + 2 - odd)
+            const refmvs_block *const r2 = t->bx & (f->sb_step - 1) ?
+                                           &ra[(t->bx - 1) >> 1] : &t->rt.ra_tl;
+            if (dav2d_block_dimensions[r2->bs][0] + init_odd == r2->ox4 + 2)
                 add_sample(0, 0, -1, -1, r2);
         }
         if (np < 8 && have_topright) { // top/right
-            const refmvs_block *const r2 = &ra[(t->bx >> 1) + ((bw4 + 1) >> 1)];
-            add_sample(bw4 - r2->ox4 - odd, 0, 1, -1, r2);
+            const refmvs_block *const r2 = &ra[(t->bx + bw4 + 1) >> 1];
+            if (r2->ox4 == init_odd)
+                add_sample(bw4, 0, 1, -1, r2);
         }
     }
     assert(np > 0 && np <= 8);
