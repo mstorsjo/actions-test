@@ -111,6 +111,7 @@ static void check_mct(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(int16_t, a_tmp, 64 * 64,);
     const pixel *src = src_buf + (64 + 7) * 3 + 3;
     const ptrdiff_t src_stride = (64 + 7) * sizeof(pixel);
+    const ptrdiff_t tmp_stride = 64;
 
     declare_func(void, int16_t *tmp, ptrdiff_t tmp_stride,
                  const pixel *src, ptrdiff_t src_stride,
@@ -135,12 +136,12 @@ static void check_mct(Dav2dMCDSPContext *const c) {
                         memset(c_tmp, 0x77, 64*64*sizeof(int16_t));
                         memset(a_tmp, 0x77, 64*64*sizeof(int16_t));
 
-                        call_ref(c_tmp, w, src, src_stride, w, h,
+                        call_ref(c_tmp, tmp_stride, src, src_stride, w, h,
                                  mx, my HIGHBD_TAIL_SUFFIX);
-                        call_new(a_tmp, w, src, src_stride, w, h,
+                        call_new(a_tmp, tmp_stride, src, src_stride, w, h,
                                  mx, my HIGHBD_TAIL_SUFFIX);
-                        checkasm_check(int16_t, c_tmp, w * sizeof(*c_tmp),
-                                                a_tmp, w * sizeof(*a_tmp),
+                        checkasm_check(int16_t, c_tmp, tmp_stride * sizeof(*c_tmp),
+                                                a_tmp, tmp_stride * sizeof(*a_tmp),
                                                 w, h, "tmp");
 
                         if (filter == DAV2D_FILTER_8TAP_REGULAR ||
@@ -216,6 +217,7 @@ static void check_mct_scaled(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(int16_t, a_tmp, 64 * 64,);
     const pixel *src = src_buf + (128 + 7) * 3 + 3;
     const ptrdiff_t src_stride = (128 + 7) * sizeof(pixel);
+    const ptrdiff_t tmp_stride = 64;
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
@@ -246,12 +248,12 @@ static void check_mct_scaled(Dav2dMCDSPContext *const c) {
                         memset(c_tmp, 0x77, 64*64*sizeof(int16_t));
                         memset(a_tmp, 0x77, 64*64*sizeof(int16_t));
 
-                        call_ref(c_tmp, w, src, src_stride,
+                        call_ref(c_tmp, tmp_stride, src, src_stride,
                                  w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
-                        call_new(a_tmp, w, src, src_stride,
+                        call_new(a_tmp, tmp_stride, src, src_stride,
                                  w, h, mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
-                        checkasm_check(int16_t, c_tmp, w * sizeof(*c_tmp),
-                                                a_tmp, w * sizeof(*a_tmp),
+                        checkasm_check(int16_t, c_tmp, tmp_stride * sizeof(*c_tmp),
+                                                a_tmp, tmp_stride * sizeof(*a_tmp),
                                                 w, h, "tmp");
 
                         if (filter == DAV2D_FILTER_8TAP_REGULAR ||
