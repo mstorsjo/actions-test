@@ -3048,31 +3048,19 @@ jumptable \type\()_bilin_hv_tbl
 endjumptable
 .endm
 
-make_8tap_fn    put,  regular_sharp,  REGULAR, SHARP,   8tap
-make_8tap_fn    put,  smooth_sharp,   SMOOTH,  SHARP,   8tap
 make_8tap_fn    put,  sharp,          SHARP,   SHARP,   8tap
-make_8tap_fn    put,  sharp_regular,  SHARP,   REGULAR, 8tap
-make_8tap_fn    put,  sharp_smooth,   SHARP,   SMOOTH,  8tap
 filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 8tap
 
 make_8tap_fn    put,  regular,        REGULAR, REGULAR, 6tap
-make_8tap_fn    put,  regular_smooth, REGULAR, SMOOTH,  6tap
 make_8tap_fn    put,  smooth,         SMOOTH,  SMOOTH,  6tap
-make_8tap_fn    put,  smooth_regular, SMOOTH,  REGULAR, 6tap
 filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 6tap
 filter_bilin_fn put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10
 
-make_8tap_fn    prep,  regular_sharp,  REGULAR, SHARP,   8tap
-make_8tap_fn    prep,  smooth_sharp,   SMOOTH,  SHARP,   8tap
 make_8tap_fn    prep,  sharp,          SHARP,   SHARP,   8tap
-make_8tap_fn    prep,  sharp_regular,  SHARP,   REGULAR, 8tap
-make_8tap_fn    prep,  sharp_smooth,   SHARP,   SMOOTH,  8tap
 filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 8tap
 
 make_8tap_fn    prep,  regular,        REGULAR, REGULAR, 6tap
-make_8tap_fn    prep,  regular_smooth, REGULAR, SMOOTH,  6tap
 make_8tap_fn    prep,  smooth,         SMOOTH,  SMOOTH,  6tap
-make_8tap_fn    prep,  smooth_regular, SMOOTH,  REGULAR, 6tap
 filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 6tap
 filter_bilin_fn prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10
 

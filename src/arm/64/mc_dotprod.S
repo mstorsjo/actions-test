@@ -92,13 +92,7 @@ endfunc
 
 .macro filter_8tap_fn type, dot, isa, dst, d_strd, src, s_strd, w, h, mx, my, xmx, xmy, ldst, lsrc, wd_strd
 make_8tap_fn \type, sharp,          SHARP1,   SHARP1,   \isa
-make_8tap_fn \type, sharp_smooth,   SHARP1,   SMOOTH1,  \isa
-make_8tap_fn \type, sharp_regular,  SHARP1,   REGULAR1, \isa
-make_8tap_fn \type, smooth_sharp,   SMOOTH1,  SHARP1,   \isa
 make_8tap_fn \type, smooth,         SMOOTH1,  SMOOTH1,  \isa
-make_8tap_fn \type, smooth_regular, SMOOTH1,  REGULAR1, \isa
-make_8tap_fn \type, regular_sharp,  REGULAR1, SHARP1,   \isa
-make_8tap_fn \type, regular_smooth, REGULAR1, SMOOTH1,  \isa
 make_8tap_fn \type, regular,        REGULAR1, REGULAR1, \isa, jump=0
 
 function \type\()_8tap_\isa, align=FUNC_ALIGN
