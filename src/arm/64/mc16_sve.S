@@ -67,10 +67,10 @@ const v_tbl_sve, align=4
 endconst
 
 
-.macro make_8tap_fn op, type, type_h, type_v, isa, jump=1
-function \op\()_8tap_\type\()_16bpc_\isa, export=1, align=FUNC_ALIGN
-        mov             x9,  \type_h
-        mov             x10, \type_v
+.macro make_8tap_fn op, name, type, isa, jump=1
+function \op\()_8tap_\name\()_16bpc_\isa, export=1, align=FUNC_ALIGN
+        mov             x9,  \type
+        mov             x10,  \type
     .if \jump
         b               \op\()_8tap_\isa
     .endif
@@ -78,9 +78,9 @@ endfunc
 .endm
 
 .macro filter_8tap_fn type, isa, dst, d_strd, src, s_strd, w, h, mx, my, bdmax, xmx, xmy, ldst, lsrc, wd_strd, ws_strd
-make_8tap_fn \type, sharp,          SHARP1,   SHARP1,   \isa
-make_8tap_fn \type, smooth,         SMOOTH1,  SMOOTH1,  \isa
-make_8tap_fn \type, regular,        REGULAR1, REGULAR1, \isa, jump=0
+make_8tap_fn \type, sharp,   SHARP1,   \isa
+make_8tap_fn \type, smooth,  SMOOTH1,  \isa
+make_8tap_fn \type, regular, REGULAR1, \isa, jump=0
 
 function \type\()_8tap_\isa, align=FUNC_ALIGN
         clz             w8, \w
@@ -100,7 +100,7 @@ function \type\()_8tap_\isa, align=FUNC_ALIGN
 .endif
 
 L(\type\()_8tap_v_\isa):
-        madd            \my, \my, w11, w10
+        madd            \my, \my, w11, w9
         movrel          x13, v_tbl_sve
 .ifc \type, put
         ld1r            {v5.8h}, [sp]                   // bdmax
@@ -479,16 +479,16 @@ L(\type\()_8tap_h_hv_\isa):
         madd            \mx, \mx, w11, w9
         movrel          x13, h_tbl_sve
         sub             \src, \src, #6              // src - 3 * 2
-        ubfx            w9, \mx, #7, #7
+        ubfx            w10, \mx, #7, #7
         and             \mx, \mx, #0x7F
         cmp             \w, #4
-        csel            \mx, \mx, w9, le
+        csel            \mx, \mx, w10, le
         ldp             q30, q31, [x13]
         add             \xmx, x12, \xmx, lsl #3     // subpel H filter address
         cbz             \my, L(\type\()_8tap_h_\isa)
 
         // HV cases
-        madd            w14, \my, w11, w10
+        madd            w14, \my, w11, w9
 .ifc \bdmax, w8
         ldr             \bdmax, [sp]
 .endif
@@ -504,15 +504,15 @@ L(\type\()_8tap_h_hv_\isa):
         add             \xmy, x12, x14, lsl #3      // subpel V filter address
         ld1sb           {z7.h}, p0/z, [\xmy]
 .ifc \type, put
-        mov             w9, #12
-        sub             w9, w9, \bdmax
-        dup             v6.4s, w9
+        mov             w10, #12
+        sub             w10, w10, \bdmax
+        dup             v6.4s, w10
 .endif
         sub             \bdmax, \bdmax, #24
         mov             x15, x30
         sub             \src, \src, \s_strd         // src - s_strd - 3 * 2
         dup             v5.4s, \bdmax
-        cmp             w10, SHARP1
+        cmp             w9, SHARP1
         b.ne            L(\type\()_6tap_hv_\isa)    // vertical != SHARP1
 
         // HV 8-tap cases

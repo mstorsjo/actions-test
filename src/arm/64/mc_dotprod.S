@@ -80,10 +80,9 @@ const v_tbl_neon_dotprod, align=4
 endconst
 
 
-.macro make_8tap_fn op, type, type_h, type_v, isa, jump=1
-function \op\()_8tap_\type\()_8bpc_\isa, export=1, align=FUNC_ALIGN
-        mov             x9,  \type_h
-        mov             x10, \type_v
+.macro make_8tap_fn op, name, type, isa, jump=1
+function \op\()_8tap_\name\()_8bpc_\isa, export=1, align=FUNC_ALIGN
+        mov             x9,  \type
     .if \jump
         b               \op\()_8tap_\isa
     .endif
@@ -91,9 +90,9 @@ endfunc
 .endm
 
 .macro filter_8tap_fn type, dot, isa, dst, d_strd, src, s_strd, w, h, mx, my, xmx, xmy, ldst, lsrc, wd_strd
-make_8tap_fn \type, sharp,          SHARP1,   SHARP1,   \isa
-make_8tap_fn \type, smooth,         SMOOTH1,  SMOOTH1,  \isa
-make_8tap_fn \type, regular,        REGULAR1, REGULAR1, \isa, jump=0
+make_8tap_fn \type, sharp,   SHARP1,   \isa
+make_8tap_fn \type, smooth,  SMOOTH1,  \isa
+make_8tap_fn \type, regular, REGULAR1, \isa, jump=0
 
 function \type\()_8tap_\isa, align=FUNC_ALIGN
         clz             w8, \w
@@ -109,7 +108,7 @@ function \type\()_8tap_\isa, align=FUNC_ALIGN
 
         .align JUMP_ALIGN
 L(\type\()_8tap_v_\isa):
-        madd            \my, \my, w11, w10
+        madd            \my, \my, w11, w9
         movrel          x13, v_tbl_neon_dotprod
         sub             \src, \src, \s_strd
 .ifc \isa, neon_dotprod
@@ -680,7 +679,7 @@ L(\type\()_8tap_v_\isa):
         .align JUMP_ALIGN
 L(\type\()_8tap_h_hv_\isa):
         madd            \mx, \mx, w11, w9
-        madd            w14, \my, w11, w10      // for HV
+        madd            w14, \my, w11, w9       // for HV
 .ifc \isa, neon_dotprod
         mov             w13, #0x2002            // FILTER_WEIGHT * 128 + rounding
         dup             v27.4s, w13             // put H overrides this
@@ -711,7 +710,7 @@ L(\type\()_8tap_h_hv_\isa):
         ldr             q25, [x13, #(OFFSET_CVT_32_8)] // LUT to help conversion
 .endif                                                 // of 32b values to 8b
         sxtl            v7.8h, v7.8b
-        cmp             w10, #SHARP1
+        cmp             w9, #SHARP1
         b.ne            L(\type\()_6tap_hv_\isa)    // vertical != SHARP1
 
         // HV 8-tap cases

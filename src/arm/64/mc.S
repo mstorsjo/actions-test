@@ -1133,10 +1133,9 @@ endjumptable
 .endif
 .endm
 
-.macro make_8tap_fn op, type, type_h, type_v, taps
-function \op\()_8tap_\type\()_8bpc_neon, export=1
-        mov             x8,  \type_h
-        mov             x9,  \type_v
+.macro make_8tap_fn op, name, type, taps
+function \op\()_8tap_\name\()_8bpc_neon, export=1
+        mov             x8,  \type
         b               \op\()_\taps\()_neon
 endfunc
 .endm
@@ -1152,7 +1151,7 @@ function \type\()_\taps\()_neon
         mul             \mx,  \mx, w10
         mul             \my,  \my, w10
         add             \mx,  \mx, w8 // mx, 8tap_h, 4tap_h
-        add             \my,  \my, w9 // my, 8tap_v, 4tap_v
+        add             \my,  \my, w8 // my, 8tap_v, 4tap_v
 .ifc \type, prep
         lsl             \d_strd, \d_strd, #1
 .endif
@@ -2926,19 +2925,19 @@ jumptable \type\()_bilin_hv_tbl
 endjumptable
 .endm
 
-make_8tap_fn    put,  sharp,          SHARP,   SHARP,   8tap
+make_8tap_fn    put,  sharp,   SHARP,   8tap
 filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 10, 8tap
 
-make_8tap_fn    put,  regular,        REGULAR, REGULAR, 6tap
-make_8tap_fn    put,  smooth,         SMOOTH,  SMOOTH,  6tap
+make_8tap_fn    put,  regular, REGULAR, 6tap
+make_8tap_fn    put,  smooth,  SMOOTH,  6tap
 filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 10, 6tap
 filter_bilin_fn put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 10
 
-make_8tap_fn    prep, sharp,          SHARP,   SHARP,   8tap
+make_8tap_fn    prep, sharp,   SHARP,   8tap
 filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 6,  8tap
 
-make_8tap_fn    prep, regular,        REGULAR, REGULAR, 6tap
-make_8tap_fn    prep, smooth,         SMOOTH,  SMOOTH,  6tap
+make_8tap_fn    prep, regular, REGULAR, 6tap
+make_8tap_fn    prep, smooth,  SMOOTH,  6tap
 filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 6,  6tap
 filter_bilin_fn prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, x8, x9, 6
 

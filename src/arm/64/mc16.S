@@ -390,7 +390,6 @@ function w_mask_\type\()_16bpc_neon, export=1
         st1             {v5.8h}, [x12], x1
         b.gt            8b
         ret
-1280:
 640:
 320:
 160:
@@ -1174,10 +1173,9 @@ endjumptable
         st1             {\r0\().8h, \r1\().8h}, [\dst], \strd
 .endm
 
-.macro make_8tap_fn op, type, type_h, type_v, taps
-function \op\()_8tap_\type\()_16bpc_neon, export=1
-        mov             w9,  \type_h
-        mov             w10, \type_v
+.macro make_8tap_fn op, name, type, taps
+function \op\()_8tap_\name\()_16bpc_neon, export=1
+        mov             w9,  \type
         b               \op\()_\taps\()_neon
 endfunc
 .endm
@@ -1196,7 +1194,7 @@ function \type\()_\taps\()_neon
         mul             \mx,  \mx, w11
         mul             \my,  \my, w11
         add             \mx,  \mx, w9  // mx, 8tap_h, 4tap_h
-        add             \my,  \my, w10 // my, 8tap_v, 4tap_v
+        add             \my,  \my, w9  // my, 8tap_v, 4tap_v
 .ifc \type, prep
         lsl             \d_strd, \d_strd, #1
 .endif
@@ -1332,8 +1330,7 @@ L(\type\()_\taps\()_h):
 80:
 160:
 320:
-640:
-1280:   // 8xN, 16xN, 32xN, ... h
+640:    // 8xN, 16xN, 32xN, ... h
         AARCH64_VALID_JUMP_TARGET
         ld1             {v0.8b}, [\xmx]
 .ifc \taps, 6tap
@@ -1650,7 +1647,6 @@ function L(\type\()_\taps\()_v)
 1680:   // 16x8, 16x16, ...
 320:    // 32x8, 32x16, ...
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         ld1             {v0.8b}, [\xmy]
         sub             \src, \src, \s_strd
@@ -2224,7 +2220,6 @@ L(\type\()_\taps\()_filter_4):
 
 880:    // 8x8, 8x16, ..., 16x8, ..., 32x8, ... hv
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         ld1             {v0.8b},  [\xmx]
         ld1             {v1.8b},  [\xmy]
@@ -2580,8 +2575,7 @@ L(\type\()_bilin_h):
         ret
 160:
 320:
-640:
-1280:   // 16xN, 32xN, ... h
+640:    // 16xN, 32xN, ... h
         AARCH64_VALID_JUMP_TARGET
         add             \ds2,  \dst,  \d_strd
         add             \sr2,  \src,  \s_strd
@@ -2785,7 +2779,6 @@ function L(\type\()_bilin_v)
 160:    // 16xN, 32xN, ...
 320:
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         mov             \my, \h
 1:
@@ -2962,7 +2955,6 @@ function L(\type\()_bilin_hv)
 160:
 320:
 640:
-1280:
         AARCH64_VALID_JUMP_TARGET
         mov             \my, \h
 
@@ -3048,19 +3040,19 @@ jumptable \type\()_bilin_hv_tbl
 endjumptable
 .endm
 
-make_8tap_fn    put,  sharp,          SHARP,   SHARP,   8tap
+make_8tap_fn    put,  sharp,   SHARP,   8tap
 filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 8tap
 
-make_8tap_fn    put,  regular,        REGULAR, REGULAR, 6tap
-make_8tap_fn    put,  smooth,         SMOOTH,  SMOOTH,  6tap
+make_8tap_fn    put,  regular, REGULAR, 6tap
+make_8tap_fn    put,  smooth,  SMOOTH,  6tap
 filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 6tap
 filter_bilin_fn put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10
 
-make_8tap_fn    prep,  sharp,          SHARP,   SHARP,   8tap
+make_8tap_fn    prep, sharp,   SHARP,   8tap
 filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 8tap
 
-make_8tap_fn    prep,  regular,        REGULAR, REGULAR, 6tap
-make_8tap_fn    prep,  smooth,         SMOOTH,  SMOOTH,  6tap
+make_8tap_fn    prep, regular, REGULAR, 6tap
+make_8tap_fn    prep, smooth,  SMOOTH,  6tap
 filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 6tap
 filter_bilin_fn prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10
 
