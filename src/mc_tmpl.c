@@ -767,6 +767,11 @@ static void w_mask_c(pixel *dst, const ptrdiff_t dst_stride,
 
     assert(!(w & (w - 1)) && w >= 4 && w <= 64);
     assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+    // w<64 means multiple lines can be written together (they live adjacent
+    // in memory). This is only not true for w=64 luma blocks, where horizontally
+    // adjacent blocks may make up a single chroma (w=64 after subsampling) block.
+    assert(mask_stride == (w >> ss_hor) || mask_stride == w);
+    assert((w == 64 && ss_hor) || mask_stride == (w >> ss_hor));
 
     do {
         for (int x = 0; x < w; x++) {
