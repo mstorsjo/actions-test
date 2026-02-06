@@ -1228,7 +1228,6 @@ function \type\()_\taps\()_neon
         add             \mx,  \mx, w8 // mx, 8tap_h, 4tap_h
         add             \my,  \my, w9 // my, 8tap_v, 4tap_v
 .ifc \type, prep
-        uxtw            \d_strd, \w
         lsl             \d_strd, \d_strd, #1
 .endif
 
@@ -1408,9 +1407,11 @@ L(\type\()_\taps\()_h):
 
         sub             \s_strd,  \s_strd,  \w, uxtw
         sub             \s_strd,  \s_strd,  #8
-.ifc \type, put
         lsl             \d_strd,  \d_strd,  #1
+.ifc \type, put
         sub             \d_strd,  \d_strd,  \w, uxtw
+.else
+        sub             \d_strd,  \d_strd,  \w, uxtw #1
 .endif
 161:
         ld1             {v16.8b, v17.8b, v18.8b},  [\src], #24
@@ -2486,7 +2487,6 @@ function \type\()_bilin_8bpc_neon, export=1
         dup             v0.16b, w8
         dup             v2.16b, w9
 .ifc \type, prep
-        uxtw            \d_strd, \w
         lsl             \d_strd, \d_strd, #1
 .endif
 
@@ -2593,9 +2593,11 @@ L(\type\()_bilin_h):
 
         sub             \s_strd,  \s_strd,  \w, uxtw
         sub             \s_strd,  \s_strd,  #8
-.ifc \type, put
         lsl             \d_strd,  \d_strd,  #1
+.ifc \type, put
         sub             \d_strd,  \d_strd,  \w, uxtw
+.else
+        sub             \d_strd,  \d_strd,  \w, uxtw #1
 .endif
 161:
         ld1             {v16.d}[1],  [\src], #8

@@ -135,7 +135,7 @@ L(\type\()_8tap_v_\isa):
 80:     // V - 8xN+
         ldp             q30, q31, [x13, #48]
 .ifc \type, prep
-        add             \wd_strd, \w, \w                // d_strd = 2 * w
+        add             \wd_strd, \wd_strd, \wd_strd    // d_strd *= 2
 .endif
         .align LOOP_ALIGN
 81:
@@ -261,8 +261,8 @@ L(\type\()_8tap_v_\isa):
 40:     // V - 4xN, put only: 2xN
 .ifc \type, put
         lsr             \d_strd, \d_strd, #1        // hword index for `st1h`
-        whilelt         p1.h, wzr, \w               // masking for writes
 .endif
+        whilelt         p1.h, wzr, \w               // masking for writes
         cmp             \h, #4
         b.le            44f
 
@@ -330,16 +330,16 @@ L(\type\()_8tap_v_\isa):
         srshl           v1.4s, v1.4s, v5.4s
         uzp1            v0.8h, v0.8h, v1.8h
         sub             z0.h, z0.h, #PREP_BIAS
-        str             q0, [\dst], #16
+        mov             v1.d[0], v0.d[1]
 .else   // put
         sqrshrun        v0.4h, v0.4s, #6
         sqrshrun        v1.4h, v1.4s, #6
         umin            v0.4h, v0.4h, v5.4h
         umin            v1.4h, v1.4h, v5.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         st1h            {z1.h}, p1, [\dst, \d_strd, lsl #1]
         add             \dst, \dst, \d_strd, lsl #2
-.endif
         b.gt            4b
 
         ldr             d18, [\src]
@@ -371,15 +371,15 @@ L(\type\()_8tap_v_\isa):
         srshl           v1.4s, v1.4s, v5.4s
         uzp1            v0.8h, v0.8h, v1.8h
         sub             z0.h, z0.h, #PREP_BIAS
-        str             q0, [\dst]
+        mov             v1.d[0], v0.d[1]
 .else   // put
         sqrshrun        v0.4h, v0.4s, #6
         sqrshrun        v1.4h, v1.4s, #6
         umin            v0.4h, v0.4h, v5.4h
         umin            v1.4h, v1.4h, v5.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         st1h            {z1.h}, p1, [\dst, \d_strd, lsl #1]
-.endif
         ret
 
         .align JUMP_ALIGN
@@ -431,16 +431,16 @@ L(\type\()_8tap_v_\isa):
         srshl           v1.4s, v1.4s, v5.4s
         uzp1            v0.8h, v0.8h, v1.8h
         sub             z0.h, z0.h, #PREP_BIAS
-        str             q0, [\dst], #16
+        mov             v1.d[0], v0.d[1]
 .else   // put
         sqrshrun        v0.4h, v0.4s, #6
         sqrshrun        v1.4h, v1.4s, #6
         umin            v0.4h, v0.4h, v5.4h
         umin            v1.4h, v1.4h, v5.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         st1h            {z1.h}, p1, [\dst, \d_strd, lsl #1]
         add             \dst, \dst, \d_strd, lsl #2
-.endif
 
 .ifc \type, put
         .align JUMP_ALIGN
@@ -469,15 +469,15 @@ L(\type\()_8tap_v_\isa):
         srshl           v1.4s, v1.4s, v5.4s
         uzp1            v0.8h, v0.8h, v1.8h
         sub             z0.h, z0.h, #PREP_BIAS
-        str             q0, [\dst]
+        mov             v1.d[0], v0.d[1]
 .else   // put
         sqrshrun        v0.4h, v0.4s, #6
         sqrshrun        v1.4h, v1.4s, #6
         umin            v0.4h, v0.4h, v5.4h
         umin            v1.4h, v1.4h, v5.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         st1h            {z1.h}, p1, [\dst, \d_strd, lsl #1]
-.endif
         ret
 
         .align JUMP_ALIGN
@@ -528,7 +528,7 @@ L(\type\()_8tap_h_hv_\isa):
         // .align JUMP_ALIGN    // fallthrough
 80:     // HV8 - 8xN+
 .ifc \type, prep
-        add             \wd_strd, \w, \w                // d_strd = 2 * w
+        add             \wd_strd, \wd_strd, \wd_strd    // d_strd *= 2
 .endif
         cmp             \h, #4
         b.le            84f
@@ -640,8 +640,8 @@ L(\type\()_8tap_h_hv_\isa):
 40:     // HV8 - 4xN, put only: 2xN
 .ifc \type, put
         lsr             \d_strd, \d_strd, #1        // hword index for `st1h`
-        whilelt         p1.h, wzr, \w               // masking for writes
 .endif
+        whilelt         p1.h, wzr, \w               // masking for writes
         ext             v4.16b, v4.16b, v4.16b, #4  // [\xmy + 2 * 2]
         add             \src, \src, #4
 
@@ -699,14 +699,13 @@ L(\type\()_8tap_h_hv_\isa):
 .ifc \type, prep
         rshrn           v0.4h, v24.4s, #6
         sub             z0.h, z0.h, #PREP_BIAS
-        str             d0, [\dst], #8
 .else   // put
         srshl           v0.4s, v24.4s, v6.4s
         sqxtun          v0.4h, v0.4s
         umin            v0.4h, v0.4h, v29.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         add             \dst, \dst, \d_strd, lsl #1
-.endif
         b.gt            4b
         ret             x15
 
@@ -718,7 +717,7 @@ L(\type\()_6tap_hv_\isa):
         // .align JUMP_ALIGN    // fallthrough
 80:     // HV6 - 8xN+
 .ifc \type, prep
-        add             \wd_strd, \w, \w        // d_strd = 2 * w
+        add             \wd_strd, \wd_strd, \wd_strd // d_strd *= 2
 .endif
         cmp             \h, #4
         b.le            84f
@@ -949,8 +948,8 @@ L(\type\()_hv_filter4_\isa):
 46:     // H4V6 - 4xN, put only: 2xN
 .ifc \type, put
         lsr             \d_strd, \d_strd, #1        // hword index for `st1h`
-        whilelt         p1.h, wzr, \w               // masking for writes
 .endif
+        whilelt         p1.h, wzr, \w               // masking for writes
         ext             v4.16b, v4.16b, v4.16b, #4  // [\xmy + 2 * 2]
         add             \src, \src, #4
 
@@ -999,14 +998,13 @@ L(\type\()_hv_filter4_\isa):
 .ifc \type, prep
         rshrn           v0.4h, v24.4s, #6
         sub             z0.h, z0.h, #PREP_BIAS
-        str             d0, [\dst], #8
 .else   // put
         srshl           v0.4s, v24.4s, v6.4s
         sqxtun          v0.4h, v0.4s
         umin            v0.4h, v0.4h, v29.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         add             \dst, \dst, \d_strd, lsl #1
-.endif
         b.gt            4b
         ret             x15
 
@@ -1044,14 +1042,13 @@ L(\type\()_hv_filter4_\isa):
 .ifc \type, prep
         rshrn           v0.4h, v24.4s, #6
         sub             z0.h, z0.h, #PREP_BIAS
-        str             d0, [\dst], #8
 .else   // put
         srshl           v0.4s, v24.4s, v6.4s
         sqxtun          v0.4h, v0.4s
         umin            v0.4h, v0.4h, v29.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         add             \dst, \dst, \d_strd, lsl #1
-.endif
         b.gt            4b
         ret             x15
 
@@ -1086,8 +1083,8 @@ L(\type\()_8tap_h_\isa):
         ext             v4.16b, v4.16b, v4.16b, #4  // [\xmy + 2 * 2]
 .ifc \type, put
         lsr             \d_strd, \d_strd, #1        // hword index for `st1h`
-        whilelt         p1.h, wzr, \w               // masking for writes
 .endif
+        whilelt         p1.h, wzr, \w               // masking for writes
         .align LOOP_ALIGN
 4:
         ldr             q17, [\src]
@@ -1122,22 +1119,25 @@ L(\type\()_8tap_h_\isa):
         srshl           v1.4s, v1.4s, v5.4s
         uzp1            v0.8h, v0.8h, v1.8h
         sub             z0.h, z0.h, #PREP_BIAS
-        str             q0, [\dst], #16
+        mov             v1.d[0], v0.d[1]
 .else   // put
         sqshrun         v0.4h, v0.4s, #6
         sqshrun         v1.4h, v1.4s, #6
         umin            v0.4h, v0.4h, v5.4h
         umin            v1.4h, v1.4h, v5.4h
+.endif
         st1h            {z0.h}, p1, [\dst]
         st1h            {z1.h}, p1, [\dst, \d_strd, lsl #1]
         add             \dst, \dst, \d_strd, lsl #2
-.endif
         b.gt            4b
         ret
 
         .align JUMP_ALIGN
 80:     // H - 8xN
         AARCH64_VALID_JUMP_TARGET
+.ifc \type, prep
+        add             \wd_strd, \wd_strd, \wd_strd
+.endif
 
         .align LOOP_ALIGN
 8:
@@ -1226,7 +1226,6 @@ L(\type\()_8tap_h_\isa):
         uzp1            v1.8h, v1.8h, v3.8h
         sub             z0.h, z0.h, #PREP_BIAS
         sub             z1.h, z1.h, #PREP_BIAS
-        stp             q0, q1, [\dst], #32
 .else   // put
         sqshrun         v0.4h, v0.4s, #6
         sqshrun2        v0.8h, v2.4s, #6
@@ -1234,15 +1233,18 @@ L(\type\()_8tap_h_\isa):
         sqshrun2        v1.8h, v3.4s, #6
         umin            v0.8h, v0.8h, v5.8h
         umin            v1.8h, v1.8h, v5.8h
+.endif
         st1             {v0.16b}, [\dst], \d_strd
         st1             {v1.16b}, [\dst], \d_strd
-.endif
         b.gt            8b
         ret
 
         .align JUMP_ALIGN
 160:    // H - 16xN
         AARCH64_VALID_JUMP_TARGET
+.ifc \type, prep
+        add             \wd_strd, \wd_strd, \wd_strd
+.endif
 
         .align LOOP_ALIGN
 16:
@@ -1330,7 +1332,6 @@ L(\type\()_8tap_h_\isa):
         uzp1            v1.8h, v1.8h, v3.8h
         sub             z0.h, z0.h, #PREP_BIAS
         sub             z1.h, z1.h, #PREP_BIAS
-        stp             q0, q1, [\dst], #32
 .else   // put
         sqshrun         v0.4h, v0.4s, #6
         sqshrun2        v0.8h, v2.4s, #6
@@ -1338,8 +1339,8 @@ L(\type\()_8tap_h_\isa):
         sqshrun2        v1.8h, v3.4s, #6
         umin            v0.8h, v0.8h, v5.8h
         umin            v1.8h, v1.8h, v5.8h
-        st1             {v0.16b, v1.16b}, [\dst], \d_strd
 .endif
+        st1             {v0.16b, v1.16b}, [\dst], \d_strd
         b.gt            16b
         ret
 
@@ -1348,9 +1349,10 @@ L(\type\()_8tap_h_\isa):
 640:
 1280:
         AARCH64_VALID_JUMP_TARGET
-.ifc \type, put
-        sub             \d_strd, \d_strd, \w, uxtw #1
+.ifc \type, prep
+        add             \wd_strd, \wd_strd, \wd_strd
 .endif
+        sub             \d_strd, \d_strd, \w, uxtw #1
         sub             \s_strd, \s_strd, \w, uxtw #1
         mov             w8, \w
 
@@ -1452,9 +1454,7 @@ L(\type\()_8tap_h_\isa):
         b.gt            32b
 
         add             \src, \src, \s_strd
-.ifc \type, put
         add             \dst, \dst, \d_strd
-.endif
         subs            \h, \h, #1
         mov             w8, \w
         b.gt            32b

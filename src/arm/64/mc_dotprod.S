@@ -106,11 +106,11 @@ function \type\()_8tap_\isa, align=FUNC_ALIGN
         mov             w11,  #0x4081   // (1 << 14) | (1 << 7) | (1 << 0)
         sub             w8, w8, #24     // for jump tables
         movrel          x12, X(mc_subpel_filters)
+.ifc \type, prep
+        add             \wd_strd, \wd_strd, \wd_strd // d_strd is expressed in int16 units
+.endif
         cbnz            \mx, L(\type\()_8tap_h_hv_\isa)
         cbnz            \my, L(\type\()_8tap_v_\isa)
-.ifc \type, prep
-        add             \wd_strd, \w, \w    // prep_neon needs w * 2 as stride
-.endif
         b               X(\type\()_neon)
 
         .align JUMP_ALIGN
@@ -145,9 +145,6 @@ L(\type\()_8tap_v_\isa):
         // .align JUMP_ALIGN    // fallthrough
 160:    // V - 16xN+
         ldp             q30, q31, [x13, #48]
-.ifc \type, prep
-        add             \wd_strd, \w, \w
-.endif
         .align LOOP_ALIGN
 161:
         mov             \lsrc, \src
@@ -394,7 +391,9 @@ L(\type\()_8tap_v_\isa):
         sshr            v0.8h, v0.8h, #2
         sshr            v1.8h, v2.8h, #2
     .endif
-        stp             q0, q1, [\dst], #32
+        str             q0, [\dst]
+        str             q1, [\dst, \d_strd]
+        add             \dst, \dst, \d_strd, lsl #1
 .else   // put
         sqrshrun        v0.8b, v0.8h, #6
         sqrshrun        v1.8b, v2.8h, #6
@@ -449,7 +448,9 @@ L(\type\()_8tap_v_\isa):
         sshr            v0.8h, v0.8h, #2
         sshr            v1.8h, v2.8h, #2
     .endif
-        stp             q0, q1, [\dst]
+        str             q0, [\dst]
+        str             q1, [\dst, \d_strd]
+        add             \dst, \dst, \d_strd, lsl #1
 .else   // put
         sqrshrun        v0.8b, v0.8h, #6
         sqrshrun        v1.8b, v2.8h, #6
@@ -527,7 +528,9 @@ L(\type\()_8tap_v_\isa):
         shrn            v0.4h, v0.4s, #2
         shrn2           v0.8h, v1.4s, #2
     .endif
-        str             q0, [\dst], #16
+        mov             v1.d[0], v0.d[1]
+        st1             {v0.4h}, [\dst], \d_strd
+        st1             {v1.4h}, [\dst], \d_strd
 .else
         uzp1            v0.8h, v0.8h, v1.8h
         sqrshrun        v0.8b, v0.8h, #6
@@ -569,7 +572,9 @@ L(\type\()_8tap_v_\isa):
         shrn            v0.4h, v0.4s, #2
         shrn2           v0.8h, v1.4s, #2
     .endif
-        str             q0, [\dst]
+        mov             v1.d[0], v0.d[1]
+        st1             {v0.4h}, [\dst], \d_strd
+        st1             {v1.4h}, [\dst], \d_strd
 .else
         uzp1            v0.8h, v0.8h, v1.8h
         sqrshrun        v0.8b, v0.8h, #6
@@ -727,9 +732,6 @@ L(\type\()_8tap_h_hv_\isa):
 80:     // HV8 - 8xN+
         ldp             q29, q30, [x13, #16]
         ldr             d26, [\xmx]
-.ifc \type, prep
-        add             \wd_strd, \w, \w
-.endif
         .align LOOP_ALIGN
 81:
         mov             \lsrc, \src
@@ -921,8 +923,9 @@ L(\type\()_8tap_h_hv_\isa):
         smlal           v0.4s, v22.4h, v7.h[7]
 .ifc \type, prep
         rshrn           v0.4h, v0.4s, #6
-        str             d0, [\dst], #8
+        str             d0, [\dst]
         subs            \h, \h, #1
+        add             \dst, \dst, \d_strd
 .else
         subs            \h, \h, #1
         tbl             v0.8b, {v0.16b}, v25.8b
@@ -1012,9 +1015,6 @@ L(\type\()_6tap_hv_\isa):
         // .align JUMP_ALIGN    // fallthrough
 80:     // HV6 - 8xN+
         ldr             d26, [\xmx]
-.ifc \type, prep
-        add             \wd_strd, \w, \w
-.endif
 .ifc \isa, neon_i8mm
         cmp             w9, #SHARP1
         b.eq            88f             // horizontal == SHARP1
@@ -1292,7 +1292,8 @@ L(\type\()_hv_filter4_\isa):
         smlal           v0.4s, v20.4h, v7.h[6]
 .ifc \type, prep
         rshrn           v0.4h, v0.4s, #6
-        str             d0, [\dst], #8
+        str             d0, [\dst]
+        add             \dst, \dst, \d_strd
 .else
         tbl             v0.8b, {v0.16b}, v25.8b
         sqrshrun        v0.8b, v0.8h, #2
@@ -1452,7 +1453,10 @@ L(\type\()_8tap_h_\isa):
         shrn            v4.4h, v4.4s, #2
         shrn2           v4.8h, v5.4s, #2
     .endif
-        str             q4, [\dst], #16
+        mov             v5.d[0], v4.d[1]
+        str             d4, [\dst]
+        str             d5, [\dst, \d_strd]
+        add             \dst, \dst, \d_strd, lsl #1
 .else   // put
         uzp1            v4.8h, v4.8h, v5.8h
         sqshrun         v4.8b, v4.8h, #6
@@ -1510,7 +1514,9 @@ L(\type\()_8tap_h_\isa):
         srshr           v4.8h, v4.8h, #2
         srshr           v20.8h, v20.8h, #2
         subs            \h, \h, #2
-        stp             q4, q20, [\dst], #32
+        str             q4,  [\dst]
+        str             q20, [\dst, \d_strd]
+        add             \dst, \dst, \d_strd, lsl #1
     .else   // put
         sqshrun         v4.8b, v4.8h, #6
         sqshrun         v20.8b, v20.8h, #6
@@ -1574,7 +1580,9 @@ L(\type\()_8tap_h_\isa):
         sshr            v20.8h, v20.8h, #2
     .endif
         subs            \h, \h, #2
-        stp             q4, q20, [\dst], #32
+        str             q4,  [\dst]
+        str             q20, [\dst, \d_strd]
+        add             \dst, \dst, \d_strd, lsl #1
 .else   // put
         sqshrun         v4.8b, v4.8h, #6
         sqshrun         v20.8b, v20.8h, #6
@@ -1630,7 +1638,8 @@ L(\type\()_8tap_h_\isa):
         srshr           v6.8h, v6.8h, #2
         srshr           v22.8h, v22.8h, #2
         subs            \h, \h, #1
-        stp             q6, q22, [\dst], #32
+        stp             q6, q22, [\dst]
+        add             \dst, \dst, \d_strd
     .else   // put
         sqshrun         v6.8b, v6.8h, #6
         sqshrun2        v6.16b, v22.8h, #6
@@ -1691,7 +1700,8 @@ L(\type\()_8tap_h_\isa):
         sshr            v22.8h, v22.8h, #2
     .endif
         subs            \h, \h, #1
-        stp             q6, q22, [\dst], #32
+        stp             q6, q22, [\dst]
+        add             \dst, \dst, \d_strd
 .else   // put
         sqshrun         v6.8b, v6.8h, #6
         sqshrun2        v6.16b, v22.8h, #6
@@ -1709,6 +1719,8 @@ L(\type\()_8tap_h_\isa):
         ldr             d26, [\xmx]
 .ifc \type, put
         sub             \d_strd, \d_strd, \w, uxtw
+.else
+        sub             \d_strd, \d_strd, \w, uxtw #1
 .endif
         sub             \s_strd, \s_strd, \w, uxtw
         mov             w8, \w
@@ -1763,9 +1775,7 @@ L(\type\()_8tap_h_\isa):
         b.gt            32b
 
         add             \src, \src, \s_strd
-    .ifc \type, put
         add             \dst, \dst, \d_strd
-    .endif
         mov             w8, \w
         subs            \h, \h, #1
         b.gt            32b
@@ -1832,9 +1842,7 @@ L(\type\()_8tap_h_\isa):
         b.gt            32b
 
         add             \src, \src, \s_strd
-.ifc \type, put
         add             \dst, \dst, \d_strd
-.endif
         mov             w8, \w
         subs            \h, \h, #1
         b.gt            32b
