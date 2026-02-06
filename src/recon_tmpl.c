@@ -2470,7 +2470,7 @@ static void bawp(Dav2dTaskContext *const t,
 
     int alpha, beta;
     if (plane) {
-        alpha = t->pb.bawp.alpha;
+        alpha = have_left || have_above ? t->pb.bawp.alpha : 256;
     } else {
         if (bawp_idx != 1) {
             assert(bawp_idx & 2);
