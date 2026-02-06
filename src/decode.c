@@ -2197,7 +2197,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                       b->ref.ref[0], -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
                     mvstack[n].mv[1] = mvstack[n].mv[0];
-                    mvstack[n].weight *= 0x11;
+                    mvstack[n].weight *= 0x101;
                 }
                 n_mvs[1] = n_mvs[0];
             } else {
@@ -2210,8 +2210,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                       b->ref.ref[1], -1 } }, bs, 0, t->by, t->bx);
                 for (int n = 0; n < 6; n++) {
                     mvstack[n].mv[1] = mvstack2[n].mv[0];
-                    mvstack[n].weight = (mvstack[n].weight & 0xf) |
-                                         mvstack2[n].weight << 4;
+                    mvstack[n].weight = (mvstack[n].weight & 0xff) |
+                                         mvstack2[n].weight << 8;
                 }
             }
 #if DEBUG_BLOCK_INFO
@@ -2225,7 +2225,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                    depth + 1, "", drl, n, n_mvs[drl],
                                    mvstack[n].mv[drl].y,
                                    mvstack[n].mv[drl].x,
-                                   (mvstack[n].weight >> (4 * drl)) & 0xf);
+                                   (mvstack[n].weight >> (8 * drl)) & 0xff);
                 } else {
                     for (int n = 0; n < n_mvs[0]; n++)
                         printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",

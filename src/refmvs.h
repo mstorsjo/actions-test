@@ -150,7 +150,7 @@ typedef struct refmvs_tile {
 
 typedef struct refmvs_candidate {
     union mv mv[2];
-    uint8_t weight;
+    uint16_t weight;
     int8_t cwp_idx;
     int8_t y_off, x_off;
 } refmvs_candidate;
