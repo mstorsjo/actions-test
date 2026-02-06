@@ -2370,15 +2370,15 @@ static void bawp(Dav2dTaskContext *const t,
     if ((sb_dim[0] > (16 << ss_hor) && bx & (sb_dim[0] - 1)) ||
         (sb_dim[1] > (16 << ss_ver) && by & (sb_dim[1] - 1)))
     {
-        const int alpha = t->pb.bawp.alpha, beta = t->pb.bawp.beta[plane];
+        const int alpha = t->pb.bawp[plane].alpha, beta = t->pb.bawp[plane].beta;
         if (alpha != 256 || beta)
             dsp->mc.morph(dst, stride, alpha, beta,
                           bw4 * h_mul, bh4 * v_mul HIGHBD_CALL_SUFFIX);
         return;
     }
     // defaults
-    if (!plane) t->pb.bawp.alpha = 256;
-    t->pb.bawp.beta[plane] = 0;
+    t->pb.bawp[plane].alpha = 256;
+    t->pb.bawp[plane].beta = 0;
     Dav2dTileState *const ts = t->ts;
     int tile_top_edge, tile_left_edge, tile_bottom_edge, tile_right_edge;
     if (refp == &f->cur) {
@@ -2470,7 +2470,7 @@ static void bawp(Dav2dTaskContext *const t,
 
     int alpha, beta;
     if (plane) {
-        alpha = have_left || have_above ? t->pb.bawp.alpha : 256;
+        alpha = have_left || have_above ? t->pb.bawp[0].alpha : 256;
     } else {
         if (bawp_idx != 1) {
             assert(bawp_idx & 2);
@@ -2484,8 +2484,8 @@ static void bawp(Dav2dTaskContext *const t,
         } else {
             alpha = 256;
         }
-        t->pb.bawp.alpha = alpha;
     }
+    t->pb.bawp[plane].alpha = alpha;
 
     if (count_l2) {
         const int diff = (sum_y << 8) - sum_x * alpha;
@@ -2494,7 +2494,7 @@ static void bawp(Dav2dTaskContext *const t,
     } else {
         beta = -128;
     }
-    t->pb.bawp.beta[plane] = beta;
+    t->pb.bawp[plane].beta = beta;
 
     dsp->mc.morph(dst, stride, alpha, beta,
                   bw4 * h_mul, bh4 * v_mul HIGHBD_CALL_SUFFIX);
