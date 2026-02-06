@@ -65,7 +65,7 @@ typedef struct BlockContext {
 } BlockContext;
 
 struct SBEdgeCtx {
-    uint8_t ref[2][64];
+    int8_t ref[2][64];
     uint8_t motion_mode[64];
 };
 

@@ -2932,6 +2932,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 const int bx4_lmt_aligned = bx4 & ~is_sb_boundary;
                 const int bx4_rmt_aligned = bx4_lmt_aligned + bw4 - (1 + is_sb_boundary);
+                const int8_t (*const ar)[64] =
+                    is_sb_boundary ? t->a_sb_cache.ref : t->a->ref;
                 if (x_off || y_off) {
                     /* do nothing */
                 } else if (have_bottom_left &&
@@ -2941,8 +2943,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     y_off = bh4 - 1;
                     x_off = -1;
                 } else if (have_top_right &&
-                           (t->a->ref[0][bx4_rmt_aligned] == b->ref.ref[0] ||
-                            t->a->ref[1][bx4_rmt_aligned] == b->ref.ref[0]))
+                           (ar[0][bx4_rmt_aligned] == b->ref.ref[0] ||
+                            ar[1][bx4_rmt_aligned] == b->ref.ref[0]))
                 {
                     y_off = -1;
                     x_off = bx4_rmt_aligned - bx4;
@@ -2953,8 +2955,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     y_off = 0;
                     x_off = -1;
                 } else if (have_top &&
-                           (t->a->ref[0][bx4_lmt_aligned] == b->ref.ref[0] ||
-                            t->a->ref[1][bx4_lmt_aligned] == b->ref.ref[0]))
+                           (ar[0][bx4_lmt_aligned] == b->ref.ref[0] ||
+                            ar[1][bx4_lmt_aligned] == b->ref.ref[0]))
                 {
                     y_off = -1;
                     x_off = bx4_lmt_aligned - bx4;
