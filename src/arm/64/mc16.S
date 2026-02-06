@@ -251,29 +251,33 @@ bidir_fn mask, w7
 
 .macro w_mask_fn type
 function w_mask_\type\()_16bpc_neon, export=1
-        ldr             w8,  [sp]
-        clz             w9,  w4
+#ifdef __APPLE__
+        ldp             w8,  w9,  [sp]
+#else
+        ldp             x8,  x9,  [sp]
+#endif
+        clz             w11, w4
         movrel          x10, w_mask_\type\()_tbl
-        dup             v31.8h,  w8   // bitdepth_max
-        sub             w9,  w9,  #24
-        clz             w8,  w8       // clz(bitdepth_max)
-        ldrsw           x9,  [x10,  x9,  lsl #2]
-        add             x10, x10, x9
-        sub             w8,  w8,  #12 // sh = intermediate_bits + 6 = clz(bitdepth_max) - 12
-        mov             w9,  #PREP_BIAS*64
-        neg             w8,  w8       // -sh
+        dup             v31.8h,  w9   // bitdepth_max
+        sub             w11, w11, #24
+        clz             w9,  w9       // clz(bitdepth_max)
+        ldrsw           x11, [x10,  x11, lsl #2]
+        add             x10, x10, x11
+        sub             w9,  w9,  #12 // sh = intermediate_bits + 6 = clz(bitdepth_max) - 12
+        mov             w12, #PREP_BIAS*64
+        neg             w9,  w9       // -sh
         mov             w11, #27615   // (64 + 1 - 38)<<mask_sh - 1 - mask_rnd
-        dup             v30.4s,  w9   // PREP_BIAS*64
-        dup             v29.4s,  w8   // -sh
+        dup             v30.4s,  w12  // PREP_BIAS*64
+        dup             v29.4s,  w9   // -sh
         dup             v0.8h,   w11
 .if \type == 444
         movi            v1.16b,  #64
 .elseif \type == 422
-        dup             v2.8b,   w7
+        dup             v2.8b,   w8
         movi            v3.8b,   #129
         sub             v3.8b,   v3.8b,   v2.8b
 .elseif \type == 420
-        dup             v2.8h,   w7
+        dup             v2.8h,   w8
         movi            v3.8h,   #1, lsl #8
         sub             v3.8h,   v3.8h,   v2.8h
 .endif
@@ -416,18 +420,26 @@ function w_mask_\type\()_16bpc_neon, export=1
         mov             w11, w4
         sub             x1,  x1,  w4,  uxtw #1
 .if \type == 444
-        add             x10, x6,  w4,  uxtw
+        add             x10, x6,  x7
+        lsl             x7,  x7,  #1
+        sub             x7,  x7,  w4,  uxtw
 .elseif \type == 422
-        add             x10, x6,  x11, lsr #1
+        uxtw            x4,  w4
+        add             x10, x6,  x7
+        lsl             x7,  x7,  #1
+        sub             x7,  x7,  x4,  lsr #1
+.elseif \type == 420
+        uxtw            x4,  w4
+        sub             x7,  x7,  x4,  lsr #1
 .endif
         add             x9,  x3,  w4,  uxtw #1
-        add             x7,  x2,  w4,  uxtw #1
+        add             x13, x2,  w4,  uxtw #1
 161:
         mov             w8,  w4
 16:
         ld1             {v4.8h,   v5.8h},  [x2], #32 // tmp1
         ld1             {v16.8h,  v17.8h}, [x3], #32 // tmp2
-        ld1             {v6.8h,   v7.8h},  [x7], #32
+        ld1             {v6.8h,   v7.8h},  [x13], #32
         ld1             {v18.8h,  v19.8h}, [x9], #32
         subs            w8,  w8,  #16
         sabd            v20.8h,  v4.8h,   v16.8h  // abs(tmp1 - tmp2)
@@ -536,14 +548,13 @@ function w_mask_\type\()_16bpc_neon, export=1
         subs            w5,  w5,  #2
         add             x2,  x2,  w4,  uxtw #1
         add             x3,  x3,  w4,  uxtw #1
-        add             x7,  x7,  w4,  uxtw #1
+        add             x13, x13, w4,  uxtw #1
         add             x9,  x9,  w4,  uxtw #1
+        add             x6,  x6,  x7
 .if \type == 444
-        add             x6,  x6,  w4,  uxtw
-        add             x10, x10, w4,  uxtw
+        add             x10, x10, x7
 .elseif \type == 422
-        add             x6,  x6,  x11, lsr #1
-        add             x10, x10, x11, lsr #1
+        add             x10, x10, x7
 .endif
         add             x0,  x0,  x1
         add             x12, x12, x1

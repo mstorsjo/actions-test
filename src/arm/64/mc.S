@@ -233,6 +233,7 @@ bidir_fn mask
 
 .macro w_mask_fn type
 function w_mask_\type\()_8bpc_neon, export=1
+        ldr             w11, [sp] // sign
         clz             w8,  w4
         movrel          x9,  w_mask_\type\()_tbl
         sub             w8,  w8,  #24
@@ -243,11 +244,11 @@ function w_mask_\type\()_8bpc_neon, export=1
 .if \type == 444
         movi            v1.16b,  #64
 .elseif \type == 422
-        dup             v2.8b,   w7
+        dup             v2.8b,   w11
         movi            v3.8b,   #129
         sub             v3.8b,   v3.8b,   v2.8b
 .elseif \type == 420
-        dup             v2.8h,   w7
+        dup             v2.8h,   w11
         movi            v3.8h,   #1, lsl #8
         sub             v3.8h,   v3.8h,   v2.8h
 .endif
@@ -350,18 +351,26 @@ function w_mask_\type\()_8bpc_neon, export=1
         mov             w11, w4
         sub             x1,  x1,  w4,  uxtw
 .if \type == 444
-        add             x10, x6,  w4,  uxtw
+        add             x10, x6,  x7
+        lsl             x7,  x7,  #1
+        sub             x7,  x7,  w4,  uxtw
 .elseif \type == 422
-        add             x10, x6,  x11, lsr #1
+        uxtw            x4,  w4
+        add             x10, x6,  x7
+        lsl             x7,  x7,  #1
+        sub             x7,  x7,  x4,  lsr #1
+.elseif \type == 420
+        uxtw            x4,  w4
+        sub             x7,  x7,  x4,  lsr #1
 .endif
         add             x9,  x3,  w4,  uxtw #1
-        add             x7,  x2,  w4,  uxtw #1
+        add             x13, x2,  w4,  uxtw #1
 161:
         mov             w8,  w4
 16:
         ld1             {v4.8h,   v5.8h},   [x2],  #32
         ld1             {v6.8h,   v7.8h},   [x3],  #32
-        ld1             {v16.8h,  v17.8h},  [x7],  #32
+        ld1             {v16.8h,  v17.8h},  [x13], #32
         ld1             {v18.8h,  v19.8h},  [x9],  #32
         subs            w8,  w8,  #16
         sub             v6.8h,   v6.8h,   v4.8h
@@ -426,14 +435,13 @@ function w_mask_\type\()_8bpc_neon, export=1
         subs            w5,  w5,  #2
         add             x2,  x2,  w4,  uxtw #1
         add             x3,  x3,  w4,  uxtw #1
-        add             x7,  x7,  w4,  uxtw #1
+        add             x13, x13, w4,  uxtw #1
         add             x9,  x9,  w4,  uxtw #1
+        add             x6,  x6,  x7
 .if \type == 444
-        add             x6,  x6,  w4,  uxtw
-        add             x10, x10, w4,  uxtw
+        add             x10, x10, x7
 .elseif \type == 422
-        add             x6,  x6,  x11, lsr #1
-        add             x10, x10, x11, lsr #1
+        add             x10, x10, x7
 .endif
         add             x0,  x0,  x1
         add             x12, x12, x1
