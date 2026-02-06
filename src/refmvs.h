@@ -29,6 +29,7 @@
 #define DAV2D_SRC_REF_MVS_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "dav2d/headers.h"
 
