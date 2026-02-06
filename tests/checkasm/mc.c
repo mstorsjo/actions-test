@@ -419,6 +419,8 @@ static void check_w_mask(Dav2dMCDSPContext *const c) {
 
                     CLEAR_PIXEL_RECT(c_dst);
                     CLEAR_PIXEL_RECT(a_dst);
+                    memset(c_mask, 0x77, 64*64);
+                    memset(a_mask, 0x77, 64*64);
 
                     call_ref(c_dst, c_dst_stride, tmp[0], tmp[1], w, h,
                              c_mask, mask_stride, sign HIGHBD_TAIL_SUFFIX);
