@@ -302,7 +302,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
                 // lines up and offset from the actual candidate position here,
                 // this happens to work.
                 off = ioff + bs(&ra[off8])[0] + 1;
-            } while (off < bw4 + tr_ext && np < 8);
+            } while (off < w4 + tr_ext && np < 8);
             have_topright = 1;
         }
         have_topright &= bw4 <= 16 && t->bx + bw4 < t->ts->tiling.col_end &&
