@@ -202,7 +202,6 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
     const int apply_u = f->frame_hdr->loopfilter.level_u;
     const int apply_v = f->frame_hdr->loopfilter.level_v;
 
-    const int bs = 16 >> ss_ver;
     const unsigned u_q_thr = f->lf.thr_lut.thr_uv[0][0][0];
     const unsigned u_side_thr = f->lf.thr_lut.thr_uv[0][1][0];
     const unsigned v_q_thr = f->lf.thr_lut.thr_uv[1][0][0];
@@ -211,7 +210,7 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
     for (int x = 0; x < w; x++) {
         if (!have_left && !x) continue;
         uint64_t hmask[4] = { 0 };
-        for (int y = starty64, shift = 0; y < endy64; y++, shift += bs) {
+        for (int y = starty64, shift = 0; y < endy64; y++, shift += 16) {
             hmask[0] |= (uint64_t) mask[x][0][y] << shift;
             hmask[1] |= (uint64_t) mask[x][1][y] << shift;
             hmask[2] |= (uint64_t) mask[x][2][y] << shift;
@@ -254,14 +253,18 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
     {
         if (!have_top && !y) continue;
         const uint64_t vmask[4] = {
-            mask[y][0][0] | (uint64_t) mask[y][0][1] << bs |
-                            (uint64_t) mask[y][0][2] << (bs * 2),
-            mask[y][1][0] | (uint64_t) mask[y][1][1] << bs |
-                            (uint64_t) mask[y][1][2] << (bs * 2),
-            mask[y][2][0] | (uint64_t) mask[y][2][1] << bs |
-                            (uint64_t) mask[y][2][2] << (bs * 2),
-            mask[y][3][0] | (uint64_t) mask[y][3][1] << bs |
-                            (uint64_t) mask[y][3][2] << (bs * 2),
+            mask[y][0][0] | (uint64_t) mask[y][0][1] << 16 |
+                            (uint64_t) mask[y][0][2] << 32 |
+                            (uint64_t) mask[y][0][3] << 48,
+            mask[y][1][0] | (uint64_t) mask[y][1][1] << 16 |
+                            (uint64_t) mask[y][1][2] << 32 |
+                            (uint64_t) mask[y][1][3] << 48,
+            mask[y][2][0] | (uint64_t) mask[y][2][1] << 16 |
+                            (uint64_t) mask[y][2][2] << 32 |
+                            (uint64_t) mask[y][2][3] << 48,
+            mask[y][3][0] | (uint64_t) mask[y][3][1] << 16 |
+                            (uint64_t) mask[y][3][2] << 32 |
+                            (uint64_t) mask[y][3][3] << 48,
         };
         if (apply_u)
             dsp->lf.loop_filter_sb[1][1](&u[off_l], ls, vmask, u_q_thr, u_side_thr,
@@ -427,7 +430,7 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
             tile_col++;
             tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] * sbsz;
         }
-        filter_plane_cols_uv(f, have_left, &lflvl[x >> 2].filter_uv[0][(x & 3) * 16],
+        filter_plane_cols_uv(f, have_left, &lflvl[x >> 2].filter_uv[0][(x & 3) * 16 >> ss_hor],
                              &p[1][uv_off], &p[2][uv_off], f->cur.p.stride[1],
                              (imin(16, f->bw - x * 16) + ss_hor) >> ss_hor,
                              starty4 >> ss_ver, uv_endy4,
