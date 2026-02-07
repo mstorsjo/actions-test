@@ -35,7 +35,7 @@
 #include "src/loopfilter.h"
 
 static const int8_t max_width_y[4] = { 1, 3, 6, 8 };
-static const int8_t max_width_uv[3] = { 1, 3, 5 };
+static const int8_t max_width_uv[3] = { 1, 3, 4 };
 
 static const int8_t q_first[5] = { 45, 40, 32 };
 static const int8_t q_thresh_mults[8] = { 32, 25, 19, 19, 0, 18, 0, 17 };
