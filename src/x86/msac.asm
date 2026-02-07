@@ -158,11 +158,12 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     cmp           r3b, 32
     adc           r3d, 0  ; count + (count < 32)
     movd           m3, eax
-    pavgw          m2, m1 ; i >= val ? -1 : 32768
+    pavgw          m2, m1 ; i >= val ? 65535 : 32768
+    psrlw          m4, m1, m3
     psubw          m2, m0 ; for (i = 0; i < val; i++)
-    psubw          m0, m1 ;     cdf[i] += (32768 - cdf[i]) >> rate;
-    psraw          m2, m3 ; for (; i < n_symbols; i++)
-    paddw          m0, m2 ;     cdf[i] += ((  -1 - cdf[i]) >> rate) + 1;
+    psubw          m0, m4 ;     cdf[i] += (32768 - cdf[i]) >> rate;
+    psrlw          m2, m3 ; for (; i < n_symbols; i++)
+    paddw          m0, m2 ;     cdf[i] += ((65535 - cdf[i]) >> rate) - (65535 >> rate);
     mov%2      [cdfq], m0
     mov    [cdfq+nsq], r3w
 %if %1 == 8
