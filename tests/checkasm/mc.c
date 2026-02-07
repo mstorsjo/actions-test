@@ -499,16 +499,18 @@ static void check_warp8x8(Dav2dMCDSPContext *const c) {
                  HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->warp8x8, "warp_8x8_%dbpc", BITDEPTH)) {
-        const int mx = (rnd() & 0x1fff) - 0xa00;
-        const int my = (rnd() & 0x1fff) - 0xa00;
+        const int mx = (rnd() & 0x6fff) - 0x3000;
+        const int my = (rnd() & 0x6fff) - 0x3000;
 #if BITDEPTH == 16
         const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
         const int bitdepth_max = 0xff;
 #endif
 
-        for (int i = 0; i < 4; i++)
-            abcd[i] = (rnd() & 0x1fff) - 0xa00;
+        abcd[0] = (rnd() & 0x6fff) - 0x3000;
+        abcd[1] = (rnd() & 0x37ff) - 0x1800;
+        abcd[2] = (rnd() & 0x6fff) - 0x3000;
+        abcd[3] = (rnd() & 0x6fff) - 0x3000;
 
         for (int i = 0; i < 15 * 15; i++)
             src_buf[i] = rnd() & bitdepth_max;
