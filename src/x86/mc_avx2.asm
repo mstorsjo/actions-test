@@ -4810,7 +4810,7 @@ ALIGN function_align
     pxor                m11, m11
     lea             filterq, [mc_warp_filter2]
     lea               tmp1q, [ssq*3+3]
-    add                 mxd, 512+(64<<10)
+    add                 mxd, 512+(3*64<<10)
     lea               tmp2d, [alphaq*3]
     sub                srcq, tmp1q    ; src -= src_stride*3 + 3
     sub               betad, tmp2d    ; beta -= alpha*3
@@ -4834,7 +4834,7 @@ ALIGN function_align
     pblendw              m3, m0, 0xaa ; 46
     movsx            deltad, word [abcdq+2*2]
     movsx            gammad, word [abcdq+2*3]
-    add                 myd, 512+(64<<10)
+    add                 myd, 512+(3*64<<10)
     mov                 r4d, 4
     lea               tmp1d, [deltaq*3]
     sub              gammad, tmp1d    ; gamma -= delta*3

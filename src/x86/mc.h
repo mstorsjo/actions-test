@@ -54,6 +54,8 @@ decl_fn(w_mask, dav2d_w_mask_420);
 decl_fn(w_mask, dav2d_w_mask_422);
 decl_fn(w_mask, dav2d_w_mask_444);
 decl_fn(blend, dav2d_blend);
+decl_fn(warp8x8, dav2d_warp_affine_8x8);
+decl_fn(warp8x8t, dav2d_warp_affine_8x8t);
 decl_fn(emu_edge, dav2d_emu_edge);
 
 static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
@@ -74,5 +76,7 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
     c->w_mask[1] = BF(dav2d_w_mask_422, avx2);
     c->w_mask[2] = BF(dav2d_w_mask_420, avx2);
     c->blend = BF(dav2d_blend, avx2);
+    c->warp8x8  = BF(dav2d_warp_affine_8x8, avx2);
+    c->warp8x8t = BF(dav2d_warp_affine_8x8t, avx2);
     c->emu_edge = BF(dav2d_emu_edge, avx2);
 }
