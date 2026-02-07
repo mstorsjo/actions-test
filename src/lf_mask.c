@@ -174,11 +174,12 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][5][4],
 static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
                                            const int by4, const int bx4,
                                            const int w4, const int h4,
-                                           const int sz, const int twl4c,
-                                           const int thl4c,
+                                           const int hsz, const int vsz,
+                                           const int twl4c, const int thl4c,
                                            const int ds_sub_pu_mask)
 {
-    assert(!(sz & (sz - 1)) && sz >= 1 && sz <= 8);
+    assert(!(hsz & (hsz - 1)) && hsz >= 1 && hsz <= 8);
+    assert(!(vsz & (vsz - 1)) && vsz >= 1 && vsz <= 8);
     assert((unsigned) thl4c <= 2U && (unsigned) twl4c <= 2U);
     assert(ds_sub_pu_mask == 15 || ds_sub_pu_mask == 0);
 
@@ -188,7 +189,7 @@ static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
     unsigned inner1 = (unsigned) ((inner >> 16) & 0xffff);
     unsigned inner2 = (unsigned) ((inner >> 32) & 0xffff);
     unsigned inner3 = (unsigned) ((inner >> 48));
-    for (int x = sz; x < w4; x += sz) {
+    for (int x = hsz; x < w4; x += hsz) {
 #define mask_subpu(a, b, c, d, e) \
         if (inner##e) { \
             const unsigned m = masks[a][b + c][d][e]; \
@@ -210,13 +211,36 @@ static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
     inner1 = (unsigned) ((inner >> 16) & 0xffff);
     inner2 = (unsigned) ((inner >> 32) & 0xffff);
     inner3 = (unsigned) ((inner >> 48));
-    for (int y = sz; y < h4; y += sz) {
+    for (int y = vsz; y < h4; y += vsz) {
         mask_subpu(1, by4, y, thl4c, 0);
         mask_subpu(1, by4, y, thl4c, 1);
         mask_subpu(1, by4, y, thl4c, 2);
         mask_subpu(1, by4, y, thl4c, 3);
 #undef mask_subpu
     }
+}
+
+static int subpu_flt_lvl(const Dav2dSequenceHeader *const seq_hdr,
+                         const Dav2dFrameHeader *const frame_hdr,
+                         const enum BlockSize bs, const int bw4, const int bh4,
+                         const Av2Block *const b, const int max_lvl)
+{
+    if (b->intra || !frame_hdr->loopfilter.lf_sub_pu) {
+        /* do nothing */
+    } else if (b->ref.ref[0] == TIP_FRAME) {
+        const int opfl = seq_hdr->tip_refine_mv &&
+            (frame_hdr->tip.frame_mode == 1 ||
+             frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
+        return 1 + (frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+                    ((!opfl && imin(bw4, bh4) >= 4) || bs == BS_256x256));
+    } else if (b->ref.ref[1] != -1) {
+        if (b->inter_mode >= OPFL_NEARMV_NEARMV) {
+            return 1 - (bs == BS_8x8);
+        } else if (b->refine_mv && b->comp_type == COMP_INTER_AVG) {
+            return 2;
+        }
+    }
+    return max_lvl;
 }
 
 void dav2d_create_lf_mask_luma(Av2Filter *const lflvl,
@@ -235,23 +259,8 @@ void dav2d_create_lf_mask_luma(Av2Filter *const lflvl,
     const int by4 = by & 63;
     assert(bw4 > 0 && bh4 > 0);
 
-    int subpu_sz = 0;
-    if (b->intra || !frame_hdr->loopfilter.lf_sub_pu) {
-        /* do nothing */
-    } else if (b->ref.ref[0] == TIP_FRAME) {
-        const int opfl = seq_hdr->tip_refine_mv &&
-            (frame_hdr->tip.frame_mode == 1 ||
-             frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
-        subpu_sz = 2 << (frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
-                         ((!opfl && imin(bw4, bh4) >= 4) || lbs == BS_256x256));
-    } else if (b->ref.ref[1] != -1) {
-        if (b->inter_mode >= OPFL_NEARMV_NEARMV) {
-            subpu_sz = 2 - (lbs == BS_8x8);
-        } else if (b->refine_mv && b->comp_type == COMP_INTER_AVG) {
-            subpu_sz = 4;
-        }
-    }
-    const int subpu_l2 = subpu_sz ? ulog2(subpu_sz) : 3;
+    const int subpu_l2 = subpu_flt_lvl(seq_hdr, frame_hdr,
+                                       lbs, b_dim[0], b_dim[1], b, 3);
     const int ds_subpu_mask = (frame_hdr->tip.frame_mode != 2) * 15;
     int twl4c, thl4c;
 
@@ -272,9 +281,11 @@ void dav2d_create_lf_mask_luma(Av2Filter *const lflvl,
         twl4c = thl4c = subpu_l2;
     }
 
-    if (subpu_sz)
-        mask_subpu_edges(lflvl->filter_y, by4, bx4, bw4, bh4, subpu_sz,
+    if (subpu_l2 != 3) {
+        const int sz = 1 << subpu_l2;
+        mask_subpu_edges(lflvl->filter_y, by4, bx4, bw4, bh4, sz, sz,
                          twl4c, thl4c, ds_subpu_mask);
+    }
 }
 
 void dav2d_create_lf_mask_chroma(Av2Filter *const lflvl,
@@ -296,10 +307,22 @@ void dav2d_create_lf_mask_chroma(Av2Filter *const lflvl,
     const int cby4 = (cby & 63) >> ss_ver;
     assert(cbw4 > 0 && cbh4 > 0);
 
+    const int subpu_l2 = subpu_flt_lvl(seq_hdr, frame_hdr,
+                                       cbs, cb_dim[0], cb_dim[1], b, 3);
+    const int ds_subpu_mask = (frame_hdr->tip.frame_mode != 2) * 15;
+
     mask_outer_edge_l(lflvl->filter_uv[0][cbx4], cby4, cbh4,
-                      imin(2, cb_dim[2] - ss_hor), luv);
+                      iclip(imin(subpu_l2, cb_dim[2]) - ss_hor, 0, 2), luv);
     mask_outer_edge_t(lflvl->filter_uv[1][cby4], cbx4, cbw4,
-                      imin(2, cb_dim[3] - ss_ver), auv);
+                      iclip(imin(subpu_l2, cb_dim[3]) - ss_ver, 0, 2), auv);
     // FIXME tx edges (for 256xN/Nx256 where tx=64x64)
-    // FIXME subpu edges
+    if (subpu_l2 != 3) {
+        const int h_subpu_l2 = subpu_l2 - (ss_hor && subpu_l2);
+        const int v_subpu_l2 = subpu_l2 - (ss_ver && subpu_l2);
+        mask_subpu_edges(lflvl->filter_uv, cby4, cbx4, cbw4, cbh4,
+                         1 << h_subpu_l2, 1 << v_subpu_l2,
+                         h_subpu_l2, v_subpu_l2,
+                         // this variable isn't subsampled for some reason
+                         ds_subpu_mask);
+    }
 }

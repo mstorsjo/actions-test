@@ -47,7 +47,7 @@ typedef struct Av2RestorationUnit {
 typedef struct Av2Filter {
     // each bit is 1 col
     uint16_t filter_y[2 /* 0=col, 1=row */][64][5][4];
-    uint16_t filter_uv[2 /* 0=col, 1=row */][64][4][4];
+    uint16_t filter_uv[2 /* 0=col, 1=row */][64][5][4];
     uint8_t gdf[4];
     int8_t cdef_idx[16]; // -1 means "unset"
     uint8_t ccso[3];

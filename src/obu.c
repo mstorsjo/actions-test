@@ -1202,6 +1202,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                     if (hdr->tip.apply_filter) {
                         hdr->loopfilter.level_y[0] = 1;
                         hdr->loopfilter.level_y[1] = 1;
+                        hdr->loopfilter.level_u = 1;
+                        hdr->loopfilter.level_v = 1;
                     }
                 }
             }

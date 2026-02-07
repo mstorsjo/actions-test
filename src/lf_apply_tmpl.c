@@ -190,7 +190,7 @@ static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
 
 static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
                                         const int have_left,
-                                        const uint16_t (*const mask)[4][4],
+                                        const uint16_t (*const mask)[5][4],
                                         pixel *const u, pixel *const v,
                                         const ptrdiff_t ls, const int w,
                                         const int starty4, const int endy4,
@@ -214,7 +214,7 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
             hmask[0] |= (uint64_t) mask[x][0][y] << shift;
             hmask[1] |= (uint64_t) mask[x][1][y] << shift;
             hmask[2] |= (uint64_t) mask[x][2][y] << shift;
-            hmask[3] |= (uint64_t) mask[x][3][y] << shift;
+            hmask[3] |= (uint64_t) mask[x][4][y] << shift;
         }
         if (apply_u)
             dsp->lf.loop_filter_sb[1][0](&u[x * 4], ls, hmask, u_q_thr, u_side_thr,
@@ -229,7 +229,7 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
 
 static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
                                         const int have_top,
-                                        const uint16_t (*const mask)[4][4],
+                                        const uint16_t (*const mask)[5][4],
                                         pixel *const u, pixel *const v,
                                         const ptrdiff_t ls, const int w,
                                         const int starty4, const int endy4,
@@ -262,9 +262,9 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
             mask[y][2][0] | (uint64_t) mask[y][2][1] << 16 |
                             (uint64_t) mask[y][2][2] << 32 |
                             (uint64_t) mask[y][2][3] << 48,
-            mask[y][3][0] | (uint64_t) mask[y][3][1] << 16 |
-                            (uint64_t) mask[y][3][2] << 32 |
-                            (uint64_t) mask[y][3][3] << 48,
+            mask[y][4][0] | (uint64_t) mask[y][4][1] << 16 |
+                            (uint64_t) mask[y][4][2] << 32 |
+                            (uint64_t) mask[y][4][3] << 48,
         };
         if (apply_u)
             dsp->lf.loop_filter_sb[1][1](&u[off_l], ls, vmask, u_q_thr, u_side_thr,
