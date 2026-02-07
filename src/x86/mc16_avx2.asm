@@ -5133,7 +5133,7 @@ cglobal warp_affine_8x8_16bpc, 4, 14, 16, dst, ds, src, ss, abcd, mx, tmp2, \
     pmulhrsw             m7, m14
     pminsw               m7, m15
     vpermq               m7, m7, q3120
-    mova         [dstq+dsq*0], xm7
+    movu         [dstq+dsq*0], xm7
     vextracti128 [dstq+dsq*1], m7, 1
     dec                 r4d
     jg .loop

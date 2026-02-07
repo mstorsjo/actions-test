@@ -489,7 +489,7 @@ static void check_blend(Dav2dMCDSPContext *const c) {
 static void check_warp8x8(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src_buf, 15 * 15,);
     PIXEL_RECT(c_dst, 8, 8);
-    PIXEL_RECT(a_dst, 8, 8);
+    PIXEL_RECT(a_dst, 16, 8);
     int16_t abcd[4];
     const pixel *src = src_buf + 15 * 3 + 3;
     const ptrdiff_t src_stride = 15 * sizeof(pixel);
@@ -506,6 +506,7 @@ static void check_warp8x8(Dav2dMCDSPContext *const c) {
 #else
         const int bitdepth_max = 0xff;
 #endif
+        pixel *const u_dst = a_dst + 4;
 
         abcd[0] = (rnd() & 0x6fff) - 0x3000;
         abcd[1] = (rnd() & 0x37ff) - 0x1800;
@@ -519,8 +520,8 @@ static void check_warp8x8(Dav2dMCDSPContext *const c) {
         CLEAR_PIXEL_RECT(a_dst);
 
         call_ref(c_dst, c_dst_stride, src, src_stride, abcd, mx, my HIGHBD_TAIL_SUFFIX);
-        call_new(a_dst, a_dst_stride, src, src_stride, abcd, mx, my HIGHBD_TAIL_SUFFIX);
-        checkasm_check_pixel_padded(c_dst, c_dst_stride, a_dst, a_dst_stride,
+        call_new(u_dst, a_dst_stride, src, src_stride, abcd, mx, my HIGHBD_TAIL_SUFFIX);
+        checkasm_check_pixel_padded(c_dst, c_dst_stride, u_dst, a_dst_stride,
                                     8, 8, "dst");
 
         bench_new(a_dst, a_dst_stride, src, src_stride, abcd, mx, my HIGHBD_TAIL_SUFFIX);
