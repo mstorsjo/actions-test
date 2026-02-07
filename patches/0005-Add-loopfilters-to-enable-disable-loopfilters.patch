@@ -1,4 +1,4 @@
-From cee10e56dc662c5c3d58db2badd79fac9fd8ed3b Mon Sep 17 00:00:00 2001
+From 46a6f5e7cd01f15a06a0e25d5b63eba20f74f8f2 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
@@ -6,11 +6,12 @@ Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
 ---
  apps/avmdec.c             | 35 ++++++++++++++++++++++++++++++++++-
  av2/av2_dx_iface.c        | 15 +++++++++++++++
+ av2/common/reconinter.c   | 10 ++++++++++
  av2/decoder/decodeframe.c | 32 +++++++++++++++++++++-----------
  av2/decoder/decoder.h     |  2 ++
  avm/avm_codec.h           | 10 ++++++++++
  avm/avmdx.h               | 11 +++++++++++
- 6 files changed, 93 insertions(+), 12 deletions(-)
+ 7 files changed, 103 insertions(+), 12 deletions(-)
 
 diff --git a/apps/avmdec.c b/apps/avmdec.c
 index 83d10a0059..bf2f41dbcd 100644
@@ -140,8 +141,32 @@ index e80aa01a7b..0f2126e2da 100644
  #if CONFIG_F024_KEYOBU
    { AV2D_SET_RANDOM_ACCESS, ctrl_set_random_access },
  #endif  // CONFIG_F024_KEYOBU
+diff --git a/av2/common/reconinter.c b/av2/common/reconinter.c
+index 6a1c309785..54d81f7ccd 100644
+--- a/av2/common/reconinter.c
++++ b/av2/common/reconinter.c
+@@ -1971,9 +1971,19 @@ void av2_build_one_bawp_inter_predictor(
+       (mi_y_p + y_off_p - BAWP_REF_LINES) < 0 || ref_w <= 0 || ref_h <= 0 ||
+       (mi_x_p + ref_w + x_off_p) > width_p ||
+       (mi_y_p + ref_h + y_off_p) > height_p) {
++#if 0
+     avm_internal_error(
+         (struct avm_internal_error_info *)&cm->error, AVM_CODEC_ERROR,
+         "Inter BAWP template cannot outside the valid reference range");
++#else
++    // When disabling postfilters, the reconstruction changes and motion vectors
++    // (b/c refinemc/opfl) will change, causing some sequences to cause the
++    // above error to be thrown. To increase the number of CTC samples we can
++    // test, we skip BAWP (instead of aborting decoding) when this happens.
++    // This is not normative but is allowed as error resilience behaviour.
++    mbmi->bawp_alpha[plane][ref] = 256;
++    mbmi->bawp_beta[plane][ref] = 0;
++#endif
+     return;
+   } else {
+     uint16_t *recon_buf = xd->plane[plane].dst.buf;
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 93278555eb..f28de42a42 100644
+index 7815d61799..751034f66a 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -667,9 +667,10 @@ static void dec_calc_subpel_params_and_extend(
