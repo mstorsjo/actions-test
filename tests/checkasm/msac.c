@@ -58,12 +58,13 @@ typedef struct {
 static void randomize_cdf(uint16_t *const cdf, int n) {
     for (int i = n + 1; i < 8; i++)
         cdf[i] = 0; // padding
-    cdf[n] = (rnd() % 125) << 8;
-    int c = 0;
-    do {
+    cdf[n] = (rnd() % 125) << 8; // para
+    if (rnd() & 1)
+        cdf[--n] = 0; // explicitly test the zero edge case
+    for (int c = 0; n > 0; n--) {
         c += rnd() % (32768 - c - n) + 1;
         cdf[n - 1] = c;
-    } while (--n > 0);
+    }
 }
 
 /* memcmp() on structs can have weird behavior due to padding etc. */
