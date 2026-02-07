@@ -297,9 +297,9 @@ void dav2d_create_lf_mask_chroma(Av2Filter *const lflvl,
     assert(cbw4 > 0 && cbh4 > 0);
 
     mask_outer_edge_l(lflvl->filter_uv[0][cbx4], cby4, cbh4,
-                      imin(2, cb_dim[2] >> ss_hor), luv);
+                      imin(2, cb_dim[2] - ss_hor), luv);
     mask_outer_edge_t(lflvl->filter_uv[1][cby4], cbx4, cbw4,
-                      imin(2, cb_dim[3] >> ss_ver), auv);
+                      imin(2, cb_dim[3] - ss_ver), auv);
     // FIXME tx edges (for 256xN/Nx256 where tx=64x64)
     // FIXME subpu edges
 }
