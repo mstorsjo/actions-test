@@ -2527,7 +2527,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
                 const int end = imin((bx + sbsz) & ~(sbsz - 1),
                                      ts->tiling.col_end);
                 w = imin(w, end - t->bx - bw4);
-                if (!w) {
+                if (w <= 0) {
                     // right sb or tile/frame boundary
                     n_tr = 0;
                 } else {
@@ -2540,7 +2540,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
         if (bx > ts->tiling.col_start) {
             const int end = imin((by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
             const int h = imin(bh4, end - by - bh4);
-            if (!h) {
+            if (h <= 0) {
                 // bottom sb or tile/frame boundary
                 n_bl = 0;
             } else if (!(bx & (sbsz - 1))) {
@@ -2718,7 +2718,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         if (has_top) {
             const int csbsz = sbsz >> ss_hor;
             const int tile_end = ts->tiling.col_end >> ss_hor;
-            int w = imin(ctw4, tile_end - ssbx - ctw4);
+            int w = imax(0, imin(ctw4, tile_end - ssbx - ctw4));
             if (is_top_sb_edge) {
                 n_tr = w;
             } else {
@@ -2736,8 +2736,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         }
         if (has_left) {
             const int csbsz = sbsz >> ss_ver;
-            const int end = imin((ssby + csbsz) & ~(csbsz - 1),
-                                 ts->tiling.row_end >> ss_ver);
+            const int end = imax(0, imin((ssby + csbsz) & ~(csbsz - 1),
+                                         ts->tiling.row_end >> ss_ver));
             const int h = imin(cth4, end - ssby - cth4);
             if (!(t->cbx & (sbsz - 1)) || !h) { // left or bottom sb boundary
                 n_bl = h;
