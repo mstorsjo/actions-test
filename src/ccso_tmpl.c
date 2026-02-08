@@ -71,7 +71,7 @@ static void padding(pixel *const tmp, const ptrdiff_t tmp_stride,
     }
 }
 
-static unsigned ccso_score(int diff, int quant_step, unsigned edge_classifier) {
+static inline unsigned ccso_score(int diff, int quant_step, unsigned edge_classifier) {
     if (diff > quant_step && !edge_classifier)
         return 2;
     if (diff < -quant_step)
