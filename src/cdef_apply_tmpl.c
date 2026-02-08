@@ -158,7 +158,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 const unsigned scale_idx = hdr->ccso.p[0].scale_idx;
                 const unsigned quant =
                     dav2d_ccso_quant_sz[scale_idx][hdr->ccso.p[0].quant_idx];
-                const int edge_cfl = hdr->ccso.p[0].edge_clf;
+                const int edge_clf = hdr->ccso.p[0].edge_clf;
                 const int bo_only = hdr->ccso.p[0].bo_only;
 
                 const pixel *top, *bot;
@@ -195,7 +195,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 }
 
                 dsp->ccso.prep[0](ccso_lut_idx[0], 64, iptrs[0], f->cur.p.stride[0], lr_bak[bit][0],
-                                  top, bot, max_band, ext_filter, quant, edge_cfl, bo_only,
+                                  top, bot, max_band, ext_filter, quant, edge_clf, bo_only,
                                   w, 8, sb_edges HIGHBD_CALL_SUFFIX);
             }
             if (cdef_idx == -1 ||

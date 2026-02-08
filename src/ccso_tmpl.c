@@ -83,7 +83,7 @@ static NOINLINE void
 ccso_prep_c(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, const ptrdiff_t src_stride,
             const pixel (*left)[2], const pixel *top, const pixel *bottom,
             unsigned max_band_log2, const unsigned ext_filter,
-            const unsigned quant_step, const int edge_cfl,
+            const unsigned quant_step, const int edge_clf,
             const int bo_only, enum CdefEdgeFlags edges,
             const int w, const int h, const int ss_hor, const int ss_ver
             HIGHBD_DECL_SUFFIX)
@@ -106,8 +106,8 @@ ccso_prep_c(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, const ptrdiff_
                 dst[x] = band;
             else {
                 unsigned cls0 = 0, cls1 = 0;
-                cls0 = ccso_score(tmp[x_luma + luma_offset] - c, quant_step, edge_cfl);
-                cls1 = ccso_score(tmp[x_luma - luma_offset] - c, quant_step, edge_cfl);
+                cls0 = ccso_score(tmp[x_luma + luma_offset] - c, quant_step, edge_clf);
+                cls1 = ccso_score(tmp[x_luma - luma_offset] - c, quant_step, edge_clf);
                 dst[x] = (cls0 << 5) | (cls1 << 3) | band;
             }
         }
@@ -127,7 +127,7 @@ static void ccso_prep_##name##_c(uint8_t *const dst, \
                                  const unsigned max_band_log2, \
                                  const unsigned ext_filter, \
                                  const unsigned quant_step, \
-                                 const int ccso_edge_cfl, \
+                                 const int ccso_edge_clf, \
                                  const int bo_only, \
                                  const int w, \
                                  const int h, \
@@ -135,7 +135,7 @@ static void ccso_prep_##name##_c(uint8_t *const dst, \
                                  HIGHBD_DECL_SUFFIX) \
 { \
     ccso_prep_c(dst, dst_stride, src, src_stride, left, top, bottom, max_band_log2, ext_filter, \
-                quant_step, ccso_edge_cfl, bo_only, edges, w, h, ss_hor, ss_ver HIGHBD_TAIL_SUFFIX); \
+                quant_step, ccso_edge_clf, bo_only, edges, w, h, ss_hor, ss_ver HIGHBD_TAIL_SUFFIX); \
 }
 
 ccso_prep_fn(1, 1, 420);
