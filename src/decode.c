@@ -796,7 +796,6 @@ static void read_tx_part(Dav2dTaskContext *const t,
     const int bw4 = b_dim[0], bh4 = b_dim[1];
 
     b->tx_part = TX_PARTITION_NONE;
-    b->uvtx = dav2d_max_txfm_size_for_bs[bs][f->cur.p.p.layout];
     if (f->frame_hdr->segmentation.lossless[b->seg_id] || b->skip_txfm) {
         // FIXME I believe lossless can be wht as well as idtx?
     } else {

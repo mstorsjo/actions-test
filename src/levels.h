@@ -310,7 +310,7 @@ enum CflMhDir {
 
 typedef struct Av2Block {
     uint8_t bs;
-    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, uvtx, fsc;
+    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, fsc;
     union {
         struct {
             uint8_t y_mode, mrl_index, multi_mrl, dip;
