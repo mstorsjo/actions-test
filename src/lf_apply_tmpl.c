@@ -290,12 +290,8 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
     const int halign = (f->bh + 63) & ~63;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
-#if 0
-    const int vmask = 16 >> ss_ver, hmask = 16 >> ss_hor;
-    const unsigned vmax = 1U << vmask, hmax = 1U << hmask;
-#endif
     const int endy4 = starty4 + imin(f->bh - sby * sbsz, sbsz);
-    const unsigned uv_endy4 = (endy4 + ss_ver) >> ss_ver;
+    const int uv_endy4 = (endy4 + ss_ver) >> ss_ver;
 
     if (f->frame_hdr->segmentation.enabled) {
         fprintf(stderr, "segmentation not supported for deblocking\n");
@@ -303,13 +299,11 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
 
     // fix lpf strength at tile col boundaries
     const uint8_t *lpf_y = &f->lf.tx_lpf_right_edge[0][sby << sbl2];
-#if 0
     const uint8_t *lpf_uv = &f->lf.tx_lpf_right_edge[1][sby << (sbl2 - ss_ver)];
-#endif
     for (int tile_col = 1;; tile_col++) {
         x = f->frame_hdr->tiling.t.col_start_sb[tile_col];
         if ((x << sbl2) >= f->bw) break;
-        const int bx4 = (x << sbl2) & 0x30; //, cbx4 = bx4 >> ss_hor;
+        const int bx4 = (x << sbl2) & 0x30, cbx4 = bx4 >> ss_hor;
         x >>= 2 - sb128;
 
         uint16_t (*const y_hmask)[4] = lflvl[x].filter_y[0][bx4];
@@ -325,24 +319,22 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
             y_hmask[0][sidx] &= ~smask;
             y_hmask[imin(idx, lpf_y[y - starty4])][sidx] |= smask;
         }
-
         lpf_y += halign;
-#if 0
+
         if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
             uint16_t (*const uv_hmask)[4] = lflvl[x].filter_uv[0][cbx4];
-            for (unsigned y = starty4 >> ss_ver, uv_mask = 1 << y; y < uv_endy4;
-                 y++, uv_mask <<= 1)
-            {
-                const int sidx = uv_mask >= vmax;
-                const unsigned smask = uv_mask >> (sidx << (4 - ss_ver));
-                const int idx = !!(uv_hmask[1][sidx] & smask);
+            for (int y = starty4 >> ss_ver; y < uv_endy4; y++) {
+                const int sidx = y >> 4;
+                const unsigned smask = 1 << (y & 0xf);
+                const int idx = 2 * !!(uv_hmask[2][sidx] & smask) +
+                                !!(uv_hmask[1][sidx] & smask);
+                uv_hmask[2][sidx] &= ~smask;
                 uv_hmask[1][sidx] &= ~smask;
                 uv_hmask[0][sidx] &= ~smask;
                 uv_hmask[imin(idx, lpf_uv[y - (starty4 >> ss_ver)])][sidx] |= smask;
             }
         }
         lpf_uv += halign >> ss_ver;
-#endif
     }
 
     // fix lpf strength at tile row boundaries
@@ -366,20 +358,20 @@ void bytefn(dav2d_loopfilter_sbrow_cols)(const Dav2dFrameContext *const f,
                 y_vmask[imin(idx, a->tx_lpf_y[i])][sidx] |= smask;
             }
 
-#if 0
             if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
-                const unsigned cw = (w + ss_hor) >> ss_hor;
+                const int cw = (w + ss_hor) >> ss_hor;
                 uint16_t (*const uv_vmask)[4] = lflvl[x].filter_uv[1][starty4 >> ss_ver];
-                for (unsigned uv_mask = 1, i = 0; i < cw; uv_mask <<= 1, i++) {
-                    const int sidx = uv_mask >= hmax;
-                    const unsigned smask = uv_mask >> (sidx << (4 - ss_hor));
-                    const int idx = !!(uv_vmask[1][sidx] & smask);
+                for (int i = 0; i < cw; i++) {
+                    const int sidx = i >> 4;
+                    const unsigned smask = 1 << (i & 0xf);
+                    const int idx = 2 * !!(uv_vmask[2][sidx] & smask) +
+                                    !!(uv_vmask[1][sidx] & smask);
+                    uv_vmask[2][sidx] &= ~smask;
                     uv_vmask[1][sidx] &= ~smask;
                     uv_vmask[0][sidx] &= ~smask;
                     uv_vmask[imin(idx, a->tx_lpf_uv[i])][sidx] |= smask;
                 }
             }
-#endif
         }
     }
 
