@@ -3137,18 +3137,18 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
         if (has_luma) {
-            dav2d_create_lf_mask_luma(t->lf_mask, b, lbs, t->bx, t->by,
-                                      f->bw, f->bh,
-                                      &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
-                                      f->frame_hdr, f->seq_hdr);
+            dav2d_create_lf_mask(t->lf_mask->filter_y, b, lbs, t->bx, t->by,
+                                 f->bw, f->bh, f->cur.p.p.layout, 0,
+                                 &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
+                                 f->frame_hdr, f->seq_hdr);
         }
         if (has_chroma &&
             (f->frame_hdr->loopfilter.level_u || f->frame_hdr->loopfilter.level_v))
         {
-            dav2d_create_lf_mask_chroma(t->lf_mask, b, cbs, t->cbx, t->cby,
-                                        f->bw, f->bh, f->cur.p.p.layout,
-                                        &t->a->tx_lpf_uv[cbx4], &t->l.tx_lpf_uv[cby4],
-                                        f->frame_hdr, f->seq_hdr);
+            dav2d_create_lf_mask(t->lf_mask->filter_uv, b, cbs, t->cbx, t->cby,
+                                 f->bw, f->bh, f->cur.p.p.layout, 1,
+                                 &t->a->tx_lpf_uv[cbx4], &t->l.tx_lpf_uv[cby4],
+                                 f->frame_hdr, f->seq_hdr);
         }
     }
 
@@ -4303,15 +4303,16 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             t->cbx = t->bx;
             t->cby = t->by;
             if (f->frame_hdr->tip.apply_filter) {
-                dav2d_create_lf_mask_luma(t->lf_mask, &b, root_bs,
-                                          t->bx, t->by, f->bw, f->bh,
+                dav2d_create_lf_mask(t->lf_mask->filter_y, &b, root_bs,
+                                          t->bx, t->by, f->bw, f->bh, f->cur.p.p.layout, 0,
                                           &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                           f->frame_hdr, f->seq_hdr);
-                dav2d_create_lf_mask_chroma(t->lf_mask, &b, root_bs, t->bx, t->by,
-                                            f->bw, f->bh, f->cur.p.p.layout,
-                                            &t->a->tx_lpf_uv[bx4 >> f->ss_hor],
-                                            &t->l.tx_lpf_uv[by4 >> f->ss_ver],
-                                            f->frame_hdr, f->seq_hdr);
+                if (c_root_bs != BS_INVALID)
+                    dav2d_create_lf_mask(t->lf_mask->filter_uv, &b, root_bs, t->bx, t->by,
+                                         f->bw, f->bh, f->cur.p.p.layout, 1,
+                                         &t->a->tx_lpf_uv[bx4 >> f->ss_hor],
+                                         &t->l.tx_lpf_uv[by4 >> f->ss_ver],
+                                         f->frame_hdr, f->seq_hdr);
             }
             f->bd_fn.recon_b(t, DB_ONLY(0) root_bs,
                 (const enum BlockSize[2]){ c_root_bs, c_root_bs }, &b);

@@ -60,16 +60,11 @@ typedef struct Av2Restoration {
     Av2RestorationUnit lr[3][16];
 } Av2Restoration;
 
-void dav2d_create_lf_mask_luma(Av2Filter *lflvl, const Av2Block *b,
-                               enum BlockSize lbs, int bx, int by,
-                               int iw, int ih, uint8_t *ay, uint8_t *ly,
-                               const Dav2dFrameHeader *frame_hdr,
-                               const Dav2dSequenceHeader *seq_hdr);
-void dav2d_create_lf_mask_chroma(Av2Filter *lflvl, const Av2Block *b,
-                                 enum BlockSize cbs, int cbx, int cby,
-                                 int iw, int ih, enum Dav2dPixelLayout layout,
-                                 uint8_t *auv, uint8_t *luv,
-                                 const Dav2dFrameHeader *frame_hdr,
-                                 const Dav2dSequenceHeader *seq_hdr);
+// for luma, set layout to 400; for chroma, select the appropriate layout
+void dav2d_create_lf_mask(uint16_t (*const masks)[64][5][4], const Av2Block *b,
+                          enum BlockSize bs, int bx, int by, int iw, int ih,
+                          enum Dav2dPixelLayout layout, int chroma, uint8_t *a,
+                          uint8_t *l, const Dav2dFrameHeader *frame_hdr,
+                          const Dav2dSequenceHeader *seq_hdr);
 
 #endif /* DAV2D_SRC_LF_MASK_H */

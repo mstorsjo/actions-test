@@ -117,11 +117,11 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][5][4],
                                    const int w4, const int h4,
                                    const enum TxPartition tx_part,
                                    const TxfmInfo *const t_dim,
-                                   const int lim,
+                                   const int hlim, const int vlim,
                                    uint8_t *const a, uint8_t *const l)
 {
     const int tw4 = t_dim->w, th4 = t_dim->h;
-    const int twl4c = imin(lim, t_dim->lw), thl4c = imin(lim, t_dim->lh);
+    const int twl4c = imin(hlim, t_dim->lw), thl4c = imin(vlim, t_dim->lh);
 
     if (tx_part < TX_PARTITION_H5) {
         mask_outer_edge_l(masks[0][bx4], by4, h4, twl4c, l);
@@ -140,7 +140,7 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][5][4],
         mask_outer_edge_l(masks[0][bx4], by4, imin(th4, h4), twl4c, l);
         if (h4 > th4) {
             mask_outer_edge_l(masks[0][bx4], by4 + th4, imin(2 * th4, h4 - th4),
-                              imin(twl4c + 1, lim), &l[th4]);
+                              imin(twl4c + 1, hlim), &l[th4]);
             if (h4 > th4 * 3)
                 mask_outer_edge_l(masks[0][bx4], by4 + th4 * 3,
                                   imin(th4, h4 - 3 * th4), twl4c, &l[th4 * 3]);
@@ -157,7 +157,7 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][5][4],
         mask_outer_edge_t(masks[1][by4], bx4, imin(tw4, w4), thl4c, a);
         if (w4 > tw4) {
             mask_outer_edge_t(masks[1][by4], bx4 + tw4, imin(2 * tw4, w4 - tw4),
-                              imin(thl4c + 1, lim), &a[tw4]);
+                              imin(thl4c + 1, vlim), &a[tw4]);
             if (w4 > tw4 * 3)
                 mask_outer_edge_t(masks[1][by4], bx4 + tw4 * 3,
                                   imin(tw4, w4 - 3 * tw4), thl4c, &a[tw4 * 3]);
@@ -174,49 +174,53 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][5][4],
 static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
                                            const int by4, const int bx4,
                                            const int w4, const int h4,
-                                           const int hsz, const int vsz,
                                            const int twl4c, const int thl4c,
+                                           const int hsz, const int vsz,
                                            const int ds_sub_pu_mask)
 {
-    assert(!(hsz & (hsz - 1)) && hsz >= 1 && hsz <= 8);
-    assert(!(vsz & (vsz - 1)) && vsz >= 1 && vsz <= 8);
+    assert(!(hsz & (hsz - 1)) && hsz >= 0 && hsz <= 8);
+    assert(!(vsz & (vsz - 1)) && vsz >= 0 && vsz <= 8);
     assert((unsigned) thl4c <= 2U && (unsigned) twl4c <= 2U);
     assert(ds_sub_pu_mask == 15 || ds_sub_pu_mask == 0);
 
-    // inner (subpu) left|right edges
-    uint64_t inner = (~0ULL >> (64 - h4)) << by4;
-    unsigned inner0 = (unsigned) (inner & 0xffff);
-    unsigned inner1 = (unsigned) ((inner >> 16) & 0xffff);
-    unsigned inner2 = (unsigned) ((inner >> 32) & 0xffff);
-    unsigned inner3 = (unsigned) ((inner >> 48));
-    for (int x = hsz; x < w4; x += hsz) {
+    if (hsz) {
+        // inner (subpu) left|right edges
+        const uint64_t inner = (~0ULL >> (64 - h4)) << by4;
+        const unsigned inner0 = (unsigned) (inner & 0xffff);
+        const unsigned inner1 = (unsigned) ((inner >> 16) & 0xffff);
+        const unsigned inner2 = (unsigned) ((inner >> 32) & 0xffff);
+        const unsigned inner3 = (unsigned) ((inner >> 48));
+        for (int x = hsz; x < w4; x += hsz) {
 #define mask_subpu(a, b, c, d, e) \
-        if (inner##e) { \
-            const unsigned m = masks[a][b + c][d][e]; \
-            masks[a][b + c][d][e] |= inner##e; \
-            if (c & ds_sub_pu_mask) \
-                masks[a][b + c][4][e] |= inner##e & ~m; \
+            if (inner##e) { \
+                const unsigned m = masks[a][b + c][d][e]; \
+                masks[a][b + c][d][e] |= inner##e; \
+                if (c & ds_sub_pu_mask) \
+                    masks[a][b + c][4][e] |= inner##e & ~m; \
+            }
+            mask_subpu(0, bx4, x, twl4c, 0);
+            mask_subpu(0, bx4, x, twl4c, 1);
+            mask_subpu(0, bx4, x, twl4c, 2);
+            mask_subpu(0, bx4, x, twl4c, 3);
         }
-        mask_subpu(0, bx4, x, twl4c, 0);
-        mask_subpu(0, bx4, x, twl4c, 1);
-        mask_subpu(0, bx4, x, twl4c, 2);
-        mask_subpu(0, bx4, x, twl4c, 3);
     }
 
-    //               top
-    // inner (subpu) --- edges
-    //              bottom
-    inner = (~0ULL >> (64 - w4)) << bx4;
-    inner0 = (unsigned) (inner & 0xffff);
-    inner1 = (unsigned) ((inner >> 16) & 0xffff);
-    inner2 = (unsigned) ((inner >> 32) & 0xffff);
-    inner3 = (unsigned) ((inner >> 48));
-    for (int y = vsz; y < h4; y += vsz) {
-        mask_subpu(1, by4, y, thl4c, 0);
-        mask_subpu(1, by4, y, thl4c, 1);
-        mask_subpu(1, by4, y, thl4c, 2);
-        mask_subpu(1, by4, y, thl4c, 3);
+    if (vsz) {
+        //               top
+        // inner (subpu) --- edges
+        //              bottom
+        const uint64_t inner = (~0ULL >> (64 - w4)) << bx4;
+        const unsigned inner0 = (unsigned) (inner & 0xffff);
+        const unsigned inner1 = (unsigned) ((inner >> 16) & 0xffff);
+        const unsigned inner2 = (unsigned) ((inner >> 32) & 0xffff);
+        const unsigned inner3 = (unsigned) ((inner >> 48));
+        for (int y = vsz; y < h4; y += vsz) {
+            mask_subpu(1, by4, y, thl4c, 0);
+            mask_subpu(1, by4, y, thl4c, 1);
+            mask_subpu(1, by4, y, thl4c, 2);
+            mask_subpu(1, by4, y, thl4c, 3);
 #undef mask_subpu
+        }
     }
 }
 
@@ -243,85 +247,55 @@ static int subpu_flt_lvl(const Dav2dSequenceHeader *const seq_hdr,
     return max_lvl;
 }
 
-void dav2d_create_lf_mask_luma(Av2Filter *const lflvl,
-                               const Av2Block *const b,
-                               const enum BlockSize lbs,
-                               const int bx, const int by,
-                               const int iw, const int ih,
-                               uint8_t *const ay, uint8_t *const ly,
-                               const Dav2dFrameHeader *const frame_hdr,
-                               const Dav2dSequenceHeader *const seq_hdr)
+void dav2d_create_lf_mask(uint16_t (*const masks)[64][5][4],
+                          const Av2Block *const b,
+                          const enum BlockSize bs,
+                          const int bx, const int by,
+                          const int iw, const int ih,
+                          const enum Dav2dPixelLayout layout,
+                          const int chroma,
+                          uint8_t *const a, uint8_t *const l,
+                          const Dav2dFrameHeader *const frame_hdr,
+                          const Dav2dSequenceHeader *const seq_hdr)
 {
-    const uint8_t *const b_dim = dav2d_block_dimensions[lbs];
-    const int bw4 = imin(iw - bx, b_dim[0]);
-    const int bh4 = imin(ih - by, b_dim[1]);
-    const int bx4 = bx & 63;
-    const int by4 = by & 63;
+    const int ss_ver = chroma && layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = chroma && layout != DAV2D_PIXEL_LAYOUT_I444;
+    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
+    const int bw4 = imin(iw - bx, b_dim[0]) >> ss_hor;
+    const int bh4 = imin(ih - by, b_dim[1]) >> ss_ver;
+    const int bx4 = (bx & 63) >> ss_hor;
+    const int by4 = (by & 63) >> ss_ver;
     assert(bw4 > 0 && bh4 > 0);
 
     const int subpu_l2 = subpu_flt_lvl(seq_hdr, frame_hdr,
-                                       lbs, b_dim[0], b_dim[1], b, 3);
+                                       bs, b_dim[0], b_dim[1], b, 3);
     const int ds_subpu_mask = (frame_hdr->tip.frame_mode != 2) * 15;
     int twl4c, thl4c;
 
     if (b->intra || !b->skip_txfm) {
-        const enum TxPartition tx_part = b->tx_part;
-        const int8_t *const tp = dav2d_tx_part_tbl[lbs];
-        const enum RectTxfmSize tx = tp[tx_part];
+        const enum TxPartition tx_part = chroma ? TX_PARTITION_NONE : b->tx_part;
+        const enum RectTxfmSize tx = chroma ?
+            dav2d_max_txfm_size_for_bs[bs][layout] :
+            dav2d_tx_part_tbl[bs][tx_part];
         const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
-        mask_edges_part(lflvl->filter_y, by4, bx4, bw4, bh4, b->tx_part, t_dim,
-                        subpu_l2, ay, ly);
+        mask_edges_part(masks, by4, bx4, bw4, bh4, tx_part, t_dim,
+                        iclip(subpu_l2 - ss_hor, 0, 3 - chroma),
+                        iclip(subpu_l2 - ss_ver, 0, 3 - chroma), a, l);
         twl4c = imin(subpu_l2, t_dim->lw);
         thl4c = imin(subpu_l2, t_dim->lh);
     } else {
-        mask_outer_edge_l(lflvl->filter_y[0][bx4], by4, bh4,
-                          imin(subpu_l2, b_dim[2]), ly);
-        mask_outer_edge_t(lflvl->filter_y[1][by4], bx4, bw4,
-                          imin(subpu_l2, b_dim[3]), ay);
+        mask_outer_edge_l(masks[0][bx4], by4, bh4,
+                          iclip(imin(subpu_l2, b_dim[2]) - ss_hor, 0, 3 - chroma), l);
+        mask_outer_edge_t(masks[1][by4], bx4, bw4,
+                          iclip(imin(subpu_l2, b_dim[3]) - ss_ver, 0, 3 - chroma), a);
         twl4c = thl4c = subpu_l2;
     }
 
     if (subpu_l2 != 3) {
-        const int sz = 1 << subpu_l2;
-        mask_subpu_edges(lflvl->filter_y, by4, bx4, bw4, bh4, sz, sz,
-                         twl4c, thl4c, ds_subpu_mask);
-    }
-}
-
-void dav2d_create_lf_mask_chroma(Av2Filter *const lflvl,
-                                 const Av2Block *const b,
-                                 const enum BlockSize cbs,
-                                 const int cbx, const int cby,
-                                 const int iw, const int ih,
-                                 const enum Dav2dPixelLayout layout,
-                                 uint8_t *const auv, uint8_t *const luv,
-                                 const Dav2dFrameHeader *const frame_hdr,
-                                 const Dav2dSequenceHeader *const seq_hdr)
-{
-    const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
-    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
-    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
-    const int cbw4 = imin(iw - cbx, cb_dim[0]) >> ss_hor;
-    const int cbh4 = imin(ih - cby, cb_dim[1]) >> ss_ver;
-    const int cbx4 = (cbx & 63) >> ss_hor;
-    const int cby4 = (cby & 63) >> ss_ver;
-    assert(cbw4 > 0 && cbh4 > 0);
-
-    const int subpu_l2 = subpu_flt_lvl(seq_hdr, frame_hdr,
-                                       cbs, cb_dim[0], cb_dim[1], b, 3);
-    const int ds_subpu_mask = (frame_hdr->tip.frame_mode != 2) * 15;
-
-    mask_outer_edge_l(lflvl->filter_uv[0][cbx4], cby4, cbh4,
-                      iclip(imin(subpu_l2, cb_dim[2]) - ss_hor, 0, 2), luv);
-    mask_outer_edge_t(lflvl->filter_uv[1][cby4], cbx4, cbw4,
-                      iclip(imin(subpu_l2, cb_dim[3]) - ss_ver, 0, 2), auv);
-    // FIXME tx edges (for 256xN/Nx256 where tx=64x64)
-    if (subpu_l2 != 3) {
-        const int h_subpu_l2 = subpu_l2 - (ss_hor && subpu_l2);
-        const int v_subpu_l2 = subpu_l2 - (ss_ver && subpu_l2);
-        mask_subpu_edges(lflvl->filter_uv, cby4, cbx4, cbw4, cbh4,
-                         1 << h_subpu_l2, 1 << v_subpu_l2,
-                         h_subpu_l2, v_subpu_l2,
+        const int h_subpu_l2 = twl4c - (ss_hor && twl4c);
+        const int v_subpu_l2 = thl4c - (ss_ver && thl4c);
+        mask_subpu_edges(masks, by4, bx4, bw4, bh4, h_subpu_l2, v_subpu_l2,
+                         (1 << subpu_l2) >> ss_hor, (1 << subpu_l2) >> ss_ver,
                          // this variable isn't subsampled for some reason
                          ds_subpu_mask);
     }
