@@ -1429,9 +1429,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         const ptrdiff_t ccso_idx = 3 * ((t->bx >> 6) + (t->by >> 6) * f->sb256w);
         for (int p = 0; p < 3; p++) {
             if (!f->frame_hdr->ccso.p[p].enabled) continue;
-            int ccso;
             if (f->frame_hdr->ccso.p[p].sb_reuse) {
-                ccso = t->lf_mask->ccso[p] = f->prev_ccsomap[p][ccso_idx + p];
+                t->lf_mask->ccso[p] = f->prev_ccsomap[p][ccso_idx + p];
             } else {
                 // for left/left-bottom [if no overhang] context:
                 // ctx=0: --/--, false/--, --/false, false/false
@@ -1440,14 +1439,14 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 // ctx=3: true/true [different coded block]
                 const int ctx = t->bx - 64 >= ts->tiling.col_start ?
                                 t->lf_mask[-1].ccso[p] * 2 : 0;
-                ccso = t->lf_mask->ccso[p] = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                                 ts->cdf.m.ccso[p][ctx]);
+                t->lf_mask->ccso[p] =
+                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.ccso[p][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,ctx=%d,%d]: r=%d\n",
                                    depth, "", "yuv"[p], ctx,
                                    t->lf_mask->ccso[p], ts->msac.rng);
             }
             if (f->cur_ccsomap)
-                f->cur_ccsomap[ccso_idx + p] = ccso;
+                f->cur_ccsomap[ccso_idx + p] = t->lf_mask->ccso[p];
         }
     }
 
