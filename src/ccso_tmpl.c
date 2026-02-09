@@ -95,7 +95,7 @@ ccso_prep_c(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, const ptrdiff_
     const ptrdiff_t luma_offset = dx + dy * tmp_stride;
     pixel tmp_buf[68 * 12]; // 68*12 is the maximum value of tmp_stride * (h + 4)
     pixel *tmp = tmp_buf + 2 * tmp_stride + 2;
-    padding(tmp, tmp_stride, src, src_stride, left, top, bottom, w, h, edges);
+    padding(tmp, tmp_stride, src, src_stride, left, top, bottom, w << ss_hor, h << ss_ver, edges);
 
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
