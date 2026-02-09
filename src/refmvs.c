@@ -1534,11 +1534,10 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                 // right
                 const int have_right = x + 2 < xend;
                 if (have_right && rp_proj[pos + 2].mv.y != INVALID_MV) {
-                    union mv right_mv = rp_proj[pos + 2].mv;
                     const int right_ref_off = rp_proj[pos + 2].ref;
-                    if (right_ref_off != ref_off)
-                        right_mv = dav2d_mv_projection(right_mv, ref_off,
-                                                       right_ref_off, -2047, 2047);
+                    const union mv right_mv =
+                        dav2d_mv_projection(rp_proj[pos + 2].mv, ref_off,
+                                            right_ref_off, -2047, 2047);
                     sum_x += right_mv.x;
                     sum_y += right_mv.y;
                     rp_proj[pos + 1].mv.y = (sum_y + (sum_y > 0)) >> 1;
@@ -1552,11 +1551,10 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                 // bottom
                 const int have_bottom = y + 2 < yend;
                 if (have_bottom && rp_proj[pos + 2 * stride].mv.y != INVALID_MV) {
-                    union mv bottom_mv = rp_proj[pos + 2 * stride].mv;
                     const int bottom_ref_off = rp_proj[pos + 2 * stride].ref;
-                    if (bottom_ref_off != ref_off)
-                        bottom_mv = dav2d_mv_projection(bottom_mv, ref_off,
-                                                        bottom_ref_off, -2047, 2047);
+                    const union mv bottom_mv =
+                        dav2d_mv_projection(rp_proj[pos + 2 * stride].mv, ref_off,
+                                            bottom_ref_off, -2047, 2047);
                     sum_x += bottom_mv.x;
                     const int mx = mvx + bottom_mv.x;
                     sum_y += bottom_mv.y;
@@ -1575,10 +1573,9 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                     if (bottom_right_mv.y != INVALID_MV) {
                         const int bottom_right_ref_off =
                             rp_proj[pos + 2 * (1 + stride)].ref;
-                        if (bottom_right_ref_off != ref_off)
-                            bottom_right_mv = dav2d_mv_projection(bottom_right_mv, ref_off,
-                                                                  bottom_right_ref_off,
-                                                                  -2047, 2047);
+                        bottom_right_mv = dav2d_mv_projection(bottom_right_mv, ref_off,
+                                                              bottom_right_ref_off,
+                                                              -2047, 2047);
                         sum_x += bottom_right_mv.x;
                         sum_y += bottom_right_mv.y;
                         sum_n++;
