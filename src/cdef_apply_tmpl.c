@@ -121,7 +121,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
     const ptrdiff_t y_stride = PXSTRIDE(f->cur.p.stride[0]);
     const ptrdiff_t uv_stride = PXSTRIDE(f->cur.p.stride[1]);
 
-    for (int bit = 0, by = by_start; by < by_end; by += 2, edges |= CDEF_HAVE_TOP) {
+    for (int by = by_start; by < by_end; by += 2, edges |= CDEF_HAVE_TOP) {
         const int tf = tc->top_pre_cdef_toggle;
         const int by_idx = (by & 0x3e) >> 1;
         if (by + 2 >= f->bh) edges &= ~CDEF_HAVE_BOTTOM;
@@ -143,7 +143,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
         edges &= ~CDEF_HAVE_LEFT;
         edges |= CDEF_HAVE_RIGHT;
         enum Backup2x8Flags prev_flag = 0;
-        for (int sbx = 0; sbx < sb64w; sbx++, edges |= CDEF_HAVE_LEFT) {
+        for (int sbx = 0, bit = 0; sbx < sb64w; sbx++, edges |= CDEF_HAVE_LEFT) {
             ALIGN_STK_64(uint8_t, ccso_lut_idx, 3, [64*8]);
             const int sb256x = sbx >> 2;
             const int sb64_idx = ((by & 0x30) >> 2) + (sbx & 3);
