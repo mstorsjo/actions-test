@@ -1,4 +1,4 @@
-From d492450c360ea5ca3a0c67e53471ad3c1db12d21 Mon Sep 17 00:00:00 2001
+From 046a86c6b40f36b14d599ef7cd779c3a0c45adf6 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 07:46:22 -0500
 Subject: [PATCH 1/5] OBU header & sequence header debugging.
@@ -327,7 +327,7 @@ index 883af85445..c72321be4e 100644
  extern "C" {
  #endif
 diff --git a/av2/decoder/obu.c b/av2/decoder/obu.c
-index 4eba32142f..21587c27d4 100644
+index 4eba32142f..34c58c0194 100644
 --- a/av2/decoder/obu.c
 +++ b/av2/decoder/obu.c
 @@ -306,12 +306,26 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi,
@@ -422,7 +422,7 @@ index 4eba32142f..21587c27d4 100644
      } else {
        cm->bridge_frame_info.is_bridge_frame = 0;
      }
-+#if DEBUG_SEQ_HDR
++#if DEBUG_OBU_HDR
 +    printf("OBU type=%d size=%ld\n",
 +           obu_header.type, payload_size);
 +#endif
