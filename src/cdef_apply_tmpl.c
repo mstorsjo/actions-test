@@ -347,10 +347,11 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 // XXX could improve the (actual) backups prior to running filter
                 // (so the right side ones) by checking whether next sb/b needs
                 // it (if has_cdef or has_ccso)
-                if (!(prev_flag & flag) && (sbx + 1) * sbsz < f->bw) {
+                const enum Backup2x8Flags do_right = flag & ~prev_flag;
+                if (do_right && (sbx + 1) * sbsz < f->bw) {
                     backup2x8(lr_bak[bit], iptrs, f->cur.p.stride, sbsz * 4,
-                              layout, flag);
-                    prev_flag |= flag;
+                              layout, do_right);
+                    prev_flag |= do_right;
                 }
                 for (int pl = 0; pl < 3; pl++)
                     if (lflvl[sb256x].ccso[pl]) {
