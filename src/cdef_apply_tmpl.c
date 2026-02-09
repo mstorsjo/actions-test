@@ -152,13 +152,14 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
             if (f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) {
                 const enum Backup2x8Flags flag = lflvl[sb256x].ccso[0] |
                     lflvl[sb256x].ccso[1] | lflvl[sb256x].ccso[2];
-                const enum Backup2x8Flags do_left = (prev_flag ^ flag) & flag;
-                prev_flag = flag;
+                const enum Backup2x8Flags do_left = flag & ~prev_flag;
+                prev_flag |= flag;
                 if (do_left && edges & CDEF_HAVE_LEFT) {
                     // we didn't backup the prefilter data because we didn't
                     // filter it, so do it here instead
                     backup2x8(lr_bak[bit], iptrs, f->cur.p.stride, 0, layout, do_left);
                 }
+
                 for (int pl = 0; pl < 3; pl++) {
                     if (!lflvl[sb256x].ccso[pl]) continue;
 
@@ -252,7 +253,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                     prev_flag = 0;
                     goto next_b;
                 }
-                const enum Backup2x8Flags do_left = (prev_flag ^ flag) & flag;
+                const enum Backup2x8Flags do_left = flag & ~prev_flag;
                 prev_flag = flag;
                 if (do_left && edges & CDEF_HAVE_LEFT) {
                     // we didn't backup the prefilter data because it wasn't
