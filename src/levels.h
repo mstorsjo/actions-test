@@ -272,7 +272,7 @@ typedef union mv {
         int32_t y, x;
     };
     uint64_t n;
-} ALIGN(mv, 8);
+} mv;
 CHECK_SIZE(mv, 8);
 #define INVALID_MV 0x200000 // applied to mv.y
 #define COPY2MV(dst, src) memcpy(dst, src, 2 * sizeof(union mv))
