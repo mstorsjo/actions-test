@@ -331,7 +331,8 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
             } while (off < w4 + tr_ext && np < 8);
             have_topright = 1;
         }
-        have_topright &= bw4 <= 16 && t->bx + bw4 < t->ts->tiling.col_end &&
+        have_topright &= bw4 <= 16 &&
+            t->bx + bw4 + !is_not_sb_boundary < t->ts->tiling.col_end &&
             (!(t->by & (f->sb_step - 1)) || // top sb boundary
              ((t->bx + bw4) & (f->sb_step - 1) && // right sb boundary
               t->is_coded[0][(t->by - 1) & 63] & (1ULL << ((t->bx + bw4) & 63))));
