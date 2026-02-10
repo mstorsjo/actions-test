@@ -30,18 +30,18 @@
 
 #define DEBUG_BLOCK_INFO 0
 #if DEBUG_BLOCK_INFO
-#define DB_ONLY(x...) x,
+#define DB_ONLY(...) __VA_ARGS__,
 #define BLOCK_TO_DEBUG_S(frame_offset, by, bx) \
     frame_offset == 0 && by >= 0 && by < 16 && bx >= 0 && bx < 16
 #define BLOCK_TO_DEBUG BLOCK_TO_DEBUG_S(f->frame_hdr->frame_offset, t->by, t->bx)
-#define DEBUG_BLOCK_printf(fmt...) \
+#define DEBUG_BLOCK_printf(...) \
     if (BLOCK_TO_DEBUG) { \
-        printf(fmt); \
+        printf(__VA_ARGS__); \
     }
 #else
-#define DB_ONLY(x...)
+#define DB_ONLY(...)
 #define BLOCK_TO_DEBUG 0
-#define DEBUG_BLOCK_printf(fmt...) do { } while (0)
+#define DEBUG_BLOCK_printf(...) do { } while (0)
 #endif
 #define DEBUG_B_PIXELS 0
 

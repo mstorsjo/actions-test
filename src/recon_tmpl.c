@@ -346,10 +346,10 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
 #if DEBUG_BLOCK_INFO
     const int dbg = BLOCK_TO_DEBUG && plane > -1 && 1;
-#define DEBUG_CF_printf(fmt...) \
-    if (dbg) printf(fmt)
+#define DEBUG_CF_printf(...) \
+    if (dbg) printf(__VA_ARGS__)
 #else
-#define DEBUG_CF_printf(fmt...)
+#define DEBUG_CF_printf(...)
 #endif
 
     DEBUG_CF_printf("%*sdecode_cf[y=%d,x=%d,pl=%d,tx=%dx%d]: r=%d\n",

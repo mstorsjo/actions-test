@@ -44,16 +44,16 @@
 #define DEBUG_REFMV 0
 
 #if DEBUG_BLOCK_INFO && DEBUG_REFMV
-#define RDB_ONLY(x...) x
-#define DB_ARGS(x...) x,
-#define DEBUG_REFMV_printf(fmt...) \
+#define RDB_ONLY(...) __VA_ARGS__
+#define DB_ARGS(...) __VA_ARGS__,
+#define DEBUG_REFMV_printf(...) \
     if (DEBUG_REFMV && BLOCK_TO_DEBUG_S(rf->frm_hdr->frame_offset, by4, bx4)) { \
-        printf(fmt); \
+        printf(__VA_ARGS__); \
     }
 #else
-#define RDB_ONLY(x...)
-#define DB_ARGS(x...)
-#define DEBUG_REFMV_printf(fmt...) do {} while (0)
+#define RDB_ONLY(...)
+#define DB_ARGS(...)
+#define DEBUG_REFMV_printf(...) do {} while (0)
 #endif
 
 static int add_candidate_sngl(DB_ARGS(const refmvs_frame *const rf,
