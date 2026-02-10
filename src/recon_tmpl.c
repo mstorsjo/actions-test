@@ -3739,7 +3739,7 @@ void bytefn(dav2d_read_pal_plane)(DB_ONLY(const int depth)
                 cache[i++] = dir[n + n_zero++]; \
                 n += n_zero; \
                 mask <<= n_zero; \
-            } while (i < pal_sz)
+            } while (mask)
             select(a);
         } else if (!a_cache) {
             select(l);
