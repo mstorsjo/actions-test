@@ -35,6 +35,7 @@ libdav2d_sources = files(
     'decode.c',
     'dip_tables.c',
     'getbits.c',
+    'gdf_tables.c',
     'ibp.c',
     'itx_1d.c',
     'lf_mask.c',

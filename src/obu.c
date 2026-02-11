@@ -1511,8 +1511,11 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (hdr->gdf.enabled) {
             if (imax(hdr->width, hdr->height) > gdf_bs)
                 hdr->gdf.enabled += dav2d_get_bit(gb);
-            hdr->gdf.qp_idx = dav2d_get_bits(gb, 2);
-            hdr->gdf.scale_idx = dav2d_get_bits(gb, 2);
+            const int qp_base = IS_KEY_OR_INTRA(hdr) ? 85 : 110;
+            const int qp_diff = hdr->quant.yac - qp_base - 48 * seqhdr->hbd;
+            const int qp_idx_offset = dav2d_get_bits(gb, 2);
+            hdr->gdf.qp_idx = iclip((qp_diff - 37)/25, 0, 2) + qp_idx_offset;
+            hdr->gdf.scale = dav2d_get_bits(gb, 2) + 1;
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-gdf[%d]: off=%td\n",

@@ -40,8 +40,8 @@ enum FirstSbInTileRow {
 };
 
 static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
-                      const pixel (*left)[4], int x, int y,
-                      const int plane, const int unit_w, const int row_h,
+                      const pixel (*left)[6], int x, int y,
+                      const int plane, const int w, const int row_h,
                       const Av2RestorationUnit *const lr, enum LrEdgeFlags edges,
                       const enum FirstSbInTileRow first_sby_in_tile_row,
                       const int tile_row_m1)
@@ -59,13 +59,18 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
                   (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ?
         f->lf.lr_cdef_line[plane] + tile_row_m1 * 4 * PXSTRIDE(stride) + x : NULL;
+    const int sb256x = x >> 8;
+    const int sb64x_idx = (x >> 6) & 3;
 
     // The first stripe of the frame is shorter by 8 luma pixel rows.
     int stripe_h = imin((64 - 8 * !!first_sby_in_tile_row) >> ss_ver, row_h - y);
 
-    wienerfilter_fn wiener_fn;
+    int ref_dst_idx = f->lf.gdf_ref_dst_idx;
+    int qp_idx = f->frame_hdr->gdf.qp_idx;
+    int gdf_scale = f->frame_hdr->gdf.scale;
+    wienerfilter_fn wiener_fn = NULL;
     WienerParams wiener_params;
-    uint16_t noskip_mask[64 + 2][12];
+    uint16_t noskip_mask[64 + 2];
     int multi_wiener = 0;
 
     if (lr->type == DAV2D_RESTORATION_NS_WIENER) {
@@ -90,45 +95,51 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         wiener_params.multi.base_q = f->lf.base_q;
         wiener_params.multi.subclass_lut = f->lf.pc_subclass_lut;
         wiener_params.multi.filters.pretrained = f->lf.pc_filters;
-    } else {
-        return;
     }
 
     if (multi_wiener) {
         wiener_params.multi.noskip_mask = noskip_mask;
-        // TODO: The below is a bit hacky to make wiener work over full restoration widths.
-        //       We should refactor restoration to work over blocks 64 pixels wide at a time instead.
         for (int by = y >> 2, r = 0; by < row_h >> 2; by++, r++) {
-            // Iterate with sb64 precision, otherwise the coded wouldn't support unit sizes of 64 or 128
-            for (int sb64x = x >> 6, c = 0; sb64x < (x + unit_w + 63) >> 6; sb64x++, c++) {
-                int by_idx = by & 63;
-                int sb256_idx = f->sb256w * (by >> 6) + (sb64x >> 2);
-                uint16_t* noskip_row = f->lf.mask[sb256_idx].lr_noskip_mask[by_idx];
-                noskip_mask[r][c] = noskip_row[sb64x & 3];
-            }
+            int by_idx = by & 63;
+            // TODO: add outer loop so we don't compute and offset by the same sb256_idx most iterations
+            int sb256_idx = f->sb256w * (by >> 6) + sb256x;
+            uint16_t* noskip_row = f->lf.mask[sb256_idx].lr_noskip_mask[by_idx];
+            noskip_mask[r] = noskip_row[sb64x_idx];
             // extend masks on the right edge
-            if (!(edges & LR_HAVE_RIGHT) && unit_w & 63) {
-                const int c = unit_w >> 6;
-                const int shift = ((unit_w >> 2) & 15) - 1;
-                const int mask = noskip_mask[r][c];
+            if (!(edges & LR_HAVE_RIGHT) && w & 63) {
+                const int shift = ((w >> 2) & 15) - 1;
+                const int mask = noskip_mask[r];
                 const int edge = mask >> shift;
-                noskip_mask[r][c] |= edge << (shift + 1);
+                noskip_mask[r] |= edge << (shift + 1);
             }
         }
     }
 
+    int8_t gdf_err[64*64];
     while (y + stripe_h <= row_h) {
         // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
-        wiener_fn(p, stride, left, top ? top : lpf,
-                  lpf + 6 * PXSTRIDE(stride), unit_w, stripe_h, &wiener_params,
-                  edges HIGHBD_CALL_SUFFIX);
+        int sb256_idx = f->sb256w * ((y + 8) >> 8) + sb256x;
+        int gdf = f->lf.mask[sb256_idx].gdf[(((y + 8) >> 4) & 12) + sb64x_idx];
+
+        if (gdf) {
+            dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, lpf,
+                             w, stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
+        }
+        if (wiener_fn) {
+            wiener_fn(p, stride, left, top ? top : lpf,
+                      lpf + 6 * PXSTRIDE(stride), w, stripe_h, &wiener_params,
+                      edges HIGHBD_CALL_SUFFIX);
+            if (multi_wiener)
+                wiener_params.multi.noskip_mask += stripe_h >> 2;
+        }
+        if (gdf) {
+            dsp->lr.gdf_add(p, stride, gdf_err, 64, w, stripe_h, gdf_scale
+                            HIGHBD_CALL_SUFFIX);
+        }
         edges &= ~(LR_HAVE_BOTTOM_INTEGRATED | LR_HAVE_TOP_INTEGRATED);
         left += stripe_h;
         y += stripe_h;
-        if (multi_wiener) {
-            wiener_params.multi.noskip_mask += stripe_h >> 2;
-        }
         p += stripe_h * PXSTRIDE(stride);
         edges |= LR_HAVE_TOP;
         stripe_h = imin(64 >> ss_ver, row_h - y);
@@ -138,11 +149,11 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     }
 }
 
-static void backup4xU(pixel (*dst)[4], const pixel *src, const ptrdiff_t src_stride,
+static void backup6xU(pixel (*dst)[6], const pixel *src, const ptrdiff_t src_stride,
                       int u)
 {
     for (; u > 0; u--, dst++, src += PXSTRIDE(src_stride))
-        pixel_copy(dst, src, 4);
+        pixel_copy(dst, src, 6);
 }
 
 static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
@@ -158,7 +169,6 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     const int unit_size_log2 = f->frame_hdr->restoration.unit_size[!!plane];
     const int unit_size = 1 << unit_size_log2;
     const int half_unit_size = unit_size >> 1;
-    const int max_unit_size = unit_size + half_unit_size;
 
     // Y coordinate of the sbrow (y is 8 luma pixel rows above row_y)
     const int row_y = y + ((8 >> ss_ver) * !first_sby_in_tile_row);
@@ -173,7 +183,7 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     const int shift_hor = 8 - ss_hor;
 
     /* maximum sbrow height is 256 + 8 rows offset */
-    ALIGN_STK_16(pixel, pre_lr_border, 2, [256 + 8][4]);
+    ALIGN_STK_16(pixel, pre_lr_border, 2, [256 + 8][6]);
     const Av2RestorationUnit *lr[2];
 
     enum LrEdgeFlags edges = (y > 0 ? LR_HAVE_TOP : 0) | LR_HAVE_RIGHT;
@@ -187,26 +197,27 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     const int sb_idx = (aligned_unit_pos >> 8) * f->sb256w;
     const int unit_idx = ((aligned_unit_pos >> 6) & 0x3) << 2;
     lr[0] = &f->lf.lr_mask[sb_idx].lr[plane][unit_idx];
-    int restore = lr[0]->type != DAV2D_RESTORATION_NONE;
+    int restore = 1; // TODO: restore logic for disabling backups
     int x = 0, bit = 0;
-    for (; x + max_unit_size <= w; p += unit_size, edges |= LR_HAVE_LEFT, bit ^= 1) {
-        const int next_x = x + unit_size;
-        const int next_u_idx = unit_idx + ((next_x >> (shift_hor - 2)) & 0x3);
+    for (; x + 64 < w; p += 64, edges |= LR_HAVE_LEFT, bit ^= 1) {
+        const int next_x = x + 64;
+        const int next_iter_lru_start_x = next_x & ~(unit_size - 1);
+        const int next_u_idx = unit_idx + ((next_iter_lru_start_x >> (shift_hor - 2)) & 3);
         lr[!bit] =
-            &f->lf.lr_mask[sb_idx + (next_x >> shift_hor)].lr[plane][next_u_idx];
-        const int restore_next = lr[!bit]->type != DAV2D_RESTORATION_NONE;
+            &f->lf.lr_mask[sb_idx + (next_iter_lru_start_x >> shift_hor)].lr[plane][next_u_idx];
+        const int restore_next = 1;
         if (restore_next)
-            backup4xU(pre_lr_border[bit], p + unit_size - 4, p_stride, row_h - y);
+            backup6xU(pre_lr_border[bit], p + 64 - 6, p_stride, row_h - y);
         if (restore)
-            lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, unit_size, row_h,
+            lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, 64, row_h,
                       lr[bit], edges, first_sby_in_tile_row, tile_row_m1);
         x = next_x;
         restore = restore_next;
     }
     if (restore) {
         edges &= ~LR_HAVE_RIGHT;
-        const int unit_w = w - x;
-        lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, unit_w, row_h,
+        const int end_w = w - x;
+        lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, end_w, row_h,
                   lr[bit], edges, first_sby_in_tile_row, tile_row_m1);
     }
 }

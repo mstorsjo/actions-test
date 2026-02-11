@@ -46,7 +46,7 @@ enum LrEdgeFlags {
 };
 
 #ifdef BITDEPTH
-typedef const pixel (*const_left_pixel_row)[4];
+typedef const pixel (*const_left_pixel_row)[6];
 #else
 typedef const void *const_left_pixel_row;
 #endif
@@ -61,14 +61,14 @@ typedef union WienerParams {
             const int16_t (*pretrained)[13];
         } filters;
         const uint8_t *subclass_lut;
-        const uint16_t (*noskip_mask)[12];
+        const uint16_t *noskip_mask;
         int base_q;
     } multi;
 } WienerParams;
 
 // Although the spec applies restoration filters over 4x4 blocks,
 // they can be applied to a bigger surface.
-//    * w is constrained by the restoration unit size (w <= 256)
+//    * w is constrained by the smallest gdf block size (w <= 64)
 //    * h is constrained by the stripe height (h <= 64)
 // The filter functions are allowed to do aligned writes past the right
 // edge of the buffer, aligned up to the minimum loop restoration unit size
@@ -81,10 +81,28 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
+#define decl_gdf_prep_fn(name) \
+void (name)(int8_t *dst, ptrdiff_t dst_stride, \
+            const pixel *p, ptrdiff_t stride, \
+            const_left_pixel_row left, \
+            const pixel *lpf, int w, int h, \
+            int ref_dst_idx, int qp_idx, \
+            enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+typedef decl_gdf_prep_fn(*gdf_prep_fn);
+
+#define decl_gdf_add_fn(name) \
+void (name)(pixel *p, ptrdiff_t dst_stride, \
+            const int8_t *err, const ptrdiff_t err_stride, \
+            const int w, const int h, const int scale \
+            HIGHBD_DECL_SUFFIX)
+typedef decl_gdf_add_fn(*gdf_add_fn);
+
 typedef struct Dav2dLoopRestorationDSPContext {
     wienerfilter_fn ns_wiener_single;
     wienerfilter_fn ns_wiener_multi;
     wienerfilter_fn pc_wiener;
+    gdf_prep_fn gdf_prep;
+    gdf_add_fn gdf_add;
 } Dav2dLoopRestorationDSPContext;
 
 bitfn_decls(void dav2d_loop_restoration_dsp_init, Dav2dLoopRestorationDSPContext *c, int bpc);

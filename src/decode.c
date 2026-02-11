@@ -1339,29 +1339,30 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     if (has_luma) {
         // FIXME some of these can be pre-calculated at the start of a frame
-        const int gdf_bs = f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY ?
-                           32 : imax(32, 16 << f->frame_hdr->sb128);
+        // FIXME gdf block size can be 64 pixels when tiles are split at odd places
+        const int gdf_sz_log2 = f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY ?
+                                1 : imax(1, f->frame_hdr->sb128);
+        const int gdf_bs = 16 << gdf_sz_log2;
         if (!((t->bx | t->by) & (gdf_bs - 1))) {
-            int idx = ((t->by & 16) >> 3) + ((t->bx & 16) >> 4);
+            int idx = ((t->by & 48) >> 2) + ((t->bx & 48) >> 4);
+            int flag;
             if (f->frame_hdr->gdf.enabled == DAV2D_ADAPTIVE &&
                 imax(f->cur.p.p.w, f->cur.p.p.h) > 4 * gdf_bs)
             {
-                for (int y = 0; y < bh4; y += gdf_bs, idx += 2) {
-                    for (int x = 0; x < bw4; x += gdf_bs) {
-                        // FIXME separate storage sites for 256x256 blocks
-                        t->lf_mask->gdf[idx + !!x] =
-                            dav2d_msac_decode_bool_adapt(&ts->msac,
-                                                         ts->cdf.m.gdf);
-                        DEBUG_BLOCK_printf("%*sPost-gdf[y=%d,x=%d,gdf=%d]: r=%d\n",
-                                           depth, "", t->by + y, t->bx + x,
-                                           t->lf_mask->gdf[idx + !!x],
-                                           ts->msac.rng);
-                    }
-                }
+                flag = dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.gdf);
+                DEBUG_BLOCK_printf("%*sPost-gdf[y=%d,x=%d,gdf=%d]: r=%d\n",
+                                   depth, "", t->by, t->bx,
+                                   flag, ts->msac.rng);
             } else
-                for (int y = 0; y < bh4; y += gdf_bs, idx += 2)
-                    for (int x = 0; x < bw4; x += gdf_bs)
-                        t->lf_mask->gdf[idx + !!x] = !!f->frame_hdr->gdf.enabled;
+                flag = !!f->frame_hdr->gdf.enabled;
+            dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx], flag);
+            if (gdf_bs >= 32) {
+                dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx+4], flag);
+                if (gdf_bs == 64) {
+                    dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx+8], flag);
+                    dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx+12], flag);
+                }
+            }
         }
     }
 
@@ -4323,7 +4324,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             for (int p = 0, ss_ver = 0, ss_hor = 0; p < 3;
                  p++, ss_ver = f->ss_ver, ss_hor = f->ss_hor)
             {
-                if (!((f->lf.restore_planes >> p) & 1U))
+                if (f->frame_hdr->restoration.p[p].type == DAV2D_RESTORATION_NONE)
                     continue;
 
                 const int tx = 4 * (t->bx - ts->tiling.col_start) >> ss_hor;
@@ -4676,21 +4677,36 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
     memset(f->lf.mask, 0, sizeof(*f->lf.mask) * num_sb256);
 
-    const int lr_mask_sz = f->sb256w * f->sb256h;
-    if (lr_mask_sz != f->lf.lr_mask_sz) {
+    if (num_sb256 != f->lf.lr_mask_sz) {
         dav2d_free(f->lf.lr_mask);
-        f->lf.lr_mask = dav2d_malloc(ALLOC_LR, sizeof(*f->lf.lr_mask) * lr_mask_sz);
+        f->lf.lr_mask = dav2d_malloc(ALLOC_LR, sizeof(*f->lf.lr_mask) * num_sb256);
         if (!f->lf.lr_mask) {
             f->lf.lr_mask_sz = 0;
             goto error;
         }
-        f->lf.lr_mask_sz = lr_mask_sz;
+        f->lf.lr_mask_sz = num_sb256;
     }
+    memset(f->lf.lr_mask, 0, sizeof(*f->lf.lr_mask) * num_sb256);
+
     init_wiener(f);
     f->lf.restore_planes =
-        ((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE) << 0) +
+        ((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE ||
+          f->frame_hdr->gdf.enabled) << 0) +
         ((f->frame_hdr->restoration.p[1].type != DAV2D_RESTORATION_NONE) << 1) +
         ((f->frame_hdr->restoration.p[2].type != DAV2D_RESTORATION_NONE) << 2);
+
+    if (f->frame_hdr->gdf.enabled) {
+        int ref_dst_idx = 0;
+        if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
+            int max_dist = 0;
+            for (int i = 0; i < imin(f->frame_hdr->n_ref_frames, 2); i++)
+                max_dist = imax(max_dist, f->absrefdist[i]);
+            const uint8_t ref_dst_idx_tbl[12] = { 5, 1, 2, 3, 3, 3, 4, 4, 4, 4, 4, 5 };
+            ref_dst_idx = ref_dst_idx_tbl[imin(max_dist, 11)];
+        }
+        f->lf.gdf_ref_dst_idx = ref_dst_idx;
+    }
+
     if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
         init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
     }

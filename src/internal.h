@@ -329,6 +329,7 @@ struct Dav2dFrameContext {
         int re_sz /* h */;
         ALIGN(Av2FilterLUT thr_lut, 16);
         int base_q;
+        int gdf_ref_dst_idx;
         const uint8_t *ns_subclass_lut;
         const uint8_t *pc_subclass_lut;
         const int16_t (*pc_filters)[13];

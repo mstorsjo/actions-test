@@ -466,7 +466,7 @@ typedef struct Dav2dFrameHeader {
     } loopfilter;
     struct {
         enum Dav2dAdaptiveBoolean enabled;
-        uint8_t qp_idx, scale_idx;
+        uint8_t qp_idx, scale;
     } gdf;
     struct {
         uint8_t enabled;
