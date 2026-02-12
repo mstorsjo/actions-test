@@ -53,6 +53,7 @@ static void init_tmp(pixel *buf, const ptrdiff_t stride,
     }
 }
 
+#if 0
 static void check_wiener(Dav2dLoopRestorationDSPContext *const c, const int bpc) {
     PIXEL_RECT(c_dst, 384, 64);
     PIXEL_RECT(a_dst, 384, 64);
@@ -123,77 +124,10 @@ static void check_wiener(Dav2dLoopRestorationDSPContext *const c, const int bpc)
         }
     }
 }
-
-static void check_sgr(Dav2dLoopRestorationDSPContext *const c, const int bpc) {
-    PIXEL_RECT(c_dst, 384, 64);
-    PIXEL_RECT(a_dst, 384, 64);
-    PIXEL_RECT(h_edge, 384, 8);
-    pixel left[64][4];
-    LooprestorationParams params;
-
-    declare_func(void, pixel *dst, ptrdiff_t dst_stride,
-                 const pixel (*const left)[4],
-                 const pixel *lpf, int w, int h,
-                 const LooprestorationParams *params,
-                 enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
-
-    static const struct { char name[4]; uint8_t idx; } sgr_data[3] = {
-        { "5x5", 14 },
-        { "3x3", 10 },
-        { "mix",  0 },
-    };
-
-    for (int i = 0; i < 3; i++) {
-        if (check_func(c->sgr[i], "sgr_%s_%dbpc", sgr_data[i].name, bpc)) {
-            const uint16_t *const sgr_params = dav2d_sgr_params[sgr_data[i].idx];
-            params.sgr.s0 = sgr_params[0];
-            params.sgr.s1 = sgr_params[1];
-            params.sgr.w0 = sgr_params[0] ? (rnd() & 127) - 96 : 0;
-            params.sgr.w1 = (sgr_params[1] ? 160 - (rnd() & 127) : 33) - params.sgr.w0;
-
-            const int base_w = 1 + (rnd() % 384);
-            const int base_h = 1 + (rnd() & 63);
-            const int bitdepth_max = (1 << bpc) - 1;
-
-            CLEAR_PIXEL_RECT(c_dst);
-            /* We potentially read 3 pixels to the left of the input
-             * pointer, and up to the max width, horizontally.
-             * (In the case of LR_HAVE_RIGHT we read 3 pixels past the
-             * input dimensions, but if LR_HAVE_RIGHT we have w == 256.)
-             * Therefore, initialize (384+4) x 64 pixels. */
-            init_tmp(c_dst - 4, c_dst_stride, 384 + 4, 64, bitdepth_max);
-            init_tmp(h_edge - 4, h_edge_stride, 384 + 4, 8, bitdepth_max);
-            init_tmp((pixel *) left, 4 * sizeof(pixel), 4, 64, bitdepth_max);
-
-            for (enum LrEdgeFlags edges = 0; edges <= 0xf; edges++) {
-                const int w = edges & LR_HAVE_RIGHT ? 256 : base_w;
-                const int h = edges & LR_HAVE_BOTTOM ? 64 : base_h;
-
-                assert(c_dst_stride == a_dst_stride);
-                assert(c_dst_buf_h == a_dst_buf_h);
-                memcpy(a_dst_buf, c_dst_buf, a_dst_stride * a_dst_buf_h);
-
-                assert(c_dst_stride == h_edge_stride);
-                call_ref(c_dst, c_dst_stride, left, h_edge,
-                         w, h, &params, edges HIGHBD_TAIL_SUFFIX);
-                call_new(a_dst, a_dst_stride, left, h_edge,
-                         w, h, &params, edges HIGHBD_TAIL_SUFFIX);
-                if (checkasm_check_pixel_padded_align(c_dst, c_dst_stride,
-                                                      a_dst, a_dst_stride,
-                                                      w, h, "dst", 64, 1))
-                {
-                    fprintf(stderr, "size = %dx%d, edges = %04d\n",
-                            w, h, to_binary(edges));
-                    break;
-                }
-            }
-            bench_new(alternate(c_dst, a_dst), a_dst_stride, left,
-                      h_edge, 256, 64, &params, 0xf HIGHBD_TAIL_SUFFIX);
-        }
-    }
-}
+#endif
 
 void bitfn(checkasm_check_looprestoration)(void) {
+#if 0
 #if BITDEPTH == 16
     const int bpc_min = 10, bpc_max = 12;
 #else
@@ -205,10 +139,5 @@ void bitfn(checkasm_check_looprestoration)(void) {
         check_wiener(&c, bpc);
     }
     report("wiener");
-    for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
-        Dav2dLoopRestorationDSPContext c;
-        bitfn(dav2d_loop_restoration_dsp_init)(&c, bpc);
-        check_sgr(&c, bpc);
-    }
-    report("sgr");
+#endif
 }

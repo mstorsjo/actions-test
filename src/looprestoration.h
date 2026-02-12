@@ -46,14 +46,6 @@ typedef const pixel (*const_left_pixel_row)[4];
 typedef const void *const_left_pixel_row;
 #endif
 
-typedef union LooprestorationParams {
-    ALIGN(int16_t filter[2][8], 16);
-    struct {
-        uint32_t s0, s1;
-        int16_t w0, w1;
-    } sgr;
-} LooprestorationParams;
-
 typedef union WienerParams {
     struct {
         const int8_t *filter;
@@ -76,14 +68,6 @@ typedef union WienerParams {
 // The filter functions are allowed to do aligned writes past the right
 // edge of the buffer, aligned up to the minimum loop restoration unit size
 // (which is 32 pixels for subsampled chroma and 64 pixels for luma).
-#define decl_lr_filter_fn(name) \
-void (name)(pixel *dst, ptrdiff_t dst_stride, \
-            const_left_pixel_row left, \
-            const pixel *lpf, int w, int h, \
-            const LooprestorationParams *params, \
-            enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
-typedef decl_lr_filter_fn(*looprestorationfilter_fn);
-
 #define decl_wiener_filter_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const_left_pixel_row left, \
@@ -96,9 +80,6 @@ typedef struct Dav2dLoopRestorationDSPContext {
     wienerfilter_fn ns_wiener_single;
     wienerfilter_fn ns_wiener_multi;
     wienerfilter_fn pc_wiener;
-
-    looprestorationfilter_fn wiener[2]; /* 7-tap, 5-tap */
-    looprestorationfilter_fn sgr[3]; /* 5x5, 3x3, mix */
 } Dav2dLoopRestorationDSPContext;
 
 bitfn_decls(void dav2d_loop_restoration_dsp_init, Dav2dLoopRestorationDSPContext *c, int bpc);
