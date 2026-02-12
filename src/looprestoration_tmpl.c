@@ -112,7 +112,8 @@ static void backup_row_lpf(pixel *dst, const pixel *src, const int w, const enum
 
 static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
                                  const pixel (*left)[4],
-                                 const pixel *lpf, const int w, int h,
+                                 const pixel *lpf, const pixel *lpf_bottom,
+                                 const int w, int h,
                                  const WienerParams *params,
                                  const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
@@ -120,14 +121,19 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
     pixel row_buffers[9][REST_UNIT_STRIDE];
     pixel *bak_rows[9];
     const pixel *ptrs[9];
-    const pixel *lpf_bottom = lpf + 6*PXSTRIDE(stride);
 
     for (int i = 0; i < 9; i++)
         bak_rows[i] = row_buffers[i] + 4;
 
     backup_row(bak_rows[4], p, left[0], w, edges);
     ptrs[4] = bak_rows[4];
-    if (edges & LR_HAVE_TOP) {
+    if (edges & LR_HAVE_TOP_INTEGRATED) {
+        for (int i = 0; i < 4; i++) {
+            backup_row_lpf(bak_rows[i], lpf, w, edges);
+            lpf += PXSTRIDE(stride);
+            ptrs[i] = bak_rows[i];
+        }
+    } else if (edges & LR_HAVE_TOP) {
         // y = -2,-1
         backup_row_lpf(bak_rows[2], lpf, w, edges);
         ptrs[2] = bak_rows[2];
@@ -151,6 +157,9 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
     for (int y = 0; y < h; y++) {
         if (y + 4 < h) {
             backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, edges);
+            ptrs[8] = bak_rows[bak_idx];
+        } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
+            backup_row_lpf(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), w, edges);
             ptrs[8] = bak_rows[bak_idx];
         } else if (y + 2 < h && edges & LR_HAVE_BOTTOM) {
             int offset_y = y + 4 - h;
@@ -251,7 +260,8 @@ static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t (*noskip_mask
 
 static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const pixel (*left)[4],
-                         const pixel *lpf, const int w, int h,
+                         const pixel *lpf, const pixel *lpf_bottom,
+                         const int w, int h,
                          const int8_t (*filters_user)[18],
                          const int16_t (*filters_pretrained)[13],
                          const uint8_t *subclass_lut,
@@ -265,14 +275,19 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
     pixel row_buffers[10][REST_UNIT_STRIDE];
     pixel *bak_rows[10];
     const pixel *ptrs[10];
-    const pixel *lpf_bottom = lpf + 6*PXSTRIDE(stride);
 
     for (int i = 0; i < 10; i++)
         bak_rows[i] = row_buffers[i] + 4;
 
     backup_row(bak_rows[4], p, left[0], w, edges);
     ptrs[4] = bak_rows[4];
-    if (edges & LR_HAVE_TOP) {
+    if (edges & LR_HAVE_TOP_INTEGRATED) {
+        for (int i = 0; i < 4; i++) {
+            backup_row_lpf(bak_rows[i], lpf, w, edges);
+            lpf += PXSTRIDE(stride);
+            ptrs[i] = bak_rows[i];
+        }
+    } else if (edges & LR_HAVE_TOP) {
         // y = -2,-1
         backup_row_lpf(bak_rows[2], lpf, w, edges);
         ptrs[2] = bak_rows[2];
@@ -303,6 +318,11 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
             ptrs[8] = bak_rows[bak_idx];
             backup_row(bak_rows[9], p + 5*PXSTRIDE(stride), left[(by << 2) + 5], w, edges);
             ptrs[9] = bak_rows[9];
+        } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
+            backup_row_lpf(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), w, edges);
+            ptrs[8] = bak_rows[bak_idx];
+            backup_row_lpf(bak_rows[9], p + 5*PXSTRIDE(stride), w, edges);
+            ptrs[9] = bak_rows[9];
         } else if (edges & LR_HAVE_BOTTOM) {
             backup_row_lpf(bak_rows[bak_idx], lpf_bottom + 0 * PXSTRIDE(stride), w, edges);
             ptrs[8] = bak_rows[bak_idx];
@@ -321,6 +341,9 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
         for (int y = by << 2; y < (by << 2) + 4; y++) {
             if (y + 4 < h) {
                 backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, edges);
+                ptrs[8] = bak_rows[bak_idx];
+            } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
+                backup_row_lpf(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), w, edges);
                 ptrs[8] = bak_rows[bak_idx];
             } else if (y + 2 < h && edges & LR_HAVE_BOTTOM) {
                 int offset_y = y + 4 - h;
@@ -370,24 +393,26 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
 
 static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
                               const pixel (*left)[4],
-                              const pixel *lpf, const int w, int h,
-                              const WienerParams *params,
+                              const pixel *lpf, const pixel *lpf_bottom,
+                              const int w, int h, const WienerParams *params,
                               const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
-    wiener_multi(p, stride, left, lpf, w, h, params->multi.filters.user, NULL,
-                 params->multi.subclass_lut, params->multi.noskip_mask, params->multi.base_q,
-                 edges HIGHBD_TAIL_SUFFIX);
+    wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
+                 params->multi.filters.user, NULL,
+                 params->multi.subclass_lut, params->multi.noskip_mask,
+                 params->multi.base_q, edges HIGHBD_TAIL_SUFFIX);
 }
 
 static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
                         const pixel (*left)[4],
-                        const pixel *lpf, const int w, int h,
-                        const WienerParams *params,
+                        const pixel *lpf, const pixel *lpf_bottom,
+                        const int w, int h, const WienerParams *params,
                         const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
-    wiener_multi(p, stride, left, lpf, w, h, NULL, params->multi.filters.pretrained,
-                 params->multi.subclass_lut, params->multi.noskip_mask, params->multi.base_q,
-                 edges HIGHBD_TAIL_SUFFIX);
+    wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
+                 NULL, params->multi.filters.pretrained,
+                 params->multi.subclass_lut, params->multi.noskip_mask,
+                 params->multi.base_q, edges HIGHBD_TAIL_SUFFIX);
 }
 
 #if HAVE_ASM && 0

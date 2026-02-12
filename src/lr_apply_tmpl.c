@@ -33,10 +33,18 @@
 
 #include "src/lr_apply.h"
 
+enum FirstSbInTileRow {
+    FIRST_SB_NONE = 0,
+    FIRST_SB_TOP,
+    FIRST_SB_BOTTOM,
+};
+
 static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                       const pixel (*left)[4], int x, int y,
                       const int plane, const int unit_w, const int row_h,
-                      const Av2RestorationUnit *const lr, enum LrEdgeFlags edges)
+                      const Av2RestorationUnit *const lr, enum LrEdgeFlags edges,
+                      const enum FirstSbInTileRow first_sby_in_tile_row,
+                      const int tile_row_m1)
 {
     const Dav2dDSPContext *const dsp = f->dsp;
     const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[0].ns;
@@ -47,9 +55,13 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const int have_tt = f->c->n_tc > 1;
     const pixel *lpf = f->lf.lr_lpf_line[plane] +
         have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(stride) + x;
+    const pixel *top =
+        ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
+                  (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ?
+        f->lf.lr_cdef_line[plane] + tile_row_m1 * 4 * PXSTRIDE(stride) + x : NULL;
 
     // The first stripe of the frame is shorter by 8 luma pixel rows.
-    int stripe_h = imin((64 - 8 * !y) >> ss_ver, row_h - y);
+    int stripe_h = imin((64 - 8 * !!first_sby_in_tile_row) >> ss_ver, row_h - y);
 
     wienerfilter_fn wiener_fn;
     WienerParams wiener_params;
@@ -108,7 +120,10 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     while (y + stripe_h <= row_h) {
         // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
-        wiener_fn(p, stride, left, lpf, unit_w, stripe_h, &wiener_params, edges HIGHBD_CALL_SUFFIX);
+        wiener_fn(p, stride, left, top ? top : lpf,
+                  lpf + 6 * PXSTRIDE(stride), unit_w, stripe_h, &wiener_params,
+                  edges HIGHBD_CALL_SUFFIX);
+        edges &= ~(LR_HAVE_BOTTOM_INTEGRATED | LR_HAVE_TOP_INTEGRATED);
         left += stripe_h;
         y += stripe_h;
         if (multi_wiener) {
@@ -119,6 +134,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         stripe_h = imin(64 >> ss_ver, row_h - y);
         if (stripe_h == 0) break;
         lpf += 4 * PXSTRIDE(stride);
+        top = NULL;
     }
 }
 
@@ -130,7 +146,9 @@ static void backup4xU(pixel (*dst)[4], const pixel *src, const ptrdiff_t src_str
 }
 
 static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
-                     const int w, const int h, const int row_h, const int plane)
+                     const int w, const int h, const int row_h, const int plane,
+                     const enum FirstSbInTileRow first_sby_in_tile_row,
+                     const int tile_row_m1)
 {
     const int chroma = !!plane;
     const int ss_ver = chroma & (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
@@ -143,7 +161,7 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     const int max_unit_size = unit_size + half_unit_size;
 
     // Y coordinate of the sbrow (y is 8 luma pixel rows above row_y)
-    const int row_y = y + ((8 >> ss_ver) * !!y);
+    const int row_y = y + ((8 >> ss_ver) * !first_sby_in_tile_row);
 
     // FIXME This is an ugly hack to lookup the proper AV2Filter unit for
     // chroma planes. Question: For Multithreaded decoding, is it better
@@ -159,6 +177,8 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     const Av2RestorationUnit *lr[2];
 
     enum LrEdgeFlags edges = (y > 0 ? LR_HAVE_TOP : 0) | LR_HAVE_RIGHT;
+    if (first_sby_in_tile_row == FIRST_SB_TOP) edges |= LR_HAVE_BOTTOM_INTEGRATED;
+    if (first_sby_in_tile_row == FIRST_SB_BOTTOM && y > 0) edges |= LR_HAVE_TOP_INTEGRATED;
 
     int aligned_unit_pos = row_y & ~(unit_size - 1);
     if (aligned_unit_pos && aligned_unit_pos + half_unit_size > h)
@@ -179,22 +199,27 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
             backup4xU(pre_lr_border[bit], p + unit_size - 4, p_stride, row_h - y);
         if (restore)
             lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, unit_size, row_h,
-                      lr[bit], edges);
+                      lr[bit], edges, first_sby_in_tile_row, tile_row_m1);
         x = next_x;
         restore = restore_next;
     }
     if (restore) {
         edges &= ~LR_HAVE_RIGHT;
         const int unit_w = w - x;
-        lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, unit_w, row_h, lr[bit], edges);
+        lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, unit_w, row_h,
+                  lr[bit], edges, first_sby_in_tile_row, tile_row_m1);
     }
 }
 
+static inline void copy4lines(pixel *dst, const pixel *src, const ptrdiff_t stride) {
+    memcpy(dst, src, stride * 4);
+}
+
 void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
-                            const int sby)
+                            const int sby, const int tile_row)
 {
     // TODO: strips starting at each tile row need to be shorted, not just the first row.
-    const int offset_y = 8 * !!sby;
+    const Dav2dFrameHeader *const hdr = f->frame_hdr;
     const ptrdiff_t *const dst_stride = f->cur.p.stride;
     const int restore_planes = f->lf.restore_planes;
     const int not_last = sby + 1 < f->sbh;
@@ -203,10 +228,23 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
         const int h = f->bh * 4;
         const int w = f->bw * 4;
         const int next_row_y = (sby + 1) << (6 + f->frame_hdr->sb128);
-        const int row_h = imin(next_row_y - 8 * not_last, h);
-        const int y_stripe = (sby << (6 + f->frame_hdr->sb128)) - offset_y;
+        int row_h = imin(next_row_y - 8 * not_last, h);
+        const int first_sby_in_tile_row =
+            sby == hdr->tiling.t.row_start_sb[tile_row];
+        int offset_y = 8 * !!sby;
+        int y_stripe = (sby << (6 + f->frame_hdr->sb128)) - offset_y;
+        if (sby && first_sby_in_tile_row) {
+            copy4lines(&f->lf.lr_cdef_line[0][4 * PXSTRIDE(dst_stride[0]) * (tile_row - 1)],
+                       dst[0] - 4 * PXSTRIDE(dst_stride[0]), dst_stride[0]);
+            lr_sbrow(f, dst[0] - offset_y * PXSTRIDE(dst_stride[0]), y_stripe, w,
+                     h, y_stripe + 8, 0, first_sby_in_tile_row * FIRST_SB_TOP,
+                     tile_row - 1);
+            offset_y = 0;
+            y_stripe += 8;
+        }
         lr_sbrow(f, dst[0] - offset_y * PXSTRIDE(dst_stride[0]), y_stripe, w,
-                 h, row_h, 0);
+                 h, row_h, 0, first_sby_in_tile_row * FIRST_SB_BOTTOM,
+                 tile_row - 1);
     }
 #if 0
     if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {

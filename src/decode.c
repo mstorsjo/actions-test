@@ -4606,15 +4606,21 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
     const int sb256 = f->frame_hdr->sb128;
     const int num_lines = c->n_tc > 1 ? f->sbh * 4 << sb256 : 20;
+    // FIXME double this with threading enabled
+    const int n_tile_rows_m1 = f->frame_hdr->tiling.t.rows - 1;
     y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
-        uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1])
+        uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1] ||
+        y_stride * 4 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[2] ||
+        uv_stride * 8 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[3])
     {
         dav2d_free_aligned(f->lf.lr_line_buf);
         // lr simd may overread the input, so slightly over-allocate the lpf buffer
         size_t alloc_sz = 128;
         alloc_sz += (size_t)llabs(y_stride) * num_lines;
         alloc_sz += (size_t)llabs(uv_stride) * num_lines * 2;
+        alloc_sz += (size_t)llabs(y_stride) * n_tile_rows_m1 * 4;
+        alloc_sz += (size_t)llabs(uv_stride) * n_tile_rows_m1 * 8;
         uint8_t *ptr = f->lf.lr_line_buf = dav2d_alloc_aligned(ALLOC_LR, alloc_sz, 64);
         if (!ptr) {
             f->lf.lr_buf_plane_sz[0] = f->lf.lr_buf_plane_sz[1] = 0;
@@ -4634,9 +4640,17 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             f->lf.lr_lpf_line[1] = ptr;
             f->lf.lr_lpf_line[2] = ptr + uv_stride * num_lines;
         }
+        ptr += llabs(uv_stride) * num_lines * 2;
+        // FIXME make the below work with negative stride
+        f->lf.lr_cdef_line[0] = ptr;
+        ptr += llabs(y_stride) * n_tile_rows_m1 * 4;
+        f->lf.lr_cdef_line[1] = ptr;
+        f->lf.lr_cdef_line[2] = ptr + llabs(uv_stride) * n_tile_rows_m1 * 4;
 
         f->lf.lr_buf_plane_sz[0] = (int) y_stride * num_lines;
         f->lf.lr_buf_plane_sz[1] = (int) uv_stride * num_lines * 2;
+        f->lf.lr_buf_plane_sz[2] = (int) y_stride * n_tile_rows_m1 * 4;
+        f->lf.lr_buf_plane_sz[3] = (int) uv_stride * n_tile_rows_m1 * 8;
     }
 
     // update allocation for loopfilter masks
@@ -4842,7 +4856,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         // post filters (deblock + cdef + ccso + ...)
         // do this after completing full tiles, so that intra bc works correctly
         for (int sby = sby_start; sby < sbh_end; sby++) {
-            f->bd_fn.filter_sbrow(f, sby);
+            f->bd_fn.filter_sbrow(f, sby, tile_row);
         }
     }
 

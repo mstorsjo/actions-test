@@ -38,6 +38,11 @@ enum LrEdgeFlags {
     LR_HAVE_RIGHT = 1 << 1,
     LR_HAVE_TOP = 1 << 2,
     LR_HAVE_BOTTOM = 1 << 3,
+    // top (or bottom) edges are at tile row boundaries and consist of
+    // post-cdef/ccso instead of pre-cdef/ccso data. This also means they
+    // contain 4 lines of pixel data instead of 2.
+    LR_HAVE_TOP_INTEGRATED = 1 << 4,
+    LR_HAVE_BOTTOM_INTEGRATED = 1 << 5,
 };
 
 #ifdef BITDEPTH
@@ -71,7 +76,7 @@ typedef union WienerParams {
 #define decl_wiener_filter_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const_left_pixel_row left, \
-            const pixel *lpf, int w, int h, \
+            const pixel *top, const pixel *bottom, int w, int h, \
             const WienerParams *params, \
             enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);

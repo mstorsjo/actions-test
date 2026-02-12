@@ -885,7 +885,7 @@ void *dav2d_worker_task(void *data) {
             // fall-through
         case DAV2D_TASK_TYPE_LOOP_RESTORATION:
             if (!atomic_load(&f->task_thread.error) && f->lf.restore_planes)
-                f->bd_fn.filter_sbrow_lr(f, sby);
+                f->bd_fn.filter_sbrow_lr(f, sby, 0 /* FIXME */);
             // fall-through
         case DAV2D_TASK_TYPE_RECONSTRUCTION_PROGRESS:
             // dummy to cover for no post-filters

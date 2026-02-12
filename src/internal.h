@@ -273,11 +273,11 @@ struct Dav2dFrameContext {
     const Dav2dDSPContext *dsp;
     struct {
         recon_b_fn recon_b;
-        filter_sbrow_fn filter_sbrow;
+        filter_sbrow_w_tile_fn filter_sbrow;
         filter_sbrow_fn filter_sbrow_deblock_cols;
         filter_sbrow_fn filter_sbrow_deblock_rows;
         void (*filter_sbrow_cdef)(Dav2dTaskContext *tc, int sby);
-        filter_sbrow_fn filter_sbrow_lr;
+        filter_sbrow_w_tile_fn filter_sbrow_lr;
         backup_ipred_edge_fn backup_ipred_edge;
         read_coef_blocks_fn read_coef_blocks;
         copy_pal_block_fn copy_pal_block_y;
@@ -323,7 +323,9 @@ struct Dav2dFrameContext {
         int mask_sz /* w*h */, lr_mask_sz;
         int cdef_buf_plane_sz[2]; /* stride*sbh*4 */
         int cdef_buf_sbh;
-        int lr_buf_plane_sz[2]; /* (stride*sbh*4) << sb128 if n_tc > 1, else stride*4 */
+        /* 0-1: (stride*sbh*4) << sb128 if n_tc > 1, else stride*4;
+         * 2-3: stride*(n_tile_rows-1)*4 if n_tc==1, double that otherwise */
+        int lr_buf_plane_sz[4];
         int re_sz /* h */;
         ALIGN(Av2FilterLUT thr_lut, 16);
         int base_q;
@@ -334,6 +336,7 @@ struct Dav2dFrameContext {
         uint8_t *cdef_line_buf, *lr_line_buf;
         pixel *cdef_line[2 /* pre, post */][3 /* plane */];
         pixel *lr_lpf_line[3 /* plane */];
+        pixel *lr_cdef_line[3 /* plane */];
 
         // in-loop filter per-frame state keeping
         uint8_t *start_of_tile_row;
