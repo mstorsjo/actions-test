@@ -71,6 +71,7 @@ EXTERN const int16_t dav2d_deblock_side_thresholds[296];
 EXTERN const int8_t dav2d_cdef_directions[12][2];
 
 EXTERN const uint16_t dav2d_ccso_quant_sz[4][4];
+EXTERN const int8_t dav2d_ccso_offset[4][8];
 
 EXTERN const unsigned dav2d_subset_masks_y[4];
 EXTERN const unsigned dav2d_subset_masks_uv[3];

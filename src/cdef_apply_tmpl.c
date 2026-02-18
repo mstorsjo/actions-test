@@ -359,6 +359,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                         dsp->ccso.add(iptrs[pl], f->cur.p.stride[!!pl],
                                       ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),
                                       f->frame_hdr->ccso.p[pl].filter_off,
+                                      dav2d_ccso_offset[f->frame_hdr->ccso.p[pl].scale_idx],
                                       w >> (!!pl * ss_hor), 8 >> (!!pl * ss_ver)
                                       HIGHBD_CALL_SUFFIX);
                     }

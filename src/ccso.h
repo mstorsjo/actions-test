@@ -42,8 +42,8 @@ typedef decl_ccso_prep_fn(*ccso_prep_fn);
 
 #define decl_ccso_add_fn(name) \
 void (name)(pixel *dst, const ptrdiff_t dst_stride, const uint8_t *idx, \
-            ptrdiff_t idx_stride, const int8_t *filter_offsets, int w, int h \
-            HIGHBD_DECL_SUFFIX)
+            ptrdiff_t idx_stride, const uint8_t *offset_idxs, \
+            const int8_t *offset_lut, int w, int h HIGHBD_DECL_SUFFIX)
 typedef decl_ccso_add_fn(*ccso_add_fn);
 
 typedef struct Dav2dCcsoDSPContext {

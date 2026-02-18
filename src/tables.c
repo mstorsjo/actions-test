@@ -393,6 +393,13 @@ const uint16_t dav2d_ccso_quant_sz[4 /* scale */][4 /* quant_idx */] = {
     { 80, 112, 160, 256 }
 };
 
+const int8_t dav2d_ccso_offset[4][8] = {
+    {    0,   1,  -1,   3,  -3,   7,  -7, -10 },
+    {    0,   2,  -2,   6,  -6,  14, -14, -20 },
+    {    0,   3,  -3,   9,  -9,  21, -21, -30 },
+    {    0,   4,  -4,  12, -12,  28, -28, -40 },
+};
+
 const unsigned dav2d_subset_masks_y[4] = { 0x3f, 0xfc3, 0xfff, 0xffff };
 const unsigned dav2d_subset_masks_uv[3] = { 0x3f, 0x3ff, 0x3ffff };
 

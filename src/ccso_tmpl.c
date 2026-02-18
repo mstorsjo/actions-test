@@ -28,6 +28,7 @@
 #include "config.h"
 
 #include "ccso.h"
+#include "tables.h"
 
 #include "common/bitdepth.h"
 #include "common/intops.h"
@@ -144,12 +145,17 @@ ccso_prep_fn(0, 0, 444);
 
 static void ccso_add_c(pixel *dst, const ptrdiff_t dst_stride,
                        const uint8_t *idx, const ptrdiff_t idx_stride,
-                       const int8_t *const filter_offsets, const int w, const int h
-                       HIGHBD_DECL_SUFFIX)
+                       const uint8_t *const offset_idxs,
+                       const int8_t *const offset_lut,
+                       const int w, const int h HIGHBD_DECL_SUFFIX)
 {
     for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++)
-            dst[x] = iclip_pixel(dst[x] + filter_offsets[idx[x]]);
+        for (int x = 0; x < w; x++) {
+            int byte_idx = idx[x] >> 1;
+            int half_idx = idx[x] & 1;
+            int offset_idx = 7 & (offset_idxs[byte_idx] >> (4 * half_idx));
+            dst[x] = iclip_pixel(dst[x] + offset_lut[offset_idx]);
+        }
         dst += PXSTRIDE(dst_stride);
         idx += idx_stride;
     }

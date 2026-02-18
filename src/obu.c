@@ -1798,16 +1798,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                     const int max_band = 1 << hdr->ccso.p[p].max_band_log2;
                     memset(hdr->ccso.p[p].filter_off, 0, sizeof(hdr->ccso.p[p].filter_off));
                     for (int n = 0; n < n_edge_off_intervals; n++) {
-                        int8_t *filter_off = &hdr->ccso.p[p].filter_off[n * 32];
-                        for (int m = 0; m < n_edge_off_intervals; m++, filter_off += 8) {
+                        uint8_t *filter_off = &hdr->ccso.p[p].filter_off[n * 16];
+                        for (int m = 0; m < n_edge_off_intervals; m++, filter_off += 4) {
                             for (int o = 0; o < max_band; o++) {
                                 int off = 0;
                                 for (; off < 7; off++)
                                     if (!dav2d_get_bit(gb)) break;
-                                static const int8_t ccso_offset[8] = {
-                                    0, 1, -1, 3, -3, 7, -7, -10
-                                };
-                                filter_off[o] = ccso_offset[off] * (si + 1);
+                                filter_off[o >> 1] |= off << (4 * (o & 1));
                             }
                         }
                     }
