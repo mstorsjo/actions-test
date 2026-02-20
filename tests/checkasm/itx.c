@@ -159,7 +159,7 @@ static const uint8_t valid_txtp_per_txsz[N_RECT_TX_SIZES][29] = {
     [RTX_64X4]  = { TXTP_MASK_DCT_HOR },
 };
 
-static void check_itxfm_add(Dav2dInvTxfmDSPContext *const c,
+static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                             const enum RectTxfmSize tx)
 {
     ALIGN_STK_64(coef, coeff, 2, [32 * 32]);
@@ -173,64 +173,61 @@ static void check_itxfm_add(Dav2dInvTxfmDSPContext *const c,
     const int sw = imin(w, 32), sh = imin(h, 32);
     const int subsh_max = subsh_iters[imax(dav2d_txfm_dimensions[tx].lw,
                                            dav2d_txfm_dimensions[tx].lh)];
-#if BITDEPTH == 16
-    const int bpc_min = 10, bpc_max = 12;
-#else
-    const int bpc_min = 8, bpc_max = 8;
-#endif
     pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, coef *coeff,
                  enum TxfmType txtp, int eob HIGHBD_DECL_SUFFIX);
 
-    for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
-        /* Always using the largest possible coef_max just results in
-         * most of the output being clipped to either 0 or bitdepth_max.
-         * Randomize the range a bit to cover more scenarios. */
-        const int coef_max = (1 << ((rnd() % (bpc + 5)) + 4)) - 1;
-        const int bitdepth_max = (1 << bpc) - 1;
-        bitfn(dav2d_itx_dsp_init)(c, bpc);
+    /* Always using the largest possible coef_max just results in
+     * most of the output being clipped to either 0 or bitdepth_max.
+     * Randomize the range a bit to cover more scenarios. */
+#if BITDEPTH == 16
+    const int bpc = (rnd() & 1) ? 10 : 12;
+#else
+    const int bpc = 8;
+#endif
+    const int coef_max = (1 << ((rnd() % (bpc + 5)) + 4)) - 1;
+    const int bitdepth_max = (1 << bpc) - 1;
 
-        for (int txtp_idx = 0; valid_txtp_per_txsz[tx][txtp_idx] != 0xff;
-             txtp_idx++)
-        {
-            const enum TxfmType txtp = valid_txtp_per_txsz[tx][txtp_idx];
-            const enum Tx1dType hor1d = txtp & 0x7, ver1d = txtp >> 5;
-            for (int subsh = !!txtp; subsh < subsh_max; subsh++)
-                if (check_func(txtp == WHT_WHT ? c->iwht_add_4x4: c->itxfm_add[tx],
-                               "inv_txfm_add_%dx%d_%s_%s_%d_%dbpc",
-                               w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
-                               subsh, bpc))
-                {
-                    int max_eob;
-                    const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
-                                                   subsh, &max_eob, coef_max);
-                    memcpy(coeff[1], coeff[0], sizeof(*coeff));
+    for (int txtp_idx = 0; valid_txtp_per_txsz[tx][txtp_idx] != 0xff;
+         txtp_idx++)
+    {
+        const enum TxfmType txtp = valid_txtp_per_txsz[tx][txtp_idx];
+        const enum Tx1dType hor1d = txtp & 0x7, ver1d = txtp >> 5;
+        for (int subsh = !!txtp; subsh < subsh_max; subsh++)
+            if (check_func(txtp == WHT_WHT ? c->iwht_add_4x4: c->itxfm_add[tx],
+                           "inv_txfm_add_%dx%d_%s_%s_%d_%dbpc",
+                           w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
+                           subsh, BITDEPTH))
+            {
+                int max_eob;
+                const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
+                                               subsh, &max_eob, coef_max);
+                memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
-                    CLEAR_PIXEL_RECT(c_dst);
-                    CLEAR_PIXEL_RECT(a_dst);
+                CLEAR_PIXEL_RECT(c_dst);
+                CLEAR_PIXEL_RECT(a_dst);
 
-                    for (int y = 0; y < h; y++)
-                        for (int x = 0; x < w; x++)
-                            c_dst[y*PXSTRIDE(c_dst_stride) + x] =
-                            u_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        c_dst[y*PXSTRIDE(c_dst_stride) + x] =
+                        u_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
 
-                    call_ref(c_dst, c_dst_stride, coeff[0], txtp, eob
-                             HIGHBD_TAIL_SUFFIX);
-                    call_new(u_dst, a_dst_stride, coeff[1], txtp, eob
-                             HIGHBD_TAIL_SUFFIX);
+                call_ref(c_dst, c_dst_stride, coeff[0], txtp, eob
+                         HIGHBD_TAIL_SUFFIX);
+                call_new(u_dst, a_dst_stride, coeff[1], txtp, eob
+                         HIGHBD_TAIL_SUFFIX);
 
-                    checkasm_check_pixel_padded(c_dst, c_dst_stride,
-                                                u_dst, a_dst_stride,
-                                                w, h, "dst");
-                    if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
-                        fail();
+                checkasm_check_pixel_padded(c_dst, c_dst_stride,
+                                            u_dst, a_dst_stride,
+                                            w, h, "dst");
+                if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
+                    fail();
 
-                    bench_new(alternate(c_dst, a_dst), a_dst_stride,
-                              alternate(coeff[0], coeff[1]), txtp,
-                              max_eob HIGHBD_TAIL_SUFFIX);
-                }
-        }
+                bench_new(alternate(c_dst, a_dst), a_dst_stride,
+                          alternate(coeff[0], coeff[1]), txtp,
+                          max_eob HIGHBD_TAIL_SUFFIX);
+            }
     }
 }
 
@@ -251,6 +248,7 @@ void bitfn(checkasm_check_itx)(void) {
     };
 
     Dav2dInvTxfmDSPContext c;
+    bitfn(dav2d_itx_dsp_init)(&c);
 
     const uint8_t *txfm = txfm_size_order;
     for (int i = 0; i < 5; i++) {

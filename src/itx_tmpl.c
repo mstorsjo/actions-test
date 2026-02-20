@@ -247,7 +247,7 @@ static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
 #endif
 #endif
 
-COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c, int bpc) {
+COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c) {
 #define assign_itx(w, h, pfx) \
     c->itxfm_add[pfx##TX_##w##X##h] = inv_txfm_add_##w##x##h##_c
 
@@ -283,19 +283,19 @@ COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c, int bpc) {
 #if 0
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-    itx_dsp_init_arm(c, bpc, &all_simd);
+    itx_dsp_init_arm(c, &all_simd);
 #endif
 #if ARCH_LOONGARCH64
-    itx_dsp_init_loongarch(c, bpc);
+    itx_dsp_init_loongarch(c);
 #endif
 #if ARCH_PPC64LE
-    itx_dsp_init_ppc(c, bpc);
+    itx_dsp_init_ppc(c);
 #endif
 #if ARCH_RISCV
-    itx_dsp_init_riscv(c, bpc);
+    itx_dsp_init_riscv(c);
 #endif
 #if ARCH_X86
-    itx_dsp_init_x86(c, bpc, &all_simd);
+    itx_dsp_init_x86(c, &all_simd);
 #endif
 #endif
 #endif

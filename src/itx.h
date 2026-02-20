@@ -64,7 +64,7 @@ typedef struct Dav2dInvTxfmDSPContext {
     itxfm_fn iwht_add_4x4;
 } Dav2dInvTxfmDSPContext;
 
-bitfn_decls(void dav2d_itx_dsp_init, Dav2dInvTxfmDSPContext *c, int bpc);
+bitfn_decls(void dav2d_itx_dsp_init, Dav2dInvTxfmDSPContext *c);
 
 #define assign_itx_fn(pfx, w, h, ext) \
     c->itxfm_add[pfx##TX_##w##X##h] = BF(dav2d_inv_txfm_add_##w##x##h, ext)

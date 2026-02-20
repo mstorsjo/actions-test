@@ -5055,7 +5055,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_ccso_dsp_init_##bd##bpc(&dsp->ccso); \
             dav2d_cdef_dsp_init_##bd##bpc(&dsp->cdef); \
             dav2d_intra_pred_dsp_init_##bd##bpc(&dsp->ipred); \
-            dav2d_itx_dsp_init_##bd##bpc(&dsp->itx, bpc); \
+            dav2d_itx_dsp_init_##bd##bpc(&dsp->itx); \
             dav2d_stx_dsp_init_##bd##bpc(&dsp->stx); \
             dav2d_loop_filter_dsp_init_##bd##bpc(&dsp->lf); \
             dav2d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr, bpc); \
