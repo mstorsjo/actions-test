@@ -594,7 +594,9 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     hdr->restoration = dav2d_get_bit(gb);
 
     if (hdr->restoration) {
-        hdr->rst_disable_mask[0] = dav2d_get_bits(gb, 2);
+        unsigned no_pc_wiener = dav2d_get_bit(gb);
+        unsigned no_ns_wiener_y = dav2d_get_bit(gb);
+        hdr->rst_disable_mask[0] = (no_ns_wiener_y << 1) | no_pc_wiener;
         if (dav2d_get_bit(gb)) {
             hdr->rst_disable_mask[1] = (dav2d_get_bit(gb) << 1) | 1;
         } else {
