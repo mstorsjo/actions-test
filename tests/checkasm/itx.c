@@ -231,6 +231,51 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
     }
 }
 
+static void check_cctx(const Dav2dInvTxfmDSPContext *const c) {
+    ALIGN_STK_64(coef, c_coef, 2, [33 * 32]);
+    ALIGN_STK_64(coef, a_coef, 2, [33 * 32]);
+
+    declare_func(void, coef *u, coef *v, const int16_t angle[3],
+                 size_t sz HIGHBD_DECL_SUFFIX);
+
+    if (check_func(c->cctx, "cctx_%dbpc", BITDEPTH)) {
+#if BITDEPTH == 16
+        const int bpc = (rnd() & 1) ? 10 : 12;
+        const int bitdepth_max = (1 << bpc) - 1;
+#else
+        const int bpc = 8;
+#endif
+        const int coef_max = (1 << (bpc + 8)) - 1;
+        const int coef_sign = (coef_max + 1) >> 1;
+        for (int sz = 4 * 4; sz <= 32 * 32; sz <<= 1)
+        {
+            const int16_t *const angle = dav2d_cctx_angle[rnd() % 6];
+            for (int i = 0; i <= sz; i++) {
+                c_coef[0][i] = (rnd() & coef_max) - coef_sign;
+                c_coef[1][i] = (rnd() & coef_max) - coef_sign;
+            }
+            /* +1 to check for buffer overwrite */
+            const size_t mem_sz = sizeof(coef) * (sz + 1);
+            memcpy(a_coef[0], c_coef[0], mem_sz);
+            memcpy(a_coef[1], c_coef[1], mem_sz);
+
+            call_ref(c_coef[0], c_coef[1], angle, sz HIGHBD_TAIL_SUFFIX);
+            call_new(a_coef[0], a_coef[1], angle, sz HIGHBD_TAIL_SUFFIX);
+            if (memcmp(c_coef[0], a_coef[0], mem_sz) ||
+                memcmp(c_coef[1], a_coef[1], mem_sz))
+            {
+                fail();
+            }
+
+            if (sz == 16 * 16)
+                bench_new(alternate(c_coef[0], a_coef[0]),
+                          alternate(c_coef[1], a_coef[1]),
+                          angle, sz HIGHBD_TAIL_SUFFIX);
+        }
+    }
+    report("cctx");
+}
+
 void bitfn(checkasm_check_itx)(void) {
     static const uint8_t txfm_size_order[N_RECT_TX_SIZES] = {
         // tx4
@@ -257,4 +302,6 @@ void bitfn(checkasm_check_itx)(void) {
         report("add_tx%d", 4 << i);
     }
     assert(txfm == &txfm_size_order[N_RECT_TX_SIZES]);
+
+    check_cctx(&c);
 }
