@@ -178,6 +178,7 @@ static void check_itxfm_add(Dav2dInvTxfmDSPContext *const c,
 #else
     const int bpc_min = 8, bpc_max = 8;
 #endif
+    pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, coef *coeff,
                  enum TxfmType txtp, int eob HIGHBD_DECL_SUFFIX);
@@ -212,15 +213,15 @@ static void check_itxfm_add(Dav2dInvTxfmDSPContext *const c,
                     for (int y = 0; y < h; y++)
                         for (int x = 0; x < w; x++)
                             c_dst[y*PXSTRIDE(c_dst_stride) + x] =
-                            a_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
+                            u_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
 
                     call_ref(c_dst, c_dst_stride, coeff[0], txtp, eob
                              HIGHBD_TAIL_SUFFIX);
-                    call_new(a_dst, a_dst_stride, coeff[1], txtp, eob
+                    call_new(u_dst, a_dst_stride, coeff[1], txtp, eob
                              HIGHBD_TAIL_SUFFIX);
 
                     checkasm_check_pixel_padded(c_dst, c_dst_stride,
-                                                a_dst, a_dst_stride,
+                                                u_dst, a_dst_stride,
                                                 w, h, "dst");
                     if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
                         fail();
