@@ -57,7 +57,7 @@ EXTERN const int8_t dav2d_tx_part_tbl[N_BS_SIZES][8];
 EXTERN const uint8_t /* enum TxfmType */
                      dav2d_txtp_from_uvmode[N_UV_INTRA_PRED_MODES];
 
-EXTERN const int16_t dav2d_cctx_angle[6][2];
+EXTERN const int16_t dav2d_cctx_angle[6][3];
 
 EXTERN const uint8_t dav2d_mode_to_angle_map[8];
 

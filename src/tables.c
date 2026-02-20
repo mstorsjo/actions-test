@@ -329,16 +329,14 @@ const uint8_t /* enum TxfmType */
     [PAETH_PRED]           = ADST_ADST,
 };
 
-// Given a rotation angle a, the CCTX transform matrix is defined as
-// [cos(t), sin(t); -sin(t), cos(t)] * 1<<CCTX_PREC_BITS). The array below only
-// stores two values: cos(t) and sin(t) for each rotation angle.
-const int16_t dav2d_cctx_angle[6][2] = {
-    { 181,  181 }, // 45 degrees
-    { 222,  128 }, // 30 degrees
-    { 128,  222 }, // 60 degrees
-    { 181, -181 }, // -45 degrees
-    { 222, -128 }, // -30 degrees
-    { 128, -222 }, // -60 degrees
+/* sin(t), cos(t), -sin(t) */
+const int16_t dav2d_cctx_angle[6][3] = {
+    {  181,  181, -181 }, //  45 degrees
+    {  128,  222, -128 }, //  30 degrees
+    {  222,  128, -222 }, //  60 degrees
+    { -181,  181,  181 }, // -45 degrees
+    { -128,  222,  128 }, // -30 degrees
+    { -222,  128,  222 }, // -60 degrees
 };
 
 const uint8_t dav2d_mode_to_angle_map[8] = {

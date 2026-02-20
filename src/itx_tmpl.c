@@ -40,15 +40,16 @@
 #include "src/scan.h"
 #include "src/tables.h"
 
-static void cctx_c(coef *const u, coef *const v, const int16_t angle[2],
+static void cctx_c(coef *const u, coef *const v, const int16_t angle[3],
                    const size_t sz HIGHBD_DECL_SUFFIX)
 {
     assert(!(sz & (sz - 1)) && sz >= 4 * 4 && sz <= 32 * 32);
     const int bd = bitdepth_from_max(bitdepth_max);
     const int min = -(1 << (bd + 7));
     const int max = (1 << (bd + 7)) - 1;
-    const int cosa = angle[0];
-    const int sina = angle[1];
+    const int sina = angle[0];
+    const int cosa = angle[1];
+    assert(angle[2] == -sina);
     for (size_t i = 0; i < sz; i++) {
         const int a = u[i] * cosa - v[i] * sina;
         const int b = u[i] * sina + v[i] * cosa;

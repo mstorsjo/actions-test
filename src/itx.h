@@ -35,7 +35,7 @@
 #include "src/levels.h"
 
 #define decl_cctx_fn(name) \
-void (name)(coef *u, coef *v, const int16_t angle[2], \
+void (name)(coef *u, coef *v, const int16_t angle[3], \
             size_t sz HIGHBD_DECL_SUFFIX)
 typedef decl_cctx_fn(*cctx_fn);
 
