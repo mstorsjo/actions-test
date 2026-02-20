@@ -1623,7 +1623,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             b->mrl_index = b->multi_mrl = 0;
-            if (midx != 0xff /* directional mode */) {
+            if (midx != 0xff /* directional mode */ && f->seq_hdr->mrls) {
                 const int ctx = (boff[0] == -1 ? 0 : nb[0]->mrl[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->mrl[boff[1]]);
                 b->mrl_index = dav2d_msac_decode_symbol_adapt4(&ts->msac,
