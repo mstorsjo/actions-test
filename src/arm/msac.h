@@ -28,10 +28,7 @@
 #ifndef DAV2D_SRC_ARM_MSAC_H
 #define DAV2D_SRC_ARM_MSAC_H
 
-unsigned dav2d_msac_decode_hi_tok_neon(MsacContext *s, uint16_t *cdf);
 unsigned dav2d_msac_decode_bool_adapt_neon(MsacContext *s, uint16_t *cdf);
-unsigned dav2d_msac_decode_bool_equi_neon(MsacContext *s);
-unsigned dav2d_msac_decode_bool_neon(MsacContext *s, unsigned f);
 unsigned dav2d_msac_decode_bool_bypass_neon(MsacContext *s);
 unsigned dav2d_msac_decode_bools_bypass_neon(MsacContext *s, unsigned n_bits);
 unsigned dav2d_msac_decode_unary_bypass_neon(MsacContext *s, unsigned max_bits);
