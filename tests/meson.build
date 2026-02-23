@@ -51,10 +51,10 @@ if is_asm_enabled and checkasm_dependency.found()
 
     checkasm_tmpl_sources = files(
         'checkasm/cdef.c',
+        'checkasm/deblock.c',
         'checkasm/filmgrain.c',
         'checkasm/ipred.c',
         'checkasm/itx.c',
-        'checkasm/loopfilter.c',
         'checkasm/looprestoration.c',
         'checkasm/mc.c',
     )

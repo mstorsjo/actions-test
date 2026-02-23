@@ -30,7 +30,7 @@
 #include <string.h>
 
 #include "src/levels.h"
-#include "src/loopfilter.h"
+#include "src/deblock.h"
 
 #if 0
 static void init_lpf_border(pixel *const dst, const ptrdiff_t stride,
@@ -92,7 +92,7 @@ static void init_lpf_border(pixel *const dst, const ptrdiff_t stride,
 }
 #endif
 
-static void check_lpf_sb(loopfilter_sb_fn fn, const char *const name,
+static void check_lpf_sb(deblock_sb_fn fn, const char *const name,
                          const int n_blks, const int lf_idx,
                          const int is_chroma, const int dir)
 {
@@ -195,13 +195,13 @@ static void check_lpf_sb(loopfilter_sb_fn fn, const char *const name,
 #endif
 }
 
-void bitfn(checkasm_check_loopfilter)(void) {
-    Dav2dLoopFilterDSPContext c;
+void bitfn(checkasm_check_deblock)(void) {
+    Dav2dDeblockDSPContext c;
 
-    bitfn(dav2d_loop_filter_dsp_init)(&c);
+    bitfn(dav2d_deblock_dsp_init)(&c);
 
-    check_lpf_sb(c.loop_filter_sb[0][0], "lpf_h_sb_y", 32, 0, 0, 0);
-    check_lpf_sb(c.loop_filter_sb[0][1], "lpf_v_sb_y", 32, 1, 0, 1);
-    check_lpf_sb(c.loop_filter_sb[1][0], "lpf_h_sb_uv", 16, 2, 1, 0);
-    check_lpf_sb(c.loop_filter_sb[1][1], "lpf_v_sb_uv", 16, 2, 1, 1);
+    check_lpf_sb(c.deblock_sb[0][0], "lpf_h_sb_y", 32, 0, 0, 0);
+    check_lpf_sb(c.deblock_sb[0][1], "lpf_v_sb_y", 32, 1, 0, 1);
+    check_lpf_sb(c.deblock_sb[1][0], "lpf_h_sb_uv", 16, 2, 1, 0);
+    check_lpf_sb(c.deblock_sb[1][1], "lpf_v_sb_uv", 16, 2, 1, 1);
 }

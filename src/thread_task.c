@@ -213,8 +213,8 @@ static inline int merge_pending(const Dav2dContext *const c) {
 static int create_filter_sbrow(Dav2dFrameContext *const f,
                                const int pass, Dav2dTask **res_t)
 {
-    const int has_deblock = f->frame_hdr->loopfilter.level_y[0] ||
-                            f->frame_hdr->loopfilter.level_y[1];
+    const int has_deblock = f->frame_hdr->deblock.level_y[0] ||
+                            f->frame_hdr->deblock.level_y[1];
     const int has_cdef = f->seq_hdr->cdef;
     const int has_lr = f->lf.restore_planes;
 
@@ -240,11 +240,11 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
                                                     2 * prog_sz * sizeof(*prog));
             if (!prog) return -1;
             f->frame_thread.frame_progress = prog;
-            f->frame_thread.copy_lpf_progress = prog + prog_sz;
+            f->frame_thread.copy_db_progress = prog + prog_sz;
         }
         f->frame_thread.prog_sz = prog_sz;
         memset(f->frame_thread.frame_progress, 0, prog_sz * sizeof(atomic_uint));
-        memset(f->frame_thread.copy_lpf_progress, 0, prog_sz * sizeof(atomic_uint));
+        memset(f->frame_thread.copy_db_progress, 0, prog_sz * sizeof(atomic_uint));
         atomic_store(&f->frame_thread.deblock_progress, 0);
     }
     f->frame_thread.next_tile_row[pass & 1] = 0;
@@ -645,7 +645,7 @@ void *dav2d_worker_task(void *data) {
                     }
                     goto found;
                 } else if (t->type == DAV2D_TASK_TYPE_CDEF) {
-                    atomic_uint *prog = f->frame_thread.copy_lpf_progress;
+                    atomic_uint *prog = f->frame_thread.copy_db_progress;
                     const int p1 = atomic_load(&prog[(t->sby - 1) >> 5]);
                     if (p1 & (1U << ((t->sby - 1) & 31)))
                         goto found;
@@ -848,8 +848,8 @@ void *dav2d_worker_task(void *data) {
             if (!atomic_load(&f->task_thread.error))
                 f->bd_fn.filter_sbrow_deblock_rows(f, sby);
             // signal deblock progress
-            if (f->frame_hdr->loopfilter.level_y[0] ||
-                f->frame_hdr->loopfilter.level_y[1])
+            if (f->frame_hdr->deblock.level_y[0] ||
+                f->frame_hdr->deblock.level_y[1])
             {
                 error = atomic_load(&f->task_thread.error);
                 atomic_store(&f->frame_thread.deblock_progress,
@@ -858,12 +858,12 @@ void *dav2d_worker_task(void *data) {
                 if (!atomic_fetch_or(&ttd->cond_signaled, 1))
                     pthread_cond_signal(&ttd->cond);
             } else if (f->seq_hdr->cdef || f->lf.restore_planes) {
-                atomic_fetch_or(&f->frame_thread.copy_lpf_progress[sby >> 5],
+                atomic_fetch_or(&f->frame_thread.copy_db_progress[sby >> 5],
                                 1U << (sby & 31));
                 // CDEF needs the top buffer to be saved by lr_copy_lpf of the
                 // previous sbrow
                 if (sby) {
-                    int prog = atomic_load(&f->frame_thread.copy_lpf_progress[(sby - 1) >> 5]);
+                    int prog = atomic_load(&f->frame_thread.copy_db_progress[(sby - 1) >> 5]);
                     if (~prog & (1U << ((sby - 1) & 31))) {
                         t->type = DAV2D_TASK_TYPE_CDEF;
                         t->recon_progress = t->deblock_progress = 0;

@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018, VideoLAN and dav2d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,23 +25,35 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "src/cpu.h"
-#include "src/loopfilter.h"
+#ifndef DAV2D_SRC_DEBLOCK_H
+#define DAV2D_SRC_DEBLOCK_H
 
-decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_y, pwr9));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_y, pwr9));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_uv, pwr9));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_uv, pwr9));
+#include <stdint.h>
+#include <stddef.h>
 
-static ALWAYS_INLINE void loop_filter_dsp_init_ppc(Dav2dLoopFilterDSPContext *const c) {
-    const unsigned flags = dav2d_get_cpu_flags();
+#include "common/bitdepth.h"
 
-    if (!(flags & DAV2D_PPC_CPU_FLAG_PWR9)) return;
+#include "src/levels.h"
+#include "src/lf_mask.h"
 
-#if BITDEPTH == 8
-    c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, pwr9);
-    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, pwr9);
-    c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, pwr9);
-    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, pwr9);
-#endif
-}
+// TODO: * Compute q_thr/side_thr from seg_ids in filter.
+//       * Add a flag to shift down q_thr/side_thr for sub_pu_edge
+#define decl_deblock_sb_fn(name) \
+void (name)(pixel *dst, ptrdiff_t stride, const uint64_t *mask, \
+            unsigned q_thr, unsigned side_thr, int edge, \
+            const Av2FilterLUT *lut, int w HIGHBD_DECL_SUFFIX)
+typedef decl_deblock_sb_fn(*deblock_sb_fn);
+
+typedef struct Dav2dDeblockDSPContext {
+    /*
+     * dimension 1: plane (0=luma, 1=chroma)
+     * dimension 2: 0=col-edge filter (h), 1=row-edge filter (v)
+     *
+     * dst/stride are aligned by 32
+     */
+    deblock_sb_fn deblock_sb[2][2];
+} Dav2dDeblockDSPContext;
+
+bitfn_decls(void dav2d_deblock_dsp_init, Dav2dDeblockDSPContext *c);
+
+#endif /* DAV2D_SRC_DEBLOCK_H */

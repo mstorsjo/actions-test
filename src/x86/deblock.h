@@ -1,5 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav2d authors
+ * Copyright © 2018-2021, VideoLAN and dav2d authors
  * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
@@ -26,20 +26,44 @@
  */
 
 #include "src/cpu.h"
-#include "src/loopfilter.h"
+#include "src/deblock.h"
 
-decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_y, neon));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_y, neon));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_uv, neon));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_uv, neon));
+#define decl_deblock_sb_fns(ext) \
+decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_y, ext)); \
+decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_y, ext)); \
+decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_uv, ext)); \
+decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_uv, ext))
 
-static ALWAYS_INLINE void loop_filter_dsp_init_arm(Dav2dLoopFilterDSPContext *const c) {
+decl_deblock_sb_fns(ssse3);
+decl_deblock_sb_fns(avx2);
+decl_deblock_sb_fns(avx512icl);
+
+static ALWAYS_INLINE void deblock_dsp_init_x86(Dav2dDeblockDSPContext *const c) {
     const unsigned flags = dav2d_get_cpu_flags();
 
-    if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
+    if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
 
-    c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, neon);
-    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, neon);
-    c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, neon);
-    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, neon);
+    c->deblock_sb[0][0] = BF(dav2d_lpf_h_sb_y, ssse3);
+    c->deblock_sb[0][1] = BF(dav2d_lpf_v_sb_y, ssse3);
+    c->deblock_sb[1][0] = BF(dav2d_lpf_h_sb_uv, ssse3);
+    c->deblock_sb[1][1] = BF(dav2d_lpf_v_sb_uv, ssse3);
+
+#if ARCH_X86_64
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
+
+    c->deblock_sb[0][0] = BF(dav2d_lpf_h_sb_y, avx2);
+    c->deblock_sb[0][1] = BF(dav2d_lpf_v_sb_y, avx2);
+    c->deblock_sb[1][0] = BF(dav2d_lpf_h_sb_uv, avx2);
+    c->deblock_sb[1][1] = BF(dav2d_lpf_v_sb_uv, avx2);
+
+    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
+
+    c->deblock_sb[0][1] = BF(dav2d_lpf_v_sb_y, avx512icl);
+    c->deblock_sb[1][1] = BF(dav2d_lpf_v_sb_uv, avx512icl);
+
+    if (!(flags & DAV2D_X86_CPU_FLAG_SLOW_GATHER)) {
+        c->deblock_sb[0][0] = BF(dav2d_lpf_h_sb_y, avx512icl);
+        c->deblock_sb[1][0] = BF(dav2d_lpf_h_sb_uv, avx512icl);
+    }
+#endif
 }

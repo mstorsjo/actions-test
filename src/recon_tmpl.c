@@ -42,7 +42,7 @@
 #include "src/ctx.h"
 #include "src/ipred_prepare.h"
 #include "src/itx_1d.h"
-#include "src/lf_apply.h"
+#include "src/db_apply.h"
 #include "src/lr_apply.h"
 #include "src/recon.h"
 #include "src/scan.h"
@@ -3570,7 +3570,7 @@ chroma: {}
 
 void bytefn(dav2d_filter_sbrow_deblock_cols)(Dav2dFrameContext *const f, const int sby) {
     if (!(f->c->inloop_filters & DAV2D_INLOOPFILTER_DEBLOCK) ||
-        (!f->frame_hdr->loopfilter.level_y[0] && !f->frame_hdr->loopfilter.level_y[1]))
+        (!f->frame_hdr->deblock.level_y[0] && !f->frame_hdr->deblock.level_y[1]))
     {
         return;
     }
@@ -3582,7 +3582,7 @@ void bytefn(dav2d_filter_sbrow_deblock_cols)(Dav2dFrameContext *const f, const i
         f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
     Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    bytefn(dav2d_loopfilter_sbrow_cols)(f, p, mask, sby, f->lf.start_of_tile_row[sby]);
+    bytefn(dav2d_deblock_sbrow_cols)(f, p, mask, sby, f->lf.start_of_tile_row[sby]);
 }
 
 void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const int sby) {
@@ -3595,17 +3595,17 @@ void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const i
     };
     Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
     if (f->c->inloop_filters & DAV2D_INLOOPFILTER_DEBLOCK &&
-        (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]))
+        (f->frame_hdr->deblock.level_y[0] || f->frame_hdr->deblock.level_y[1]))
     {
-        bytefn(dav2d_loopfilter_sbrow_rows)(f, p, mask, sby);
+        bytefn(dav2d_deblock_sbrow_rows)(f, p, mask, sby);
     }
     if ((f->seq_hdr->cdef &&
          f->c->inloop_filters & DAV2D_INLOOPFILTER_CDEF) ||
         (f->lf.restore_planes &&
          f->c->inloop_filters & DAV2D_INLOOPFILTER_RESTORATION))
     {
-        // Store loop filtered pixels required by CDEF / LR
-        bytefn(dav2d_copy_lpf)(f, p, sby);
+        // Store deblocked pixels required by CDEF / LR
+        bytefn(dav2d_copy_db)(f, p, sby);
     }
 }
 

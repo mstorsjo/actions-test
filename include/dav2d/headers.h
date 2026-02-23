@@ -311,7 +311,7 @@ typedef struct Dav2dSequenceHeader {
 
     uint8_t tip, tip_hole_fill;
     uint8_t mv_traj, bawp, cwp, imp_msk_bld;
-    uint8_t lf_sub_pu, tip_explicit_qp;
+    uint8_t db_sub_pu, tip_explicit_qp;
 
     uint8_t opfl_refine, refine_mv, tip_refine_mv;
     uint8_t bru, adaptive_mvd, mvd_sign_derive, flex_mvres;
@@ -459,11 +459,11 @@ typedef struct Dav2dFrameHeader {
     uint8_t all_lossless;
     uint8_t tcq, parity_hiding;
     struct {
-        uint8_t lf_sub_pu;
+        uint8_t sub_pu;
         uint8_t level_y[2 /* dir */];
         uint8_t level_u, level_v;
         int8_t delta_q_y[2], delta_q_u, delta_q_v;
-    } loopfilter;
+    } deblock;
     struct {
         enum Dav2dAdaptiveBoolean enabled;
         uint8_t qp_idx, scale;

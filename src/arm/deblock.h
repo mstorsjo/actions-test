@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018-2026, VideoLAN and dav2d authors
- * Copyright © 2018-2026, Two Orioles, LLC
+ * Copyright © 2018, VideoLAN and dav2d authors
+ * Copyright © 2018, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,35 +25,21 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV2D_SRC_LOOPFILTER_H
-#define DAV2D_SRC_LOOPFILTER_H
+#include "src/cpu.h"
+#include "src/deblock.h"
 
-#include <stdint.h>
-#include <stddef.h>
+decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_y, neon));
+decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_y, neon));
+decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_uv, neon));
+decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_uv, neon));
 
-#include "common/bitdepth.h"
+static ALWAYS_INLINE void loop_filter_dsp_init_arm(Dav2dDeblockDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-#include "src/levels.h"
-#include "src/lf_mask.h"
+    if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
-// TODO: * Compute q_thr/side_thr from seg_ids in filter.
-//       * Add a flag to shift down q_thr/side_thr for sub_pu_edge
-#define decl_loopfilter_sb_fn(name) \
-void (name)(pixel *dst, ptrdiff_t stride, const uint64_t *mask, \
-            unsigned q_thr, unsigned side_thr, int edge, \
-            const Av2FilterLUT *lut, int w HIGHBD_DECL_SUFFIX)
-typedef decl_loopfilter_sb_fn(*loopfilter_sb_fn);
-
-typedef struct Dav2dLoopFilterDSPContext {
-    /*
-     * dimension 1: plane (0=luma, 1=chroma)
-     * dimension 2: 0=col-edge filter (h), 1=row-edge filter (v)
-     *
-     * dst/stride are aligned by 32
-     */
-    loopfilter_sb_fn loop_filter_sb[2][2];
-} Dav2dLoopFilterDSPContext;
-
-bitfn_decls(void dav2d_loop_filter_dsp_init, Dav2dLoopFilterDSPContext *c);
-
-#endif /* DAV2D_SRC_LOOPFILTER_H */
+    c->deblock_sb[0][0] = BF(dav2d_lpf_h_sb_y, neon);
+    c->deblock_sb[0][1] = BF(dav2d_lpf_v_sb_y, neon);
+    c->deblock_sb[1][0] = BF(dav2d_lpf_h_sb_uv, neon);
+    c->deblock_sb[1][1] = BF(dav2d_lpf_v_sb_uv, neon);
+}

@@ -25,42 +25,23 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV2D_TESTS_CHECKASM_INTERNAL_H
-#define DAV2D_TESTS_CHECKASM_INTERNAL_H
+#include "src/cpu.h"
+#include "src/deblock.h"
 
-#include "config.h"
+decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_y, pwr9));
+decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_y, pwr9));
+decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_uv, pwr9));
+decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_uv, pwr9));
 
-#include "common/intops.h"
+static ALWAYS_INLINE void deblock_dsp_init_ppc(Dav2dDeblockDSPContext *const c) {
+    const unsigned flags = dav2d_get_cpu_flags();
 
-#include <checkasm/test.h>
-#include <checkasm/utils.h>
+    if (!(flags & DAV2D_PPC_CPU_FLAG_PWR9)) return;
 
-#define rnd checkasm_rand
-
-#define decl_check_bitfns(name) \
-    name##_8bpc(void); \
-    name##_16bpc(void)
-
-void checkasm_check_msac(void);
-void checkasm_check_pal(void);
-void checkasm_check_refmvs(void);
-decl_check_bitfns(void checkasm_check_cdef);
-decl_check_bitfns(void checkasm_check_filmgrain);
-decl_check_bitfns(void checkasm_check_ipred);
-decl_check_bitfns(void checkasm_check_itx);
-decl_check_bitfns(void checkasm_check_deblock);
-decl_check_bitfns(void checkasm_check_looprestoration);
-decl_check_bitfns(void checkasm_check_mc);
-
-#ifdef BITDEPTH
-    #define checkasm_check_impl_pixel checkasm_check_impl(PIXEL_TYPE)
-    #define checkasm_check_pixel(...) checkasm_check(PIXEL_TYPE, __VA_ARGS__)
-    #define checkasm_check_coef(...)  checkasm_check(COEF_TYPE, __VA_ARGS__)
-
-    #define PIXEL_RECT(name, w, h)            BUF_RECT(pixel, name, w, h)
-    #define CLEAR_PIXEL_RECT                  CLEAR_BUF_RECT
-    #define checkasm_check_pixel_padded       checkasm_check_rect_padded
-    #define checkasm_check_pixel_padded_align checkasm_check_rect_padded_align
+#if BITDEPTH == 8
+    c->deblock_sb[0][0] = BF(dav2d_lpf_h_sb_y, pwr9);
+    c->deblock_sb[0][1] = BF(dav2d_lpf_v_sb_y, pwr9);
+    c->deblock_sb[1][0] = BF(dav2d_lpf_h_sb_uv, pwr9);
+    c->deblock_sb[1][1] = BF(dav2d_lpf_v_sb_uv, pwr9);
 #endif
-
-#endif /* DAV2D_TESTS_CHECKASM_INTERNAL_H */
+}

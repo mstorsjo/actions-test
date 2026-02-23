@@ -1,6 +1,6 @@
 /*
- * Copyright © 2023, VideoLAN and dav2d authors
- * Copyright © 2023, Loongson Technology Corporation Limited
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,28 +25,24 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV2D_SRC_LOONGARCH_LOOPFILTER_H
-#define DAV2D_SRC_LOONGARCH_LOOPFILTER_H
+#ifndef DAV2D_SRC_DB_APPLY_H
+#define DAV2D_SRC_DB_APPLY_H
 
-#include "src/cpu.h"
-#include "src/loopfilter.h"
+#include <stdint.h>
 
-decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_y, lsx));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_y, lsx));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_h_sb_uv, lsx));
-decl_loopfilter_sb_fn(BF(dav2d_lpf_v_sb_uv, lsx));
+#include "common/bitdepth.h"
 
-static ALWAYS_INLINE void loop_filter_dsp_init_loongarch(Dav2dLoopFilterDSPContext *const c) {
-    const unsigned flags = dav2d_get_cpu_flags();
+#include "src/internal.h"
+#include "src/levels.h"
 
-    if (!(flags & DAV2D_LOONGARCH_CPU_FLAG_LSX)) return;
+void bytefn(dav2d_deblock_sbrow_cols)(const Dav2dFrameContext *f,
+                                      pixel *const p[3], Av2Filter *lflvl,
+                                      int sby, int start_of_tile_row);
+void bytefn(dav2d_deblock_sbrow_rows)(const Dav2dFrameContext *f,
+                                      pixel *const p[3], Av2Filter *lflvl,
+                                      int sby);
 
-#if BITDEPTH == 8
-    c->loop_filter_sb[0][0] = BF(dav2d_lpf_h_sb_y, lsx);
-    c->loop_filter_sb[0][1] = BF(dav2d_lpf_v_sb_y, lsx);
-    c->loop_filter_sb[1][0] = BF(dav2d_lpf_h_sb_uv, lsx);
-    c->loop_filter_sb[1][1] = BF(dav2d_lpf_v_sb_uv, lsx);
-#endif
-}
+void bytefn(dav2d_copy_db)(Dav2dFrameContext *const f,
+                                /*const*/ pixel *const src[3], int sby);
 
-#endif /* DAV2D_SRC_LOONGARCH_LOOPFILTER_H */
+#endif /* DAV2D_SRC_DB_APPLY_H */

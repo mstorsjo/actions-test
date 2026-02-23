@@ -61,7 +61,7 @@ typedef struct Av2Restoration {
 } Av2Restoration;
 
 // for luma, set layout to 400; for chroma, select the appropriate layout
-void dav2d_create_lf_mask(uint16_t (*const masks)[64][5][4], const Av2Block *b,
+void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4], const Av2Block *b,
                           enum BlockSize bs, int bx, int by, int iw, int ih,
                           enum Dav2dPixelLayout layout, int chroma, uint8_t *a,
                           uint8_t *l, const Dav2dFrameHeader *frame_hdr,

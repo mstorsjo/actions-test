@@ -448,8 +448,8 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     if (!hdr->reduced_still_picture_header) {
         hdr->cwp = dav2d_get_bit(gb);
         hdr->imp_msk_bld = dav2d_get_bit(gb);
-        hdr->lf_sub_pu = dav2d_get_bit(gb);
-        if (hdr->tip == 1 && hdr->lf_sub_pu)
+        hdr->db_sub_pu = dav2d_get_bit(gb);
+        if (hdr->tip == 1 && hdr->db_sub_pu)
             hdr->tip_explicit_qp = dav2d_get_bit(gb);
     }
 #if DEBUG_SEQ_HDR
@@ -461,7 +461,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
            hdr->bawp,
            hdr->cwp,
            hdr->imp_msk_bld,
-           hdr->lf_sub_pu,
+           hdr->db_sub_pu,
            hdr->tip_explicit_qp,
            dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
@@ -1197,21 +1197,21 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
 
         if (hdr->tip.frame_mode == 2) {
-            if (seqhdr->lf_sub_pu) {
-                hdr->loopfilter.lf_sub_pu = dav2d_get_bit(gb);
-                if (hdr->loopfilter.lf_sub_pu) {
+            if (seqhdr->db_sub_pu) {
+                hdr->deblock.sub_pu = dav2d_get_bit(gb);
+                if (hdr->deblock.sub_pu) {
                     hdr->tip.apply_filter = dav2d_get_bit(gb);
                     if (hdr->tip.apply_filter) {
-                        hdr->loopfilter.level_y[0] = 1;
-                        hdr->loopfilter.level_y[1] = 1;
-                        hdr->loopfilter.level_u = 1;
-                        hdr->loopfilter.level_v = 1;
+                        hdr->deblock.level_y[0] = 1;
+                        hdr->deblock.level_y[1] = 1;
+                        hdr->deblock.level_u = 1;
+                        hdr->deblock.level_v = 1;
                     }
                 }
             }
 #if DEBUG_FRAME_HDR
             printf("HDR: post-tip_deblock[lfsubpu:%d,apply:%d]: off=%td\n",
-                   hdr->loopfilter.lf_sub_pu, hdr->tip.apply_filter,
+                   hdr->deblock.sub_pu, hdr->tip.apply_filter,
                    (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
             if (seqhdr->tip_explicit_qp) {
@@ -1470,37 +1470,37 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
-    // loopfilter
+    // deblock
     if (!hdr->all_lossless) {
         if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER)
-            hdr->loopfilter.lf_sub_pu = dav2d_get_bit(gb);
-        hdr->loopfilter.level_y[0] = dav2d_get_bit(gb);
-        hdr->loopfilter.level_y[1] = dav2d_get_bit(gb);
+            hdr->deblock.sub_pu = dav2d_get_bit(gb);
+        hdr->deblock.level_y[0] = dav2d_get_bit(gb);
+        hdr->deblock.level_y[1] = dav2d_get_bit(gb);
         if (seqhdr->layout != DAV2D_PIXEL_LAYOUT_I400 &&
-            (hdr->loopfilter.level_y[0] || hdr->loopfilter.level_y[1]))
+            (hdr->deblock.level_y[0] || hdr->deblock.level_y[1]))
         {
-            hdr->loopfilter.level_u = dav2d_get_bit(gb);
-            hdr->loopfilter.level_v = dav2d_get_bit(gb);
+            hdr->deblock.level_u = dav2d_get_bit(gb);
+            hdr->deblock.level_v = dav2d_get_bit(gb);
         }
         const int bits = seqhdr->df_par_bits, off = 1 << (bits - 1);
-        if (hdr->loopfilter.level_y[0] && dav2d_get_bit(gb))
-            hdr->loopfilter.delta_q_y[0] = dav2d_get_bits(gb, bits) - off;
-        if (hdr->loopfilter.level_y[1])
-            hdr->loopfilter.delta_q_y[1] = dav2d_get_bit(gb) ?
+        if (hdr->deblock.level_y[0] && dav2d_get_bit(gb))
+            hdr->deblock.delta_q_y[0] = dav2d_get_bits(gb, bits) - off;
+        if (hdr->deblock.level_y[1])
+            hdr->deblock.delta_q_y[1] = dav2d_get_bit(gb) ?
                                            (int)dav2d_get_bits(gb, bits) - off :
-                                           hdr->loopfilter.delta_q_y[0];
-        if (hdr->loopfilter.level_u && dav2d_get_bit(gb))
-            hdr->loopfilter.delta_q_u = dav2d_get_bits(gb, bits) - off;
-        if (hdr->loopfilter.level_v && dav2d_get_bit(gb))
-            hdr->loopfilter.delta_q_v = dav2d_get_bits(gb, bits) - off;
+                                           hdr->deblock.delta_q_y[0];
+        if (hdr->deblock.level_u && dav2d_get_bit(gb))
+            hdr->deblock.delta_q_u = dav2d_get_bits(gb, bits) - off;
+        if (hdr->deblock.level_v && dav2d_get_bit(gb))
+            hdr->deblock.delta_q_v = dav2d_get_bits(gb, bits) - off;
     }
 #if DEBUG_FRAME_HDR
     printf("HDR: post-deblock[lfsubpu:%d,y:%d|%d,u:%d,v:%d,dqy:%d|%d,dqu:%d,dqv:%d]: off=%td\n",
-           hdr->loopfilter.lf_sub_pu,
-           hdr->loopfilter.level_y[0], hdr->loopfilter.level_y[1],
-           hdr->loopfilter.level_u, hdr->loopfilter.level_v,
-           hdr->loopfilter.delta_q_y[0], hdr->loopfilter.delta_q_y[1],
-           hdr->loopfilter.delta_q_u, hdr->loopfilter.delta_q_v,
+           hdr->deblock.sub_pu,
+           hdr->deblock.level_y[0], hdr->deblock.level_y[1],
+           hdr->deblock.level_u, hdr->deblock.level_v,
+           hdr->deblock.delta_q_y[0], hdr->deblock.delta_q_y[1],
+           hdr->deblock.delta_q_u, hdr->deblock.delta_q_v,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 

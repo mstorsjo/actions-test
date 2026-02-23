@@ -54,7 +54,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const ptrdiff_t stride = f->cur.p.stride[chroma];
     const int sby = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver + f->frame_hdr->sb128);
     const int have_tt = f->c->n_tc > 1;
-    const pixel *lpf = f->lf.lr_lpf_line[plane] +
+    const pixel *lpf = f->lf.lr_db_line[plane] +
         have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(stride) + x;
     const pixel *top =
         ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
@@ -116,7 +116,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         }
     }
     const ptrdiff_t lstride = f->cur.p.stride[0];
-    const pixel *llpf = f->lf.lr_lpf_line[0] +
+    const pixel *llpf = f->lf.lr_db_line[0] +
         have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(lstride) + x * 2;
     if (chroma) {
         wiener_params.single.ss_ver = ss_ver;

@@ -229,7 +229,7 @@ static int subpu_flt_lvl(const Dav2dSequenceHeader *const seq_hdr,
                          const enum BlockSize bs, const int bw4, const int bh4,
                          const Av2Block *const b, const int max_lvl)
 {
-    if (b->intra || !frame_hdr->loopfilter.lf_sub_pu) {
+    if (b->intra || !frame_hdr->deblock.sub_pu) {
         /* do nothing */
     } else if (b->ref.ref[0] == TIP_FRAME) {
         const int opfl = seq_hdr->tip_refine_mv &&
@@ -247,7 +247,7 @@ static int subpu_flt_lvl(const Dav2dSequenceHeader *const seq_hdr,
     return max_lvl;
 }
 
-void dav2d_create_lf_mask(uint16_t (*const masks)[64][5][4],
+void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
                           const Av2Block *const b,
                           const enum BlockSize bs,
                           const int bx, const int by,

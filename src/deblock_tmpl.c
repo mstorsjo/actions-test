@@ -32,7 +32,7 @@
 #include "common/attributes.h"
 #include "common/intops.h"
 
-#include "src/loopfilter.h"
+#include "src/deblock.h"
 
 static const int8_t max_width_y[4] = { 1, 3, 6, 8 };
 static const int8_t max_width_uv[3] = { 1, 3, 4 };
@@ -98,10 +98,10 @@ static int filter_choice(const pixel *const s, const pixel *const t, const ptrdi
 }
 
 static NOINLINE void
-loop_filter(pixel *dst, unsigned q_thr, unsigned side_thr,
-            const ptrdiff_t stridea, const ptrdiff_t strideb,
-            const int max_width_pos, const int max_width_neg
-            HIGHBD_DECL_SUFFIX)
+deblock(pixel *dst, unsigned q_thr, unsigned side_thr,
+        const ptrdiff_t stridea, const ptrdiff_t strideb,
+        const int max_width_pos, const int max_width_neg
+        HIGHBD_DECL_SUFFIX)
 {
     const int width = filter_choice(dst, dst + 3 * stridea, strideb, max_width_neg, max_width_pos, q_thr, side_thr);
     const int width_neg = imin(width, max_width_neg);
@@ -126,13 +126,13 @@ loop_filter(pixel *dst, unsigned q_thr, unsigned side_thr,
     }
 }
 
-static void loop_filter_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
-                                   const uint64_t *const vmask,
-                                   const unsigned q_thr,
-                                   const unsigned side_thr,
-                                   const int edge,
-                                   const Av2FilterLUT *lut, const int h
-                                   HIGHBD_DECL_SUFFIX)
+static void deblock_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
+                               const uint64_t *const vmask,
+                               const unsigned q_thr,
+                               const unsigned side_thr,
+                               const int edge,
+                               const Av2FilterLUT *lut, const int h
+                               HIGHBD_DECL_SUFFIX)
 {
     const uint64_t vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
     for (uint64_t y = 1; vm & ~(y - 1); y <<= 1, dst += 4 * PXSTRIDE(stride)) {
@@ -141,19 +141,19 @@ static void loop_filter_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
             const int is_sub_pu = !!(vmask[4] & y) * 3;
-            loop_filter(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
+            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
-static void loop_filter_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
-                                   const uint64_t *const vmask,
-                                   const unsigned q_thr,
-                                   const unsigned side_thr,
-                                   const int edge,
-                                   const Av2FilterLUT *lut, const int w
-                                   HIGHBD_DECL_SUFFIX)
+static void deblock_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
+                               const uint64_t *const vmask,
+                               const unsigned q_thr,
+                               const unsigned side_thr,
+                               const int edge,
+                               const Av2FilterLUT *lut, const int w
+                               HIGHBD_DECL_SUFFIX)
 {
     const uint64_t vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
     for (uint64_t x = 1; vm & ~(x - 1); x <<= 1, dst += 4) {
@@ -162,19 +162,19 @@ static void loop_filter_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
             const int is_sub_pu = !!(vmask[4] & x) * 3;
-            loop_filter(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
+            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
-static void loop_filter_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
-                                    const uint64_t *const vmask,
-                                    const unsigned q_thr,
-                                    const unsigned side_thr,
-                                    const int edge,
-                                    const Av2FilterLUT *lut, const int h
-                                    HIGHBD_DECL_SUFFIX)
+static void deblock_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
+                                const uint64_t *const vmask,
+                                const unsigned q_thr,
+                                const unsigned side_thr,
+                                const int edge,
+                                const Av2FilterLUT *lut, const int h
+                                HIGHBD_DECL_SUFFIX)
 {
     const uint64_t vm = vmask[0] | vmask[1] | vmask[2];
     for (uint64_t y = 1; vm & ~(y - 1); y <<= 1, dst += 4 * PXSTRIDE(stride)) {
@@ -183,13 +183,13 @@ static void loop_filter_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
             const int is_sub_pu = !!(vmask[3] & y) * 3;
-            loop_filter(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
+            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
-static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
+static void deblock_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
                                     const uint64_t *const vmask,
                                     const unsigned q_thr,
                                     const unsigned side_thr,
@@ -204,29 +204,31 @@ static void loop_filter_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
             const int is_sub_pu = !!(vmask[3] & x) * 3;
-            loop_filter(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
+            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
+#if 0
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-#include "src/arm/loopfilter.h"
+#include "src/arm/deblock.h"
 #elif ARCH_LOONGARCH64
-#include "src/loongarch/loopfilter.h"
+#include "src/loongarch/deblock.h"
 #elif ARCH_PPC64LE
-#include "src/ppc/loopfilter.h"
+#include "src/ppc/deblock.h"
 #elif ARCH_X86
-#include "src/x86/loopfilter.h"
+#include "src/x86/deblock.h"
+#endif
 #endif
 #endif
 
-COLD void bitfn(dav2d_loop_filter_dsp_init)(Dav2dLoopFilterDSPContext *const c) {
-    c->loop_filter_sb[0][0] = loop_filter_h_sb128y_c;
-    c->loop_filter_sb[0][1] = loop_filter_v_sb128y_c;
-    c->loop_filter_sb[1][0] = loop_filter_h_sb128uv_c;
-    c->loop_filter_sb[1][1] = loop_filter_v_sb128uv_c;
+COLD void bitfn(dav2d_deblock_dsp_init)(Dav2dDeblockDSPContext *const c) {
+    c->deblock_sb[0][0] = deblock_h_sb128y_c;
+    c->deblock_sb[0][1] = deblock_v_sb128y_c;
+    c->deblock_sb[1][0] = deblock_h_sb128uv_c;
+    c->deblock_sb[1][1] = deblock_v_sb128uv_c;
 
 #if 0
 #if HAVE_ASM

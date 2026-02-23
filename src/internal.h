@@ -50,7 +50,7 @@ typedef struct Dav2dTask Dav2dTask;
 #include "src/itx.h"
 #include "src/levels.h"
 #include "src/lf_mask.h"
-#include "src/loopfilter.h"
+#include "src/deblock.h"
 #include "src/looprestoration.h"
 #include "src/mc.h"
 #include "src/msac.h"
@@ -67,7 +67,7 @@ typedef struct Dav2dDSPContext {
     Dav2dMCDSPContext mc;
     Dav2dInvTxfmDSPContext itx;
     Dav2dStxDSPContext stx;
-    Dav2dLoopFilterDSPContext lf;
+    Dav2dDeblockDSPContext lf;
     Dav2dCcsoDSPContext ccso;
     Dav2dCdefDSPContext cdef;
     Dav2dLoopRestorationDSPContext lr;
@@ -301,7 +301,7 @@ struct Dav2dFrameContext {
         int next_tile_row[2 /* 0: reconstruction, 1: entropy */];
         atomic_int entropy_progress;
         atomic_int deblock_progress; // in sby units
-        atomic_uint *frame_progress, *copy_lpf_progress;
+        atomic_uint *frame_progress, *copy_db_progress;
         // indexed using t->by * f->b4_stride + t->bx
         Av2Block *b;
         int16_t *cbi; /* bits 0-4: txtp, bits 5-15: eob */
@@ -333,16 +333,15 @@ struct Dav2dFrameContext {
         const uint8_t *ns_subclass_lut;
         const uint8_t *pc_subclass_lut;
         const int16_t (*pc_filters)[13];
-        uint8_t *tx_lpf_right_edge[2];
+        uint8_t *tx_db_right_edge[2];
         uint8_t *cdef_line_buf, *lr_line_buf;
         pixel *cdef_line[2 /* pre, post */][3 /* plane */];
-        pixel *lr_lpf_line[3 /* plane */];
+        pixel *lr_db_line[3 /* plane */];
         pixel *lr_cdef_line[3 /* plane */];
 
         // in-loop filter per-frame state keeping
         uint8_t *start_of_tile_row;
         int start_of_tile_row_sz;
-        int need_cdef_lpf_copy;
         pixel *p[3], *sr_p[3];
         int restore_planes; // enum LrRestorePlanes
     } lf;

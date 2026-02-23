@@ -107,16 +107,16 @@ static void init_deblock_lut(const Dav2dSequenceHeader *const seq_hdr,
         const int yac = frame_hdr->segmentation.enabled ?
             iclip(qidx + frame_hdr->segmentation.d.delta_q[i], 0, qmax) : qidx;
         for (int dir = 0; dir < 2; dir++) {
-            const int dir_yac = yac + 8 * frame_hdr->loopfilter.delta_q_y[dir];
+            const int dir_yac = yac + 8 * frame_hdr->deblock.delta_q_y[dir];
             lut->thr[dir][0][i] = deblock_quant_thr(seq_hdr->hbd, dir_yac);
             lut->thr[dir][1][i] = deblock_side_thr(seq_hdr->hbd, dir_yac);
         }
         const int uac = yac + frame_hdr->quant.uac_delta +
-                        8 * frame_hdr->loopfilter.delta_q_u;
+                        8 * frame_hdr->deblock.delta_q_u;
         lut->thr_uv[0][0][i] = deblock_quant_thr(seq_hdr->hbd, uac);
         lut->thr_uv[0][1][i] = deblock_side_thr(seq_hdr->hbd, uac);
         const int vac = yac + frame_hdr->quant.vac_delta +
-                        8 * frame_hdr->loopfilter.delta_q_v;
+                        8 * frame_hdr->deblock.delta_q_v;
         lut->thr_uv[1][0][i] = deblock_quant_thr(seq_hdr->hbd, vac);
         lut->thr_uv[1][1][i] = deblock_side_thr(seq_hdr->hbd, vac);
     }
@@ -3137,17 +3137,17 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 #undef set_ctx
     }
 
-    if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
+    if (f->frame_hdr->deblock.level_y[0] || f->frame_hdr->deblock.level_y[1]) {
         if (has_luma) {
-            dav2d_create_lf_mask(t->lf_mask->filter_y, b, lbs, t->bx, t->by,
+            dav2d_create_db_mask(t->lf_mask->filter_y, b, lbs, t->bx, t->by,
                                  f->bw, f->bh, f->cur.p.p.layout, 0,
                                  &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                  f->frame_hdr, f->seq_hdr);
         }
         if (has_chroma &&
-            (f->frame_hdr->loopfilter.level_u || f->frame_hdr->loopfilter.level_v))
+            (f->frame_hdr->deblock.level_u || f->frame_hdr->deblock.level_v))
         {
-            dav2d_create_lf_mask(t->lf_mask->filter_uv, b, cbs, t->cbx, t->cby,
+            dav2d_create_db_mask(t->lf_mask->filter_uv, b, cbs, t->cbx, t->cby,
                                  f->bw, f->bh, f->cur.p.p.layout, 1,
                                  &t->a->tx_lpf_uv[cbx4], &t->l.tx_lpf_uv[cby4],
                                  f->frame_hdr, f->seq_hdr);
@@ -4305,12 +4305,12 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             t->cbx = t->bx;
             t->cby = t->by;
             if (f->frame_hdr->tip.apply_filter) {
-                dav2d_create_lf_mask(t->lf_mask->filter_y, &b, root_bs,
+                dav2d_create_db_mask(t->lf_mask->filter_y, &b, root_bs,
                                           t->bx, t->by, f->bw, f->bh, f->cur.p.p.layout, 0,
                                           &t->a->tx_lpf_y[bx4], &t->l.tx_lpf_y[by4],
                                           f->frame_hdr, f->seq_hdr);
                 if (c_root_bs != BS_INVALID)
-                    dav2d_create_lf_mask(t->lf_mask->filter_uv, &b, root_bs, t->bx, t->by,
+                    dav2d_create_db_mask(t->lf_mask->filter_uv, &b, root_bs, t->bx, t->by,
                                          f->bw, f->bh, f->cur.p.p.layout, 1,
                                          &t->a->tx_lpf_uv[bx4 >> f->ss_hor],
                                          &t->l.tx_lpf_uv[by4 >> f->ss_ver],
@@ -4400,11 +4400,11 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     // backup t->a/l.tx_lpf_y/uv at tile boundaries to use them to "fix"
     // up the initial value in neighbour tiles when running the loopfilter
     int align_h = (f->bh + 63) & ~63;
-    memcpy(&f->lf.tx_lpf_right_edge[0][align_h * tile_col + t->by],
+    memcpy(&f->lf.tx_db_right_edge[0][align_h * tile_col + t->by],
            &t->l.tx_lpf_y[t->by & 0x30], sb_step);
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     align_h >>= ss_ver;
-    memcpy(&f->lf.tx_lpf_right_edge[1][align_h * tile_col + (t->by >> ss_ver)],
+    memcpy(&f->lf.tx_db_right_edge[1][align_h * tile_col + (t->by >> ss_ver)],
            &t->l.tx_lpf_uv[(t->by & 0x30) >> ss_ver], sb_step >> ss_ver);
 
     // error out on symbol decoder overread
@@ -4616,7 +4616,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         uv_stride * 4 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[3])
     {
         dav2d_free_aligned(f->lf.lr_line_buf);
-        // lr simd may overread the input, so slightly over-allocate the lpf buffer
+        // lr simd may overread the input, so slightly over-allocate the db buffer
         size_t alloc_sz = 128;
         alloc_sz += (size_t)llabs(y_stride) * num_lines;
         alloc_sz += (size_t)llabs(uv_stride) * num_lines * 2;
@@ -4630,16 +4630,16 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
         ptr += 64;
         if (y_stride < 0)
-            f->lf.lr_lpf_line[0] = ptr - y_stride * (num_lines - 1);
+            f->lf.lr_db_line[0] = ptr - y_stride * (num_lines - 1);
         else
-            f->lf.lr_lpf_line[0] = ptr;
+            f->lf.lr_db_line[0] = ptr;
         ptr += llabs(y_stride) * num_lines;
         if (uv_stride < 0) {
-            f->lf.lr_lpf_line[1] = ptr - uv_stride * (num_lines * 1 - 1);
-            f->lf.lr_lpf_line[2] = ptr - uv_stride * (num_lines * 2 - 1);
+            f->lf.lr_db_line[1] = ptr - uv_stride * (num_lines * 1 - 1);
+            f->lf.lr_db_line[2] = ptr - uv_stride * (num_lines * 2 - 1);
         } else {
-            f->lf.lr_lpf_line[1] = ptr;
-            f->lf.lr_lpf_line[2] = ptr + uv_stride * num_lines;
+            f->lf.lr_db_line[1] = ptr;
+            f->lf.lr_db_line[2] = ptr + uv_stride * num_lines;
         }
         ptr += llabs(uv_stride) * num_lines * 2;
         // FIXME make the below work with negative stride
@@ -4707,7 +4707,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->lf.gdf_ref_dst_idx = ref_dst_idx;
     }
 
-    if (f->frame_hdr->loopfilter.level_y[0] || f->frame_hdr->loopfilter.level_y[1]) {
+    if (f->frame_hdr->deblock.level_y[0] || f->frame_hdr->deblock.level_y[1]) {
         init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
     }
 
@@ -4734,13 +4734,13 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
     const int re_sz = f->sb256h * f->frame_hdr->tiling.t.cols;
     if (re_sz != f->lf.re_sz) {
-        dav2d_free(f->lf.tx_lpf_right_edge[0]);
-        f->lf.tx_lpf_right_edge[0] = dav2d_malloc(ALLOC_LF, re_sz * 64 * 2);
-        if (!f->lf.tx_lpf_right_edge[0]) {
+        dav2d_free(f->lf.tx_db_right_edge[0]);
+        f->lf.tx_db_right_edge[0] = dav2d_malloc(ALLOC_LF, re_sz * 64 * 2);
+        if (!f->lf.tx_db_right_edge[0]) {
             f->lf.re_sz = 0;
             goto error;
         }
-        f->lf.tx_lpf_right_edge[1] = f->lf.tx_lpf_right_edge[0] + re_sz * 64;
+        f->lf.tx_db_right_edge[1] = f->lf.tx_db_right_edge[0] + re_sz * 64;
         f->lf.re_sz = re_sz;
     }
 
@@ -5073,7 +5073,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_intra_pred_dsp_init_##bd##bpc(&dsp->ipred); \
             dav2d_itx_dsp_init_##bd##bpc(&dsp->itx); \
             dav2d_stx_dsp_init_##bd##bpc(&dsp->stx); \
-            dav2d_loop_filter_dsp_init_##bd##bpc(&dsp->lf); \
+            dav2d_deblock_dsp_init_##bd##bpc(&dsp->lf); \
             dav2d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr, bpc); \
             dav2d_mc_dsp_init_##bd##bpc(&dsp->mc); \
             dav2d_film_grain_dsp_init_##bd##bpc(&dsp->fg); \
