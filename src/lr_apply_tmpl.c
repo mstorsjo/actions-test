@@ -135,8 +135,9 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         }
         // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
-        int sb256_idx = f->sb256w * ((y + 8) >> 8) + sb256x;
-        int gdf = !plane && f->lf.mask[sb256_idx].gdf[(((y + 8) >> 4) & 12) + sb64x_idx];
+        const int inc = edges & LR_HAVE_BOTTOM ? 8 : 0;
+        int sb256_idx = f->sb256w * ((y + inc) >> 8) + sb256x;
+        int gdf = !plane && f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
             dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, lpf,
@@ -218,7 +219,9 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     int x = 0, bit = 0;
     for (; x + 64 < w; p += 64, edges |= LR_HAVE_LEFT, bit ^= 1) {
         const int next_x = x + 64;
-        const int next_iter_lru_start_x = next_x & ~(unit_size - 1);
+        int next_iter_lru_start_x = next_x & ~(unit_size - 1);
+        if (next_iter_lru_start_x && w - next_iter_lru_start_x < half_unit_size)
+            next_iter_lru_start_x -= unit_size;
         const int next_u_idx = unit_idx + ((next_iter_lru_start_x >> (shift_hor - 2)) & 3);
         lr[!bit] =
             &f->lf.lr_mask[sb_idx + (next_iter_lru_start_x >> shift_hor)].lr[plane][next_u_idx];
