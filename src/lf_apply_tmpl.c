@@ -70,9 +70,8 @@ static void backup_lpf(const Dav2dFrameContext *const f,
     }
 
     while (row + stripe_h <= row_h) {
-        const int n_lines = 4 - (row + stripe_h + 1 == h);
         for (int i = 0; i < 4; i++) {
-            pixel_copy(dst, i == n_lines ? &dst[-PXSTRIDE(stride)] : src, w);
+            pixel_copy(dst, src, w);
             dst += PXSTRIDE(stride);
             src += PXSTRIDE(stride);
         }

@@ -54,6 +54,9 @@ typedef const void *const_left_pixel_row;
 typedef union WienerParams {
     struct {
         const int8_t *filter;
+        const pixel *luma, *luma_top, *luma_bottom;
+        ptrdiff_t stride;
+        int ss_ver, ss_hor, ds_flt;
     } single;
     struct {
         union {
@@ -98,7 +101,7 @@ void (name)(pixel *p, ptrdiff_t dst_stride, \
 typedef decl_gdf_add_fn(*gdf_add_fn);
 
 typedef struct Dav2dLoopRestorationDSPContext {
-    wienerfilter_fn ns_wiener_single;
+    wienerfilter_fn ns_wiener_single[2 /* y, uv */];
     wienerfilter_fn ns_wiener_multi;
     wienerfilter_fn pc_wiener;
     gdf_prep_fn gdf_prep;

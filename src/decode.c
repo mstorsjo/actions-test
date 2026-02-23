@@ -4613,7 +4613,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
         uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1] ||
         y_stride * 4 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[2] ||
-        uv_stride * 8 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[3])
+        uv_stride * 4 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[3])
     {
         dav2d_free_aligned(f->lf.lr_line_buf);
         // lr simd may overread the input, so slightly over-allocate the lpf buffer
@@ -4621,7 +4621,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         alloc_sz += (size_t)llabs(y_stride) * num_lines;
         alloc_sz += (size_t)llabs(uv_stride) * num_lines * 2;
         alloc_sz += (size_t)llabs(y_stride) * n_tile_rows_m1 * 4;
-        alloc_sz += (size_t)llabs(uv_stride) * n_tile_rows_m1 * 8;
+        alloc_sz += (size_t)llabs(uv_stride) * n_tile_rows_m1 * 4;
         uint8_t *ptr = f->lf.lr_line_buf = dav2d_alloc_aligned(ALLOC_LR, alloc_sz, 64);
         if (!ptr) {
             f->lf.lr_buf_plane_sz[0] = f->lf.lr_buf_plane_sz[1] = 0;
@@ -4646,12 +4646,12 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->lf.lr_cdef_line[0] = ptr;
         ptr += llabs(y_stride) * n_tile_rows_m1 * 4;
         f->lf.lr_cdef_line[1] = ptr;
-        f->lf.lr_cdef_line[2] = ptr + llabs(uv_stride) * n_tile_rows_m1 * 4;
+        f->lf.lr_cdef_line[2] = ptr + llabs(uv_stride) * n_tile_rows_m1 * 2;
 
         f->lf.lr_buf_plane_sz[0] = (int) y_stride * num_lines;
         f->lf.lr_buf_plane_sz[1] = (int) uv_stride * num_lines * 2;
         f->lf.lr_buf_plane_sz[2] = (int) y_stride * n_tile_rows_m1 * 4;
-        f->lf.lr_buf_plane_sz[3] = (int) uv_stride * n_tile_rows_m1 * 8;
+        f->lf.lr_buf_plane_sz[3] = (int) uv_stride * n_tile_rows_m1 * 4;
     }
 
     // update allocation for loopfilter masks

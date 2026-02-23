@@ -47,9 +47,10 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                       const int tile_row_m1)
 {
     const Dav2dDSPContext *const dsp = f->dsp;
-    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[0].ns;
+    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[plane].ns;
     const int chroma = !!plane;
     const int ss_ver = chroma & (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
+    const int ss_hor = chroma & (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444);
     const ptrdiff_t stride = f->cur.p.stride[chroma];
     const int sby = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver + f->frame_hdr->sb128);
     const int have_tt = f->c->n_tc > 1;
@@ -58,7 +59,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const pixel *top =
         ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
                   (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ?
-        f->lf.lr_cdef_line[plane] + tile_row_m1 * 4 * PXSTRIDE(stride) + x : NULL;
+        f->lf.lr_cdef_line[plane] + tile_row_m1 * (4 >> chroma) * PXSTRIDE(stride) + x : NULL;
     const int sb256x = x >> 8;
     const int sb64x_idx = (x >> 6) & 3;
 
@@ -76,7 +77,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     if (lr->type == DAV2D_RESTORATION_NS_WIENER) {
         if (pd->frame_filters_on) {
             if (pd->num_classes == 1) {
-                wiener_fn = dsp->lr.ns_wiener_single;
+                wiener_fn = dsp->lr.ns_wiener_single[chroma];
                 wiener_params.single.filter = pd->filter[0];
             } else {
                 multi_wiener = 1;
@@ -86,7 +87,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                 wiener_params.multi.filters.user = pd->filter;
             }
         } else {
-            wiener_fn = dsp->lr.ns_wiener_single;
+            wiener_fn = dsp->lr.ns_wiener_single[chroma];
             wiener_params.single.filter = lr->ns_filter[0];
         }
     } else if (lr->type == DAV2D_RESTORATION_PC_WIENER) {
@@ -114,13 +115,28 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             }
         }
     }
+    const ptrdiff_t lstride = f->cur.p.stride[0];
+    const pixel *llpf = f->lf.lr_lpf_line[0] +
+        have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(lstride) + x * 2;
+    if (chroma) {
+        wiener_params.single.ss_ver = ss_ver;
+        wiener_params.single.ss_hor = ss_hor;
+        wiener_params.single.stride = lstride;
+        wiener_params.single.ds_flt = f->seq_hdr->cfl_ds_filter_index;
+    }
 
     int8_t gdf_err[64*64];
     while (y + stripe_h <= row_h) {
+        if (chroma) {
+            wiener_params.single.luma =
+                &((pixel *) f->cur.p.data[0])[(x << ss_hor) + (y << ss_ver) * PXSTRIDE(lstride)];
+            wiener_params.single.luma_top = llpf;
+            wiener_params.single.luma_bottom = llpf + 6 * PXSTRIDE(lstride);
+        }
         // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
         int sb256_idx = f->sb256w * ((y + 8) >> 8) + sb256x;
-        int gdf = f->lf.mask[sb256_idx].gdf[(((y + 8) >> 4) & 12) + sb64x_idx];
+        int gdf = !plane && f->lf.mask[sb256_idx].gdf[(((y + 8) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
             dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, lpf,
@@ -145,15 +161,16 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         stripe_h = imin(64 >> ss_ver, row_h - y);
         if (stripe_h == 0) break;
         lpf += 4 * PXSTRIDE(stride);
+        llpf += 4 * PXSTRIDE(lstride);
         top = NULL;
     }
 }
 
-static void backup6xU(pixel (*dst)[6], const pixel *src, const ptrdiff_t src_stride,
-                      int u)
+static void backupNxU(pixel (*dst)[6], const pixel *src, const ptrdiff_t src_stride,
+                      int u, const int n)
 {
     for (; u > 0; u--, dst++, src += PXSTRIDE(src_stride))
-        pixel_copy(dst, src, 6);
+        pixel_copy(&dst[0][6 - n], src - n, n);
 }
 
 static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
@@ -206,8 +223,10 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
         lr[!bit] =
             &f->lf.lr_mask[sb_idx + (next_iter_lru_start_x >> shift_hor)].lr[plane][next_u_idx];
         const int restore_next = 1;
+        // FIXME could backup 4px for luma if gdf=off
         if (restore_next)
-            backup6xU(pre_lr_border[bit], p + 64 - 6, p_stride, row_h - y);
+            backupNxU(pre_lr_border[bit], p + 64, p_stride, row_h - y,
+                      plane ? 2 : 6);
         if (restore)
             lr_stripe(f, p, pre_lr_border[!bit], x, y, plane, 64, row_h,
                       lr[bit], edges, first_sby_in_tile_row, tile_row_m1);
@@ -222,8 +241,10 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     }
 }
 
-static inline void copy4lines(pixel *dst, const pixel *src, const ptrdiff_t stride) {
-    memcpy(dst, src, stride * 4);
+static inline void copyNlines(pixel *dst, const pixel *src, const ptrdiff_t stride,
+                              const int n)
+{
+    memcpy(dst, src, stride * n);
 }
 
 void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
@@ -234,19 +255,59 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
     const ptrdiff_t *const dst_stride = f->cur.p.stride;
     const int restore_planes = f->lf.restore_planes;
     const int not_last = sby + 1 < f->sbh;
+    const int first_sby_in_tile_row =
+        sby == hdr->tiling.t.row_start_sb[tile_row];
+
+    if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
+        const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+        const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+        const int h = f->bh * 4 >> ss_ver;
+        const int w = f->bw * 4 >> ss_hor;
+        const int next_row_y = (sby + 1) << ((6 - ss_ver) + f->frame_hdr->sb128);
+        const int row_h = imin(next_row_y - (8 >> ss_ver) * not_last, h);
+        int offset_uv = 8 * !!sby >> ss_ver;
+        int y_stripe = (sby << ((6 - ss_ver) + f->frame_hdr->sb128)) - offset_uv;
+        if (sby && first_sby_in_tile_row) {
+            if (restore_planes & LR_RESTORE_U) {
+                copyNlines(&f->lf.lr_cdef_line[1][2 * PXSTRIDE(dst_stride[1]) *
+                                                  (tile_row - 1)],
+                           dst[1] - 2 * PXSTRIDE(dst_stride[1]), dst_stride[1], 2);
+                lr_sbrow(f, dst[1] - offset_uv * PXSTRIDE(dst_stride[1]),
+                         y_stripe, w, h, y_stripe + (8 >> ss_ver), 1,
+                         first_sby_in_tile_row * FIRST_SB_TOP, tile_row - 1);
+            }
+            if (restore_planes & LR_RESTORE_V) {
+                copyNlines(&f->lf.lr_cdef_line[2][2 * PXSTRIDE(dst_stride[1]) *
+                                                  (tile_row - 1)],
+                           dst[2] - 2 * PXSTRIDE(dst_stride[1]), dst_stride[1], 2);
+                lr_sbrow(f, dst[2] - offset_uv * PXSTRIDE(dst_stride[1]),
+                         y_stripe, w, h, y_stripe + (8 >> ss_ver), 2,
+                         first_sby_in_tile_row * FIRST_SB_TOP, tile_row - 1);
+            }
+            offset_uv = 0;
+            y_stripe += 8 >> ss_ver;
+        }
+
+        if (restore_planes & LR_RESTORE_U)
+            lr_sbrow(f, dst[1] - offset_uv * PXSTRIDE(dst_stride[1]), y_stripe,
+                     w, h, row_h, 1, first_sby_in_tile_row * FIRST_SB_BOTTOM,
+                     tile_row - 1);
+        if (restore_planes & LR_RESTORE_V)
+            lr_sbrow(f, dst[2] - offset_uv * PXSTRIDE(dst_stride[1]), y_stripe,
+                     w, h, row_h, 2, first_sby_in_tile_row * FIRST_SB_BOTTOM,
+                     tile_row - 1);
+    }
 
     if (restore_planes & LR_RESTORE_Y) {
         const int h = f->bh * 4;
         const int w = f->bw * 4;
         const int next_row_y = (sby + 1) << (6 + f->frame_hdr->sb128);
         int row_h = imin(next_row_y - 8 * not_last, h);
-        const int first_sby_in_tile_row =
-            sby == hdr->tiling.t.row_start_sb[tile_row];
         int offset_y = 8 * !!sby;
         int y_stripe = (sby << (6 + f->frame_hdr->sb128)) - offset_y;
         if (sby && first_sby_in_tile_row) {
-            copy4lines(&f->lf.lr_cdef_line[0][4 * PXSTRIDE(dst_stride[0]) * (tile_row - 1)],
-                       dst[0] - 4 * PXSTRIDE(dst_stride[0]), dst_stride[0]);
+            copyNlines(&f->lf.lr_cdef_line[0][4 * PXSTRIDE(dst_stride[0]) * (tile_row - 1)],
+                       dst[0] - 4 * PXSTRIDE(dst_stride[0]), dst_stride[0], 4);
             lr_sbrow(f, dst[0] - offset_y * PXSTRIDE(dst_stride[0]), y_stripe, w,
                      h, y_stripe + 8, 0, first_sby_in_tile_row * FIRST_SB_TOP,
                      tile_row - 1);
@@ -257,23 +318,4 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
                  h, row_h, 0, first_sby_in_tile_row * FIRST_SB_BOTTOM,
                  tile_row - 1);
     }
-#if 0
-    if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
-        const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-        const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
-        const int h = (f->cur.p.p.h + ss_ver) >> ss_ver;
-        const int w = (f->cur.p.p.w + ss_hor) >> ss_hor;
-        const int next_row_y = (sby + 1) << ((6 - ss_ver) + f->frame_hdr->sb128);
-        const int row_h = imin(next_row_y - (8 >> ss_ver) * not_last, h);
-        const int offset_uv = offset_y >> ss_ver;
-        const int y_stripe = (sby << ((6 - ss_ver) + f->frame_hdr->sb128)) - offset_uv;
-        if (restore_planes & LR_RESTORE_U)
-            lr_sbrow(f, dst[1] - offset_uv * PXSTRIDE(dst_stride[1]), y_stripe,
-                     w, h, row_h, 1);
-
-        if (restore_planes & LR_RESTORE_V)
-            lr_sbrow(f, dst[2] - offset_uv * PXSTRIDE(dst_stride[1]), y_stripe,
-                     w, h, row_h, 2);
-    }
-#endif
 }

@@ -57,6 +57,15 @@ static const int8_t wiener_ns_config_y[32][2] = {
     { 3, 3 }, { -3, -3 }, { 3, -3 }, { -3, 3 }
 };
 
+static const int8_t wiener_ns_config_uv[6][2] = {
+    { 1, 0 }, { 0, 1 }, { 1, 1 }, { -1, 1 }, { 2, 0 }, { 0, 2 },
+};
+
+static const int8_t wiener_ns_config_uv_from_y[12][3] = {
+    { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, -1 },
+    { -1, 1 }, { 1, -1 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 },
+};
+
 static const int8_t pc_wiener_config[25][2] = {
     {  1,  0 }, { -1,  0 }, {  0,  1 }, {  0, -1 }, {  2,  0 },
     { -2,  0 }, {  0,  2 }, {  0, -2 }, {  1,  1 }, { -1, -1 },
@@ -120,6 +129,81 @@ static void backup_row_lpf(pixel *dst, const pixel *src, const int w,
     } else {
         for (int x = w; x < w + edge_len; x++)
             dst[x] = src[w - 1];
+    }
+}
+
+static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_stride,
+                            const int w, const enum LrEdgeFlags edges, const int ss_ver,
+                            const int cfl_ds_flt)
+{
+    if (!ss_ver) {
+        backup_row_lpf(dst, src, w, 4, edges);
+        return;
+    }
+
+    const pixel *src2 = &src[PXSTRIDE(src_stride)];
+    switch (cfl_ds_flt) {
+    case 0:
+        for (int x = 0; x < w; x++)
+            dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
+        break;
+    case 1:
+        for (int x = 0; x < w; x++)
+            dst[x] = (src[x] + src2[x]) >> 1;
+        break;
+    default:
+        assert(0);
+        // fall-through in non-debug mode
+    case 2:
+        for (int x = 0; x < w; x++)
+            dst[x] = src[x];
+        break;
+    }
+
+    if (edges & LR_HAVE_LEFT) {
+        switch (cfl_ds_flt) {
+        case 0:
+            for (int x = -4; x < 0; x++)
+                dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
+            break;
+        case 1:
+            for (int x = -4; x < 0; x++)
+                dst[x] = (src[x] + src2[x]) >> 1;
+            break;
+        default:
+            assert(0);
+            // fall-through in non-debug mode
+        case 2:
+            for (int x = -4; x < 0; x++)
+                dst[x] = src[x];
+            break;
+        }
+    } else {
+        for (int x = -4; x < 0; x++)
+            dst[x] = dst[0];
+    }
+
+    if (edges & LR_HAVE_RIGHT) {
+        switch (cfl_ds_flt) {
+        case 0:
+            for (int x = w; x < w + 4; x++)
+                dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
+            break;
+        case 1:
+            for (int x = w; x < w + 4; x++)
+                dst[x] = (src[x] + src2[x]) >> 1;
+            break;
+        default:
+            assert(0);
+            // fall-through in non-debug mode
+        case 2:
+            for (int x = w; x < w + 4; x++)
+                dst[x] = src[x];
+            break;
+        }
+    } else {
+        for (int x = w; x < w + 4; x++)
+            dst[x] = dst[w - 2];
     }
 }
 
@@ -200,6 +284,131 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
 
         for (int r = 0; r < 8; r++) ptrs[r] = ptrs[r+1];
         p += PXSTRIDE(stride);
+    }
+}
+
+static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
+                                  const pixel (*left)[6], // FIXME this can be 2
+                                  const pixel *lpf, const pixel *lpf_bottom,
+                                  const int w, int h,
+                                  const WienerParams *params,
+                                  const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+{
+    const int8_t *filter = params->single.filter;
+    pixel row_buffers_c[5][REST_UNIT_STRIDE];
+    pixel row_buffers_l[5][REST_UNIT_STRIDE + 64];
+    pixel *bak_rows[2][5];
+    const pixel *ptrs[2][5];
+
+    for (int i = 0; i < 5; i++) {
+        bak_rows[0][i] = row_buffers_c[i] + 6;
+        bak_rows[1][i] = row_buffers_l[i] + 6;
+    }
+
+    // FIXME we only need 2px edges here (left/right), not 4
+    backup_row(bak_rows[0][2], p, left[0], w, 2, edges);
+    ptrs[0][2] = bak_rows[0][2];
+    if (edges & (LR_HAVE_TOP_INTEGRATED | LR_HAVE_TOP)) {
+        // y = -2,-1
+        for (int i = 0; i < 2; i++) {
+            backup_row_lpf(bak_rows[0][i], lpf, w, 2, edges);
+            ptrs[0][i] = bak_rows[0][i];
+            lpf += PXSTRIDE(stride);
+        }
+    } else {
+        ptrs[0][0] = ptrs[0][1] = ptrs[0][2];
+    }
+
+    backup_row(bak_rows[0][3], p + PXSTRIDE(stride), left[1], w, 2, edges);
+    ptrs[0][3] = bak_rows[0][3];
+    int bak_idx = 4;
+
+    const pixel *luma = params->single.luma;
+    const ptrdiff_t lstride = params->single.stride;
+    const int ss_hor = params->single.ss_hor, ss_ver = params->single.ss_ver;
+    backup_row_luma(bak_rows[1][2], luma, lstride, w << ss_hor, edges, ss_ver,
+                    params->single.ds_flt);
+    ptrs[1][2] = bak_rows[1][2];
+    if (edges & LR_HAVE_TOP_INTEGRATED) {
+        backup_row_luma(bak_rows[1][0], params->single.luma - 4 * PXSTRIDE(lstride),
+                        lstride, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+        ptrs[1][0] = bak_rows[1][0];
+        backup_row_luma(bak_rows[1][1], params->single.luma - 2 * PXSTRIDE(lstride),
+                        lstride, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+        ptrs[1][1] = bak_rows[1][1];
+    } else if (edges & LR_HAVE_TOP) {
+        backup_row_luma(bak_rows[1][0], params->single.luma_top,
+                        0, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+        ptrs[1][0] = bak_rows[1][0];
+        backup_row_luma(bak_rows[1][1], params->single.luma_top,
+                        lstride, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+        ptrs[1][1] = bak_rows[1][1];
+    } else {
+        ptrs[1][0] = ptrs[1][1] = ptrs[1][2];
+    }
+    backup_row_luma(bak_rows[1][3], luma + (1 << ss_ver) * PXSTRIDE(lstride),
+                    lstride, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+    ptrs[1][3] = bak_rows[1][3];
+    int lbak_idx = 4;
+
+    for (int y = 0; y < h; y++) {
+        if (y + 2 < h) {
+            backup_row(bak_rows[0][bak_idx], p + 2*PXSTRIDE(stride), left[y + 2], w, 2, edges);
+            ptrs[0][4] = bak_rows[0][bak_idx];
+        } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
+            backup_row_lpf(bak_rows[0][bak_idx], p + 2*PXSTRIDE(stride), w, 2, edges);
+            ptrs[0][4] = bak_rows[0][bak_idx];
+        } else if (edges & LR_HAVE_BOTTOM) {
+            int offset_y = y + 2 - h;
+            assert(offset_y < 2);
+            backup_row_lpf(bak_rows[0][bak_idx], lpf_bottom + offset_y * PXSTRIDE(stride), w, 2, edges);
+            ptrs[0][4] = bak_rows[0][bak_idx];
+        } else {
+            ptrs[0][4] = ptrs[0][3];
+        }
+        if (++bak_idx == 5) bak_idx = 0;
+
+        if (ptrs[0][4] == ptrs[0][3]) {
+            ptrs[1][4] = ptrs[1][3];
+        } else if (y + 2 == h && !(edges & LR_HAVE_BOTTOM_INTEGRATED)) {
+            backup_row_luma(bak_rows[1][lbak_idx], params->single.luma_bottom,
+                            lstride, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+            ptrs[1][4] = bak_rows[1][lbak_idx];
+        } else if (y + 1 == h && !(edges & LR_HAVE_BOTTOM_INTEGRATED)) {
+            backup_row_luma(bak_rows[1][lbak_idx], params->single.luma_bottom + PXSTRIDE(lstride),
+                            0, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+            ptrs[1][4] = bak_rows[1][lbak_idx];
+        } else {
+            backup_row_luma(bak_rows[1][lbak_idx], luma + (2 << ss_ver) * PXSTRIDE(lstride),
+                            lstride, w << ss_hor, edges, ss_ver, params->single.ds_flt);
+            ptrs[1][4] = bak_rows[1][lbak_idx];
+        }
+        if (++lbak_idx == 5) lbak_idx = 0;
+
+        for (int x = 0; x < w; x++) {
+            const int m = ptrs[0][2][x];
+            int s = m << 7;
+            for (int i = 0; i < 6; i++) {
+                const int dy = wiener_ns_config_uv[i][0];
+                const int dx = wiener_ns_config_uv[i][1];
+                const int diff = ptrs[0][2 + dy][x + dx] + ptrs[0][2 - dy][x - dx] - 2 * m;
+                s += diff * filter[i];
+            }
+            const int l = ptrs[1][2][x << ss_hor];
+            for (int i = 0; i < 12; i++) {
+                const int dy = wiener_ns_config_uv_from_y[i][0];
+                const int dx = wiener_ns_config_uv_from_y[i][1];
+                const int diff = ptrs[1][2 + dy][(x + dx) << ss_hor] - l;
+                s += diff * filter[6 + i];
+            }
+            const int v = (s + 64) >> 7;
+            p[x] = iclip_pixel(v);
+        }
+
+        for (int r = 0; r < 4; r++) ptrs[0][r] = ptrs[0][r + 1];
+        for (int r = 0; r < 4; r++) ptrs[1][r] = ptrs[1][r + 1];
+        p += PXSTRIDE(stride);
+        luma += PXSTRIDE(lstride) << ss_ver;
     }
 }
 
@@ -612,7 +821,8 @@ static void gdf_add_c(pixel *p, const ptrdiff_t stride,
 COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext *const c,
                                                  const int bpc)
 {
-    c->ns_wiener_single = ns_wiener_single_y_c;
+    c->ns_wiener_single[0] = ns_wiener_single_y_c;
+    c->ns_wiener_single[1] = ns_wiener_single_uv_c;
     c->ns_wiener_multi = ns_wiener_multi_c;
     c->pc_wiener = pc_wiener_c;
 
