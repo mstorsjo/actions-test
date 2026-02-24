@@ -47,6 +47,8 @@ blend_shuf:     db  0,  1,  0,  1,  0,  1,  0,  1,  2,  3,  2,  3,  2,  3,  2,  
 pb_8x0_8x8:     db  0,  0,  0,  0,  0,  0,  0,  0,  8,  8,  8,  8,  8,  8,  8,  8
 bdct_lb_dw:     db  0,  0,  0,  0,  4,  4,  4,  4,  8,  8,  8,  8, 12, 12, 12, 12
 wswap:          db  2,  3,  0,  1,  6,  7,  4,  5, 10, 11,  8,  9, 14, 15, 12, 13
+morph_A:        db  0, -1,  4, -1,  1, -1,  5, -1,  2, -1,  6, -1,  3, -1,  7, -1
+morph_B:        db  8, -1, 12, -1,  9, -1, 13, -1, 10, -1, 14, -1, 11, -1, 15, -1
 rescale_mul:    dd  0,  1,  2,  3,  4,  5,  6,  7
 
 wm_420_sign:    dd 0x01020102, 0x01010101
@@ -54,6 +56,7 @@ wm_422_sign:    dd 0x80808080, 0x7f7f7f7f
 
 pb_64:   times 4 db 64
 pw_m256: times 2 dw -256
+pw_1:    times 2 dw 1
 pw_15:   times 2 dw 15
 pw_32:   times 2 dw 32
 pw_34:   times 2 dw 34
@@ -176,6 +179,7 @@ BIDIR_JMP_TABLE  w_mask_420,        avx2,       4, 8, 16, 32, 64
 BIDIR_JMP_TABLE  w_mask_422,        avx2,       4, 8, 16, 32, 64
 BIDIR_JMP_TABLE  w_mask_444,        avx2,       4, 8, 16, 32, 64
 BIDIR_JMP_TABLE  blend,             avx2,       4, 8, 16, 32, 64
+BIDIR_JMP_TABLE  morph,             avx2,       4, 8, 16, 32, 64
 
 SECTION .text
 
@@ -5854,3 +5858,116 @@ cglobal w_mask_444_8bpc, 4, 8, 8, dst, stride, tmp1, tmp2, w, h, mask, stride3
     dec                  hd
     jg .w64_loop
     RET
+
+cglobal morph_8bpc, 4, 6, 9, dst, stride, a, b, w, h
+    movd                xm0, ad
+    movd                xm2, bd
+    lea                  r2, [morph_avx2_table]
+    vpbroadcastw         m0, xm0
+    vpbroadcastd         m2, xm2
+    vbroadcasti128       m3, [r2+morph_A-morph_avx2_table]
+    DEFINE_ARGS dst, stride, _, stride3, w, h
+    tzcnt                wd, wm
+    movifnidn            hd, hm
+    movsxd               wq, dword [r2+wq*4]
+    add                  wq, r2
+    lea            stride3q, [strideq*3]
+    pslld                m1, m0, 16
+    psrld                m0, 16         ; since a can be negative
+    jmp                  wq
+.w4:
+    movd                xm4, [dstq+strideq*0]
+    vpbroadcastd         m6, [dstq+strideq*2]
+    movd                xm5, [dstq+strideq*1]
+    vpbroadcastd         m7, [dstq+stride3q ]
+    vpblendd             m4, m6, 0x10
+    vpblendd             m5, m7, 0x10
+    REPX    {pshufb  x, m3}, m4, m5
+    REPX    {pmaddwd x, m0}, m4, m5
+    REPX    {paddd   x, m2}, m4, m5
+    packusdw             m4, m5
+    psrlw                m4, 8
+    packuswb             m4, m4
+    vextracti128        xm5, m4, 1
+    movd   [dstq+strideq*0], xm4
+    pextrd [dstq+strideq*1], xm4, 1
+    movd   [dstq+strideq*2], xm5
+    pextrd [dstq+stride3q ], xm5, 1
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jg .w4
+    RET
+.w8:
+    movq                xm4, [dstq+strideq*0]
+    movq                xm6, [dstq+strideq*1]
+    vpbroadcastq         m5, [dstq+strideq*2]
+    vpbroadcastq         m7, [dstq+stride3q ]
+    vpblendd             m4, m5, 0xf0
+    vpblendd             m6, m7, 0xf0
+    REPX     {pshufb x, m3}, m4, m6
+    pmaddwd              m5, m4, m1
+    pmaddwd              m4, m0
+    pmaddwd              m7, m6, m1
+    pmaddwd              m6, m0
+    REPX    {paddd   x, m2}, m5, m4, m7, m6
+    packusdw             m4, m5
+    packusdw             m6, m7
+    REPX    {psrlw   x, 8 }, m4, m6
+    packuswb             m4, m6
+    vextracti128        xm5, m4, 1
+    movq   [dstq+strideq*0], xm4
+    movhps [dstq+strideq*1], xm4
+    movq   [dstq+strideq*2], xm5
+    movhps [dstq+stride3q ], xm5
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jg .w8
+    RET
+.w16:
+    vbroadcasti128       m4, [r2+morph_B-morph_avx2_table]
+.w16_loop:
+    movu                xm5, [dstq+strideq*0]
+    vinserti128          m5, [dstq+strideq*1], 1
+    call .body
+    movu         [dstq+strideq*0], xm5
+    vextracti128 [dstq+strideq*1], m5, 1
+    lea                dstq, [dstq+strideq*2]
+    sub                  hd, 2
+    jg .w16_loop
+    RET
+.w32:
+    vbroadcasti128       m4, [r2+morph_B-morph_avx2_table]
+.w32_loop:
+    movu                 m5, [dstq]
+    call .body
+    movu             [dstq], m5
+    add                dstq, strideq
+    dec                  hd
+    jg .w32_loop
+    RET
+.w64:
+    vbroadcasti128       m4, [r2+morph_B-morph_avx2_table]
+.w64_loop:
+    mova                 m5, [dstq]
+    call .body
+    mova             [dstq], m5
+    mova                 m5, [dstq+32]
+    call .body
+    mova          [dstq+32], m5
+    add                dstq, strideq
+    dec                  hd
+    jg .w64_loop
+    RET
+.body:
+    pshufb               m6, m5, m4
+    pshufb               m5, m3
+    pmaddwd              m7, m5, m1
+    pmaddwd              m5, m0
+    pmaddwd              m8, m6, m1
+    pmaddwd              m6, m0
+    REPX    {paddd   x, m2}, m7, m5, m8, m6
+    packusdw             m5, m7
+    packusdw             m6, m8
+    REPX    {psrlw   x, 8 }, m5, m6
+    packuswb             m5, m6
+    ret
