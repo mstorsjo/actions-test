@@ -1,23 +1,23 @@
-From 46a6f5e7cd01f15a06a0e25d5b63eba20f74f8f2 Mon Sep 17 00:00:00 2001
+From 66c16ab1243d0a66479069b1f13c0f8d59782c62 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
 
 ---
- apps/avmdec.c             | 35 ++++++++++++++++++++++++++++++++++-
+ apps/avmdec.c             | 36 +++++++++++++++++++++++++++++++++++-
  av2/av2_dx_iface.c        | 15 +++++++++++++++
  av2/common/reconinter.c   | 10 ++++++++++
  av2/decoder/decodeframe.c | 32 +++++++++++++++++++++-----------
  av2/decoder/decoder.h     |  2 ++
  avm/avm_codec.h           | 10 ++++++++++
  avm/avmdx.h               | 11 +++++++++++
- 7 files changed, 103 insertions(+), 12 deletions(-)
+ 7 files changed, 104 insertions(+), 12 deletions(-)
 
 diff --git a/apps/avmdec.c b/apps/avmdec.c
-index 83d10a0059..bf2f41dbcd 100644
+index 83d10a0059..9b32c0cc3b 100644
 --- a/apps/avmdec.c
 +++ b/apps/avmdec.c
-@@ -62,6 +62,27 @@ struct AvxDecInputContext {
+@@ -62,6 +62,28 @@ struct AvxDecInputContext {
    struct WebmInputContext *webm_ctx;
  };
  
@@ -33,19 +33,20 @@ index 83d10a0059..bf2f41dbcd 100644
 +  { "deblock+cdef+ccso",             INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
 +                                                INLOOPFILTER_CCSO },
 +  { "noccso",                        INLOOPFILTER_ALL - INLOOPFILTER_CCSO },
-+  { "restoration",                   INLOOPFILTER_RESTORATION },
-+  { "norestoration",                 INLOOPFILTER_ALL - INLOOPFILTER_RESTORATION },
-+  { "deblock+cdef+ccso+restoration", INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
-+                                                INLOOPFILTER_CCSO | INLOOPFILTER_RESTORATION },
++  { "wiener",                        INLOOPFILTER_WIENER },
++  { "nowiener",                      INLOOPFILTER_ALL - INLOOPFILTER_WIENER },
++  { "deblock+cdef+ccso+wiener",      INLOOPFILTER_DEBLOCK | INLOOPFILTER_CDEF |
++                                                INLOOPFILTER_CCSO | INLOOPFILTER_WIENER },
 +  { "gdf",                           INLOOPFILTER_GDF },
 +  { "nogdf",                         INLOOPFILTER_ALL - INLOOPFILTER_GDF },
 +  { "all",                           INLOOPFILTER_ALL },
++  {NULL,                             0}
 +};
 +
  static const arg_def_t help =
      ARG_DEF(NULL, "help", 0, "Show usage options and exit");
  static const arg_def_t looparg =
-@@ -123,6 +144,8 @@ static const arg_def_t outallarg = ARG_DEF(
+@@ -123,6 +145,8 @@ static const arg_def_t outallarg = ARG_DEF(
      NULL, "all-layers", 0, "Output all decoded frames of a scalable bitstream");
  static const arg_def_t skipfilmgrain =
      ARG_DEF(NULL, "skip-film-grain", 0, "Skip film grain application");
@@ -54,7 +55,7 @@ index 83d10a0059..bf2f41dbcd 100644
  #if CONFIG_F024_KEYOBU
  static const arg_def_t randomaccess =
      ARG_DEF(NULL, "random-access", 0,
-@@ -141,7 +164,7 @@ static const arg_def_t *all_args[] = {
+@@ -141,7 +165,7 @@ static const arg_def_t *all_args[] = {
  #endif
    &threadsarg,     &verbosearg,    &scalearg,    &fb_arg,         &md5arg,
    &verifyarg,      &framestatsarg, &continuearg, &outbitdeptharg, &oppointarg,
@@ -63,7 +64,7 @@ index 83d10a0059..bf2f41dbcd 100644
  #if CONFIG_F024_KEYOBU
    &randomaccess,
  #endif  // CONFIG_F024_KEYOBU
-@@ -656,6 +679,7 @@ static int main_loop(int argc, const char **argv_) {
+@@ -656,6 +680,7 @@ static int main_loop(int argc, const char **argv_) {
    int operating_point = 0;
    int output_all_layers = 0;
    int skip_film_grain = 0;
@@ -71,7 +72,7 @@ index 83d10a0059..bf2f41dbcd 100644
  #if CONFIG_F024_KEYOBU
    int random_access = 0;
  #endif  // CONFIG_F024_KEYOBU
-@@ -805,6 +829,8 @@ static int main_loop(int argc, const char **argv_) {
+@@ -805,6 +830,8 @@ static int main_loop(int argc, const char **argv_) {
        output_all_layers = 1;
      } else if (arg_match(&arg, &skipfilmgrain, argi)) {
        skip_film_grain = 1;
@@ -80,7 +81,7 @@ index 83d10a0059..bf2f41dbcd 100644
  #if CONFIG_F024_KEYOBU
      } else if (arg_match(&arg, &randomaccess, argi)) {
        random_access = arg_parse_uint(&arg);
-@@ -963,6 +989,13 @@ static int main_loop(int argc, const char **argv_) {
+@@ -963,6 +990,13 @@ static int main_loop(int argc, const char **argv_) {
      goto fail;
    }
  
@@ -166,7 +167,7 @@ index 6a1c309785..54d81f7ccd 100644
    } else {
      uint16_t *recon_buf = xd->plane[plane].dst.buf;
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 7815d61799..751034f66a 100644
+index 7815d61799..824742fe2a 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -667,9 +667,10 @@ static void dec_calc_subpel_params_and_extend(
@@ -207,7 +208,7 @@ index 7815d61799..751034f66a 100644
 +  const int filters = pbi->inloop_filters;
 +  const int enable_deblock = filters & INLOOPFILTER_DEBLOCK;
 +  const int enable_cdef = filters & INLOOPFILTER_CDEF;
-+  const int enable_restoration = filters & INLOOPFILTER_RESTORATION;
++  const int enable_restoration = filters & INLOOPFILTER_WIENER;
 +  const int enable_ccso = filters & INLOOPFILTER_CCSO;
 +  const int enable_gdf = filters & INLOOPFILTER_GDF;
 +
@@ -265,7 +266,7 @@ index 4715185cd0..c364adac6f 100644
    int inv_tile_order;
    int need_resync;  // wait for key/intra-only frame.
 diff --git a/avm/avm_codec.h b/avm/avm_codec.h
-index a0057f064a..92268adbe3 100644
+index a0057f064a..8439dcfc25 100644
 --- a/avm/avm_codec.h
 +++ b/avm/avm_codec.h
 @@ -622,6 +622,16 @@ typedef enum {
@@ -273,13 +274,13 @@ index a0057f064a..92268adbe3 100644
  } OBU_METADATA_TYPE;
  
 +enum InloopFilterType {
-+  INLOOPFILTER_NONE        = 0,
-+  INLOOPFILTER_DEBLOCK     = 1 << 0,
-+  INLOOPFILTER_CDEF        = 1 << 1,
-+  INLOOPFILTER_RESTORATION = 1 << 2,
-+  INLOOPFILTER_CCSO        = 1 << 3,
-+  INLOOPFILTER_GDF         = 1 << 4,
-+  INLOOPFILTER_ALL         = -1,
++  INLOOPFILTER_NONE    = 0,
++  INLOOPFILTER_DEBLOCK = 1 << 0,
++  INLOOPFILTER_CDEF    = 1 << 1,
++  INLOOPFILTER_WIENER  = 1 << 2,
++  INLOOPFILTER_CCSO    = 1 << 3,
++  INLOOPFILTER_GDF     = 1 << 4,
++  INLOOPFILTER_ALL     = -1,
 +};
 +
  /*!\brief Returns string representation of OBU_TYPE.
@@ -315,5 +316,5 @@ index 8d46452022..13fd143ac7 100644
  AVM_CTRL_USE_TYPE(AV2D_SET_RANDOM_ACCESS, int)
  #define AVM_CTRL_AV2D_SET_RANDOM_ACCESS
 -- 
-2.48.1
+2.43.0
 

@@ -3602,7 +3602,7 @@ void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const i
     if ((f->seq_hdr->cdef &&
          f->c->inloop_filters & DAV2D_INLOOPFILTER_CDEF) ||
         (f->lf.restore_planes &&
-         f->c->inloop_filters & DAV2D_INLOOPFILTER_RESTORATION))
+         f->c->inloop_filters & (DAV2D_INLOOPFILTER_WIENER | DAV2D_INLOOPFILTER_GDF)))
     {
         // Store deblocked pixels required by CDEF / LR
         bytefn(dav2d_copy_db)(f, p, sby);
@@ -3640,7 +3640,8 @@ void bytefn(dav2d_filter_sbrow_cdef)(Dav2dTaskContext *const tc, const int sby) 
 void bytefn(dav2d_filter_sbrow_lr)(Dav2dFrameContext *const f, const int sby,
                                    const int tile_row)
 {
-    if (!(f->c->inloop_filters & DAV2D_INLOOPFILTER_RESTORATION)) return;
+    if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_WIENER | DAV2D_INLOOPFILTER_GDF)))
+        return;
     const int y = sby * f->sb_step * 4;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     pixel *const sr_p[3] = {

@@ -59,14 +59,16 @@ typedef struct Dav2dLogger {
 } Dav2dLogger;
 
 enum Dav2dInloopFilterType {
-    DAV2D_INLOOPFILTER_DEBLOCK     = 1 << 0,
-    DAV2D_INLOOPFILTER_CDEF        = 1 << 1,
-    DAV2D_INLOOPFILTER_CCSO        = 1 << 2,
-    DAV2D_INLOOPFILTER_RESTORATION = 1 << 3,
+    DAV2D_INLOOPFILTER_DEBLOCK = 1 << 0,
+    DAV2D_INLOOPFILTER_CDEF    = 1 << 1,
+    DAV2D_INLOOPFILTER_CCSO    = 1 << 2,
+    DAV2D_INLOOPFILTER_WIENER  = 1 << 3,
+    DAV2D_INLOOPFILTER_GDF     = 1 << 4,
     DAV2D_INLOOPFILTER_ALL = DAV2D_INLOOPFILTER_DEBLOCK |
                              DAV2D_INLOOPFILTER_CDEF |
                              DAV2D_INLOOPFILTER_CCSO |
-                             DAV2D_INLOOPFILTER_RESTORATION,
+                             DAV2D_INLOOPFILTER_WIENER |
+                             DAV2D_INLOOPFILTER_GDF,
 };
 
 enum Dav2dDecodeFrameType {

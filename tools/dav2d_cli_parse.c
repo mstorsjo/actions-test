@@ -270,7 +270,8 @@ static const EnumParseTable inloop_filters_tbl[] = {
     { "deblock",       DAV2D_INLOOPFILTER_DEBLOCK },
     { "cdef",          DAV2D_INLOOPFILTER_CDEF },
     { "ccso",          DAV2D_INLOOPFILTER_CCSO },
-    { "restoration",   DAV2D_INLOOPFILTER_RESTORATION },
+    { "wiener",        DAV2D_INLOOPFILTER_WIENER },
+    { "gdf",           DAV2D_INLOOPFILTER_GDF },
     { "all",           DAV2D_INLOOPFILTER_ALL },
 };
 

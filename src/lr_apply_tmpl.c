@@ -73,8 +73,10 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     WienerParams wiener_params;
     uint16_t noskip_mask[64 + 2];
     int multi_wiener = 0;
+    const enum Dav2dRestorationType wiener_type =
+        (f->c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) ? lr->type : DAV2D_RESTORATION_NONE;
 
-    if (lr->type == DAV2D_RESTORATION_NS_WIENER) {
+    if (wiener_type == DAV2D_RESTORATION_NS_WIENER) {
         if (pd->frame_filters_on) {
             if (pd->num_classes == 1) {
                 wiener_fn = dsp->lr.ns_wiener_single[chroma];
@@ -90,7 +92,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             wiener_fn = dsp->lr.ns_wiener_single[chroma];
             wiener_params.single.filter = lr->ns_filter[0];
         }
-    } else if (lr->type == DAV2D_RESTORATION_PC_WIENER) {
+    } else if (wiener_type == DAV2D_RESTORATION_PC_WIENER) {
         multi_wiener = 1;
         wiener_fn = dsp->lr.pc_wiener;
         wiener_params.multi.base_q = f->lf.base_q;
@@ -137,7 +139,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
         const int inc = edges & LR_HAVE_BOTTOM ? 8 : 0;
         int sb256_idx = f->sb256w * ((y + inc) >> 8) + sb256x;
-        int gdf = !plane && f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
+        int gdf = !plane && (f->c->inloop_filters & DAV2D_INLOOPFILTER_GDF) &&
+                  f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
             dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, lpf,
