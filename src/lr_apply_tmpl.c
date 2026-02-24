@@ -59,7 +59,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const pixel *top =
         ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
                   (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ?
-        f->lf.lr_cdef_line[plane] + tile_row_m1 * (4 >> chroma) * PXSTRIDE(stride) + x : NULL;
+        f->lf.lr_cdef_line[plane] + tile_row_m1 * (6 - 4 * chroma) * PXSTRIDE(stride) + x : NULL;
     const int sb256x = x >> 8;
     const int sb64x_idx = (x >> 6) & 3;
 
@@ -137,17 +137,21 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         }
         // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
         edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
-        const int inc = edges & LR_HAVE_BOTTOM ? 8 : 0;
+        const int inc =
+            (edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED |
+                      LR_HAVE_BOTTOM_INTEGRATED)) == LR_HAVE_TOP &&
+            y + 8 < (f->bh * 4 >> ss_ver) ? 8 : 0;
         int sb256_idx = f->sb256w * ((y + inc) >> 8) + sb256x;
         int gdf = !plane && (f->c->inloop_filters & DAV2D_INLOOPFILTER_GDF) &&
                   f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
-            dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, lpf,
+            dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, top ? top : lpf,
+                             lpf + 6 * PXSTRIDE(stride),
                              w, stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
         }
         if (wiener_fn) {
-            wiener_fn(p, stride, left, top ? top : lpf,
+            wiener_fn(p, stride, left, top ? top + (2 * !chroma) * PXSTRIDE(stride) : lpf,
                       lpf + 6 * PXSTRIDE(stride), w, stripe_h, &wiener_params,
                       edges HIGHBD_CALL_SUFFIX);
             if (multi_wiener)
@@ -312,8 +316,8 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
         int offset_y = 8 * !!sby;
         int y_stripe = (sby << (6 + f->frame_hdr->sb128)) - offset_y;
         if (sby && first_sby_in_tile_row) {
-            copyNlines(&f->lf.lr_cdef_line[0][4 * PXSTRIDE(dst_stride[0]) * (tile_row - 1)],
-                       dst[0] - 4 * PXSTRIDE(dst_stride[0]), dst_stride[0], 4);
+            copyNlines(&f->lf.lr_cdef_line[0][6 * PXSTRIDE(dst_stride[0]) * (tile_row - 1)],
+                       dst[0] - 6 * PXSTRIDE(dst_stride[0]), dst_stride[0], 6);
             lr_sbrow(f, dst[0] - offset_y * PXSTRIDE(dst_stride[0]), y_stripe, w,
                      h, y_stripe + 8, 0, first_sby_in_tile_row * FIRST_SB_TOP,
                      tile_row - 1);

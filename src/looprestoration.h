@@ -88,7 +88,7 @@ typedef decl_wiener_filter_fn(*wienerfilter_fn);
 void (name)(int8_t *dst, ptrdiff_t dst_stride, \
             const pixel *p, ptrdiff_t stride, \
             const_left_pixel_row left, \
-            const pixel *lpf, int w, int h, \
+            const pixel *top, const pixel *bottom, int w, int h, \
             int ref_dst_idx, int qp_idx, \
             enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_gdf_prep_fn(*gdf_prep_fn);

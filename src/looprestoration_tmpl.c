@@ -662,7 +662,7 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
 static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
                        const pixel *p, const ptrdiff_t stride,
                        const pixel (*left)[6], const pixel *lpf,
-                       const int w, const int h,
+                       const pixel *lpf_bottom, const int w, const int h,
                        const int ref_dst_idx, const int qp_idx,
                        enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
@@ -674,14 +674,18 @@ static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
     pixel row_buffers[13][REST_UNIT_STRIDE];
     pixel *bak_rows[13];
     const pixel *ptrs[13];
-    const pixel *lpf_bottom = lpf + 6*PXSTRIDE(stride);
 
     for (int i = 0; i < 13; i++)
         bak_rows[i] = row_buffers[i] + 6;
 
     backup_row(bak_rows[6], p, left[0], w, 6, edges);
     ptrs[6] = bak_rows[6];
-    if (edges & LR_HAVE_TOP) {
+    if (edges & LR_HAVE_TOP_INTEGRATED) {
+        for (int n = 0; n < 6; n++) {
+            backup_row_lpf(bak_rows[n], lpf + n * PXSTRIDE(stride), w, 6, edges);
+            ptrs[n] = bak_rows[n];
+        }
+    } else if (edges & LR_HAVE_TOP) {
         // y = -2,-1
         backup_row_lpf(bak_rows[4], lpf, w, 6, edges);
         ptrs[4] = bak_rows[4];
@@ -716,6 +720,9 @@ static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
     for (int y = 0; y < h; y++) {
         if (y + 6 < h) {
             backup_row(bak_rows[bak_idx], p + 6*PXSTRIDE(stride), left[y + 6], w, 6, edges);
+            ptrs[12] = bak_rows[bak_idx];
+        } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
+            backup_row_lpf(bak_rows[bak_idx], p + 6*PXSTRIDE(stride), w, 6, edges);
             ptrs[12] = bak_rows[bak_idx];
         } else if (y + 4 < h && edges & LR_HAVE_BOTTOM) {
             int offset_y = y + 6 - h;

@@ -4612,7 +4612,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
     if (y_stride * num_lines != f->lf.lr_buf_plane_sz[0] ||
         uv_stride * num_lines * 2 != f->lf.lr_buf_plane_sz[1] ||
-        y_stride * 4 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[2] ||
+        y_stride * 6 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[2] ||
         uv_stride * 4 * n_tile_rows_m1 != f->lf.lr_buf_plane_sz[3])
     {
         dav2d_free_aligned(f->lf.lr_line_buf);
@@ -4620,7 +4620,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         size_t alloc_sz = 128;
         alloc_sz += (size_t)llabs(y_stride) * num_lines;
         alloc_sz += (size_t)llabs(uv_stride) * num_lines * 2;
-        alloc_sz += (size_t)llabs(y_stride) * n_tile_rows_m1 * 4;
+        alloc_sz += (size_t)llabs(y_stride) * n_tile_rows_m1 * 6;
         alloc_sz += (size_t)llabs(uv_stride) * n_tile_rows_m1 * 4;
         uint8_t *ptr = f->lf.lr_line_buf = dav2d_alloc_aligned(ALLOC_LR, alloc_sz, 64);
         if (!ptr) {
@@ -4644,13 +4644,13 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         ptr += llabs(uv_stride) * num_lines * 2;
         // FIXME make the below work with negative stride
         f->lf.lr_cdef_line[0] = ptr;
-        ptr += llabs(y_stride) * n_tile_rows_m1 * 4;
+        ptr += llabs(y_stride) * n_tile_rows_m1 * 6;
         f->lf.lr_cdef_line[1] = ptr;
         f->lf.lr_cdef_line[2] = ptr + llabs(uv_stride) * n_tile_rows_m1 * 2;
 
         f->lf.lr_buf_plane_sz[0] = (int) y_stride * num_lines;
         f->lf.lr_buf_plane_sz[1] = (int) uv_stride * num_lines * 2;
-        f->lf.lr_buf_plane_sz[2] = (int) y_stride * n_tile_rows_m1 * 4;
+        f->lf.lr_buf_plane_sz[2] = (int) y_stride * n_tile_rows_m1 * 6;
         f->lf.lr_buf_plane_sz[3] = (int) uv_stride * n_tile_rows_m1 * 4;
     }
 
