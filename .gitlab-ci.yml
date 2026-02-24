@@ -89,8 +89,8 @@ build-debian:
               "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
           )
           for file in "${files[@]}"; do
-              avm/x86-64/avmdec $file -o /dev/null --inloopfilters=deblock+cdef+ccso > avm.log
-              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet --inloopfilters=deblock+cdef+ccso > dav2d.log
+              avm/x86-64/avmdec $file -o /dev/null > avm.log
+              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet > dav2d.log
               diff -uw {avm,dav2d}.log
               wc -l avm.log
           done
@@ -112,9 +112,9 @@ build-debian:
           for file in "${files[@]}"; do
               base="$(basename "$file")"
               # avmdec's --md5 only outputs the MD5 of the first frame (see AVM #1267)
-              ./avm/x86-64/avmdec "$file" -o /tmp/avm.yuv --inloopfilters=deblock+cdef+ccso --rawvideo
+              ./avm/x86-64/avmdec "$file" -o /tmp/avm.yuv --rawvideo
               a_md5=$(md5sum /tmp/avm.yuv | cut -d' ' -f1)
-              d_md5=$(./build/tools/dav2d -i "$file" -o - --inloopfilters=deblock+cdef+ccso --threads=1 --quiet --muxer=md5)
+              d_md5=$(./build/tools/dav2d -i "$file" -o - --threads=1 --quiet --muxer=md5)
               if [[ "$a_md5" == "$d_md5" ]]; then
                   echo $base "[OK] md5:$a_md5"
               else
