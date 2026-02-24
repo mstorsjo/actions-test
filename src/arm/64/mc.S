@@ -2,6 +2,7 @@
  * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2018, Janne Grunau
  * Copyright © 2018, Martin Storsjo
+ * Copyright © 2026, Arm Limited
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -3259,4 +3260,156 @@ function emu_edge_8bpc_neon, export=1
 
 3:
         ret
+endfunc
+
+.macro SAD8xN_8bpc
+        ldr             q0,  [x12]              // overread by 4
+        ldr             q1,  [x13]
+        ldr             q5,  [x12, x1]          // overread by 4
+        ldr             q6,  [x13, x3]
+        add             x16, x12, x1, lsl #1    // PXSTRIDE(p0_stride) * 4
+        add             x17, x13, x3, lsl #1    // PXSTRIDE(p1_stride) * 4
+        uabd            v0.16b, v0.16b, v1.16b
+        uabd            v5.16b, v5.16b, v6.16b
+        sub             w9,  w5,  #4
+        uaddlp          v2.8h,  v0.16b
+        uaddlp          v4.8h,  v5.16b
+7:
+        ldr             q0,  [x16]              // overread by 4
+        ldr             q1,  [x17]
+        ldr             q5,  [x16, x1]          // overread by 4
+        ldr             q6,  [x17, x3]
+        add             x16, x16, x1, lsl #1    // PXSTRIDE(p0_stride) * 2
+        add             x17, x17, x3, lsl #1    // PXSTRIDE(p1_stride) * 2
+        uabd            v0.16b, v0.16b, v1.16b
+        uabd            v5.16b, v5.16b, v6.16b
+        sub             w9,  w9,  #4
+        uadalp          v2.8h,  v0.16b
+        uadalp          v4.8h,  v5.16b
+        cbnz            w9,  7b
+
+        add             v2.8h,  v2.8h,  v4.8h
+        and             v2.16b, v2.16b, v3.16b  // mask the last 4
+        uaddlv          s5,  v2.8h
+        fmov            w15, s5
+.endm
+
+.macro SAD16xN_8bpc
+        add             x14, x12, #16
+        add             x15, x13, #16
+        ldr             q0,  [x12]
+        ldr             q1,  [x13]
+        sub             w9,  w5,  #4
+        ldr             s4,  [x12, #16]
+        ldr             s5,  [x13, #16]
+        add             x14, x14, x1
+        add             x15, x15, x3
+        ldr             q16, [x12, x1]
+        ldr             q17, [x13, x3]
+        ld1             {v4.s}[1], [x14]
+        ld1             {v5.s}[1], [x15]
+        uabd            v0.16b,  v0.16b,  v1.16b
+        uabd            v16.16b, v16.16b, v17.16b
+        add             x16, x12, x1, lsl #1 // PXSTRIDE(p0_stride) * 4
+        add             x17, x13, x3, lsl #1 // PXSTRIDE(p1_stride) * 4
+        uaddlp          v2.8h, v0.16b
+        uaddlp          v3.8h, v16.16b
+        uabdl           v6.8h, v4.8b, v5.8b
+7:
+        ldr             q0,  [x16]
+        ldr             q1,  [x17]
+        ldr             s4,  [x16, #16]
+        ldr             s5,  [x17, #16]
+        add             x14, x14, x1, lsl #1
+        add             x15, x15, x3, lsl #1
+        ldr             q16, [x16, x1]
+        ldr             q17, [x17, x3]
+        ld1             {v4.s}[1], [x14]
+        ld1             {v5.s}[1], [x15]
+        uabd            v0.16b,  v0.16b,  v1.16b
+        uabd            v16.16b, v16.16b, v17.16b
+        sub             w9,  w9,  #4
+        add             x16, x16, x1, lsl #1 // PXSTRIDE(p0_stride) * 2
+        add             x17, x17, x3, lsl #1 // PXSTRIDE(p1_stride) * 2
+        uadalp          v2.8h, v0.16b
+        uadalp          v3.8h, v16.16b
+        uabal           v6.8h, v4.8b, v5.8b
+        cbnz            w9,  7b
+
+        add             v2.8h, v2.8h, v3.8h
+        add             v2.8h, v2.8h, v6.8h
+        uaddlv          s2,  v2.8h
+        fmov            w15, s2
+.endm
+
+.macro sad_refine_mv_8bpc_w width
+        add             w4,  w4,  #4          // w + 4
+        add             w5,  w5,  #4          // h + 4
+        mul             w8,  w4,  w5
+        lsl             w8,  w8,  #1          // sad_thr
+        mov             x10, #0               // best_dx
+        mov             x11, #0               // best_dy
+        mov             x15, #0xffffffff      // best_sad
+.if \width==8
+        movi            v3.16b, #0xff
+        ins             v3.s[3],  wzr
+.endif
+        cbz             w6,  2f               // is_implicit
+        // is_implicit = 1
+        add             x12, x0,  x1
+        add             x13, x2,  x3
+        add             x12, x12, #2          // 2 * p0_stride + 2
+        add             x13, x13, #2          // 2 * p1_stride + 2
+        SAD\width\()xN_8bpc
+        sub             x15, x15, x15, lsr #3 // (best_sad * 7 + 7) >> 3
+        cmp             x15, x8               // if best_sad < sad_thr
+        b.lt            6f
+2:      // is_implicit = 0
+        add             x2,  x2,  x3,  lsl #1 // p1_start = p1 + 4 * p1_stride
+        mov             x6,  x15              // best_sad
+        add             x2,  x2,  #4          // p1_start = p1 + 4 * p1_stride + 4
+        mov             x4,  #-2              // y_off
+3:
+        mov             x12, x0               // p0_ptr = p0_start
+        mov             x13, x2               // p1_ptr = p1_start
+        mov             x8,  #-2              // x_off
+4:
+        orr             x9,  x4,  x8
+        cbz             x9,  5f               // skip if both are 0
+        SAD\width\()xN_8bpc
+        cmp             x6,  x15              // if (sad >= best_sad)
+        b.ls            5f
+
+        mov             x6,  x15              // best_sad = sad
+        mov             x10, x8               // best_dx = x_off
+        mov             x11, x4               // best_dy = y_off
+5:
+        add             x8,  x8,  #1          // x_off++
+        add             x12, x12, #1          // p0++
+        sub             x13, x13, #1          // p1--
+        cmp             x8,  #2
+        b.le            4b
+
+        add             x4,  x4,  #1          // y_off++
+        add             x0,  x0,  x1, lsr #1  // p0 += p0_stride
+        sub             x2,  x2,  x3, lsr #1  // p1 -= p1_stride
+        cmp             x4,  #2
+        b.le            3b
+6:
+        strb            w11, [x7]             // o->y
+        strb            w10, [x7, #1]         // o->x
+        ret
+.endm
+
+// void dav2d_sad_refine_mv_8bpc_neon(const pixel *const p0, const ptrdiff_t p0_stride,
+//                                    const pixel *const p1, const ptrdiff_t p1_stride,
+//                                    const int w, const int h, const int is_implicit,
+//                                    struct OpflOffset *const o HIGHBD_DECL_SUFFIX)
+function sad_refine_mv_8bpc_neon, export=1
+        cmp             w4,  #8
+        lsl             x1,  x1,  #1
+        lsl             x3,  x3,  #1
+        b.eq            1f
+        sad_refine_mv_8bpc_w 16
+1:      sad_refine_mv_8bpc_w 8
 endfunc
