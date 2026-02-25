@@ -1378,7 +1378,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     hdr->segmentation.enabled = dav2d_get_bit(gb);
     if (hdr->segmentation.enabled) {
         if (seqhdr->segmentation.info_present &&
-            (!seqhdr->segmentation.adaptive || !dav2d_get_bit(gb)))
+            (!seqhdr->segmentation.adaptive || dav2d_get_bit(gb)))
         {
             hdr->segmentation.d = seqhdr->segmentation.d;
         } else {
