@@ -163,7 +163,7 @@ static ALWAYS_INLINE void parse_seg_info(Dav2dSegmentationDataSet *const seg,
     for (int n = 0, m = 0; n < n_seg; n++, m <<= 1) {
         if (dav2d_get_bit(gb)) {
             seg->delta_q_mask |= m;
-            seg->delta_q[n] = dav2d_get_sbits(gb, 9);
+            seg->delta_q[n] = iclip(dav2d_get_sbits(gb, 10), -351, 351);
         }
         seg->skip_mask |= m * dav2d_get_bit(gb);
         seg->globalmv_mask |= m * dav2d_get_bit(gb);
