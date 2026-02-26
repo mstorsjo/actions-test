@@ -1133,7 +1133,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 unsigned seg_id = get_prev_frame_segid(f, t->by, t->bx, w4, h4,
                                                        f->prev_segmap,
                                                        f->b4_stride);
-                if (seg_id >= 8) return -1;
+                if (seg_id >= 16) return -1;
                 b->seg_id = seg_id;
             } else {
                 b->seg_id = 0;
@@ -1150,19 +1150,23 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                                            w4, h4,
                                                            f->prev_segmap,
                                                            f->b4_stride);
-                    if (seg_id >= 8) return -1;
+                    if (seg_id >= 16) return -1;
                     b->seg_id = seg_id;
                 } else {
                     b->seg_id = 0;
                 }
             } else {
+                const int ext = f->seq_hdr->segmentation.ext;
                 int seg_ctx;
+                unsigned diff = 0;
                 const unsigned pred_seg_id =
                     get_cur_frame_segid(t->by, t->bx, have_top, have_left,
                                         &seg_ctx, f->cur_segmap, f->b4_stride);
-                const unsigned diff = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                          ts->cdf.m.seg_id[seg_ctx],
-                                          DAV2D_MAX_SEGMENTS - 1);
+                if (ext)
+                    diff = dav2d_msac_decode_bool_adapt(&ts->msac,
+                               ts->cdf.m.seg_id_ext[seg_ctx]) << 3;
+                diff += dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                            ts->cdf.m.seg_id[ext][seg_ctx], 7);
                 const unsigned last_active_seg_id =
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
@@ -1171,9 +1175,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
             }
 
-            if (DEBUG_BLOCK_INFO)
-                printf("Post-segid[preskip;%d]: r=%d\n",
-                       b->seg_id, ts->msac.rng);
+            DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
+                               depth, "", b->seg_id, ts->msac.rng);
         }
     } else {
         b->seg_id = 0;
@@ -1307,7 +1310,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 unsigned seg_id = get_prev_frame_segid(f, t->by, t->bx, w4, h4,
                                                        f->prev_segmap,
                                                        f->b4_stride);
-                if (seg_id >= 8) return -1;
+                if (seg_id >= 16) return -1;
                 b->seg_id = seg_id;
             } else {
                 b->seg_id = 0;
@@ -1320,9 +1323,13 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->skip_txfm) {
                 b->seg_id = pred_seg_id;
             } else {
-                const unsigned diff = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                          ts->cdf.m.seg_id[seg_ctx],
-                                          DAV2D_MAX_SEGMENTS - 1);
+                int ext = f->seq_hdr->segmentation.ext;
+                unsigned diff = 0;
+                if (ext)
+                    diff = dav2d_msac_decode_bool_adapt(&ts->msac,
+                               ts->cdf.m.seg_id_ext[seg_ctx]) << 3;
+                diff += dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                            ts->cdf.m.seg_id[ext][seg_ctx], 7);
                 const unsigned last_active_seg_id =
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
@@ -1332,9 +1339,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
         }
 
-        if (DEBUG_BLOCK_INFO)
-            printf("Post-segid[postskip;%d]: r=%d\n",
-                   b->seg_id, ts->msac.rng);
+        DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
+                           depth, "", b->seg_id, ts->msac.rng);
     }
 
     if (has_luma) {

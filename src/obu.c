@@ -160,7 +160,7 @@ static NOINLINE void parse_tile_info(struct Dav2dTileInfo *const thdr,
 static ALWAYS_INLINE void parse_seg_info(Dav2dSegmentationDataSet *const seg,
                                          GetBits *const gb, const int n_seg)
 {
-    for (int n = 0, m = 0; n < n_seg; n++, m <<= 1) {
+    for (int n = 0, m = 1; n < n_seg; n++, m <<= 1) {
         if (dav2d_get_bit(gb)) {
             seg->delta_q_mask |= m;
             seg->delta_q[n] = iclip(dav2d_get_sbits(gb, 10), -351, 351);
