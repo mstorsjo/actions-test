@@ -1156,17 +1156,17 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     b->seg_id = 0;
                 }
             } else {
-                const int ext = f->seq_hdr->segmentation.ext;
                 int seg_ctx;
-                unsigned diff = 0;
                 const unsigned pred_seg_id =
                     get_cur_frame_segid(t->by, t->bx, have_top, have_left,
                                         &seg_ctx, f->cur_segmap, f->b4_stride);
-                if (ext)
-                    diff = dav2d_msac_decode_bool_adapt(&ts->msac,
-                               ts->cdf.m.seg_id_ext[seg_ctx]) << 3;
-                diff += dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                            ts->cdf.m.seg_id[ext][seg_ctx], 7);
+                const unsigned ext_flag = f->seq_hdr->segmentation.ext ?
+                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.seg_id_ext[seg_ctx]) :
+                    0;
+                const unsigned diff =
+                    dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                        ts->cdf.m.seg_id[ext_flag][seg_ctx], 7) +
+                    (ext_flag << 3);
                 const unsigned last_active_seg_id =
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
@@ -1323,13 +1323,13 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->skip_txfm) {
                 b->seg_id = pred_seg_id;
             } else {
-                int ext = f->seq_hdr->segmentation.ext;
-                unsigned diff = 0;
-                if (ext)
-                    diff = dav2d_msac_decode_bool_adapt(&ts->msac,
-                               ts->cdf.m.seg_id_ext[seg_ctx]) << 3;
-                diff += dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                            ts->cdf.m.seg_id[ext][seg_ctx], 7);
+                const unsigned ext_flag = f->seq_hdr->segmentation.ext ?
+                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.seg_id_ext[seg_ctx]) :
+                    0;
+                const unsigned diff =
+                    dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                        ts->cdf.m.seg_id[ext_flag][seg_ctx], 7) +
+                    (ext_flag << 3);
                 const unsigned last_active_seg_id =
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
