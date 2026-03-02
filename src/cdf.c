@@ -1455,7 +1455,7 @@ static const CdfDefaultContext default_cdf = {
                 { CDF7( 4096,  8192, 12288, 16384, 20480, 24576, 28672) },
             }
         }, .delta_q = {
-            CDF3(28160, 32120, 32677)
+            CDF7(16594, 23325, 26424, 28225, 29358, 30099, 30613), 56 << 8
         },
     }, .mv = {
         .shell_set = {
@@ -6894,7 +6894,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
 \
     update_cdf_2d(3, 1, m, seg_id_ext, op); \
     update_cdf_3d(2, 3, 7, m, seg_id, op); \
-    update_cdf_1d(3, m, delta_q, op); \
+    update_cdf_1d(7, m, delta_q, op); \
  \
     update_mv_cdfs(dmv, op); \
  \

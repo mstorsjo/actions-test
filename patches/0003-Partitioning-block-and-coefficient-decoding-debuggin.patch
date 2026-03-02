@@ -1,4 +1,4 @@
-From 377a98ef2ba330c601cbb37c0f5efba45752298d Mon Sep 17 00:00:00 2001
+From a9aa98e2e07717f84696f1f4686d5ddd999d90bf Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -9,7 +9,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  av2/common/mvref_common.c   | 666 ++++++++++++++++++++++++++++--
  av2/common/tip.c            |   2 +
  av2/decoder/decodeframe.c   | 208 +++++++---
- av2/decoder/decodemv.c      | 780 ++++++++++++++++++++++++++++++------
+ av2/decoder/decodemv.c      | 788 ++++++++++++++++++++++++++++++------
  av2/decoder/decodemv.h      |  18 +-
  av2/decoder/decoder.c       |   5 +-
  av2/decoder/decoder.h       |  12 +-
@@ -18,7 +18,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  av2/decoder/detokenize.c    |   8 +-
  av2/decoder/detokenize.h    |   3 +-
  avm/debug.h                 |  16 +
- 13 files changed, 1693 insertions(+), 268 deletions(-)
+ 13 files changed, 1701 insertions(+), 268 deletions(-)
 
 diff --git a/av2/common/av2_common_int.h b/av2/common/av2_common_int.h
 index 060e8ef70b..546a157ffb 100644
@@ -2017,7 +2017,7 @@ index 73f19b9805..7ed02bef13 100644
        avm_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av2/decoder/decodemv.c b/av2/decoder/decodemv.c
-index a918b816ea..5babb80ed4 100644
+index a918b816ea..17591e0aa6 100644
 --- a/av2/decoder/decodemv.c
 +++ b/av2/decoder/decodemv.c
 @@ -42,7 +42,8 @@
@@ -2764,7 +2764,7 @@ index a918b816ea..5babb80ed4 100644
        mbmi->morph_pred = avm_read_symbol(
            r, ec_ctx->morph_pred_cdf[morph_pred_ctx], 2, ACCT_INFO());
        if (mbmi->morph_pred != 0) {
-@@ -1491,35 +1710,51 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -1491,35 +1710,59 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
                             "Invalid intrabc BAWP dv");
        }
      }
@@ -2800,10 +2800,18 @@ index a918b816ea..5babb80ed4 100644
                : cm->seq_params.bit_depth == AVM_BITS_10 ? MAXQ_10_BITS
                                                          : MAXQ);
 +#if DEBUG_BLOCK_INFO
++    BLOCK_SIZE bsize = mbmi->sb_type[xd->tree_type == CHROMA_PART];
 +    const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++    const int b_col = mi_col & (cm->mib_size - 1);
++    const int b_row = mi_row & (cm->mib_size - 1);
++    const int read_delta_q_flag = (b_col == 0 && b_row == 0);
++    if ((bsize != cm->sb_size ||
++         mbmi->skip_txfm[xd->tree_type == CHROMA_PART] == 0) &&
++        read_delta_q_flag) {
++      DEBUG_BLOCK_printf("%*sPost-delta_q[%d->%d]: r=%d\n",
++                         depth, "", delta_q_val, xd->current_base_qindex, r->ec.rng);
++    }
 +#endif
-+    DEBUG_BLOCK_printf("%*sPost-delta_q[%d->%d]: r=%d\n",
-+                       depth, "", delta_q_val, xd->current_base_qindex, r->ec.rng);
    }
  }
  
@@ -2821,7 +2829,7 @@ index a918b816ea..5babb80ed4 100644
    int mode_set_index =
        avm_read_symbol(r, ec_ctx->y_mode_set_cdf, INTRA_MODE_SETS,
                        ACCT_INFO("mode_set_index", "y_mode_set_cdf"));
-@@ -1535,6 +1770,9 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
+@@ -1535,6 +1778,9 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
    } else {
      mode_idx = FIRST_MODE_COUNT + (mode_set_index - 1) * SECOND_MODE_COUNT +
                 avm_read_literal(r, 4, ACCT_INFO("mode_idx"));
@@ -2831,7 +2839,7 @@ index a918b816ea..5babb80ed4 100644
    }
    assert(mode_idx < LUMA_MODE_COUNT);
    get_y_intra_mode_set(mbmi, xd);
-@@ -1543,30 +1781,40 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
+@@ -1543,30 +1789,40 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
    mbmi->y_mode_idx = mode_idx;
    if (mbmi->joint_y_mode_delta_angle < NON_DIRECTIONAL_MODES_COUNT)
      assert(mbmi->joint_y_mode_delta_angle == mbmi->y_mode_idx);
@@ -2877,7 +2885,7 @@ index a918b816ea..5babb80ed4 100644
        avm_read_symbol(r, ec_ctx->uv_mode_cdf[context],
                        CHROMA_INTRA_MODE_INDEX_COUNT, ACCT_INFO("uv_mode_idx"));
    if (uv_mode_idx == (CHROMA_INTRA_MODE_INDEX_COUNT - 1))
-@@ -1582,9 +1830,24 @@ static void read_intra_uv_mode(MACROBLOCKD *const xd,
+@@ -1582,9 +1838,24 @@ static void read_intra_uv_mode(MACROBLOCKD *const xd,
      mbmi->angle_delta[PLANE_TYPE_UV] = mbmi->angle_delta[PLANE_TYPE_Y];
    else
      mbmi->angle_delta[PLANE_TYPE_UV] = 0;
@@ -2903,7 +2911,7 @@ index a918b816ea..5babb80ed4 100644
                                         DecoderCodingBlock *dcb, avm_reader *r) {
    MACROBLOCKD *const xd = &dcb->xd;
    MB_MODE_INFO *const mbmi = xd->mi[0];
-@@ -1593,8 +1856,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1593,8 +1864,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
  
    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
  
@@ -2918,7 +2926,7 @@ index a918b816ea..5babb80ed4 100644
  
    mbmi->skip_mode = 0;
    if (xd->tree_type != CHROMA_PART) mbmi->morph_pred = 0;
-@@ -1608,10 +1876,15 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1608,10 +1884,15 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          avm_read_symbol(r, ec_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -2935,7 +2943,7 @@ index a918b816ea..5babb80ed4 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -1622,19 +1895,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1622,19 +1903,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
    }
  
    if (!seg->segid_preskip && xd->tree_type != CHROMA_PART)
@@ -2960,7 +2968,7 @@ index a918b816ea..5babb80ed4 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -1653,7 +1926,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1653,7 +1934,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
    }
  
    if (av2_allow_intrabc(cm, xd, bsize) && xd->tree_type != CHROMA_PART) {
@@ -2969,7 +2977,7 @@ index a918b816ea..5babb80ed4 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -1665,7 +1938,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1665,7 +1946,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_y = read_dpcm_mode(ec_ctx, r);
        if (mbmi->use_dpcm_y == 0) {
@@ -2978,7 +2986,7 @@ index a918b816ea..5babb80ed4 100644
        } else {
          mbmi->dpcm_mode_y = read_dpcm_vert_horz_mode(ec_ctx, r);
          if (mbmi->dpcm_mode_y == 0) {
-@@ -1681,11 +1954,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1681,11 +1962,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
@@ -2999,7 +3007,7 @@ index a918b816ea..5babb80ed4 100644
      } else {
        mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
      }
-@@ -1694,10 +1975,11 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1694,10 +1983,11 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
        if (mbmi->use_dpcm_y == 0) {
          mbmi->mrl_index =
              (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3013,7 +3021,7 @@ index a918b816ea..5babb80ed4 100644
                ec_ctx, r, xd->neighbors[0], xd->neighbors[1]);
          } else {
            mbmi->multi_line_mrl = 0;
-@@ -1709,11 +1991,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1709,11 +1999,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->mrl_index =
            (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3029,7 +3037,7 @@ index a918b816ea..5babb80ed4 100644
        } else {
          mbmi->multi_line_mrl = 0;
        }
-@@ -1725,7 +2009,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1725,7 +2017,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
        if (xd->lossless[mbmi->segment_id]) {
          mbmi->use_dpcm_uv = read_dpcm_uv_mode(ec_ctx, r);
          if (mbmi->use_dpcm_uv == 0) {
@@ -3038,7 +3046,7 @@ index a918b816ea..5babb80ed4 100644
                xd,
                is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                    is_mhccp_allowed(cm, xd),
-@@ -1741,7 +2025,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1741,7 +2033,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
              mbmi->angle_delta[PLANE_TYPE_UV] = 0;
          }
        } else {
@@ -3047,7 +3055,7 @@ index a918b816ea..5babb80ed4 100644
              xd,
              is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                  is_mhccp_allowed(cm, xd),
-@@ -1774,6 +2058,20 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1774,6 +2066,20 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
          if (mbmi->cfl_idx == 0)
            mbmi->cfl_alpha_idx =
                read_cfl_alphas(ec_ctx, r, &mbmi->cfl_alpha_signs);
@@ -3068,7 +3076,7 @@ index a918b816ea..5babb80ed4 100644
        }
      } else {
        // Avoid decoding angle_info if there is is no chroma prediction
-@@ -1789,10 +2087,10 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1789,10 +2095,10 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
    mbmi->palette_mode_info.palette_size[1] = 0;
    if (av2_allow_palette(PLANE_TYPE_Y, cm->features.allow_screen_content_tools,
                          bsize))
@@ -3081,7 +3089,7 @@ index a918b816ea..5babb80ed4 100644
    }
  }
  
-@@ -2077,7 +2375,9 @@ static void set_ref_frames_for_skip_mode(AV2_COMMON *const cm,
+@@ -2077,7 +2383,9 @@ static void set_ref_frames_for_skip_mode(AV2_COMMON *const cm,
  }
  
  // Read the reference frame
@@ -3092,7 +3100,7 @@ index a918b816ea..5babb80ed4 100644
                              avm_reader *r, int segment_id,
                              MV_REFERENCE_FRAME ref_frame[2]) {
    if (xd->mi[0]->skip_mode) {
-@@ -2093,9 +2393,12 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -2093,9 +2401,12 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
                          ACCT_INFO("tip_cdf"))) {
        ref_frame[0] = TIP_FRAME;
      }
@@ -3106,7 +3114,7 @@ index a918b816ea..5babb80ed4 100644
  
    if (segfeature_active(&cm->seg, segment_id, SEG_LVL_SKIP) ||
        segfeature_active(&cm->seg, segment_id, SEG_LVL_GLOBALMV)) {
-@@ -2113,9 +2416,16 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -2113,9 +2424,16 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
        assert(0 && "Invalid prediction mode.");
      }
    }
@@ -3124,7 +3132,7 @@ index a918b816ea..5babb80ed4 100644
                                           InterpFilter interp_filter,
                                           const AV2_COMMON *cm,
                                           MB_MODE_INFO *const mbmi,
-@@ -2135,10 +2445,13 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
+@@ -2135,10 +2453,13 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
          r, ec_ctx->switchable_interp_cdf[ctx], SWITCHABLE_FILTERS,
          ACCT_INFO("switchable_interp_cdf"));
      mbmi->interp_fltr = filter;
@@ -3139,7 +3147,7 @@ index a918b816ea..5babb80ed4 100644
                                         MACROBLOCKD *const xd,
                                         MB_MODE_INFO *const mbmi,
                                         avm_reader *r) {
-@@ -2165,7 +2478,7 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2165,7 +2486,7 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_y = read_dpcm_mode(ec_ctx, r);
        if (mbmi->use_dpcm_y == 0) {
@@ -3148,7 +3156,7 @@ index a918b816ea..5babb80ed4 100644
        } else {
          mbmi->dpcm_mode_y = read_dpcm_vert_horz_mode(ec_ctx, r);
          if (mbmi->dpcm_mode_y == 0) {
-@@ -2181,14 +2494,25 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2181,14 +2502,25 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
@@ -3175,7 +3183,7 @@ index a918b816ea..5babb80ed4 100644
    } else {
      mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
    }
-@@ -2200,10 +2524,11 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2200,10 +2532,11 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
        if (mbmi->use_dpcm_y == 0) {
          mbmi->mrl_index =
              (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3189,7 +3197,7 @@ index a918b816ea..5babb80ed4 100644
                ec_ctx, r, xd->neighbors[0], xd->neighbors[1]);
          } else {
            mbmi->multi_line_mrl = 0;
-@@ -2215,11 +2540,13 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2215,11 +2548,13 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->mrl_index =
            (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3205,7 +3213,7 @@ index a918b816ea..5babb80ed4 100644
        } else {
          mbmi->multi_line_mrl = 0;
        }
-@@ -2231,7 +2558,7 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2231,7 +2566,7 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_uv = read_dpcm_uv_mode(ec_ctx, r);
        if (mbmi->use_dpcm_uv == 0) {
@@ -3214,7 +3222,7 @@ index a918b816ea..5babb80ed4 100644
              xd,
              is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                  is_mhccp_allowed(cm, xd),
-@@ -2249,7 +2576,8 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2249,7 +2584,8 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->use_dpcm_uv = 0;
        mbmi->dpcm_mode_uv = 0;
@@ -3224,7 +3232,7 @@ index a918b816ea..5babb80ed4 100644
                           is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                               is_mhccp_allowed(cm, xd),
                           r);
-@@ -2279,6 +2607,20 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2279,6 +2615,20 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
          mbmi->cfl_alpha_idx =
              read_cfl_alphas(xd->tile_ctx, r, &mbmi->cfl_alpha_signs);
        }
@@ -3245,7 +3253,7 @@ index a918b816ea..5babb80ed4 100644
      }
    } else {
      // Avoid decoding angle_info if there is is no chroma prediction
-@@ -2289,14 +2631,16 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2289,14 +2639,16 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
    mbmi->palette_mode_info.palette_size[1] = 0;
    if (av2_allow_palette(PLANE_TYPE_Y, cm->features.allow_screen_content_tools,
                          bsize))
@@ -3265,7 +3273,7 @@ index a918b816ea..5babb80ed4 100644
                              PREDICTION_MODE mode,
                              MV_REFERENCE_FRAME ref_frame[2], int_mv mv[2],
                              int_mv ref_mv[2], int is_compound,
-@@ -2489,6 +2833,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
+@@ -2489,6 +2841,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
            }
          }
        }
@@ -3275,7 +3283,7 @@ index a918b816ea..5babb80ed4 100644
      }
  
      for (int ref_idx = start_signaled_mvd_idx;
-@@ -2527,7 +2874,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
+@@ -2527,7 +2882,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
    return 1;
  }
  
@@ -3286,7 +3294,7 @@ index a918b816ea..5babb80ed4 100644
                                 int segment_id, avm_reader *r) {
    if (xd->mi[0]->sb_type[PLANE_TYPE_Y] == BLOCK_4X4) {
      return 0;
-@@ -2546,6 +2895,8 @@ static int read_is_inter_block(AV2_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -2546,6 +2903,8 @@ static int read_is_inter_block(AV2_COMMON *const cm, MACROBLOCKD *const xd,
    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
    const int is_inter =
        avm_read_symbol(r, ec_ctx->intra_inter_cdf[ctx], 2, ACCT_INFO());
@@ -3295,7 +3303,7 @@ index a918b816ea..5babb80ed4 100644
    return is_inter;
  }
  
-@@ -2583,7 +2934,9 @@ static void dec_dump_logs(AV2_COMMON *cm, MB_MODE_INFO *const mbmi, int mi_row,
+@@ -2583,7 +2942,9 @@ static void dec_dump_logs(AV2_COMMON *cm, MB_MODE_INFO *const mbmi, int mi_row,
  #endif  // DEC_MISMATCH_DEBUG
  
  // This function read the refinemv_flag ( if require) from the bitstream
@@ -3306,7 +3314,7 @@ index a918b816ea..5babb80ed4 100644
                                 avm_reader *r, BLOCK_SIZE bsize) {
    MB_MODE_INFO *const mbmi = xd->mi[0];
    mbmi->refinemv_flag = get_default_refinemv_flag(cm, mbmi);
-@@ -2593,12 +2946,14 @@ static void read_refinemv_flag(AV2_COMMON *const cm, MACROBLOCKD *xd,
+@@ -2593,12 +2954,14 @@ static void read_refinemv_flag(AV2_COMMON *const cm, MACROBLOCKD *xd,
      mbmi->refinemv_flag =
          avm_read_symbol(r, xd->tile_ctx->refinemv_flag_cdf[refinemv_ctx],
                          REFINEMV_NUM_MODES, ACCT_INFO("refinemv_flag"));
@@ -3322,7 +3330,7 @@ index a918b816ea..5babb80ed4 100644
    MB_MODE_INFO *const mbmi = xd->mi[0];
    assert(mbmi->max_mv_precision ==
           av2_get_mbmi_max_mv_precision(cm, xd->sbi, mbmi));
-@@ -2610,11 +2965,13 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
+@@ -2610,11 +2973,13 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
    assert(mbmi->most_probable_pb_mv_precision ==
           cm->features.most_probable_fr_mv_precision);
  
@@ -3337,7 +3345,7 @@ index a918b816ea..5babb80ed4 100644
    const PRECISION_SET *precision_def =
        &av2_mv_precision_sets[mbmi->mb_precision_set];
    int nsymbs = precision_def->num_precisions - 1;
-@@ -2626,7 +2983,30 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
+@@ -2626,7 +2991,30 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
    return av2_get_precision_from_index(mbmi, down);
  }
  
@@ -3369,7 +3377,7 @@ index a918b816ea..5babb80ed4 100644
                                         DecoderCodingBlock *dcb,
                                         MB_MODE_INFO *const mbmi,
                                         avm_reader *r) {
-@@ -2668,7 +3048,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2668,7 +3056,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
  
    av2_collect_neighbors_ref_counts(xd);
  
@@ -3382,7 +3390,7 @@ index a918b816ea..5babb80ed4 100644
    int is_compound = has_second_ref(mbmi);
  
    const MV_REFERENCE_FRAME ref_frame = av2_ref_frame_type(mbmi->ref_frame);
-@@ -2702,10 +3086,27 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2702,10 +3094,27 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
      read_drl_idx(cm->features.max_drl_bits,
                   av2_mode_context_pristine(inter_mode_ctx, mbmi->ref_frame),
                   ec_ctx, mbmi, r);
@@ -3410,7 +3418,7 @@ index a918b816ea..5babb80ed4 100644
  
      is_compound = has_second_ref(mbmi);
      if (!is_compound) {
-@@ -2722,9 +3123,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2722,9 +3131,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
        const int16_t mode_ctx =
            av2_mode_context_analyzer(inter_mode_ctx, mbmi->ref_frame);
        if (is_compound)
@@ -3424,7 +3432,7 @@ index a918b816ea..5babb80ed4 100644
  
        mbmi->use_amvd = 0;
        if (cm->seq_params.enable_adaptive_mvd && allow_amvd_mode(mbmi->mode)) {
-@@ -2734,12 +3137,65 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2734,12 +3145,65 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
          mbmi->use_amvd =
              avm_read_symbol(r, ec_ctx->amvd_mode_cdf[amvd_index][amvd_ctx], 2,
                              ACCT_INFO("use_amvd"));
@@ -3490,7 +3498,7 @@ index a918b816ea..5babb80ed4 100644
  
        if (cm->features.enable_bawp &&
            av2_allow_bawp(cm, mbmi, xd->mi_row, xd->mi_col)) {
-@@ -2759,14 +3215,17 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2759,14 +3223,17 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
                r, xd->tile_ctx->explicit_bawp_scale_cdf, EXPLICIT_BAWP_SCALE_CNT,
                ACCT_INFO("explicit_bawp_scales"));
          }
@@ -3515,7 +3523,7 @@ index a918b816ea..5babb80ed4 100644
        }
  
        for (int ref = 0; ref < 1 + has_second_ref(mbmi); ++ref) {
-@@ -2783,7 +3242,8 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2783,7 +3250,8 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
          if (has_second_ref(mbmi))
            mbmi->num_proj_ref[1] = av2_findSamples(cm, xd, pts1, pts1_inref, 1);
        }
@@ -3525,7 +3533,7 @@ index a918b816ea..5babb80ed4 100644
        int is_warpmv_warp_causal =
            ((mbmi->motion_mode == WARP_CAUSAL) && mbmi->mode == WARPMV);
        if (mbmi->motion_mode == WARP_DELTA || is_warpmv_warp_causal) {
-@@ -2794,27 +3254,39 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2794,27 +3262,39 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
              xd->valid_num_warp_candidates[av2_ref_frame_type(mbmi->ref_frame)],
              NULL);
  
@@ -3569,7 +3577,7 @@ index a918b816ea..5babb80ed4 100644
        }
        if (enable_adaptive_mvd_resolution(cm, mbmi))
          set_amvd_mv_precision(mbmi, mbmi->max_mv_precision);
-@@ -2864,13 +3336,14 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2864,13 +3344,14 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
    }
  
    const int mv_corrupted_flag =
@@ -3586,7 +3594,7 @@ index a918b816ea..5babb80ed4 100644
    }
  
    mbmi->warp_inter_intra = 0;
-@@ -2903,10 +3376,15 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2903,10 +3384,15 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
          }
        }
      }  // if (mbmi->warp_inter_intra)
@@ -3603,7 +3611,7 @@ index a918b816ea..5babb80ed4 100644
    }
  
    // init
-@@ -2921,8 +3399,9 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2921,8 +3407,9 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
      const int masked_compound_used = is_any_masked_compound_used(bsize) &&
                                       cm->seq_params.enable_masked_compound;
  
@@ -3614,7 +3622,7 @@ index a918b816ea..5babb80ed4 100644
        mbmi->comp_group_idx = (uint8_t)avm_read_symbol(
            r, ec_ctx->comp_group_idx_cdf[ctx_comp_group_idx], 2,
            ACCT_INFO("comp_group_idx"));
-@@ -2961,11 +3440,28 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2961,11 +3448,28 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
              avm_read_literal(r, MAX_DIFFWTD_MASK_BITS, ACCT_INFO("mask_type"));
        }
      }
@@ -3644,7 +3652,7 @@ index a918b816ea..5babb80ed4 100644
      if (is_cwp_allowed(mbmi) && mbmi->skip_mode)
        mbmi->cwp_idx =
            xd->skip_mvp_candidate_list.ref_mv_stack[mbmi->ref_mv_idx[0]].cwp_idx;
-@@ -2974,10 +3470,13 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2974,10 +3478,13 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
      mbmi->refinemv_flag = 0;
    }
  
@@ -3659,7 +3667,7 @@ index a918b816ea..5babb80ed4 100644
  
    if (mbmi->motion_mode == WARP_CAUSAL) {
      mbmi->wm_params[0].wmtype = DEFAULT_WMTYPE;
-@@ -3068,13 +3567,31 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -3068,13 +3575,31 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
    }
  
    if (xd->tree_type != LUMA_PART) xd->cfl.store_y = store_cfl_required(cm, xd);
@@ -3692,7 +3700,7 @@ index a918b816ea..5babb80ed4 100644
                                         DecoderCodingBlock *dcb, avm_reader *r) {
    AV2_COMMON *const cm = &pbi->common;
    MACROBLOCKD *const xd = &dcb->xd;
-@@ -3098,9 +3615,13 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3098,9 +3623,13 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
    mbmi->refinemv_flag = 0;
  
    if (xd->tree_type != CHROMA_PART)
@@ -3708,7 +3716,7 @@ index a918b816ea..5babb80ed4 100644
  
    mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
  
-@@ -3117,7 +3638,8 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3117,7 +3646,8 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
    }
  
    if (!mbmi->skip_mode) {
@@ -3718,7 +3726,7 @@ index a918b816ea..5babb80ed4 100644
    }
  
    if (!inter_block &&
-@@ -3130,11 +3652,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3130,11 +3660,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          avm_read_symbol(r, xd->tile_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -3736,7 +3744,7 @@ index a918b816ea..5babb80ed4 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -3150,16 +3677,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3150,16 +3685,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
    mbmi->warp_inter_intra = 0;
  
    if (!cm->seg.segid_preskip && xd->tree_type != CHROMA_PART)
@@ -3758,7 +3766,7 @@ index a918b816ea..5babb80ed4 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -3176,7 +3703,7 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3176,7 +3711,7 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
      mbmi->ref_frame[1] = NONE_FRAME;
      mbmi->palette_mode_info.palette_size[0] = 0;
      mbmi->palette_mode_info.palette_size[1] = 0;
@@ -3767,7 +3775,7 @@ index a918b816ea..5babb80ed4 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -3185,9 +3712,9 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3185,9 +3720,9 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
      }
    }
    if (inter_block)
@@ -3779,7 +3787,7 @@ index a918b816ea..5babb80ed4 100644
  }
  
  static void intra_copy_frame_mvs(AV2_COMMON *const cm, int mi_row, int mi_col,
-@@ -3213,7 +3740,8 @@ static void intra_copy_frame_mvs(AV2_COMMON *const cm, int mi_row, int mi_col,
+@@ -3213,7 +3748,8 @@ static void intra_copy_frame_mvs(AV2_COMMON *const cm, int mi_row, int mi_col,
    }
  }
  
@@ -3789,7 +3797,7 @@ index a918b816ea..5babb80ed4 100644
                          avm_reader *r, int x_inside_boundary,
                          int y_inside_boundary) {
    AV2_COMMON *const cm = &pbi->common;
-@@ -3225,7 +3753,7 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3225,7 +3761,7 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
      mi->sb_type[PLANE_TYPE_UV] = mi->sb_type[PLANE_TYPE_Y];
  
    if (frame_is_intra_only(cm)) {
@@ -3798,7 +3806,7 @@ index a918b816ea..5babb80ed4 100644
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_intrabc_block(mbmi, xd->tree_type)) {
-@@ -3238,7 +3766,7 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3238,7 +3774,7 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
        intra_copy_frame_mvs(cm, xd->mi_row, xd->mi_col, x_inside_boundary,
                             y_inside_boundary);
    } else {

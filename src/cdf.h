@@ -97,7 +97,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t cctx[7+1], 16);
     ALIGN(uint16_t seg_id_ext[3][2], 2);
     ALIGN(uint16_t seg_id[2][3][8], 8);
-    ALIGN(uint16_t delta_q[4], 8);
+    ALIGN(uint16_t delta_q[8], 8);
 
     /* inter/switch */
     ALIGN(uint16_t skip_mode[3][2], 4);

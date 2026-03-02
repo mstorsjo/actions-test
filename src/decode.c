@@ -1463,15 +1463,15 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // delta-q/lf
-    if (!((t->bx | t->by) & (63 >> (2 - f->frame_hdr->sb128)))) {
+    if (has_luma && !((t->bx | t->by) & (63 >> (2 - f->frame_hdr->sb128)))) {
         const int prev_qidx = ts->last_qidx;
         const int have_delta_q = f->frame_hdr->delta.q.present &&
                                  (bs != f->root_bs || !b->skip_txfm);
 
         if (have_delta_q) {
-            int delta_q = dav2d_msac_decode_symbol_adapt4(&ts->msac,
-                                                          ts->cdf.m.delta_q, 3);
-            if (delta_q == 3) {
+            int delta_q = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                                          ts->cdf.m.delta_q, 7);
+            if (delta_q == 7) {
                 const int n_bits = 1 + dav2d_msac_decode_bools_bypass(&ts->msac, 3);
                 delta_q = dav2d_msac_decode_bools_bypass(&ts->msac, n_bits) +
                           1 + (1 << n_bits);
@@ -1481,9 +1481,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 delta_q *= 1 << f->frame_hdr->delta.q.res_log2;
             }
             ts->last_qidx = iclip(ts->last_qidx + delta_q, 1, 255);
-            if (have_delta_q && DEBUG_BLOCK_INFO)
-                printf("Post-delta_q[%d->%d]: r=%d\n",
-                       delta_q, ts->last_qidx, ts->msac.rng);
+            DEBUG_BLOCK_printf("%*sPost-delta_q[%d->%d]: r=%d\n",
+                               depth, "", delta_q, ts->last_qidx, ts->msac.rng);
         }
         if (ts->last_qidx == f->frame_hdr->quant.yac) {
             // assign frame-wide q values to this sb
