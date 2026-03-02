@@ -1128,7 +1128,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     // segment_id (if seg_feature for skip/ref/gmv is enabled)
     int seg_pred = 0;
     if (f->frame_hdr->segmentation.enabled) {
-        if (!f->frame_hdr->segmentation.update_map) {
+        if (!has_luma) {
+            b->seg_id = f->cur_segmap[t->bx + t->by * f->b4_stride];
+        } else if (!f->frame_hdr->segmentation.update_map) {
             if (f->prev_segmap) {
                 unsigned seg_id = get_prev_frame_segid(f, t->by, t->bx, w4, h4,
                                                        f->prev_segmap,
@@ -1300,7 +1302,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         f->frame_hdr->segmentation.update_map &&
         !f->frame_hdr->segmentation.preskip)
     {
-        if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
+        if (!has_luma) {
+            b->seg_id = f->cur_segmap[t->bx + t->by * f->b4_stride];
+        } else if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
             (seg_pred = dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.seg_pred[t->a->seg_pred[bx4] +
                             t->l.seg_pred[by4]])))
