@@ -98,7 +98,6 @@ if is_asm_enabled
             libdav2d_sources_asm = files(
                 # itx.S is used for both 8 and 16 bpc.
                 'arm/64/itx.S',
-                'arm/64/looprestoration_common.S',
                 'arm/64/msac.S',
                 'arm/64/refmvs.S',
             )
@@ -109,7 +108,6 @@ if is_asm_enabled
                     'arm/64/filmgrain.S',
                     'arm/64/ipred.S',
                     'arm/64/loopfilter.S',
-                    'arm/64/looprestoration.S',
                     'arm/64/mc.S',
                     'arm/64/mc_dotprod.S',
                 )
@@ -122,7 +120,6 @@ if is_asm_enabled
                     'arm/64/ipred16.S',
                     'arm/64/itx16.S',
                     'arm/64/loopfilter16.S',
-                    'arm/64/looprestoration16.S',
                     'arm/64/mc16.S',
                     'arm/64/mc16_sve.S',
                 )
@@ -131,7 +128,6 @@ if is_asm_enabled
             libdav2d_sources_asm = files(
                 # itx.S is used for both 8 and 16 bpc.
                 'arm/32/itx.S',
-                'arm/32/looprestoration_common.S',
                 'arm/32/msac.S',
                 'arm/32/refmvs.S',
             )
@@ -142,7 +138,6 @@ if is_asm_enabled
                     'arm/32/filmgrain.S',
                     'arm/32/ipred.S',
                     'arm/32/loopfilter.S',
-                    'arm/32/looprestoration.S',
                     'arm/32/mc.S',
                 )
             endif
@@ -154,7 +149,6 @@ if is_asm_enabled
                     'arm/32/ipred16.S',
                     'arm/32/itx16.S',
                     'arm/32/loopfilter16.S',
-                    'arm/32/looprestoration16.S',
                     'arm/32/mc16.S',
                 )
             endif
@@ -190,17 +184,14 @@ if is_asm_enabled
                 'x86/filmgrain_avx512.asm',
                 'x86/ipred_avx512.asm',
                 'x86/loopfilter_avx512.asm',
-                'x86/looprestoration_avx512.asm',
                 'x86/mc_avx512.asm',
                 'x86/filmgrain_avx2.asm',
                 'x86/ipred_avx2.asm',
                 'x86/loopfilter_avx2.asm',
-                'x86/looprestoration_avx2.asm',
                 'x86/mc_avx2.asm',
                 'x86/filmgrain_sse.asm',
                 'x86/ipred_sse.asm',
                 'x86/loopfilter_sse.asm',
-                'x86/looprestoration_sse.asm',
                 'x86/mc_sse.asm',
             )
         endif
@@ -212,21 +203,18 @@ if is_asm_enabled
                 'x86/ipred16_avx512.asm',
                 'x86/itx16_avx512.asm',
                 'x86/loopfilter16_avx512.asm',
-                'x86/looprestoration16_avx512.asm',
                 'x86/mc16_avx512.asm',
                 'x86/cdef16_avx2.asm',
                 'x86/filmgrain16_avx2.asm',
                 'x86/ipred16_avx2.asm',
                 'x86/itx16_avx2.asm',
                 'x86/loopfilter16_avx2.asm',
-                'x86/looprestoration16_avx2.asm',
                 'x86/mc16_avx2.asm',
                 'x86/cdef16_sse.asm',
                 'x86/filmgrain16_sse.asm',
                 'x86/ipred16_sse.asm',
                 'x86/itx16_sse.asm',
                 'x86/loopfilter16_sse.asm',
-                'x86/looprestoration16_sse.asm',
                 'x86/mc16_sse.asm',
             )
         endif
@@ -238,16 +226,11 @@ if is_asm_enabled
             'loongarch/cpu.c',
         )
 
-        libdav2d_arch_tmpl_sources += {'default': files(
-            'loongarch/looprestoration_inner.c',
-        )}
-
         libdav2d_sources_asm = files(
             'loongarch/cdef.S',
             'loongarch/ipred.S',
             'loongarch/mc.S',
             'loongarch/loopfilter.S',
-            'loongarch/looprestoration.S',
             'loongarch/msac.S',
             'loongarch/refmvs.S',
             'loongarch/itx.S',
@@ -260,7 +243,6 @@ if is_asm_enabled
         )
         libdav2d_arch_tmpl_sources += {'vsx': files(
             'ppc/cdef_tmpl.c',
-            'ppc/looprestoration_tmpl.c',
         )}
         arch_flags += {'pwr9': ['-mcpu=power9', '-DDAV2D_PWR9']}
         libdav2d_arch_tmpl_sources += {'pwr9': files(
