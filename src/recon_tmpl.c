@@ -705,6 +705,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         *txtp == IDTX && !chroma)
     {
         assert(!stx_type);
+        *txtp = IDTX_INV;
         int8_t *const levels = t->scratch.levels;
         const ptrdiff_t stride = 1 + (4 << slh);
         memset(levels, 0, stride * ((4 << slw) + 1));

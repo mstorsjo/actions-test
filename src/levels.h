@@ -87,6 +87,7 @@ enum Tx1dType {
 
 enum TxClass {
     TX_CLASS_2D,
+    TX_CLASS_2D_INV, /* inverse coefficient order */
     TX_CLASS_H,
     TX_CLASS_V,
 };
@@ -106,6 +107,7 @@ enum TxfmType {
     TX_TYPE_ENUM_2D(FLIPADST, ADST),
     TX_TYPE_ENUM_2D(ADST, FLIPADST),
     TX_TYPE_ENUM(IDTX, IDENTITY, IDENTITY, 2D),
+    TX_TYPE_ENUM(IDTX_INV, IDENTITY, IDENTITY, 2D_INV),
     TX_TYPE_ENUM(V_DCT, IDENTITY, DCT, V),
     TX_TYPE_ENUM(H_DCT, DCT, IDENTITY, H),
     TX_TYPE_ENUM(V_ADST, IDENTITY, ADST, V),
