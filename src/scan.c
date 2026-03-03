@@ -349,75 +349,42 @@ const uint16_t *const dav2d_scans[N_RECT_TX_SIZES] = {
     [RTX_64X4 ] = scan_32x4,
 };
 
-static uint8_t last_nonzero_col_from_eob_4x4[16];
-static uint8_t last_nonzero_col_from_eob_8x8[64];
-static uint8_t last_nonzero_col_from_eob_16x16[256];
-static uint8_t last_nonzero_col_from_eob_32x32[1024];
-static uint8_t last_nonzero_col_from_eob_4x8[32];
-static uint8_t last_nonzero_col_from_eob_8x4[32];
-static uint8_t last_nonzero_col_from_eob_8x16[128];
-static uint8_t last_nonzero_col_from_eob_16x8[128];
-static uint8_t last_nonzero_col_from_eob_16x32[512];
-static uint8_t last_nonzero_col_from_eob_32x16[512];
-static uint8_t last_nonzero_col_from_eob_4x16[64];
-static uint8_t last_nonzero_col_from_eob_16x4[64];
-static uint8_t last_nonzero_col_from_eob_8x32[256];
-static uint8_t last_nonzero_col_from_eob_32x8[256];
-
-static COLD void init_tbl(uint8_t *const last_nonzero_col_from_eob,
-                          const uint16_t *const scan, const int w, const int h)
-{
-    int max_col = 0;
-    for (int y = 0, n = 0; y < h; y++) {
-        for (int x = 0; x < w; x++, n++) {
-            const int rc = scan[n];
-            const int rcx = rc & (h - 1);
-            max_col = imax(max_col, rcx);
-            last_nonzero_col_from_eob[n] = max_col;
-        }
+/* Index (eob) of the last coefficient per 4xN column. */
+const struct Dav2dLastEob dav2d_last_eob_per_col = {
+    .offset = { /* Offset into the table below. */
+        [ TX_4X4  ] =  1,
+        [RTX_8X4  ] =  1,
+        [RTX_16X4 ] =  1,
+        [RTX_32X4 ] =  1,
+        [RTX_64X4 ] =  1,
+        [RTX_4X8  ] =  0,
+        [ TX_8X8  ] =  0,
+        [RTX_16X8 ] =  0,
+        [RTX_32X8 ] =  0,
+        [RTX_64X8 ] =  0,
+        [RTX_4X16 ] =  2,
+        [RTX_8X16 ] =  6,
+        [ TX_16X16] = 10,
+        [RTX_32X16] = 10,
+        [RTX_64X16] = 10,
+        [RTX_4X32 ] = 14,
+        [RTX_4X64 ] = 14,
+        [RTX_8X32 ] = 22,
+        [RTX_8X64 ] = 22,
+        [RTX_16X32] = 30,
+        [RTX_16X64] = 30,
+        [ TX_32X32] = 38,
+        [RTX_32X64] = 38,
+        [RTX_64X32] = 38,
+        [ TX_64X64] = 38,
+    }, .table = {
+          9,                               0xffff, // 4x8, 8x8, 16x8, 32x8
+          9,  25,  41,                     0xffff, // 4x16
+          9,  35,  67,                     0xffff, // 8x16
+          9,  35,  77,                     0xffff, // 16x16, 32x16
+          9,  25,  41,  57,  73,  89, 105, 0xffff, // 4x32
+          9,  35,  67,  99, 131, 163, 195, 0xffff, // 8x32
+          9,  35,  77, 135, 199, 263, 327, 0xffff, // 16x32
+          9,  35,  77, 135, 209, 299, 405, 0xffff, // 32x32
     }
-}
-
-static COLD void init_internal(void) {
-    init_tbl(last_nonzero_col_from_eob_4x4,   scan_4x4,    4,  4);
-    init_tbl(last_nonzero_col_from_eob_8x8,   scan_8x8,    8,  8);
-    init_tbl(last_nonzero_col_from_eob_16x16, scan_16x16, 16, 16);
-    init_tbl(last_nonzero_col_from_eob_32x32, scan_32x32, 32, 32);
-    init_tbl(last_nonzero_col_from_eob_4x8,   scan_4x8,    4,  8);
-    init_tbl(last_nonzero_col_from_eob_8x4,   scan_8x4,    8,  4);
-    init_tbl(last_nonzero_col_from_eob_8x16,  scan_8x16,   8, 16);
-    init_tbl(last_nonzero_col_from_eob_16x8,  scan_16x8,  16,  8);
-    init_tbl(last_nonzero_col_from_eob_16x32, scan_16x32, 16, 32);
-    init_tbl(last_nonzero_col_from_eob_32x16, scan_32x16, 32, 16);
-    init_tbl(last_nonzero_col_from_eob_4x16,  scan_4x16,   4, 16);
-    init_tbl(last_nonzero_col_from_eob_16x4,  scan_16x4,  16,  4);
-    init_tbl(last_nonzero_col_from_eob_8x32,  scan_8x32,   8, 32);
-    init_tbl(last_nonzero_col_from_eob_32x8,  scan_32x8,  32,  8);
-}
-
-COLD void dav2d_init_last_nonzero_col_from_eob_tables(void) {
-    static pthread_once_t initted = PTHREAD_ONCE_INIT;
-    pthread_once(&initted, init_internal);
-}
-
-const uint8_t *const dav2d_last_nonzero_col_from_eob[N_RECT_TX_SIZES] = {
-    [ TX_4X4  ] = last_nonzero_col_from_eob_4x4,
-    [ TX_8X8  ] = last_nonzero_col_from_eob_8x8,
-    [ TX_16X16] = last_nonzero_col_from_eob_16x16,
-    [ TX_32X32] = last_nonzero_col_from_eob_32x32,
-    [ TX_64X64] = last_nonzero_col_from_eob_32x32,
-    [RTX_4X8  ] = last_nonzero_col_from_eob_4x8,
-    [RTX_8X4  ] = last_nonzero_col_from_eob_8x4,
-    [RTX_8X16 ] = last_nonzero_col_from_eob_8x16,
-    [RTX_16X8 ] = last_nonzero_col_from_eob_16x8,
-    [RTX_16X32] = last_nonzero_col_from_eob_16x32,
-    [RTX_32X16] = last_nonzero_col_from_eob_32x16,
-    [RTX_32X64] = last_nonzero_col_from_eob_32x32,
-    [RTX_64X32] = last_nonzero_col_from_eob_32x32,
-    [RTX_4X16 ] = last_nonzero_col_from_eob_4x16,
-    [RTX_16X4 ] = last_nonzero_col_from_eob_16x4,
-    [RTX_8X32 ] = last_nonzero_col_from_eob_8x32,
-    [RTX_32X8 ] = last_nonzero_col_from_eob_32x8,
-    [RTX_16X64] = last_nonzero_col_from_eob_16x32,
-    [RTX_64X16] = last_nonzero_col_from_eob_32x16,
 };

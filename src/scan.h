@@ -33,8 +33,10 @@
 #include "src/levels.h"
 
 EXTERN const uint16_t *const dav2d_scans[N_RECT_TX_SIZES];
-EXTERN const uint8_t *const dav2d_last_nonzero_col_from_eob[N_RECT_TX_SIZES];
 
-void dav2d_init_last_nonzero_col_from_eob_tables(void);
+EXTERN const struct Dav2dLastEob {
+    uint8_t offset[N_RECT_TX_SIZES];
+    uint16_t table[46];
+} dav2d_last_eob_per_col;
 
 #endif /* DAV2D_SRC_SCAN_H */

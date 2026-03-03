@@ -68,7 +68,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     const int w = 4 * t_dim->w, h = 4 * t_dim->h;
     assert(!(w & (w - 1)) && w >= 4 && w <= 64);
     assert(!(h & (h - 1)) && h >= 4 && h <= 64);
-    assert(eob >= 0);
+    assert(eob >= 0 && eob < 32 * 32);
 
     const int is_rect2 = (t_dim->lw + t_dim->lh) & 1;
     if (eob + txtp == 0) { // DC-only DCT_DCT
@@ -99,34 +99,44 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     const int row_clip_max = ~row_clip_min;
 
     int32_t tmp[32 * 32], *c = tmp;
-#if 0
-    // FIXME Disabled for now,this needs to be updated to AVM
-    int last_nonzero_col; // in first 1d itx
-    if (txtps[1] == IDENTITY && txtps[0] != IDENTITY) {
-        last_nonzero_col = imin(sh - 1, eob);
-    } else if (txtps[0] == IDENTITY && txtps[1] != IDENTITY) {
-        last_nonzero_col = eob >> (t_dim->lw + 2);
+    int col = 0;
+    const enum TxClass tx_class = (txtp >> 3) & 0x3;
+    if (tx_class == TX_CLASS_2D) {
+        const uint16_t *last_eob = dav2d_last_eob_per_col.table +
+                                   dav2d_last_eob_per_col.offset[tx];
+        do {
+            if (is_rect2)
+                for (int x = 0; x < sw; x++)
+                    c[x] = (coeff[col + x * sh] * 181 + 128) >> 8;
+            else
+                for (int x = 0; x < sw; x++)
+                    c[x] = coeff[col + x * sh];
+            first_1d_fn(c, 1);
+            c += sw;
+        } while ((++col & 3) || eob > *last_eob++);
     } else {
-        last_nonzero_col = dav2d_last_nonzero_col_from_eob[tx][eob];
+        int last_nz_col;
+        if (tx_class == TX_CLASS_H)
+            last_nz_col = imin(sh - 1, eob);
+        else if (tx_class == TX_CLASS_V)
+            last_nz_col = eob >> (t_dim->lw + 2);
+        else /* TX_CLASS_2D_INV */
+            last_nz_col = sh - 1;
+        assert(last_nz_col < sh);
+        do {
+            if (is_rect2)
+                for (int x = 0; x < sw; x++)
+                    c[x] = (coeff[col + x * sh] * 181 + 128) >> 8;
+            else
+                for (int x = 0; x < sw; x++)
+                    c[x] = coeff[col + x * sh];
+            first_1d_fn(c, 1);
+            c += sw;
+        } while (++col <= last_nz_col);
     }
-    assert(last_nonzero_col < sh);
-#else
-    int last_nonzero_col = sh - 1;
-#endif
-    for (int y = 0; y <= last_nonzero_col; y++, c += sw) {
-        if (is_rect2)
-            for (int x = 0; x < sw; x++)
-                c[x] = (coeff[y + x * sh] * 181 + 128) >> 8;
-        else
-            for (int x = 0; x < sw; x++)
-                c[x] = coeff[y + x * sh];
-        first_1d_fn(c, 1);
-    }
+    if (col < sh)
+        memset(c, 0, sizeof(*c) * (sh - col) * sw);
 
-#if 0
-    if (last_nonzero_col + 1 < sh)
-        memset(c, 0, sizeof(*c) * (sh - last_nonzero_col - 1) * sw);
-#endif
     memset(coeff, 0, sizeof(*coeff) * sw * sh);
     int shift = tx_shift[0];
     int rnd = (1 << shift) >> 1;
@@ -280,11 +290,10 @@ COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c) {
     assign_itx(64, 32, R);
     assign_itx(64, 64, );
 
-    int all_simd = 0;
 #if 0
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-    itx_dsp_init_arm(c, &all_simd);
+    itx_dsp_init_arm(c);
 #endif
 #if ARCH_LOONGARCH64
     itx_dsp_init_loongarch(c);
@@ -296,11 +305,8 @@ COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c) {
     itx_dsp_init_riscv(c);
 #endif
 #if ARCH_X86
-    itx_dsp_init_x86(c, &all_simd);
+    itx_dsp_init_x86(c);
 #endif
 #endif
 #endif
-
-    if (!all_simd)
-        dav2d_init_last_nonzero_col_from_eob_tables();
 }
