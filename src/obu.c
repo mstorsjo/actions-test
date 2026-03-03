@@ -976,20 +976,6 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         return 0;
     }
 
-#if 0
-    if (cm->bridge_frame_info.is_bridge_frame) {
-      cm->showable_frame = 0;
-    } else
-      cm->showable_frame = current_frame->frame_type != KEY_FRAME;
-    if (!cm->show_frame) {
-      if (cm->bridge_frame_info.is_bridge_frame) {
-        cm->showable_frame = 0;
-      } else {
-        // See if this frame can be used as show_existing_frame in future
-        cm->showable_frame = avm_rb_read_bit(rb);
-      }
-    }
-#endif
     if (seqhdr->reduced_still_picture_header) {
         hdr->frame_type = DAV2D_FRAME_TYPE_KEY;
         hdr->show_frame = 1;
