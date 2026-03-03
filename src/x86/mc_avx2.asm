@@ -34,6 +34,8 @@ warp_8x8_shufB: db  2,  4,  6,  8,  3,  5,  7,  9,  3,  5,  7,  9,  4,  6,  8, 1
                 db  6,  8, 10, 12,  7,  9, 11, 13,  7,  9, 11, 13,  8, 10, 12, 14
 subpel_h_shuf4: db  0,  1,  2,  3,  1,  2,  3,  4,  8,  9, 10, 11,  9, 10, 11, 12
                 db  2,  3,  4,  5,  3,  4,  5,  6, 10, 11, 12, 13, 11, 12, 13, 14
+pw_4x84a10_4x42a5: times 4 dw 84, 10
+                   times 4 dw 42,  5
 subpel_h_shufA: db  0,  1,  2,  3,  1,  2,  3,  4,  2,  3,  4,  5,  3,  4,  5,  6
 subpel_h_shufB: db  4,  5,  6,  7,  5,  6,  7,  8,  6,  7,  8,  9,  7,  8,  9, 10
 subpel_h_shufC: db  8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14
@@ -54,6 +56,12 @@ rescale_mul:    dd  0,  1,  2,  3,  4,  5,  6,  7
 wm_420_sign:    dd 0x01020102, 0x01010101
 wm_422_sign:    dd 0x80808080, 0x7f7f7f7f
 
+pw_3x42a5_1x84a10: times 3 dw 42,  5
+                   times 1 dw 84, 10
+shuf_left_1w: db 0, 1, 0, 1
+shuf_right_1w: db 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 15
+
+pb_1_m1: times 2 db 1, -1
 pb_64:   times 4 db 64
 pw_m256: times 2 dw -256
 pw_1:    times 2 dw 1
@@ -68,10 +76,12 @@ pw_6903: times 2 dw 6903
 pw_8192: times 2 dw 8192
 pd_32:           dd 32
 pd_63:           dd 63
+pd_64:           dd 64
 pd_512:          dd 512
 pd_32768:        dd 32768
 pd_0x3ff:        dd 0x3ff
 pd_0x4000:       dd 0x4000
+pq_16:           dq 16
 pq_0x40000000:   dq 0x40000000
 
 sadrefinemv_idx2off: db -2, -2, -2, -1, -2, +0, -2, +1, -2, +2
@@ -7156,4 +7166,490 @@ cglobal sad_refine_mv_8bpc, 4, 10, 16, 9 * 32, p0, p0s, p1, p1s, p0s3, h, p1s3, 
 .ret_origin:
     mov                  r0, r7m
     mov           word [r0], 0                  ; o->y = o->x = 0
+    RET
+
+cglobal opfl_derive_mv_8bpc, 5, 7, 0, out, p0, p0s, p1, p1s, w, h, bs, reldist
+    movifnidn            wd, wm
+    cmp                  wd, 16
+    jge .w16
+
+%macro opfl_loop 1 ; bs
+    mov                  hd, hm
+    vpbroadcastd         m6, [pb_1_m1]
+    vpbroadcastw        m14, reldistm
+    mova                m15, [pw_4x84a10_4x42a5]
+
+    movq                xm0, [p0q]
+    movq                xm1, [p1q]
+    vinserti128          m0, [p0q+p0sq*1], 1
+    vinserti128          m1, [p1q+p1sq*1], 1
+    punpcklbw            m0, m1
+    pmaddubsw            m1, m0, m6         ; tmp1[y=0|1]
+    pmaddubsw            m0, m14            ; tmp0[y=0|1]
+    vpermq               m2, m0, q1010      ; tmp0[y=0|0]=q1
+    mova                 m3, m2             ; q0
+    sub                  hd, 2
+
+    ; aggregators
+%if %1 == 4
+    vpbroadcastq        xm7, [pq_16]        ; bs * bs for u*u or v*v
+%else
+    movd                xm7, [pd_64]
+%endif
+    REPX        {pxor x, x}, xm8, xm10, xm11
+    mova                xm9, xm7
+    jmp %%loop_skipconst
+%%loop:
+    vpbroadcastd         m6, [pb_1_m1]
+    vpbroadcastw        m14, reldistm
+    vpbroadcastd        m15, [pw_4x84a10_4x42a5+16]
+%%loop_skipconst:
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line]
+    ; m2=q1
+    ; m3=q0
+    ; m6=pb_1_m1 [weights for tmp0]
+    ; m7-11: res
+    ; m4-5,12-13=free
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 weights (some permutation of [pw_4x84a10_4x42a5])
+
+    lea                 p0q, [p0q+p0sq*2]
+    lea                 p1q, [p1q+p1sq*2]
+    movq                xm4, [p0q]
+    movq                xm5, [p1q]
+    vinserti128          m4, [p0q+p0sq*1], 1
+    vinserti128          m5, [p1q+p1sq*1], 1
+    punpcklbw            m4, m5
+    pmaddubsw            m5, m4, m6         ; tmp1[y=2|3]
+    pmaddubsw            m4, m14            ; tmp0[y=2|3]=q3
+    vperm2i128           m6, m0, m4, 0x21   ; tmp0[y=1|2]=q2
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line]
+    ; m2=q1
+    ; m3=q0
+    ; m4=tmp0[next line]=q3
+    ; m5=tmp1[next line]
+    ; m6=q2
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+    ; m12-13=free
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 weights (some permutation of [pw_4x84a10_4x42a5])
+
+%%loop_skipload:
+    ; gy0
+    vpbroadcastd        m14, [pd_64]
+    psubw                m2, m6, m2         ; (q2 - q1)[y=0|1]
+    psubw                m3, m4             ; (q0 - q3)[y=0|1]
+    punpckhwd           m13, m2, m3
+    punpcklwd            m2, m3
+    REPX   {pmaddwd x, m15}, m13, m2
+    psrad               m12, m13, 31
+    psrad                m3, m2, 31
+    REPX   {paddd   x, m14}, m13, m2
+    paddd               m13, m12
+    paddd                m2, m3
+    REPX   {psrad   x, 7  }, m13, m2
+    packssdw             m2, m13            ; gy0[y=0|1]=v
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line]
+    ; m2=gy0
+    ; m4=tmp0[next line]=q3
+    ; m5=tmp1[next line]
+    ; m6=q2
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+    ; m3,12-13,15=free
+    ; m14=pd_64
+
+    ; gx0
+    vbroadcasti128       m3, [shuf_left_1w]
+    vbroadcasti128      m15, [shuf_right_1w]
+    pshufb              m12, m0, m3         ; p1
+    pshufb              m13, m0, m15        ; p2
+    pshufb               m3, m12, m3        ; p0
+    pshufb              m15, m13, m15       ; p3
+    psubw               m13, m12            ; (p2 - p1)[y=0|1]
+    vbroadcasti128      m12, [pw_3x42a5_1x84a10]
+    psubw                m3, m15            ; (p0 - p3)[y=0|1]
+    punpckhwd           m15, m13, m3
+    punpcklwd           m13, m3
+    pshufd               m3, m12, q0123     ; pw_1x84a10_3x42a5
+    pmaddwd             m15, m12
+    pmaddwd             m13, m3
+    psrad               m12, m15, 31
+    psrad                m3, m13, 31
+    REPX   {paddd   x, m14}, m15, m13
+    paddd               m15, m12
+    paddd                m3, m13
+    REPX   {psrad   x, 7  }, m15, m3
+    packssdw             m3, m15            ; gx0[y=0|1]=u
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line] [w]
+    ; m2=gy0 [v]
+    ; m3=gx0 [u]
+    ; m4=tmp0[next line]=q3
+    ; m5=tmp1[next line]
+    ; m6=q2
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+    ; m12-15=free
+
+    ; regression data
+    pmaddwd             m12, m1, m2         ; v*w
+    pmaddwd              m1, m3             ; u*w
+    pmaddwd             m15, m2, m3         ; u*v
+    REPX     {pmaddwd x, x}, m2, m3         ; v*v and u*u
+    paddd               m11, m12
+    paddd               m10, m1
+    paddd                m8, m15
+    paddd                m9, m2
+    paddd                m7, m3
+
+    test                 hd, %1-1
+    jz %%end
+    sub                  hd, 2
+%%noret:
+    mova                 m3, m0
+    mova                 m0, m4
+    mova                 m1, m5
+    mova                 m2, m6
+    jg %%loop
+    ; last line
+    vpermq               m4, m4, q3232      ; tmp0[y=3|3]=q2 & q3
+    vpermq              m15, [pw_4x84a10_4x42a5], q1032
+    mova                 m6, m4
+    jmp %%loop_skipload
+
+%%end:
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+%if %1 == 8
+    phaddd               m7, m8
+    phaddd               m9, m10
+    vextracti128       xm12, m11, 1
+    phaddd               m7, m9
+    paddd              xm11, xm12
+    vextracti128        xm8, m7, 1
+    punpckhqdq         xm12, xm11, xm11
+    paddd               xm7, xm8
+    paddd              xm11, xm12
+    psrlq              xm12, xm11, 32
+    paddd              xm11, xm12
+    movu         [outq+0*4], xm7
+    movd         [outq+4*4], xm11
+%else
+    phaddd               m7, m9
+    phaddd               m8, m10
+    vextracti128       xm12, m11, 1
+    vextracti128        xm9, m7, 1
+    vextracti128       xm10, m8, 1
+    paddd              xm11, xm12
+    paddd               xm7, xm9
+    psrlq              xm12, xm11, 32
+    paddd               xm8, xm10
+    paddd              xm11, xm12
+    punpckhdq           xm9, xm7, xm8
+    punpckldq           xm7, xm8
+    punpcklqdq          xm8, xm7, xm9
+    punpckhqdq          xm7, xm9
+    movu         [outq+0*4], xm8
+    movd         [outq+4*4], xm11
+    movu         [outq+5*4], xm7
+    pextrd       [outq+9*4], xm11, 2
+%endif
+    sub                  hd, 2
+    jl %%ret
+    add                outq, 5*(32/%1)
+%if %1 == 4
+    vpbroadcastq        xm7, [pq_16]        ; bs * bs for u*u or v*v
+%else
+    movd                xm7, [pd_64]
+%endif
+    REPX        {pxor x, x}, xm8, xm10, xm11
+    mova                xm9, xm7
+    jmp %%noret
+%%ret:
+    RET
+%endmacro
+
+    PROLOGUE 5, 7, 16, out, p0, p0s, p1, p1s, w, h, bs, reldist
+    cmp           dword bsm, 4
+    je .bs4
+    opfl_loop             8
+.bs4:
+    opfl_loop             4
+
+.w16:
+    PROLOGUE 5, 8, 16, 12 * mmsize * 4 * gprsize, out, p0, p0s, p1, p1s, w, h, bs, reldist
+    lea                 r7d, [wd*5]
+    shr                 r7d, 1
+    mov [rsp+12*mmsize+0*gprsize], p0q
+    mov [rsp+12*mmsize+1*gprsize], p1q
+    mov [rsp+12*mmsize+2*gprsize], outq
+    mov [rsp+12*mmsize+3*gprsize], r7
+.w16_loop:
+    mov                  hd, hm
+    vpbroadcastd        m13, [pb_1_m1]
+    vpbroadcastw        m14, reldistm
+    mova                m15, [pw_4x84a10_4x42a5]
+
+    movu                xm0, [p0q]
+    movu                xm2, [p1q]
+    vinserti128          m0, [p0q+p0sq*1], 1
+    vinserti128          m2, [p1q+p1sq*1], 1
+    punpckhbw            m1, m0, m2
+    punpcklbw            m0, m2
+    pmaddubsw            m7, m1, m13
+    pmaddubsw            m6, m0, m13        ; tmp1[y=0|1]
+    REPX {pmaddubsw x, m14}, m0, m1         ; tmp0[y=0|1]
+    vpermq               m2, m0, q1010
+    vpermq               m3, m1, q1010      ; tmp0[y=0|0]=q1
+    mova                 m4, m2
+    mova                 m5, m3             ; q0
+    sub                  hd, 2
+
+    ; aggregators
+    movd               xm10, [pd_64]
+    pxor               xm11, xm11
+    mova    [rsp+ 2*mmsize], m10
+    mova    [rsp+ 3*mmsize], m11
+    mova    [rsp+ 4*mmsize], m10
+    mova    [rsp+ 5*mmsize], m11
+    mova    [rsp+ 6*mmsize], m11
+    mova    [rsp+ 7*mmsize], m10
+    mova    [rsp+ 8*mmsize], m11
+    mova    [rsp+ 9*mmsize], m10
+    mova    [rsp+10*mmsize], m11
+    mova    [rsp+11*mmsize], m11
+    jmp .loop_skipconst
+.loop:
+    vpbroadcastd        m13, [pb_1_m1]
+    vpbroadcastw        m14, reldistm
+    vpbroadcastd        m15, [pw_4x84a10_4x42a5+16]
+.loop_skipconst:
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=q1
+    ; m4-5=q0
+    ; m6-7=tmp1[cur line]
+    ; m8-12=free
+    ; m13=[pb_1_m1]
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 weights (some permutation of [pw_4x84a10_4x42a5])
+
+    lea                 p0q, [p0q+p0sq*2]
+    lea                 p1q, [p1q+p1sq*2]
+    movu                xm8, [p0q]
+    movu               xm10, [p1q]
+    vinserti128          m8, [p0q+p0sq*1], 1
+    vinserti128         m10, [p1q+p1sq*1], 1
+    punpckhbw            m9, m8, m10
+    punpcklbw            m8, m10
+    pmaddubsw           m11, m9, m13
+    pmaddubsw           m10, m8, m13        ; tmp1[y=2|3]
+    mova     [rsp+0*mmsize], m10
+    mova     [rsp+1*mmsize], m11
+    REPX {pmaddubsw x, m14}, m8, m9         ; tmp0[y=2|3]=q3
+    vperm2i128          m12, m0, m8, 0x21
+    vperm2i128          m13, m1, m9, 0x21   ; tmp0[y=1|2]=q2
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=q1
+    ; m4-5=q0
+    ; m6-7=tmp1[cur line]
+    ; m8-9=tmp0[next line]=q3
+    ; m10-11=free
+    ; m12-13=q2
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 weights (some permutation of [pw_4x84a10_4x42a5])
+    ; r0-1=tmp1[next line]
+    ; r2-11=res
+
+.loop_skipload:
+    ; gy0
+    psubw                m2, m12, m2
+    psubw                m3, m13, m3        ; (q2 - q1)[y=0|1]
+    psubw                m4, m8
+    psubw                m5, m9             ; (q0 - q3)[y=0|1]
+    punpckhwd           m14, m2, m4
+    punpcklwd            m2, m4
+    punpckhwd            m4, m3, m5
+    punpcklwd            m3, m5
+    vpbroadcastd         m5, [pd_64]
+    REPX   {pmaddwd x, m15}, m14, m2, m4, m3
+    psrad               m10, m14, 31
+    psrad               m11, m2, 31
+    REPX   {paddd   x, m5 }, m14, m2
+    paddd               m14, m10
+    paddd                m2, m11
+    REPX   {psrad   x, 7  }, m14, m2
+    psrad               m10, m4, 31
+    psrad               m11, m3, 31
+    REPX   {paddd   x, m5 }, m4, m3
+    paddd                m4, m10
+    paddd                m3, m11
+    REPX   {psrad   x, 7  }, m4, m3
+    packssdw             m2, m14
+    packssdw             m3, m4             ; gy0[y=0|1]=v
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=gy0
+    ; m5=pd_64
+    ; m6-7=tmp1[cur line]
+    ; m8-9=tmp0[next line]=q3
+    ; m12-13=q2
+    ; m4,10-11,14-15=free
+    ; r0-1=tmp1[next line]
+    ; r2-11=res
+
+    ; gx0
+    vbroadcasti128      m14, [shuf_left_1w]
+    vbroadcasti128      m15, [shuf_right_1w]
+    pshufb               m4, m0, m14        ; p1
+    palignr             m11, m1, m0, 2      ; p2
+    pshufb              m14, m4, m14        ; p0
+    palignr             m10, m1, m0, 4      ; p3
+    psubw               m11, m4             ; (p2 - p1)[y=0|1,x=0-7]
+    psubw               m14, m10            ; (p0 - p3)[y=0|1,x=0-7]
+    pshufb               m4, m1, m15        ; p2
+    palignr             m10, m1, m0, 14     ; p1
+    pshufb              m15, m4, m15        ; p3
+    palignr              m5, m1, m0, 12     ; p0
+    psubw                m4, m10            ; (p2 - p1)[y=0|1,x=8-15]
+    psubw                m5, m15            ; (p0 - p3)[y=0|1,x=8-15]
+    vbroadcasti128      m10, [pw_3x42a5_1x84a10]
+    punpckhwd           m15, m11, m14
+    punpcklwd           m11, m14
+    punpckhwd           m14, m4, m5
+    punpcklwd            m4, m5
+    pshufd               m5, m10, q0123     ; pw_1x84a10_3x42a5
+    pmaddwd             m14, m10
+    pshufd              m10, m10, q1111     ; pw_4x42a5
+    pmaddwd             m11, m5
+    REPX   {pmaddwd x, m10}, m15, m4
+    psrad                m5, m11, 31
+    psrad               m10, m15, 31
+    paddd               m11, m5
+    paddd               m15, m10
+    psrad                m5, m4, 31
+    psrad               m10, m14, 31
+    paddd                m5, m4
+    vpbroadcastd         m4, [pd_64]
+    paddd               m14, m10
+    REPX  {paddd    x, m4 }, m11, m15, m5, m14
+    REPX  {psrad    x, 7  }, m11, m15, m5, m14
+    packssdw             m4, m11, m15
+    packssdw             m5, m14            ; gx0[y=0|1]=u
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=gy0
+    ; m4-5=gx0
+    ; m6-7=tmp1[cur line]
+    ; m8-9=tmp0[next line]=q3
+    ; m12-13=q2
+    ; m10-11,14-15=free
+    ; r0-1=tmp1[next line]
+    ; r2-11=res
+
+    ; regression data
+    pmaddwd             m14, m2, m6
+    pmaddwd             m15, m3, m7         ; v*w
+    pmaddwd              m6, m4
+    pmaddwd              m7, m5             ; u*w
+    pmaddwd             m10, m2, m4
+    pmaddwd             m11, m3, m5         ; u*v
+    REPX     {pmaddwd x, x}, m2, m3, m4, m5 ; v*v and u*u
+    paddd                m4, [rsp+ 2*mmsize]
+    paddd               m10, [rsp+ 3*mmsize]
+    paddd                m2, [rsp+ 4*mmsize]
+    paddd                m6, [rsp+ 5*mmsize]
+    paddd               m14, [rsp+ 6*mmsize]
+    paddd                m5, [rsp+ 7*mmsize]
+    paddd               m11, [rsp+ 8*mmsize]
+    paddd                m3, [rsp+ 9*mmsize]
+    paddd                m7, [rsp+10*mmsize]
+    paddd               m15, [rsp+11*mmsize]
+
+    test                 hd, 7
+    jz .end
+    sub                  hd, 2
+    mova    [rsp+ 2*mmsize], m4
+    mova    [rsp+ 3*mmsize], m10
+    mova    [rsp+ 4*mmsize], m2
+    mova    [rsp+ 5*mmsize], m6
+    mova    [rsp+ 6*mmsize], m14
+    mova    [rsp+ 7*mmsize], m5
+    mova    [rsp+ 8*mmsize], m11
+    mova    [rsp+ 9*mmsize], m3
+    mova    [rsp+10*mmsize], m7
+    mova    [rsp+11*mmsize], m15
+.noret:
+    mova                 m4, m0
+    mova                 m5, m1
+    mova                 m0, m8
+    mova                 m1, m9
+    mova                 m2, m12
+    mova                 m3, m13
+    mova                 m6, [rsp+0*mmsize]
+    mova                 m7, [rsp+1*mmsize]
+    jg .loop
+    ; last line
+    REPX {vpermq x, x, q3232}, m8, m9       ; tmp0[y=3|3]=q2 & q3
+    vpermq              m15, [pw_4x84a10_4x42a5], q1032
+    mova                m12, m8
+    mova                m13, m9
+    jmp .loop_skipload
+
+.end:
+    ; m4-5,10-11,2-3,6-7,14-15=res [u*u, u*v, v*v, u*w, v*w]
+    phaddd               m4, m10
+    phaddd               m2, m6
+    phaddd              m14, m5
+    phaddd              m11, m3
+    phaddd               m7, m15
+    phaddd               m4, m2
+    psrlq               m15, m7, 32
+    phaddd              m14, m11
+    paddd                m7, m15
+    vextracti128        xm2, m4, 1
+    vextracti128       xm11, m14, 1
+    vextracti128       xm15, m7, 1
+    paddd               xm4, xm2
+    paddd              xm14, xm11
+    paddd               xm7, xm15
+    movu         [outq+0*4], xm4
+    pshufd              xm7, xm7, q3120
+    movu         [outq+4*4], xm14
+    movq         [outq+8*4], xm7
+    sub                  hd, 2
+    jl .next_block
+    add                outq, [rsp+12*mmsize+3*gprsize]
+    movd               xm10, [pd_64]
+    pxor               xm11, xm11
+    mova    [rsp+ 2*mmsize], m10
+    mova    [rsp+ 3*mmsize], m11
+    mova    [rsp+ 4*mmsize], m10
+    mova    [rsp+ 5*mmsize], m11
+    mova    [rsp+ 6*mmsize], m11
+    mova    [rsp+ 7*mmsize], m10
+    mova    [rsp+ 8*mmsize], m11
+    mova    [rsp+ 9*mmsize], m10
+    mova    [rsp+10*mmsize], m11
+    mova    [rsp+11*mmsize], m11
+    jmp .noret
+.next_block:
+    sub                  wd, 16
+    jz .ret
+    mov                 p0q, [rsp+12*mmsize+0*gprsize]
+    mov                 p1q, [rsp+12*mmsize+1*gprsize]
+    mov                outq, [rsp+12*mmsize+2*gprsize]
+    REPX        {add x, 16}, p0q, p1q
+    add                outq, 4*5*2
+    mov [rsp+12*mmsize+0*gprsize], p0q
+    mov [rsp+12*mmsize+1*gprsize], p1q
+    mov [rsp+12*mmsize+2*gprsize], outq
+    jmp .w16_loop
+.ret:
     RET

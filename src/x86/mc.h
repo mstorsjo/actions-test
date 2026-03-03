@@ -59,6 +59,7 @@ decl_fn(warp8x8t, dav2d_warp_affine_8x8t);
 decl_fn(emu_edge, dav2d_emu_edge);
 decl_fn(morph, dav2d_morph);
 decl_fn(sad_refine_mv, dav2d_sad_refine_mv);
+decl_fn(opfl_derive_mv, dav2d_opfl_derive_mv);
 
 static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
     const unsigned flags = dav2d_get_cpu_flags();
@@ -84,5 +85,6 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
 #if BITDEPTH == 8
     c->morph = BF(dav2d_morph, avx2);
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, avx2);
+    c->opfl_derive_mv = BF(dav2d_opfl_derive_mv, avx2);
 #endif
 }
