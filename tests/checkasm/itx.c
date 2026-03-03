@@ -101,13 +101,17 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
 }
 
 #define TXTP_MASK_DCT_ONLY DCT_DCT, 0xff /* invalid */
-#define TXTP_MASK_DCT_ID_ONLY IDTX, TXTP_MASK_DCT_ONLY
+#define TXTP_MASK_IDTX IDTX, IDTX_INV
+#define TXTP_MASK_DCT_ID_ONLY TXTP_MASK_IDTX, TXTP_MASK_DCT_ONLY
 #define TXTP_MASK_DCT_HOR ADST_DCT, FLIPADST_DCT, H_DCT, TXTP_MASK_DCT_ONLY
 #define TXTP_MASK_DCT_VER DCT_ADST, DCT_FLIPADST, V_DCT, TXTP_MASK_DCT_ONLY
-#define TXTP_MASK_DCT_ID_HOR V_DCT, V_ADST, V_FLIPADST, IDTX, TXTP_MASK_DCT_HOR
-#define TXTP_MASK_DCT_ID_VER H_DCT, H_ADST, H_FLIPADST, IDTX, TXTP_MASK_DCT_VER
-#define TXTP_MASK_16x16 FLIPADST_FLIPADST, ADST_FLIPADST, FLIPADST_ADST, IDTX, \
-                        ADST_ADST, DCT_ADST, DCT_FLIPADST, V_DCT, TXTP_MASK_DCT_HOR
+#define TXTP_MASK_DCT_ID_HOR \
+    V_DCT, V_ADST, V_FLIPADST, TXTP_MASK_IDTX, TXTP_MASK_DCT_HOR
+#define TXTP_MASK_DCT_ID_VER \
+    H_DCT, H_ADST, H_FLIPADST, TXTP_MASK_IDTX, TXTP_MASK_DCT_VER
+#define TXTP_MASK_16x16 \
+    FLIPADST_FLIPADST, ADST_FLIPADST, FLIPADST_ADST, TXTP_MASK_IDTX, \
+    ADST_ADST, DCT_ADST, DCT_FLIPADST, V_DCT, TXTP_MASK_DCT_HOR
 #define TXTP_MASK_ALL V_ADST, H_ADST, V_FLIPADST, H_FLIPADST, TXTP_MASK_16x16
 #define TXTP_MASK_ALL_LOSSLESS WHT_WHT, TXTP_MASK_ALL
 
@@ -131,7 +135,7 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
     DDT_ADST, FLIPDDT_ADST, DDT_DCT, FLIPDDT_DCT, DDT_FLIPADST, \
     FLIPDDT_FLIPADST, DDT_IDENTITY, FLIPDDT_IDENTITY, TXTP_MASK_ALL
 
-static const uint8_t valid_txtp_per_txsz[N_RECT_TX_SIZES][29] = {
+static const uint8_t valid_txtp_per_txsz[N_RECT_TX_SIZES][30] = {
     [TX_4X4]    = { TXTP_MASK_ALL_LOSSLESS },
     [TX_8X8]    = { TXTP_MASK_ALL_W_DDT_2D },
     [TX_16X16]  = { TXTP_MASK_16x16_W_DDT },
@@ -194,15 +198,23 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
     {
         const enum TxfmType txtp = valid_txtp_per_txsz[tx][txtp_idx];
         const enum Tx1dType hor1d = txtp & 0x7, ver1d = txtp >> 5;
+        const int is_inv = ((txtp >> 3) & 0x3) == TX_CLASS_2D_INV;
         for (int subsh = !!txtp; subsh < subsh_max; subsh++)
             if (check_func(txtp == WHT_WHT ? c->iwht_add_4x4: c->itxfm_add[tx],
-                           "inv_txfm_add_%dx%d_%s_%s_%d_%dbpc",
+                           "inv_txfm_add_%dx%d_%s_%s%s_%d_%dbpc",
                            w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
-                           subsh, BITDEPTH))
+                           is_inv ? "_inv" : "", subsh, BITDEPTH))
             {
                 int max_eob;
                 const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
                                                subsh, &max_eob, coef_max);
+                if (is_inv) {
+                    for (int i = 0, n = sw * sh - 1; i <= n >> 1; i++) {
+                        int tmp = coeff[0][i];
+                        coeff[0][i] = coeff[0][n - i];
+                        coeff[0][n - i] = tmp;
+                    }
+                }
                 memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
                 CLEAR_PIXEL_RECT(c_dst);
