@@ -1602,7 +1602,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             // =min(5,floor(log2(bw4+bh4)*1.99-1.62)) or
             // =      floor(log2(bw4+bh4)*1.55-0.555) - or anything in between
-            if (imax(bw4, bh4) <= 8 && f->seq_hdr->fsc) {
+            if (imax(bw4, bh4) <= 8 && f->seq_hdr->idtx_intra) {
                 static const uint8_t fsc_bsize_groups[N_BS_SIZES] = {
                     [BS_32x32] = 5,
                     [BS_32x16] = 5,
