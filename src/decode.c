@@ -2302,7 +2302,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             if (b->inter_mode == NEWMV_NEWMV && imin(bw4, bh4) > 1 &&
                 !f->frame_hdr->force_integer_mv && b->ref.ref[0] != b->ref.ref[1] &&
-                f->frame_hdr->opfl_refine_type != 2 /* always */)
+                f->frame_hdr->opfl_refine_type != 2 /* always */ &&
+                f->frame_hdr->motion_modes & (1 << MM_WARP_CAUSAL))
             {
                 const int is_sb_boundary = !(t->by & (f->sb_step - 1));
                 const int ref1 = b->ref.ref[0], ref2 = b->ref.ref[1];
@@ -2782,17 +2783,21 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                                    nb[1]->motion_mode[boff[1]];
                         const int ext_ctx = (x1 >= MM_WARP_CAUSAL) +
                                             (x2 >= MM_WARP_CAUSAL);
-                        if (f->frame_hdr->motion_modes & (1 << MM_WARP_EXTEND) &&
+                        const unsigned mm = f->frame_hdr->motion_modes;
+                        if (mm & (1 << MM_WARP_EXTEND) &&
                             dav2d_msac_decode_bool_adapt(&ts->msac,
                                ts->cdf.m.warp_extend[ext_ctx]))
                         {
                             b->motion_mode = MM_WARP_EXTEND;
-                        } else {
+                        } else if ((mm & (3 << MM_WARP_CAUSAL)) == (3 << MM_WARP_CAUSAL)) {
                             const int cs_ctx = (ext_ctx > 0) +
                                 (x1 == MM_WARP_CAUSAL) + (x2 == MM_WARP_CAUSAL);
                             b->motion_mode = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.warp_causal[cs_ctx]) ?
                                 MM_WARP_CAUSAL : MM_WARP_DELTA;
+                        } else {
+                            b->motion_mode = mm & (1 << MM_WARP_CAUSAL) ?
+                                             MM_WARP_CAUSAL : MM_WARP_DELTA;
                         }
                         DEBUG_BLOCK_printf("%*sPost-sngl_newmv_warp[%d]: r=%d\n",
                                            depth, "", b->motion_mode, ts->msac.rng);
