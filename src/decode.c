@@ -2779,7 +2779,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                                    nb[1]->motion_mode[boff[1]];
                         const int ext_ctx = (x1 >= MM_WARP_CAUSAL) +
                                             (x2 >= MM_WARP_CAUSAL);
-                        if (dav2d_msac_decode_bool_adapt(&ts->msac,
+                        if (f->frame_hdr->motion_modes & (1 << MM_WARP_EXTEND) &&
+                            dav2d_msac_decode_bool_adapt(&ts->msac,
                                ts->cdf.m.warp_extend[ext_ctx]))
                         {
                             b->motion_mode = MM_WARP_EXTEND;

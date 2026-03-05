@@ -379,7 +379,9 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     if (hdr->reduced_still_picture_header) {
         hdr->motion_modes = 1 << MM_TRANSLATION;
     } else {
-        hdr->motion_modes = (1 << MM_TRANSLATION) + (dav2d_get_bits(gb, 4) << 1);
+        hdr->motion_modes = (1 << MM_TRANSLATION);
+        for (int n = 2; n <= 16; n <<= 1)
+            hdr->motion_modes |= n * dav2d_get_bit(gb);
         if (hdr->motion_modes & ~(1 << MM_TRANSLATION))
             hdr->frame_motion_modes_present = dav2d_get_bit(gb);
         if (hdr->motion_modes & (1 << MM_WARP_DELTA))
