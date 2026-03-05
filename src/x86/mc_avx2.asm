@@ -7653,3 +7653,37 @@ cglobal opfl_derive_mv_8bpc, 5, 7, 0, out, p0, p0s, p1, p1s, w, h, bs, reldist
     jmp .w16_loop
 .ret:
     RET
+
+INIT_XMM avx2
+cglobal sad8x8_8bpc, 4, 6, 6, p0, p0s, p1, p1s, p0s3, p1s3
+    lea               p0s3q, [p0sq*3]
+    lea               p1s3q, [p1sq*3]
+    movq                 m0, [p0q]
+    movq                 m1, [p1q]
+    movhps               m0, [p0q+p0sq]
+    movhps               m1, [p1q+p1sq]
+    movq                 m2, [p0q+p0sq*2]
+    movq                 m3, [p1q+p1sq*2]
+    movhps               m2, [p0q+p0s3q]
+    movhps               m3, [p1q+p1s3q]
+    lea                 p0q, [p0q+p0sq*4]
+    lea                 p1q, [p1q+p1sq*4]
+    psadbw               m0, m1
+    psadbw               m2, m3
+    movq                 m1, [p0q]
+    movq                 m3, [p1q]
+    movhps               m1, [p0q+p0sq]
+    movhps               m3, [p1q+p1sq]
+    movq                 m4, [p0q+p0sq*2]
+    movq                 m5, [p1q+p1sq*2]
+    movhps               m4, [p0q+p0s3q]
+    movhps               m5, [p1q+p1s3q]
+    psadbw               m1, m3
+    psadbw               m4, m5
+    paddd                m0, m2
+    paddd                m1, m4
+    paddd                m0, m1
+    punpckhqdq           m1, m0, m0
+    paddd                m0, m1
+    movd                eax, m0
+    RET

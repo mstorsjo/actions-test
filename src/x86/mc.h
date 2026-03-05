@@ -60,6 +60,7 @@ decl_fn(emu_edge, dav2d_emu_edge);
 decl_fn(morph, dav2d_morph);
 decl_fn(sad_refine_mv, dav2d_sad_refine_mv);
 decl_fn(opfl_derive_mv, dav2d_opfl_derive_mv);
+decl_fn(sad8x8, dav2d_sad8x8);
 
 static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
     const unsigned flags = dav2d_get_cpu_flags();
@@ -86,5 +87,6 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
     c->morph = BF(dav2d_morph, avx2);
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, avx2);
     c->opfl_derive_mv = BF(dav2d_opfl_derive_mv, avx2);
+    c->sad8x8 = BF(dav2d_sad8x8, avx2);
 #endif
 }
