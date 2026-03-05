@@ -427,16 +427,20 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         assert(t_dim->max == TX_4X4);
         *txtp = WHT_WHT;
     } else if (chroma) {
-        // inferred from either the luma txtp (inter) or a LUT (intra)
-        if (intra) *txtp = dav2d_txtp_from_uvmode[b->uv_mode];
-        if ((t_dim->w >= 8 && *txtp & 0x02 /* horizontal is (flip)adst */) ||
-            (t_dim->h >= 8 && *txtp & 0x40 /* vertical is (flip)adst */) ||
-            (tx == (int) TX_16X16 &&
-             ((*txtp & 0x47) == 0x41 /* (flip)adst ver, identity hor */ ||
-              (*txtp & 0xe2) == 0x22 /* identity ver, (flip)adst hor */)))
-        {
+        if (f->seq_hdr->chroma_dctonly) {
             *txtp = DCT_DCT;
-        } else if (*txtp == IDTX_INV) *txtp = IDTX;
+        } else {
+            // inferred from either the luma txtp (inter) or a LUT (intra)
+            if (intra) *txtp = dav2d_txtp_from_uvmode[b->uv_mode];
+            if ((t_dim->w >= 8 && *txtp & 0x02 /* horizontal is (flip)adst */) ||
+                (t_dim->h >= 8 && *txtp & 0x40 /* vertical is (flip)adst */) ||
+                (tx == (int) TX_16X16 &&
+                 ((*txtp & 0x47) == 0x41 /* (flip)adst ver, identity hor */ ||
+                  (*txtp & 0xe2) == 0x22 /* identity ver, (flip)adst hor */)))
+            {
+                *txtp = DCT_DCT;
+            } else if (*txtp == IDTX_INV) *txtp = IDTX;
+        }
     } else if (intra) {
         if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
             *txtp = DCT_DCT;
