@@ -1670,7 +1670,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                     const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav2dFrameContext *const f = t->f;
-    const int opfl = f->seq_hdr->tip_refine_mv &&
+    int opfl = f->seq_hdr->tip_refine_mv &&
         (f->frame_hdr->tip.frame_mode == 1 ||
          f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
     const union refpair ref = f->rf.tip.ref;
@@ -1678,6 +1678,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                        f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
     const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                            ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+    opfl &= !!f->seq_hdr->opfl_refine;
     ptrdiff_t off_y = 0;
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8 &&
