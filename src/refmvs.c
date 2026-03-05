@@ -449,7 +449,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
 
     if ((unsigned) ref.ref[0] >= TIP_FRAME) return 0;
     union mv mv = rt->rp_traj[ref.ref[0]][off_8x8];
-    if (mv.y == INVALID_MV) {
+    if (!rf->seq_hdr->mv_traj || mv.y == INVALID_MV) {
         mv = rt->rp_proj[off_8x8].mv;
         if (mv.y == INVALID_MV) return 0;
         mv = dav2d_mv_projection(mv, rf->pocdiff[ref.ref[0]],
@@ -463,7 +463,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
                                   &st->iter_cntr, 16);
     }
     union mv mv2 = rt->rp_traj[ref.ref[1]][off_8x8];
-    if (mv2.y == INVALID_MV) {
+    if (!rf->seq_hdr->mv_traj || mv2.y == INVALID_MV) {
         mv2 = rt->rp_proj[off_8x8].mv;
         if (mv2.y == INVALID_MV) return 0;
         mv2 = dav2d_mv_projection(mv2, rf->pocdiff[ref.ref[1]],
