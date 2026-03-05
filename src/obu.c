@@ -1460,7 +1460,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     // deblock
     if (!hdr->all_lossless) {
-        if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER)
+        if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER && seqhdr->db_sub_pu)
             hdr->deblock.sub_pu = dav2d_get_bit(gb);
         hdr->deblock.level_y[0] = dav2d_get_bit(gb);
         hdr->deblock.level_y[1] = dav2d_get_bit(gb);
