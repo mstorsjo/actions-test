@@ -1653,8 +1653,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (has_chroma) {
+            const int mhccp_allowed = f->seq_hdr->mhccp &&
+                                      imax(cbw4, cbh4) <= 8 && cbw4 * cbh4 > 1;
             const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
-            const int cfl_allowed = f->seq_hdr->cfl &&
+            const int cfl_allowed = (f->seq_hdr->cfl || mhccp_allowed) &&
                 (imax(bw4, bh4) > 16 || !t->sdp_cfl_disallowed) &&
                 imax(cbw4, cbh4) <= (ll ? 1 : 16);
             int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
@@ -1709,8 +1711,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                b->uv_angle, ts->msac.rng);
             if (b->uv_mode == CFL_PRED) {
                 memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
-                if (f->seq_hdr->mhccp && imax(cbw4, cbh4) <= 8 && cbw4 * cbh4 > 1 &&
-                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp))
+                if (mhccp_allowed &&
+                    (!f->seq_hdr->cfl ||
+                     dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp)))
                 {
                     const int sz_ctx = size_group_lookup[bs];
                     b->cfl_type = CFL_MHCCP;
