@@ -1507,7 +1507,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
             ts->last_qidx = iclip(ts->last_qidx + delta_q, 1, 255);
             DEBUG_BLOCK_printf("%*sPost-delta_q[%d->%d]: r=%d\n",
-                               depth, "", delta_q, ts->last_qidx, ts->msac.rng);
+                               depth, "", delta_q >> f->frame_hdr->delta.q.res_log2,
+                               ts->last_qidx, ts->msac.rng);
         }
         if (ts->last_qidx == f->frame_hdr->quant.yac) {
             // assign frame-wide q values to this sb
