@@ -436,7 +436,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
               (*txtp & 0xe2) == 0x22 /* identity ver, (flip)adst hor */)))
         {
             *txtp = DCT_DCT;
-        }
+        } else if (*txtp == IDTX_INV) *txtp = IDTX;
     } else if (intra) {
         if (t_dim->sub == TX_32X32 /* 64x64, 64x32 or 32x64 */) {
             *txtp = DCT_DCT;
