@@ -28,6 +28,7 @@
 #include "config.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 
@@ -235,9 +236,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     printf("SEQHDR: post-layout[%d]: off=%u\n",
            hdr->layout, dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
-    hdr->layout = (const uint8_t[]) {
-        DAV2D_PIXEL_LAYOUT_I420, DAV2D_PIXEL_LAYOUT_I400,
-        DAV2D_PIXEL_LAYOUT_I444, DAV2D_PIXEL_LAYOUT_I422 }[hdr->layout];
+    hdr->layout = dav2d_layouts[hdr->layout];
     switch (hdr->layout) {
     case DAV2D_PIXEL_LAYOUT_I420:
     case DAV2D_PIXEL_LAYOUT_I400:
@@ -1261,7 +1260,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             derive_pri_sec_ref(c, refs);
             hdr->primary_ref_frame = refs[0];
             hdr->secondary_ref_frame = refs[1];
-            return 0;
+
+            goto grain;
         }
     }
 
@@ -1934,82 +1934,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
     }
 
+grain:
     if (seqhdr->film_grain_present && (hdr->show_frame || hdr->showable_frame)) {
-        hdr->film_grain.present = dav2d_get_bit(gb);
+        hdr->film_grain.present = seqhdr->reduced_still_picture_header ||
+                                  dav2d_get_bit(gb);
         if (hdr->film_grain.present) {
-            const unsigned seed = dav2d_get_bits(gb, 16);
-            hdr->film_grain.update = hdr->frame_type != DAV2D_FRAME_TYPE_INTER || dav2d_get_bit(gb);
-            if (!hdr->film_grain.update) {
-                const int refidx = dav2d_get_bits(gb, 3);
-                int i;
-                for (i = 0; i < 7; i++)
-                    if (hdr->refidx[i] == refidx)
-                        break;
-                if (i == 7 || !c->refs[refidx].p.p.frame_hdr) goto error;
-                hdr->film_grain.data = c->refs[refidx].p.p.frame_hdr->film_grain.data;
-                hdr->film_grain.data.seed = seed;
-            } else {
-                Dav2dFilmGrainData *const fgd = &hdr->film_grain.data;
-                fgd->seed = seed;
-
-                fgd->num_y_points = dav2d_get_bits(gb, 4);
-                if (fgd->num_y_points > 14) goto error;
-                for (int i = 0; i < fgd->num_y_points; i++) {
-                    fgd->y_points[i][0] = dav2d_get_bits(gb, 8);
-                    if (i && fgd->y_points[i - 1][0] >= fgd->y_points[i][0])
-                        goto error;
-                    fgd->y_points[i][1] = dav2d_get_bits(gb, 8);
-                }
-
-                if (seqhdr->layout != DAV2D_PIXEL_LAYOUT_I400)
-                    fgd->chroma_scaling_from_luma = dav2d_get_bit(gb);
-                if (seqhdr->layout == DAV2D_PIXEL_LAYOUT_I400 ||
-                    fgd->chroma_scaling_from_luma ||
-                    (seqhdr->ss_ver == 1 && seqhdr->ss_hor == 1 && !fgd->num_y_points))
-                {
-                    fgd->num_uv_points[0] = fgd->num_uv_points[1] = 0;
-                } else for (int pl = 0; pl < 2; pl++) {
-                    fgd->num_uv_points[pl] = dav2d_get_bits(gb, 4);
-                    if (fgd->num_uv_points[pl] > 10) goto error;
-                    for (int i = 0; i < fgd->num_uv_points[pl]; i++) {
-                        fgd->uv_points[pl][i][0] = dav2d_get_bits(gb, 8);
-                        if (i && fgd->uv_points[pl][i - 1][0] >= fgd->uv_points[pl][i][0])
-                            goto error;
-                        fgd->uv_points[pl][i][1] = dav2d_get_bits(gb, 8);
-                    }
-                }
-
-                if (seqhdr->ss_hor == 1 && seqhdr->ss_ver == 1 &&
-                    !!fgd->num_uv_points[0] != !!fgd->num_uv_points[1])
-                {
-                    goto error;
-                }
-
-                fgd->scaling_shift = dav2d_get_bits(gb, 2) + 8;
-                fgd->ar_coeff_lag = dav2d_get_bits(gb, 2);
-                const int num_y_pos = 2 * fgd->ar_coeff_lag * (fgd->ar_coeff_lag + 1);
-                if (fgd->num_y_points)
-                    for (int i = 0; i < num_y_pos; i++)
-                        fgd->ar_coeffs_y[i] = dav2d_get_bits(gb, 8) - 128;
-                for (int pl = 0; pl < 2; pl++)
-                    if (fgd->num_uv_points[pl] || fgd->chroma_scaling_from_luma) {
-                        const int num_uv_pos = num_y_pos + !!fgd->num_y_points;
-                        for (int i = 0; i < num_uv_pos; i++)
-                            fgd->ar_coeffs_uv[pl][i] = dav2d_get_bits(gb, 8) - 128;
-                        if (!fgd->num_y_points)
-                            fgd->ar_coeffs_uv[pl][num_uv_pos] = 0;
-                    }
-                fgd->ar_coeff_shift = dav2d_get_bits(gb, 2) + 6;
-                fgd->grain_scale_shift = dav2d_get_bits(gb, 2);
-                for (int pl = 0; pl < 2; pl++)
-                    if (fgd->num_uv_points[pl]) {
-                        fgd->uv_mult[pl] = dav2d_get_bits(gb, 8) - 128;
-                        fgd->uv_luma_mult[pl] = dav2d_get_bits(gb, 8) - 128;
-                        fgd->uv_offset[pl] = dav2d_get_bits(gb, 9) - 256;
-                    }
-                fgd->overlap_flag = dav2d_get_bit(gb);
-                fgd->clip_to_restricted_range = dav2d_get_bit(gb);
-            }
+            hdr->film_grain.id = dav2d_get_bits(gb, 3);
+            hdr->film_grain.seed = dav2d_get_bits(gb, 16);
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-filmgrain[%d]: off=%td\n",
@@ -2023,6 +1954,106 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 error:
     dav2d_log(c, "Error parsing frame header\n");
     return DAV2D_ERR(EINVAL);
+}
+
+static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
+#define DEBUG_FGM_HDR 0
+#if DEBUG_FRAME_HDR
+    const uint8_t *const init_ptr = gb->ptr;
+#endif
+    const unsigned mask = dav2d_get_bits(gb, 8);
+    enum Dav2dPixelLayout layout = dav2d_get_vlc(gb);
+    if (layout > 3) goto error;
+#if DEBUG_FRAME_HDR
+    printf("FGM: post-init[mask=0x%x,layout=%d]: off=%td\n",
+           mask, layout,
+           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+    layout = dav2d_layouts[layout];
+    if (layout != c->seq_hdr->layout) goto error;
+
+    for (int idx = 0, m = 1; idx < 8; idx++, m <<= 1) {
+        if (!(mask & m)) continue;
+        if (c->fgm[idx]) dav2d_ref_dec(&c->fgm[idx]);
+        c->fgm[idx] = dav2d_ref_create_using_pool(c->fgm_pool, sizeof(Dav2dFilmGrainData));
+        Dav2dFilmGrainData *const fgd = c->fgm[idx]->data;
+        memset(fgd, 0, sizeof(*fgd));
+
+        int num_pl = 1;
+        if (layout != DAV2D_PIXEL_LAYOUT_I400) {
+            fgd->chroma_scaling_from_luma = dav2d_get_bit(gb);
+            if (!fgd->chroma_scaling_from_luma) num_pl = 3;
+        }
+        for (int pl = 0; pl < num_pl; pl++) {
+            fgd->num_points[pl] = dav2d_get_bits(gb, 4);
+            if (fgd->num_points[pl] > 14) goto error;
+            if (!fgd->num_points[pl]) continue;
+            const int index_bits = 1 + dav2d_get_bits(gb, 3);
+            const int scaling_bits = 5 + dav2d_get_bits(gb, 2);
+            for (int i = 0, base = 0; i < fgd->num_points[pl]; i++) {
+                base += dav2d_get_bits(gb, index_bits);
+                if (base > 255) goto error;
+                fgd->points[pl][i][0] = base;
+                fgd->points[pl][i][1] = dav2d_get_bits(gb, scaling_bits);
+            }
+#if DEBUG_FRAME_HDR
+            printf("FGM: post-scaling_points[id=%d,pl=%d,cnt=%d,bits=%d|%d]: off=%td\n",
+                   idx, pl, fgd->num_points[pl], index_bits, scaling_bits,
+                   (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+        }
+        if (layout == DAV2D_PIXEL_LAYOUT_I420 &&
+            !!fgd->num_points[1] != !!fgd->num_points[2])
+        {
+            goto error;
+        }
+
+        fgd->scaling_shift = dav2d_get_bits(gb, 2) + 8;
+        fgd->ar_coeff_lag = dav2d_get_bits(gb, 2);
+        const int num_pos = 2 * fgd->ar_coeff_lag * (fgd->ar_coeff_lag + 1);
+        for (int pl = 0; pl < 3; pl++) {
+            if (!fgd->num_points[pl] && (!pl || !fgd->chroma_scaling_from_luma))
+                continue;
+            // chroma has one more point
+            const int num_pl_pos = num_pos + !!pl * !!fgd->num_points[0];
+            const int coef_bits = 5 + dav2d_get_bits(gb, 2);
+            for (int i = 0; i < num_pl_pos; i++)
+                fgd->ar_coeffs[pl][i] = dav2d_get_bits(gb, coef_bits) - 128;
+#if DEBUG_FRAME_HDR
+            printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%td\n",
+                   idx, pl, fgd->ar_coeff_lag, num_pl_pos, coef_bits,
+                   (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+        }
+        fgd->ar_coeff_shift = dav2d_get_bits(gb, 2) + 6;
+        fgd->grain_scale_shift = dav2d_get_bits(gb, 2);
+        for (int pl = 0; pl < 2; pl++) {
+            if (!fgd->num_points[1 + pl]) continue;
+            fgd->uv_mult[pl] = dav2d_get_bits(gb, 8) - 128;
+            fgd->uv_luma_mult[pl] = dav2d_get_bits(gb, 8) - 128;
+            fgd->uv_offset[pl] = dav2d_get_bits(gb, 9) - 256;
+        }
+        fgd->overlap_flag = dav2d_get_bit(gb);
+        fgd->clip_to_restricted_range = dav2d_get_bit(gb);
+        if (fgd->clip_to_restricted_range)
+            fgd->mc_identity = dav2d_get_bit(gb);
+        fgd->block_size = dav2d_get_bit(gb);
+#if DEBUG_FRAME_HDR
+        printf("FGM: post-data[id=%d,sh=%d|%"PRIu64"|%d,uvm=%d|%d|%d|%d|%d|%d,"
+               "overlap=%d,clip=%d,mcid=%d,bs=%d]: off=%td\n", idx,
+               fgd->scaling_shift, fgd->ar_coeff_shift, fgd->grain_scale_shift,
+               fgd->uv_mult[0], fgd->uv_luma_mult[0], fgd->uv_offset[0],
+               fgd->uv_mult[1], fgd->uv_luma_mult[1], fgd->uv_offset[1],
+               fgd->overlap_flag, fgd->clip_to_restricted_range,
+               fgd->mc_identity, fgd->block_size,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+    }
+
+    return 0;
+
+error:
+    return -1;
 }
 
 static void parse_tile_hdr(Dav2dContext *const c, GetBits *const gb) {
@@ -2122,6 +2153,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 dav2d_ref_dec(&c->refs[i].segmap);
                 dav2d_ref_dec(&c->refs[i].refmvs);
                 dav2d_cdf_thread_unref(&c->cdf[i]);
+                dav2d_ref_dec(&c->fgm[i]);
             }
 #if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
@@ -2233,6 +2265,12 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         c->n_tiles += 1 + c->tile[c->n_tile_data].end -
                           c->tile[c->n_tile_data].start;
         c->n_tile_data++;
+        break;
+    }
+    case DAV2D_OBU_FGM: {
+        parse_fgm_hdr(c, &gb);
+        if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
+            goto error;
         break;
     }
     case DAV2D_OBU_METADATA: {

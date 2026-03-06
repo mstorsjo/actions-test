@@ -190,7 +190,8 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
         dav2d_mem_pool_init(ALLOC_REFMVS, &c->refmvs_pool) ||
         dav2d_mem_pool_init(ALLOC_CCSOMAP, &c->ccsomap_pool) ||
         dav2d_mem_pool_init(ALLOC_PIC_CTX, &c->pic_ctx_pool) ||
-        dav2d_mem_pool_init(ALLOC_CDF, &c->cdf_pool))
+        dav2d_mem_pool_init(ALLOC_CDF, &c->cdf_pool) ||
+        dav2d_mem_pool_init(ALLOC_CDF, &c->fgm_pool))
     {
         goto error;
     }
@@ -408,12 +409,12 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
     return q;
 }
 
-static int has_grain(const Dav2dPicture *const pic)
-{
-    const Dav2dFilmGrainData *fgdata = &pic->frame_hdr->film_grain.data;
-    return fgdata->num_y_points || fgdata->num_uv_points[0] ||
-           fgdata->num_uv_points[1] || (fgdata->clip_to_restricted_range &&
-                                        fgdata->chroma_scaling_from_luma);
+static int has_grain(const Dav2dPicture *const pic) {
+    const Dav2dFilmGrainData *fgdata = pic->fgm;
+    return fgdata &&
+           (fgdata->num_points[0] || fgdata->num_points[1] ||
+            fgdata->num_points[2] || (fgdata->clip_to_restricted_range &&
+                                      fgdata->chroma_scaling_from_luma));
 }
 
 static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
@@ -500,7 +501,7 @@ int dav2d_apply_grain(Dav2dContext *const c, Dav2dPicture *const out,
     validate_input_or_ret(out != NULL, DAV2D_ERR(EINVAL));
     validate_input_or_ret(in != NULL, DAV2D_ERR(EINVAL));
 
-    if (!has_grain(in) || c->apply_grain) {
+    if (!has_grain(in) || !c->apply_grain) {
         dav2d_picture_ref(out, in);
         return 0;
     }
@@ -547,6 +548,7 @@ void dav2d_flush(Dav2dContext *const c) {
         dav2d_ref_dec(&c->refs[i].segmap);
         dav2d_ref_dec(&c->refs[i].refmvs);
         dav2d_cdf_thread_unref(&c->cdf[i]);
+        dav2d_ref_dec(&c->fgm[i]);
     }
     c->frame_hdr = NULL;
     c->seq_hdr = NULL;
@@ -708,6 +710,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
     dav2d_mem_pool_end(c->refmvs_pool);
     dav2d_mem_pool_end(c->ccsomap_pool);
     dav2d_mem_pool_end(c->cdf_pool);
+    dav2d_mem_pool_end(c->fgm_pool);
     dav2d_mem_pool_end(c->picture_pool);
     dav2d_mem_pool_end(c->pic_ctx_pool);
 

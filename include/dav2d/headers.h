@@ -365,16 +365,12 @@ typedef struct Dav2dSequenceHeader {
 } Dav2dSequenceHeader;
 
 typedef struct Dav2dFilmGrainData {
-    unsigned seed;
-    int num_y_points;
-    uint8_t y_points[14][2 /* value, scaling */];
     int chroma_scaling_from_luma;
-    int num_uv_points[2];
-    uint8_t uv_points[2][10][2 /* value, scaling */];
+    int num_points[3];
+    uint8_t points[3][14][2 /* value, scaling */];
     int scaling_shift;
     int ar_coeff_lag;
-    int8_t ar_coeffs_y[24];
-    int8_t ar_coeffs_uv[2][25 + 3 /* padding for alignment purposes */];
+    int8_t ar_coeffs[3][25 + 3 /* padding for alignment purposes */];
     uint64_t ar_coeff_shift;
     int grain_scale_shift;
     int uv_mult[2];
@@ -382,14 +378,12 @@ typedef struct Dav2dFilmGrainData {
     int uv_offset[2];
     int overlap_flag;
     int clip_to_restricted_range;
+    int mc_identity;
+    int block_size;
 } Dav2dFilmGrainData;
 
 typedef struct Dav2dFrameHeader {
     uint8_t id;
-    struct {
-        Dav2dFilmGrainData data;
-        uint8_t present, update;
-    } film_grain; ///< film grain parameters
     enum Dav2dFrameType frame_type; ///< type of the picture
     int width, height;
     uint8_t frame_offset; ///< frame number
@@ -508,6 +502,11 @@ typedef struct Dav2dFrameHeader {
         uint8_t refref; // index in that reference's refrence array
         Dav2dWarpedMotionParams m[DAV2D_REFS_PER_FRAME];
     } gmv;
+    struct {
+        uint8_t present;
+        uint8_t id;
+        unsigned seed;
+    } film_grain; ///< film grain parameters
 } Dav2dFrameHeader;
 
 #ifdef __cplusplus

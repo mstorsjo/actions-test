@@ -5246,6 +5246,11 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     // allocate frame
     res = dav2d_thread_picture_alloc(c, f, bpc);
     if (res < 0) goto error;
+    if (f->frame_hdr->film_grain.present && c->fgm[f->frame_hdr->film_grain.id]) {
+        f->cur.p.fgm_ref = c->fgm[f->frame_hdr->film_grain.id];
+        dav2d_ref_inc(f->cur.p.fgm_ref);
+        f->cur.p.fgm = f->cur.p.fgm_ref->data;
+    }
 
     // move f->cur into output queue
     struct OutputQueue *q = NULL;

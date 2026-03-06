@@ -1,15 +1,16 @@
-From 299db29b5ff84a744fa7145bcdd4268477af97cf Mon Sep 17 00:00:00 2001
+From bcd085b9fac0e08cce8bf2539117d013ff67ad0f Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 09:07:44 -0500
 Subject: [PATCH 2/5] Frame header debugging.
 
 ---
  av2/decoder/decodeframe.c | 205 +++++++++++++++++++++++++++++++++++++-
+ av2/decoder/obu_fgm.c     |  37 ++++++-
  avm/debug.h               |   1 +
- 2 files changed, 203 insertions(+), 3 deletions(-)
+ 3 files changed, 238 insertions(+), 5 deletions(-)
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 9ed482186c..c99b4bae66 100644
+index 9ed482186c..8ddc37a2ce 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -3608,6 +3608,11 @@ static AVM_INLINE void setup_qm_params(AV2Decoder *pbi,
@@ -72,7 +73,7 @@ index 9ed482186c..c99b4bae66 100644
      }
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-filmgrain[%d]: off=%u\n",
-+           cm->cur_frame->film_grain_params.apply_grain,
++           cm->film_grain_params.apply_grain,
 +           rb->bit_offset);
 +#endif
    }
@@ -443,6 +444,110 @@ index 9ed482186c..c99b4bae66 100644
    setup_film_grain(pbi, rb);
    features->enable_ext_seg = seq_params->enable_ext_seg;
    return 0;
+diff --git a/av2/decoder/obu_fgm.c b/av2/decoder/obu_fgm.c
+index fe02659a55..ce7a9c282e 100644
+--- a/av2/decoder/obu_fgm.c
++++ b/av2/decoder/obu_fgm.c
+@@ -26,6 +26,8 @@
+ #include "av2/decoder/decodeframe.h"
+ #include "av2/decoder/obu.h"
+ 
++#define DEBUG_FGM_HDR 0
++
+ void copy_fgm_from_list(AV2_COMMON *cm, avm_film_grain_t *pars,
+                         const struct film_grain_model *fgm) {
+   const SequenceHeader *const seq_params = &cm->seq_params;
+@@ -69,7 +71,8 @@ void copy_fgm_from_list(AV2_COMMON *cm, avm_film_grain_t *pars,
+ 
+ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+                                   struct avm_read_bit_buffer *rb,
+-                                  struct avm_internal_error_info *error_info) {
++                                  struct avm_internal_error_info *error_info,
++                                  const int idx) {
+   int monochrome = chroma_idc == CHROMA_FORMAT_400;
+   int subsampling_x = chroma_idc == CHROMA_FORMAT_444 ? 0 : 1;
+   int subsampling_y =
+@@ -121,6 +124,11 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+         }
+         fgm->fgm_scaling_points[c][i][1] = avm_rb_read_literal(rb, bitsScal);
+       }
++#if DEBUG_FGM_HDR
++      printf("FGM: post-scaling_points[id=%d,pl=%d,cnt=%d,bits=%d|%d]: off=%u\n",
++             idx, c, fgm->fgm_points[c], bitsIncr, bitsScal,
++             rb->bit_offset);
++#endif
+     }
+   }  // c < fgmNumScalingChannels
+ 
+@@ -151,6 +159,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+     int BitsArY = bits_per_ar_coeff_y_minus5 + 5;
+     for (int i = 0; i < num_pos_luma; i++)
+       fgm->ar_coeffs_y[i] = avm_rb_read_literal(rb, BitsArY) - 128;
++#if DEBUG_FGM_HDR
++    printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%u\n",
++           idx, 0, fgm->ar_coeff_lag, num_pos_luma, BitsArY, rb->bit_offset);
++#endif
+   }
+ 
+   if (fgm->fgm_points[1] || fgm->fgm_scale_from_channel0_flag) {
+@@ -158,6 +170,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+     int BitsArCb = bits_per_ar_coeff_cb_minus5 + 5;
+     for (int i = 0; i < num_pos_chroma; i++)
+       fgm->ar_coeffs_cb[i] = avm_rb_read_literal(rb, BitsArCb) - 128;
++#if DEBUG_FGM_HDR
++    printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%u\n",
++           idx, 1, fgm->ar_coeff_lag, num_pos_chroma, BitsArCb, rb->bit_offset);
++#endif
+   }
+ 
+   if (fgm->fgm_points[2] || fgm->fgm_scale_from_channel0_flag) {
+@@ -165,6 +181,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+     int BitsArCr = bits_per_ar_coeff_cr_minus5 + 5;
+     for (int i = 0; i < num_pos_chroma; i++)
+       fgm->ar_coeffs_cr[i] = avm_rb_read_literal(rb, BitsArCr) - 128;
++#if DEBUG_FGM_HDR
++    printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%u\n",
++           idx, 2, fgm->ar_coeff_lag, num_pos_chroma, BitsArCr, rb->bit_offset);
++#endif
+   }
+ 
+   fgm->ar_coeff_shift = avm_rb_read_literal(rb, 2) + 6;  // 6 + value
+@@ -191,6 +211,15 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+     fgm->mc_identity = 0;
+ 
+   fgm->block_size = avm_rb_read_bit(rb);
++#if DEBUG_FGM_HDR
++  printf("FGM: post-data[id=%d,sh=%d|%d|%d,uvm=%d|%d|%d|%d|%d|%d,overlap=%d,"
++         "clip=%d,mcid=%d,bs=%d]: off=%td\n", idx,
++         fgm->scaling_shift, fgm->ar_coeff_shift, fgm->grain_scale_shift,
++         fgm->cb_mult - 128, fgm->cb_luma_mult - 128, fgm->cb_offset - 256,
++         fgm->cr_mult - 128, fgm->cr_luma_mult - 128, fgm->cr_offset - 256,
++         fgm->overlap_flag, fgm->clip_to_restricted_range,
++         fgm->mc_identity, fgm->block_size, rb->bit_offset);
++#endif
+ }
+ 
+ // acc_fgm_id_bitmap is an in/out parameter. The caller should set
+@@ -215,6 +244,10 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
+     avm_internal_error(&pbi->common.error, AVM_CODEC_UNSUP_BITSTREAM,
+                        "Invalid fgm_chroma_idc [%d].", fgm_chroma_idc);
+   }
++#if DEBUG_FRAME_HDR
++  printf("FGM: post-init[mask=0x%x,layout=%d]: off=%u\n",
++         fgm_bit_map, fgm_chroma_idc, rb->bit_offset);
++#endif
+   for (int j = 0; j < MAX_FGM_NUM; j++) {
+     // This process overwrites the position(pbi->fg_list[fgm_id]) if the fgm_id
+     // is the same.
+@@ -226,7 +259,7 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
+       pbi->fgm_list[fgm_id].fgm_tlayer_id = obu_tlayer_id;
+       pbi->fgm_list[fgm_id].fgm_chroma_idc = fgm_chroma_idc;
+       read_film_grain_model(&pbi->fgm_list[fgm_id], fgm_chroma_idc, rb,
+-                            &pbi->common.error);
++                            &pbi->common.error, j);
+     }  // if
+   }  // j
+   if (av2_check_trailing_bits(pbi, rb) != 0) {
 diff --git a/avm/debug.h b/avm/debug.h
 index 36030e147d..b605a9125c 100644
 --- a/avm/debug.h

@@ -97,4 +97,6 @@ EXTERN const int8_t dav2d_filter_intra_taps[5][64];
 
 EXTERN const int16_t dav2d_gaussian_sequence[2048]; // for fgs
 
+EXTERN const uint8_t /*enum Dav2dPixelLayout*/ dav2d_layouts[4];
+
 #endif /* DAV2D_SRC_TABLES_H */

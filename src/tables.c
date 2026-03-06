@@ -2350,3 +2350,10 @@ const int16_t dav2d_deblock_side_thresholds[296] = {
     1460, 1470, 1480, 1489, 1499, 1509, 1519, 1529, 1539, 1549, 1559, 1569, 1579,
     1589, 1599, 1608, 1618, 1628, 1638, 1648, 1658, 1668, 1678
 };
+
+const uint8_t /*enum Dav2dPixelLayout*/ dav2d_layouts[] = {
+    DAV2D_PIXEL_LAYOUT_I420,
+    DAV2D_PIXEL_LAYOUT_I400,
+    DAV2D_PIXEL_LAYOUT_I444,
+    DAV2D_PIXEL_LAYOUT_I422,
+};

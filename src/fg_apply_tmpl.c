@@ -103,31 +103,32 @@ void bitfn(dav2d_prep_grain)(const Dav2dFilmGrainDSPContext *const dsp,
                              uint8_t scaling[3][SCALING_SIZE],
                              entry grain_lut[3][GRAIN_HEIGHT+1][GRAIN_WIDTH])
 {
-    const Dav2dFilmGrainData *const data = &out->frame_hdr->film_grain.data;
+    const Dav2dFilmGrainData *const data = out->fgm;
 #if BITDEPTH != 8
     const int bitdepth_max = (1 << out->p.bpc) - 1;
 #endif
+    const unsigned seed = out->frame_hdr->film_grain.seed;
 
     // Generate grain LUTs as needed
-    dsp->generate_grain_y(grain_lut[0], data HIGHBD_TAIL_SUFFIX); // always needed
-    if (data->num_uv_points[0] || data->chroma_scaling_from_luma)
+    dsp->generate_grain_y(grain_lut[0], data, seed HIGHBD_TAIL_SUFFIX); // always needed
+    if (data->num_points[1] || data->chroma_scaling_from_luma)
         dsp->generate_grain_uv[in->p.layout - 1](grain_lut[1], grain_lut[0],
-                                                 data, 0 HIGHBD_TAIL_SUFFIX);
-    if (data->num_uv_points[1] || data->chroma_scaling_from_luma)
+                                                 data, seed, 0 HIGHBD_TAIL_SUFFIX);
+    if (data->num_points[2] || data->chroma_scaling_from_luma)
         dsp->generate_grain_uv[in->p.layout - 1](grain_lut[2], grain_lut[0],
-                                                 data, 1 HIGHBD_TAIL_SUFFIX);
+                                                 data, seed, 1 HIGHBD_TAIL_SUFFIX);
 
     // Generate scaling LUTs as needed
-    if (data->num_y_points || data->chroma_scaling_from_luma)
-        generate_scaling(in->p.bpc, data->y_points, data->num_y_points, scaling[0]);
-    if (data->num_uv_points[0])
-        generate_scaling(in->p.bpc, data->uv_points[0], data->num_uv_points[0], scaling[1]);
-    if (data->num_uv_points[1])
-        generate_scaling(in->p.bpc, data->uv_points[1], data->num_uv_points[1], scaling[2]);
+    if (data->num_points[0] || data->chroma_scaling_from_luma)
+        generate_scaling(in->p.bpc, data->points[0], data->num_points[0], scaling[0]);
+    if (data->num_points[1])
+        generate_scaling(in->p.bpc, data->points[1], data->num_points[1], scaling[1]);
+    if (data->num_points[2])
+        generate_scaling(in->p.bpc, data->points[2], data->num_points[2], scaling[2]);
 
     // Copy over the non-modified planes
     assert(out->stride[0] == in->stride[0]);
-    if (!data->num_y_points) {
+    if (!data->num_points[0]) {
         const ptrdiff_t stride = out->stride[0];
         const ptrdiff_t sz = out->p.h * stride;
         if (sz < 0)
@@ -143,16 +144,16 @@ void bitfn(dav2d_prep_grain)(const Dav2dFilmGrainDSPContext *const dsp,
         const ptrdiff_t stride = out->stride[1];
         const ptrdiff_t sz = ((out->p.h + ss_ver) >> ss_ver) * stride;
         if (sz < 0) {
-            if (!data->num_uv_points[0])
+            if (!data->num_points[1])
                 memcpy((uint8_t*) out->data[1] + sz - stride,
                        (uint8_t*) in->data[1] + sz - stride, -sz);
-            if (!data->num_uv_points[1])
+            if (!data->num_points[2])
                 memcpy((uint8_t*) out->data[2] + sz - stride,
                        (uint8_t*) in->data[2] + sz - stride, -sz);
         } else {
-            if (!data->num_uv_points[0])
+            if (!data->num_points[1])
                 memcpy(out->data[1], in->data[1], sz);
-            if (!data->num_uv_points[1])
+            if (!data->num_points[2])
                 memcpy(out->data[2], in->data[2], sz);
         }
     }
@@ -166,31 +167,33 @@ void bitfn(dav2d_apply_grain_row)(const Dav2dFilmGrainDSPContext *const dsp,
                                   const int row)
 {
     // Synthesize grain for the affected planes
-    const Dav2dFilmGrainData *const data = &out->frame_hdr->film_grain.data;
+    const Dav2dFilmGrainData *const data = out->fgm;
     const int ss_y = in->p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_x = in->p.layout != DAV2D_PIXEL_LAYOUT_I444;
     const int cpw = (out->p.w + ss_x) >> ss_x;
     const int is_id = 0; //out->seq_hdr->mtrx == DAV2D_MC_IDENTITY;
+    const int bs = 16 << data->block_size;
     pixel *const luma_src =
-        ((pixel *) in->data[0]) + row * FG_BLOCK_SIZE * PXSTRIDE(in->stride[0]);
+        ((pixel *) in->data[0]) + row * bs * PXSTRIDE(in->stride[0]);
 #if BITDEPTH != 8
     const int bitdepth_max = (1 << out->p.bpc) - 1;
 #endif
+    const unsigned seed = out->frame_hdr->film_grain.seed;
 
-    if (data->num_y_points) {
-        const int bh = imin(out->p.h - row * FG_BLOCK_SIZE, FG_BLOCK_SIZE);
-        dsp->fgy_32x32xn(((pixel *) out->data[0]) + row * FG_BLOCK_SIZE * PXSTRIDE(out->stride[0]),
-                         luma_src, out->stride[0], data,
+    if (data->num_points[0]) {
+        const int bh = imin(out->p.h - row * bs, bs);
+        dsp->fgy_32x32xn(((pixel *) out->data[0]) + row * bs * PXSTRIDE(out->stride[0]),
+                         luma_src, out->stride[0], data, seed,
                          out->p.w, scaling[0], grain_lut[0], bh, row HIGHBD_TAIL_SUFFIX);
     }
 
-    if (!data->num_uv_points[0] && !data->num_uv_points[1] &&
+    if (!data->num_points[1] && !data->num_points[2] &&
         !data->chroma_scaling_from_luma)
     {
         return;
     }
 
-    const int bh = (imin(out->p.h - row * FG_BLOCK_SIZE, FG_BLOCK_SIZE) + ss_y) >> ss_y;
+    const int bh = (imin(out->p.h - row * bs, bs) + ss_y) >> ss_y;
 
     // extend padding pixels
     if (out->p.w & ss_x) {
@@ -201,21 +204,21 @@ void bitfn(dav2d_apply_grain_row)(const Dav2dFilmGrainDSPContext *const dsp,
         }
     }
 
-    const ptrdiff_t uv_off = row * FG_BLOCK_SIZE * PXSTRIDE(out->stride[1]) >> ss_y;
+    const ptrdiff_t uv_off = row * bs * PXSTRIDE(out->stride[1]) >> ss_y;
     if (data->chroma_scaling_from_luma) {
         for (int pl = 0; pl < 2; pl++)
             dsp->fguv_32x32xn[in->p.layout - 1](((pixel *) out->data[1 + pl]) + uv_off,
                                                 ((const pixel *) in->data[1 + pl]) + uv_off,
-                                                in->stride[1], data, cpw,
+                                                in->stride[1], data, seed, cpw,
                                                 scaling[0], grain_lut[1 + pl],
                                                 bh, row, luma_src, in->stride[0],
                                                 pl, is_id HIGHBD_TAIL_SUFFIX);
     } else {
         for (int pl = 0; pl < 2; pl++)
-            if (data->num_uv_points[pl])
+            if (data->num_points[1 + pl])
                 dsp->fguv_32x32xn[in->p.layout - 1](((pixel *) out->data[1 + pl]) + uv_off,
                                                     ((const pixel *) in->data[1 + pl]) + uv_off,
-                                                    in->stride[1], data, cpw,
+                                                    in->stride[1], data, seed, cpw,
                                                     scaling[1 + pl], grain_lut[1 + pl],
                                                     bh, row, luma_src, in->stride[0],
                                                     pl, is_id HIGHBD_TAIL_SUFFIX);
@@ -232,7 +235,8 @@ void bitfn(dav2d_apply_grain)(const Dav2dFilmGrainDSPContext *const dsp,
 #else
     uint8_t scaling[3][SCALING_SIZE];
 #endif
-    const int rows = (out->p.h + FG_BLOCK_SIZE - 1) / FG_BLOCK_SIZE;
+    const int bs = 16 << out->fgm->block_size;
+    const int rows = (out->p.h + bs - 1) / bs;
 
     bitfn(dav2d_prep_grain)(dsp, out, in, scaling, grain_lut);
     for (int row = 0; row < rows; row++)

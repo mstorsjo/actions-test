@@ -501,7 +501,8 @@ static inline void delayed_fg_task(const Dav2dContext *const c,
     case DAV2D_TASK_TYPE_FG_APPLY:;
         int row = atomic_fetch_add(&ttd->delayed_fg.progress[0], 1);
         pthread_mutex_unlock(&ttd->lock);
-        int progmax = (out->p.h + FG_BLOCK_SIZE - 1) / FG_BLOCK_SIZE;
+        const int bs = 16 << out->fgm->block_size;
+        int progmax = (out->p.h + bs - 1) / bs;
         while (row < progmax) {
             if (row + 1 < progmax)
                 pthread_cond_signal(&ttd->cond);
