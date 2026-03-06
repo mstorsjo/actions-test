@@ -46,7 +46,7 @@
 #include "src/internal.h"
 #include "src/log.h"
 #include "src/obu.h"
-#include "src/qm.h"
+#include "src/quantizer.h"
 #include "src/ref.h"
 #include "src/thread_task.h"
 #include "src/wedge.h"
@@ -189,6 +189,7 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
     if (dav2d_mem_pool_init(ALLOC_OBU_HDR, &c->seq_hdr_pool) ||
         dav2d_mem_pool_init(ALLOC_OBU_HDR, &c->frame_hdr_pool) ||
         dav2d_mem_pool_init(ALLOC_SEGMAP, &c->segmap_pool) ||
+        dav2d_mem_pool_init(ALLOC_SEGMAP, &c->segmap_uv_pool) ||
         dav2d_mem_pool_init(ALLOC_REFMVS, &c->refmvs_pool) ||
         dav2d_mem_pool_init(ALLOC_CCSOMAP, &c->ccsomap_pool) ||
         dav2d_mem_pool_init(ALLOC_PIC_CTX, &c->pic_ctx_pool) ||
@@ -712,6 +713,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
     dav2d_mem_pool_end(c->seq_hdr_pool);
     dav2d_mem_pool_end(c->frame_hdr_pool);
     dav2d_mem_pool_end(c->segmap_pool);
+    dav2d_mem_pool_end(c->segmap_uv_pool);
     dav2d_mem_pool_end(c->refmvs_pool);
     dav2d_mem_pool_end(c->ccsomap_pool);
     dav2d_mem_pool_end(c->cdf_pool);

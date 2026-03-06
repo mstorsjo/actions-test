@@ -33,11 +33,6 @@
 
 #include "src/levels.h"
 
-typedef struct Av2FilterLUT {
-    uint16_t thr[2 /* col, row */][2 /* 0 = q_thr, 1 = side_thr */][16 /* seg_id */];
-    uint16_t thr_uv[2 /* u, v */][2 /* 0 = q_thr, 1 = side_thr */][16 /* seg_id */];
-} Av2FilterLUT;
-
 typedef struct Av2RestorationUnit {
     uint8_t /* enum Dav2dRestorationType */ type;
     int8_t ns_filter[16][32];
@@ -48,6 +43,7 @@ typedef struct Av2Filter {
     // each bit is 1 col
     uint16_t filter_y[2 /* 0=col, 1=row */][64][5][4];
     uint16_t filter_uv[2 /* 0=col, 1=row */][64][5][4];
+    uint16_t qidx[16];
     uint8_t gdf[16];
     int8_t cdef_idx[16]; // -1 means "unset"
     uint8_t ccso[3];

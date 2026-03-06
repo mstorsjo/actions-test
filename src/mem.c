@@ -223,6 +223,7 @@ static COLD void mem_pool_destroy(Dav2dMemPool *const pool) {
 }
 
 void dav2d_mem_pool_push(Dav2dMemPool *const pool, void *const ptr) {
+    if (!ptr) return;
     pthread_mutex_lock(&pool->lock);
     Dav2dMemPoolBuffer *const buf = (Dav2dMemPoolBuffer*)((uintptr_t)ptr - 64);
     const int ref_cnt = --pool->ref_cnt;

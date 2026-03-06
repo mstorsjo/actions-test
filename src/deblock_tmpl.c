@@ -126,85 +126,93 @@ deblock(pixel *dst, unsigned q_thr, unsigned side_thr,
     }
 }
 
-static void deblock_h_sb128y_c(pixel *dst, const ptrdiff_t stride,
-                               const uint64_t *const vmask,
-                               const unsigned q_thr,
-                               const unsigned side_thr,
-                               const int edge,
-                               const Av2FilterLUT *lut, const int h
-                               HIGHBD_DECL_SUFFIX)
+static void deblock_h_sb64y_c(pixel *dst, const ptrdiff_t stride,
+                              const uint16_t *const vmask,
+                              const pixel *q_thr,
+                              const pixel *side_thr,
+                              const int edge,
+                              const int h
+                              HIGHBD_DECL_SUFFIX)
 {
-    const uint64_t vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
-    for (uint64_t y = 1; vm & ~(y - 1); y <<= 1, dst += 4 * PXSTRIDE(stride)) {
+    const unsigned vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
+    for (unsigned y = 1; vm & ~(y - 1);
+         y <<= 1, dst += 4 * PXSTRIDE(stride), q_thr++, side_thr++)
+    {
         if (vm & y) {
             const int idx = (vmask[3] & y) ? 3 : (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
             const int is_sub_pu = !!(vmask[4] & y) * 3;
-            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
+            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
-static void deblock_v_sb128y_c(pixel *dst, const ptrdiff_t stride,
-                               const uint64_t *const vmask,
-                               const unsigned q_thr,
-                               const unsigned side_thr,
-                               const int edge,
-                               const Av2FilterLUT *lut, const int w
-                               HIGHBD_DECL_SUFFIX)
+static void deblock_v_sb64y_c(pixel *dst, const ptrdiff_t stride,
+                              const uint16_t *const vmask,
+                              const pixel *q_thr,
+                              const pixel *side_thr,
+                              const int edge,
+                              const int w
+                              HIGHBD_DECL_SUFFIX)
 {
-    const uint64_t vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
-    for (uint64_t x = 1; vm & ~(x - 1); x <<= 1, dst += 4) {
+    const unsigned vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
+    for (unsigned x = 1; vm & ~(x - 1);
+         x <<= 1, dst += 4, q_thr++, side_thr++)
+    {
         if (vm & x) {
             const int idx = (vmask[3] & x) ? 3 : (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
             const int is_sub_pu = !!(vmask[4] & x) * 3;
-            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
+            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
-static void deblock_h_sb128uv_c(pixel *dst, const ptrdiff_t stride,
-                                const uint64_t *const vmask,
-                                const unsigned q_thr,
-                                const unsigned side_thr,
-                                const int edge,
-                                const Av2FilterLUT *lut, const int h
-                                HIGHBD_DECL_SUFFIX)
+static void deblock_h_sb64uv_c(pixel *dst, const ptrdiff_t stride,
+                               const uint16_t *const vmask,
+                               const pixel *q_thr,
+                               const pixel *side_thr,
+                               const int edge,
+                               const int h
+                               HIGHBD_DECL_SUFFIX)
 {
-    const uint64_t vm = vmask[0] | vmask[1] | vmask[2];
-    for (uint64_t y = 1; vm & ~(y - 1); y <<= 1, dst += 4 * PXSTRIDE(stride)) {
+    const unsigned vm = vmask[0] | vmask[1] | vmask[2];
+    for (unsigned y = 1; vm & ~(y - 1);
+        y <<= 1, dst += 4 * PXSTRIDE(stride), q_thr++, side_thr++)
+    {
         if (vm & y) {
             const int idx = (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
             const int is_sub_pu = !!(vmask[3] & y) * 3;
-            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
+            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
-static void deblock_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
-                                    const uint64_t *const vmask,
-                                    const unsigned q_thr,
-                                    const unsigned side_thr,
-                                    const int edge,
-                                    const Av2FilterLUT *lut, const int h
-                                    HIGHBD_DECL_SUFFIX)
+static void deblock_v_sb64uv_c(pixel *dst, const ptrdiff_t stride,
+                               const uint16_t *const vmask,
+                               const pixel *q_thr,
+                               const pixel *side_thr,
+                               const int edge,
+                               const int w
+                               HIGHBD_DECL_SUFFIX)
 {
-    const uint64_t vm = vmask[0] | vmask[1] | vmask[2];
-    for (uint64_t x = 1; vm & ~(x - 1); x <<= 1, dst += 4) {
+    const unsigned vm = vmask[0] | vmask[1] | vmask[2];
+    for (unsigned x = 1; vm & ~(x - 1);
+         x <<= 1, dst += 4, q_thr++, side_thr++)
+    {
         if (vm & x) {
             const int idx = (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
             const int is_sub_pu = !!(vmask[3] & x) * 3;
-            deblock(dst, q_thr >> is_sub_pu, side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
+            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
                         max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
@@ -225,10 +233,10 @@ static void deblock_v_sb128uv_c(pixel *dst, const ptrdiff_t stride,
 #endif
 
 COLD void bitfn(dav2d_deblock_dsp_init)(Dav2dDeblockDSPContext *const c) {
-    c->deblock_sb[0][0] = deblock_h_sb128y_c;
-    c->deblock_sb[0][1] = deblock_v_sb128y_c;
-    c->deblock_sb[1][0] = deblock_h_sb128uv_c;
-    c->deblock_sb[1][1] = deblock_v_sb128uv_c;
+    c->deblock_sb[0][0] = deblock_h_sb64y_c;
+    c->deblock_sb[0][1] = deblock_v_sb64y_c;
+    c->deblock_sb[1][0] = deblock_h_sb64uv_c;
+    c->deblock_sb[1][1] = deblock_v_sb64uv_c;
 
 #if 0
 #if HAVE_ASM

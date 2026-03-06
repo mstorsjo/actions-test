@@ -31,7 +31,19 @@
 
 #include "common/attributes.h"
 
-#include "src/qm.h"
+#include "src/quantizer.h"
+
+int dav2d_dq_lookup(int qidx) {
+    if (!qidx) return 64;
+    qidx--;
+    const int shift = qidx / 24;
+    qidx %= 24;
+    static const uint8_t dq_lookup_tbl[] = {
+        40, 41, 43, 44, 45, 47, 48, 49, 51, 52, 54, 55,
+        57, 59, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78,
+    };
+    return dq_lookup_tbl[qidx] << shift;
+}
 
 static const uint8_t qm_tbl_32x16[][2][512] = {
     {

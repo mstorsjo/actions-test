@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DAV2D_SRC_QM_H
-#define DAV2D_SRC_QM_H
+#ifndef DAV2D_SRC_QUANTIZER_H
+#define DAV2D_SRC_QUANTIZER_H
 
 #include "src/levels.h"
 
@@ -34,4 +34,6 @@ EXTERN const uint8_t *dav2d_qm_tbl[16][2][N_RECT_TX_SIZES];
 
 void dav2d_init_qm_tables(void);
 
-#endif /* DAV2D_SRC_QM_H */
+int dav2d_dq_lookup(int qidx);
+
+#endif /* DAV2D_SRC_QUANTIZER_H */

@@ -43,7 +43,7 @@
 #include "src/env.h"
 #include "src/filmgrain.h"
 #include "src/log.h"
-#include "src/qm.h"
+#include "src/quantizer.h"
 #include "src/recon.h"
 #include "src/ref.h"
 #include "src/tables.h"
@@ -51,20 +51,7 @@
 #include "src/warpmv.h"
 #include "src/wedge.h"
 
-static inline int dq_lookup(const int hbd, int qidx) {
-    if (!qidx) return 64;
-    qidx--;
-    const int shift = qidx / 24;
-    qidx %= 24;
-    static const uint8_t dq_lookup_tbl[] = {
-        40, 41, 43, 44, 45, 47, 48, 49, 51, 52, 54, 55,
-        57, 59, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78,
-    };
-    return dq_lookup_tbl[qidx] << shift;
-}
-
-static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
-                              const Dav2dFrameHeader *const frame_hdr,
+static void init_quant_tables(const Dav2dFrameHeader *const frame_hdr,
                               const int qidx, uint32_t (*dq)[3][2])
 {
     // and then ac == dc
@@ -77,48 +64,12 @@ static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
         const int vac = yac + frame_hdr->quant.vac_delta;
         const int vdc = yac + frame_hdr->quant.vdc_delta;
 
-        dq[i][0][0] = dq_lookup(seq_hdr->hbd, ydc);
-        dq[i][0][1] = dq_lookup(seq_hdr->hbd, yac);
-        dq[i][1][0] = dq_lookup(seq_hdr->hbd, udc);
-        dq[i][1][1] = dq_lookup(seq_hdr->hbd, uac);
-        dq[i][2][0] = dq_lookup(seq_hdr->hbd, vdc);
-        dq[i][2][1] = dq_lookup(seq_hdr->hbd, vac);
-    }
-}
-
-static uint16_t deblock_quant_thr(const int hbd, const int qidx) {
-    const int qmax = 255 + 48 * hbd;
-    return (dq_lookup(hbd, iclip(qidx, 0, qmax)) + 4) >> (3 + 6);
-}
-
-static uint16_t deblock_side_thr(const int hbd, const int qidx) {
-    const int bitdepth_min_8 = 2 * hbd;
-    const int q_ind = imin(imax(qidx - 24 * bitdepth_min_8, 0), 296 - 1);
-    const int side_thr = dav2d_deblock_side_thresholds[q_ind];
-    return imax(side_thr + (1 << 4 >> bitdepth_min_8), 0) >> (5 - bitdepth_min_8);
-}
-
-static void init_deblock_lut(const Dav2dSequenceHeader *const seq_hdr,
-                             const Dav2dFrameHeader *const frame_hdr,
-                             const int qidx, Av2FilterLUT *const lut)
-{
-    const int qmax = 255 + 48 * seq_hdr->hbd;
-    for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
-        const int yac = frame_hdr->segmentation.enabled ?
-            iclip(qidx + frame_hdr->segmentation.d.delta_q[i], 0, qmax) : qidx;
-        for (int dir = 0; dir < 2; dir++) {
-            const int dir_yac = yac + 8 * frame_hdr->deblock.delta_q_y[dir];
-            lut->thr[dir][0][i] = deblock_quant_thr(seq_hdr->hbd, dir_yac);
-            lut->thr[dir][1][i] = deblock_side_thr(seq_hdr->hbd, dir_yac);
-        }
-        const int uac = yac + frame_hdr->quant.uac_delta +
-                        8 * frame_hdr->deblock.delta_q_u;
-        lut->thr_uv[0][0][i] = deblock_quant_thr(seq_hdr->hbd, uac);
-        lut->thr_uv[0][1][i] = deblock_side_thr(seq_hdr->hbd, uac);
-        const int vac = yac + frame_hdr->quant.vac_delta +
-                        8 * frame_hdr->deblock.delta_q_v;
-        lut->thr_uv[1][0][i] = deblock_quant_thr(seq_hdr->hbd, vac);
-        lut->thr_uv[1][1][i] = deblock_side_thr(seq_hdr->hbd, vac);
+        dq[i][0][0] = dav2d_dq_lookup(ydc);
+        dq[i][0][1] = dav2d_dq_lookup(yac);
+        dq[i][1][0] = dav2d_dq_lookup(udc);
+        dq[i][1][1] = dav2d_dq_lookup(uac);
+        dq[i][2][0] = dav2d_dq_lookup(vdc);
+        dq[i][2][1] = dav2d_dq_lookup(vac);
     }
 }
 
@@ -128,7 +79,7 @@ static inline void init_wiener(Dav2dFrameContext *const f) {
 
     int qidx = f->frame_hdr->quant.yac;
 
-    f->lf.base_q = dq_lookup(f->seq_hdr->hbd, f->frame_hdr->quant.yac);
+    f->lf.base_q = dav2d_dq_lookup(f->frame_hdr->quant.yac);
     int idx = 3;
     if (qidx < 130) {
         idx = 0;
@@ -1522,13 +1473,23 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                depth, "", delta_q >> f->frame_hdr->delta.q.res_log2,
                                ts->last_qidx, ts->msac.rng);
         }
-        if (ts->last_qidx == f->frame_hdr->quant.yac) {
+
+        const int new_qidx = ts->last_qidx;
+        if (new_qidx == f->frame_hdr->quant.yac) {
             // assign frame-wide q values to this sb
             ts->dq = f->dq;
-        } else if (ts->last_qidx != prev_qidx) {
+        } else if (new_qidx != prev_qidx) {
             // find sb-specific quant parameters
-            init_quant_tables(f->seq_hdr, f->frame_hdr, ts->last_qidx, ts->dqmem);
+            init_quant_tables(f->frame_hdr, new_qidx, ts->dqmem);
             ts->dq = ts->dqmem;
+        }
+
+        uint16_t *qidx_ptr = &t->lf_mask->qidx[(bx4 >> 4) + ((by4 & 0x30) >> 2)];
+        const int sbsz64 = 1 << f->frame_hdr->sb128;
+        for (int y64 = 0; y64 < sbsz64; y64++) {
+            for (int x64 = 0; x64 < sbsz64; x64++)
+                qidx_ptr[x64] = new_qidx;
+            qidx_ptr += 4;
         }
     }
 
@@ -3210,17 +3171,31 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // update contexts
-    if (f->frame_hdr->segmentation.enabled &&
-        f->frame_hdr->segmentation.update_map)
-    {
-        uint8_t *seg_ptr = &f->cur_segmap[t->by * f->b4_stride + t->bx];
+    if (f->frame_hdr->segmentation.enabled) {
+        if (has_luma) {
+            uint8_t *seg_ptr = &f->cur_segmap[t->by * f->b4_stride + t->bx];
 #define set_ctx(rep_macro) \
-        for (int y = 0; y < bh4; y++) { \
-            rep_macro(seg_ptr, 0, b->seg_id); \
-            seg_ptr += f->b4_stride; \
-        }
-        case_set(b_dim[2]);
+            for (int y = 0; y < bh4; y++) { \
+                rep_macro(seg_ptr, 0, b->seg_id); \
+                seg_ptr += f->b4_stride; \
+            }
+            case_set(b_dim[2]);
 #undef set_ctx
+        }
+        if (has_chroma &&
+            (f->frame_hdr->deblock.level_u || f->frame_hdr->deblock.level_v))
+        {
+            ptrdiff_t seg_stride = f->lf.uv_segmap_stride;
+            uint8_t *seg_ptr =
+                &f->lf.segmap_uv[(t->cby >> ss_ver) * seg_stride + (t->cbx >> ss_hor)];
+#define set_ctx(rep_macro) \
+            for (int y = 0; y < cbh4; y++) { \
+                rep_macro(seg_ptr, 0, b->seg_id); \
+                seg_ptr += seg_stride; \
+            }
+            case_set(ulog2(cbw4));
+#undef set_ctx
+        }
     }
 
     if (f->frame_hdr->deblock.level_y[0] || f->frame_hdr->deblock.level_y[1]) {
@@ -4404,6 +4379,15 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                                          &t->a->tx_lpf_uv[bx4 >> f->ss_hor],
                                          &t->l.tx_lpf_uv[by4 >> f->ss_ver],
                                          f->frame_hdr, f->seq_hdr);
+
+                const int qidx = f->frame_hdr->quant.yac;
+                uint16_t *qidx_ptr = &t->lf_mask->qidx[(bx4 >> 4) + ((by4 & 0x30) >> 2)];
+                const int sbsz64 = sb_step >> 4;
+                for (int y64 = 0; y64 < sbsz64; y64++) {
+                    for (int x64 = 0; x64 < sbsz64; x64++)
+                        qidx_ptr[x64] = qidx;
+                    qidx_ptr += 4;
+                }
             }
             f->bd_fn.recon_b(t, DB_ONLY(0) root_bs,
                 (const enum BlockSize[2]){ c_root_bs, c_root_bs }, &b);
@@ -4796,10 +4780,6 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->lf.gdf_ref_dst_idx = ref_dst_idx;
     }
 
-    if (f->frame_hdr->deblock.level_y[0] || f->frame_hdr->deblock.level_y[1]) {
-        init_deblock_lut(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, &f->lf.thr_lut);
-    }
-
     const int plane_mul = 1 + (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400 ?
                                0 : 2 >> f->ss_hor);
     const int ipred_edge_plane_sz = f->sbh * f->sb256w * 256 << hbd;
@@ -4843,7 +4823,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
 
     // setup dequant tables
-    init_quant_tables(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, f->dq);
+    init_quant_tables(f->frame_hdr, f->frame_hdr->quant.yac, f->dq);
     if (f->frame_hdr->quant.qm.enabled)
         for (int i = 0; i < N_RECT_TX_SIZES; i++) {
             f->qm[i][0] = dav2d_qm_tbl[f->frame_hdr->quant.qm.y[0]][0][i];
@@ -5013,6 +4993,8 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
     }
     dav2d_ref_dec(&f->cur_segmap_ref);
     dav2d_ref_dec(&f->prev_segmap_ref);
+    dav2d_mem_pool_push(f->c->segmap_uv_pool, f->lf.segmap_uv);
+    f->lf.segmap_uv = NULL;
     dav2d_ref_dec(&f->mvs_ref);
     dav2d_ref_dec(&f->cur_ccsomap_ref);
     for (int p = 0; p < 3; p++)
@@ -5421,39 +5403,35 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             }
         }
 
-        if (f->frame_hdr->segmentation.update_map) {
-            // We're updating an existing map, but need somewhere to
-            // put the new values. Allocate them here (the data
-            // actually gets set elsewhere)
-            f->cur_segmap_ref = dav2d_ref_create_using_pool(c->segmap_pool,
-                sizeof(*f->cur_segmap) * f->b4_stride * 64 * f->sb256h);
-            if (!f->cur_segmap_ref) {
+        const size_t segmap_size = sizeof(*f->cur_segmap) * f->b4_stride * 64 * f->sb256h;
+        f->cur_segmap_ref = dav2d_ref_create_using_pool(c->segmap_pool, segmap_size);
+        if (!f->cur_segmap_ref) {
+            if (f->prev_segmap_ref)
                 dav2d_ref_dec(&f->prev_segmap_ref);
-                res = DAV2D_ERR(ENOMEM);
-                goto error;
-            }
-            f->cur_segmap = f->cur_segmap_ref->data;
-        } else if (f->prev_segmap_ref) {
-            // We're not updating an existing map, and we have a valid
-            // reference. Use that.
-            f->cur_segmap_ref = f->prev_segmap_ref;
-            dav2d_ref_inc(f->cur_segmap_ref);
-            f->cur_segmap = f->prev_segmap_ref->data;
-        } else {
-            // We need to make a new map. Allocate one here and zero it out.
-            const size_t segmap_size = sizeof(*f->cur_segmap) * f->b4_stride * 64 * f->sb256h;
-            f->cur_segmap_ref = dav2d_ref_create_using_pool(c->segmap_pool, segmap_size);
-            if (!f->cur_segmap_ref) {
-                res = DAV2D_ERR(ENOMEM);
-                goto error;
-            }
-            f->cur_segmap = f->cur_segmap_ref->data;
+            res = DAV2D_ERR(ENOMEM);
+            goto error;
+        }
+        f->cur_segmap = f->cur_segmap_ref->data;
+        if (!f->frame_hdr->segmentation.update_map && !f->prev_segmap_ref) {
+            // We need a fresh segmentation map, zero out the segmentation map
             memset(f->cur_segmap, 0, segmap_size);
         }
+
+        f->lf.uv_segmap_stride = f->sb256w * (64 >> f->ss_hor);
+        const size_t segmap_uv_size = sizeof(*f->lf.segmap_uv) * f->lf.uv_segmap_stride *
+                                       f->sb256h * (64 >> f->ss_ver);
+        void *buf = dav2d_mem_pool_pop(c->segmap_uv_pool, segmap_uv_size);
+        if (!buf) {
+            res = DAV2D_ERR(ENOMEM);
+            goto error;
+        }
+        f->lf.segmap_uv = buf;
     } else {
         f->cur_segmap = NULL;
         f->cur_segmap_ref = NULL;
         f->prev_segmap_ref = NULL;
+        f->lf.segmap_uv = NULL;
+        f->lf.uv_segmap_stride = 0;
     }
 
     // CCSO map
@@ -5514,9 +5492,10 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             }
 
             dav2d_ref_dec(&c->refs[i].segmap);
-            c->refs[i].segmap = f->cur_segmap_ref;
-            if (f->cur_segmap_ref)
-                dav2d_ref_inc(f->cur_segmap_ref);
+            c->refs[i].segmap = f->frame_hdr->segmentation.update_map ?
+                                    f->cur_segmap_ref : f->prev_segmap_ref;
+            if (c->refs[i].segmap)
+                dav2d_ref_inc(c->refs[i].segmap);
             dav2d_ref_dec(&c->refs[i].refmvs);
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
                 c->refs[i].refmvs = f->mvs_ref;

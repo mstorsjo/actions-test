@@ -191,6 +191,9 @@ struct Dav2dContext {
     Dav2dMemPool *ci_pool;
     Dav2dRef *ci_ref;
 
+    // uv segmap, not part of the reference state
+    Dav2dMemPool *segmap_uv_pool;
+
     Dav2dDSPContext dsp[3 /* 8, 10, 12 bits/component */];
     Dav2dPalDSPContext pal_dsp;
     Dav2dRefmvsDSPContext refmvs_dsp;
@@ -324,14 +327,15 @@ struct Dav2dFrameContext {
     struct {
         Av2Filter *mask;
         Av2Restoration *lr_mask;
-        int mask_sz /* w*h */, lr_mask_sz;
+        uint8_t *segmap_uv;
+        int mask_sz /* w*h */, lr_mask_sz, uv_segmap_sz;
+        ptrdiff_t uv_segmap_stride;
         int cdef_buf_plane_sz[2]; /* stride*sbh*4 */
         int cdef_buf_sbh;
         /* 0-1: (stride*sbh*4) << sb128 if n_tc > 1, else stride*4;
          * 2-3: stride*(n_tile_rows-1)*4 if n_tc==1, double that otherwise */
         int lr_buf_plane_sz[4];
         int re_sz /* h */;
-        ALIGN(Av2FilterLUT thr_lut, 16);
         int base_q;
         int gdf_ref_dst_idx;
         const uint8_t *ns_subclass_lut;

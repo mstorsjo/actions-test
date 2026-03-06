@@ -46,7 +46,7 @@ libdav2d_sources = files(
     'obu.c',
     'pal.c',
     'picture.c',
-    'qm.c',
+    'quantizer.c',
     'ref.c',
     'refmvs.c',
     'scan.c',
