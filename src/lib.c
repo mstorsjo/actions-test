@@ -333,7 +333,7 @@ static void queue_flush(Dav2dContext *const c) {
     int mask = 0;
     for (;;) {
         int cand_n = -1, cand_poc;
-        for (int n = 0, m = 0; n < 8; n++, m <<= 1) {
+        for (int n = 0, m = 1; n < 8; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
@@ -367,7 +367,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
 
     for (;;) {
         int cand_n = -1, cand_poc = poc;
-        for (int n = 0, m = 0; n < 8; n++, m <<= 1) {
+        for (int n = 0, m = 1; n < 8; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
@@ -391,7 +391,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
     // immediately-adjacent future refs after the trigger frame
     for (;;) {
         int n, m;
-        for (n = 0, m = 0; n < 8; n++, m <<= 1) {
+        for (n = 0, m = 1; n < 8; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
