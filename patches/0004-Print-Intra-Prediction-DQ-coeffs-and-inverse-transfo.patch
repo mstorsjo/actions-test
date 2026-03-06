@@ -1,4 +1,4 @@
-From 462ff108134fc7487b7c58334e6643ce0fbdcd6a Mon Sep 17 00:00:00 2001
+From cb10205d4347f25a3c91b5fd9bb90d48c01dfe10 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -7,12 +7,12 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
  av2/common/idct.c         |  19 +++-
  av2/common/idct.h         |   7 +-
  av2/common/reconintra.c   | 189 ++++++++++++++++++++++++++++++++++++--
- av2/decoder/decodeframe.c |  36 +++++++-
+ av2/decoder/decodeframe.c |  39 +++++++-
  av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 8 files changed, 298 insertions(+), 22 deletions(-)
+ 8 files changed, 301 insertions(+), 22 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af6944168..699c7c3b2f 100644
@@ -390,7 +390,7 @@ index 27fbd5045e..df4e86259b 100644
        disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 7ed02bef13..7815d61799 100644
+index dce25fb054..b2c661f064 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -207,11 +207,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -436,7 +436,7 @@ index 7ed02bef13..7815d61799 100644
  
  #if CONFIG_MISMATCH_DEBUG
    {
-@@ -919,6 +942,17 @@ static AVM_INLINE void predict_inter_block(AV2_COMMON *const cm,
+@@ -919,6 +942,20 @@ static AVM_INLINE void predict_inter_block(AV2_COMMON *const cm,
      }
    }
  #endif  // CONFIG_INSPECTION
@@ -448,7 +448,10 @@ index 7ed02bef13..7815d61799 100644
 +      get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
 +    const int w = mi_size_wide[plane_block_size] * MI_SIZE;
 +    const int h = mi_size_high[plane_block_size] * MI_SIZE;
-+    hex_dump(pd->dst.buf, pd->dst.stride, w, h, "y-pred", !!(xd->bd - 8));
++    for (int y = 0; y < h; y += 64)
++      for (int x = 0; x < w; x += 64)
++        hex_dump(&pd->dst.buf[y * pd->dst.stride + x], pd->dst.stride,
++                 AVMMIN(w, 64), AVMMIN(h, 64), "y-pred", !!(xd->bd - 8));
 +  }
 +#endif
  }
