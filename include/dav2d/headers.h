@@ -503,7 +503,11 @@ typedef struct Dav2dFrameHeader {
     uint8_t bawp;
     uint8_t warp_motion;
     uint8_t reduced_txtp_set;
-    Dav2dWarpedMotionParams gmv[DAV2D_REFS_PER_FRAME];
+    struct {
+        uint8_t ref; // index in our reference array
+        uint8_t refref; // index in that reference's refrence array
+        Dav2dWarpedMotionParams m[DAV2D_REFS_PER_FRAME];
+    } gmv;
 } Dav2dFrameHeader;
 
 #ifdef __cplusplus

@@ -44,6 +44,7 @@
 #include "src/obu.h"
 #include "src/ref.h"
 #include "src/thread_task.h"
+#include "src/warpmv.h"
 
 static int check_trailing_bits(GetBits *const gb,
                                const int strict_std_compliance)
@@ -938,6 +939,31 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
     if (sbmul == 2) {
         hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] = (hdr->height + 127) >> 7;
         hdr->tiling.t.col_start_sb[hdr->tiling.t.cols] = (hdr->width + 127) >> 7;
+    }
+}
+
+static void rescale_matrix(int32_t *const dm, const int32_t *const sm,
+                           int in_dist, int out_dist)
+{
+    int shift, inv_in_dist = dav2d_resolve_divisor_32(abs(in_dist), &shift);
+    if (inv_in_dist >= 512) {
+        inv_in_dist >>= 1;
+        shift--;
+    }
+    if (in_dist < 0) inv_in_dist = -inv_in_dist;
+    const int rnd = (1 << shift) >> 1;
+    for (int n = 0; n < 2; n++) {
+        const int r = iclip(sm[n], -0x400000, 0x400000) * inv_in_dist;
+        const int t = ((r + rnd - (r < 0)) >> shift) * out_dist;
+        const int d = (t + 0x1000 - (t < 0)) & ~0x1fff;
+        dm[n] = iclip(d, -0x7ffe000, +0x7ffe000);
+    }
+    for (int n = 2; n < 6; n++) {
+        const int b = 0x10000 * ((unsigned) (n - 3) > 1U);
+        const int r = (sm[n] - b) * inv_in_dist;
+        const int t = ((r + rnd - (r < 0)) >> shift) * out_dist;
+        const int d = (t + 32 - (t < 0)) & ~63;
+        dm[n] = b + iclip(d, -0x7fc0, +0x7fc0);
     }
 }
 
@@ -1840,52 +1866,67 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
 
     for (int i = 0; i < 7; i++)
-        hdr->gmv[i] = dav2d_default_wm_params;
+        hdr->gmv.m[i] = dav2d_default_wm_params;
 
     if (IS_INTER_OR_SWITCH(hdr)) {
-        if (seqhdr->global_motion && dav2d_get_bit(gb)) for (int i = 0; i < 7; i++) {
-            hdr->gmv[i].type = !dav2d_get_bit(gb) ? DAV2D_WM_TYPE_IDENTITY :
-                                dav2d_get_bit(gb) ? DAV2D_WM_TYPE_ROT_ZOOM :
-                                dav2d_get_bit(gb) ? DAV2D_WM_TYPE_TRANSLATION :
-                                                    DAV2D_WM_TYPE_AFFINE;
-
-            if (hdr->gmv[i].type == DAV2D_WM_TYPE_IDENTITY) continue;
-
-            const Dav2dWarpedMotionParams *ref_gmv;
-            if (hdr->primary_ref_frame == DAV2D_PRIMARY_REF_NONE) {
-                ref_gmv = &dav2d_default_wm_params;
+        if (seqhdr->global_motion && dav2d_get_bit(gb)) {
+            hdr->gmv.ref = dav2d_get_uniform(gb, hdr->n_ref_frames + 1);
+            const int32_t *ref_base_mat;
+            int in_dist;
+            if (hdr->gmv.ref == hdr->n_ref_frames) {
+                ref_base_mat = dav2d_default_wm_params.matrix;
+                in_dist = 1;
             } else {
-                const int pri_ref = hdr->refidx[hdr->primary_ref_frame];
-                if (!c->refs[pri_ref].p.p.frame_hdr) goto error;
-                ref_gmv = &c->refs[pri_ref].p.p.frame_hdr->gmv[i];
+                const int refidx = hdr->refidx[hdr->gmv.ref];
+                const Dav2dFrameHeader *const refhdr = c->refs[refidx].p.p.frame_hdr;
+                if (!refhdr->n_ref_frames) {
+                    ref_base_mat = dav2d_default_wm_params.matrix;
+                    in_dist = 1;
+                } else {
+                    hdr->gmv.refref = refhdr->n_ref_frames == 1 ? 0 :
+                                      dav2d_get_uniform(gb, refhdr->n_ref_frames);
+                    ref_base_mat = refhdr->gmv.m[hdr->gmv.refref].matrix;
+                    in_dist = get_poc_diff(seqhdr->order_hint_n_bits, refhdr->frame_offset,
+                                           c->refs[refidx].refpoc[hdr->gmv.refref]);
+                }
             }
-            int32_t *const mat = hdr->gmv[i].matrix;
-            const int32_t *const ref_mat = ref_gmv->matrix;
-            int bits, shift;
+            for (int i = 0; i < hdr->n_ref_frames; i++) {
+                hdr->gmv.m[i].type = !dav2d_get_bit(gb) ? DAV2D_WM_TYPE_IDENTITY :
+                                      dav2d_get_bit(gb) ? DAV2D_WM_TYPE_ROT_ZOOM :
+                                                          DAV2D_WM_TYPE_AFFINE;
 
-            if (hdr->gmv[i].type >= DAV2D_WM_TYPE_ROT_ZOOM) {
-                mat[2] = (1 << 16) + 2 *
-                    dav2d_get_bits_subexp(gb, (ref_mat[2] - (1 << 16)) >> 1, 12);
-                mat[3] = 2 * dav2d_get_bits_subexp(gb, ref_mat[3] >> 1, 12);
+                if (hdr->gmv.m[i].type == DAV2D_WM_TYPE_IDENTITY) continue;
 
-                bits = 12;
-                shift = 10;
-            } else {
-                bits = 6 + hdr->mv_precision;
-                shift = 16 - hdr->mv_precision;
+                int32_t *const mat = hdr->gmv.m[i].matrix;
+                int32_t ref_mat[6];
+                const int out_dist =
+                    get_poc_diff(seqhdr->order_hint_n_bits, hdr->frame_offset,
+                                 c->refs[hdr->refidx[i]].p.p.frame_hdr->frame_offset);
+                rescale_matrix(ref_mat, ref_base_mat, in_dist, out_dist);
+
+                if (hdr->gmv.m[i].type >= DAV2D_WM_TYPE_ROT_ZOOM) {
+                    mat[2] = (1 << 16) + 64 *
+                        dav2d_get_bits_subexp(gb, (ref_mat[2] - (1 << 16)) >> 6, 512);
+                    mat[3] = 64 * dav2d_get_bits_subexp(gb, ref_mat[3] >> 6, 512);
+                }
+
+                if (hdr->gmv.m[i].type == DAV2D_WM_TYPE_AFFINE) {
+                    mat[4] = 64 * dav2d_get_bits_subexp(gb, ref_mat[4] >> 6, 512);
+                    mat[5] = (1 << 16) + 64 *
+                        dav2d_get_bits_subexp(gb, (ref_mat[5] - (1 << 16)) >> 6, 512);
+                } else {
+                    mat[4] = -mat[3];
+                    mat[5] = mat[2];
+                }
+
+                mat[0] = dav2d_get_bits_subexp(gb, ref_mat[0] >> 13, 0x4000) * 8192;
+                mat[1] = dav2d_get_bits_subexp(gb, ref_mat[1] >> 13, 0x4000) * 8192;
+#if DEBUG_FRAME_HDR
+                printf("HDR: post-gmv[%d]matrix[%d,%d|%d,%d,%d,%d,t=%d]: off=%td\n", i,
+                       mat[0], mat[1], mat[2], mat[3], mat[4], mat[5],
+                       hdr->gmv.m[i].type, (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
             }
-
-            if (hdr->gmv[i].type == DAV2D_WM_TYPE_AFFINE) {
-                mat[4] = 2 * dav2d_get_bits_subexp(gb, ref_mat[4] >> 1, 12);
-                mat[5] = (1 << 16) + 2 *
-                    dav2d_get_bits_subexp(gb, (ref_mat[5] - (1 << 16)) >> 1, 12);
-            } else {
-                mat[4] = -mat[3];
-                mat[5] = mat[2];
-            }
-
-            mat[0] = dav2d_get_bits_subexp(gb, ref_mat[0] >> shift, bits) * (1 << shift);
-            mat[1] = dav2d_get_bits_subexp(gb, ref_mat[1] >> shift, bits) * (1 << shift);
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-gmv: off=%td\n",

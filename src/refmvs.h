@@ -174,7 +174,8 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, \
             int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
-            const Dav2dWarpedMotionParams *const matrix, \
+            const Dav2dWarpedMotionParams *const wm1, \
+            const Dav2dWarpedMotionParams *const wm2, \
             int bw4, int bh4, int t_swap, const uint8_t *wedge, int w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
 

@@ -2905,13 +2905,14 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
             const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
             if (!f->frame_hdr->force_integer_mv &&
-                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
+                ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+                  f->gmv_warp_allowed[b->ref.ref[0]]) ||
                  (b->motion_mode >= MM_WARP_CAUSAL &&
                   t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, dst, NULL, f->cur.p.stride[0], b_dim, 0, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
-                                &f->frame_hdr->gmv[b->ref.ref[0]]);
+                                &f->frame_hdr->gmv.m[b->ref.ref[0]]);
             } else {
                 mc(t, dst, NULL, f->cur.p.stride[0], bw4, bh4,
                    t->bx, t->by, 0, b->mv[0], refp, b->ref.ref[0], b->filter,
@@ -2942,14 +2943,14 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 for (int i = 0; i < 2; i++) {
                     const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[i]];
 
-                    if ((b->inter_mode == GLOBALMV_GLOBALMV &&
+                    if ((b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1 &&
                          f->gmv_warp_allowed[b->ref.ref[i]]) ||
                         (b->motion_mode == MM_WARP_CAUSAL &&
                          t->warpmv[i].type > DAV2D_WM_TYPE_INVALID))
                     {
                         warp_affine(t, NULL, tmp[i], bw4 * 4, b_dim, 0, refp,
                                     b->motion_mode >= MM_WARP_CAUSAL ?
-                                        &t->warpmv[i] : &f->frame_hdr->gmv[b->ref.ref[i]]);
+                                        &t->warpmv[i] : &f->frame_hdr->gmv.m[b->ref.ref[i]]);
                     } else {
                         mc(t, NULL, tmp[i], bw4 * 4, bw4, bh4, t->bx, t->by, 0,
                            b->mv[i], refp, b->ref.ref[i], b->filter,
@@ -3318,13 +3319,14 @@ chroma: {}
         for (int pl = 0; pl < 2; pl++) {
             pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff;
             if (!f->frame_hdr->force_integer_mv &&
-                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
+                ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+                  f->gmv_warp_allowed[b->ref.ref[0]]) ||
                  (b->motion_mode >= MM_WARP_CAUSAL &&
                   t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, dst, NULL, stride, cb_dim, 1 + pl, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
-                                &f->frame_hdr->gmv[b->ref.ref[0]]);
+                                &f->frame_hdr->gmv.m[b->ref.ref[0]]);
             } else {
                 mc(t, dst, NULL, stride,
                    cbw4, cbh4, t->cbx, t->cby, 1 + pl, b->mv[0], refp, b->ref.ref[0],
@@ -3366,7 +3368,7 @@ chroma: {}
                                 !f->svc[b->ref.ref[1]][0].scale);
                 for (int i = 0; i < 2; i++) {
                     const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[i]];
-                    if ((b->inter_mode == GLOBALMV_GLOBALMV &&
+                    if ((b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1 &&
                          f->gmv_warp_allowed[b->ref.ref[i]]) ||
                         (b->motion_mode == MM_WARP_CAUSAL &&
                          t->warpmv[i].type > DAV2D_WM_TYPE_INVALID))
@@ -3374,7 +3376,7 @@ chroma: {}
                         warp_affine(t, NULL, tmp[i], cbw4 * 4 >> ss_hor,
                                     cb_dim, 1 + pl, refp,
                                     b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[i] :
-                                        &f->frame_hdr->gmv[b->ref.ref[i]]);
+                                        &f->frame_hdr->gmv.m[b->ref.ref[i]]);
                     } else {
                         mc(t, NULL, tmp[i], cbw4 * 4 >> ss_hor, cbw4, cbh4,
                            t->cbx, t->cby, 1 + pl, b->mv[i],

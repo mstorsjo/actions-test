@@ -397,7 +397,7 @@ static void extend_warpmv(Dav2dTaskContext *const t,
         else
             memcpy(m, r->m, sizeof(*m) * 6);
     } else if (r->mf & 1) {
-        memcpy(m, t->f->frame_hdr->gmv[b->ref.ref[0]].matrix, sizeof(*m) * 6);
+        memcpy(m, t->f->frame_hdr->gmv.m[b->ref.ref[0]].matrix, sizeof(*m) * 6);
     } else {
         memcpy(&m[2], &dav2d_default_wm_params.matrix[2], sizeof(*m) * 4);
         const int ref = r->ref.ref[0] != b->ref.ref[0];
@@ -608,23 +608,34 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     s_src.mv[1].y = INVALID_MV;
     s_src.bs = bs;
     s_src.subpel_filter = b->filter;
-    if (b->motion_mode > MM_INTERINTRA) {
-        assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
-        s_src.mf = 2;
-        const int32_t *const mat = t->warpmv[0].matrix;
+    if (b->motion_mode > MM_INTERINTRA ||
+        (b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+         f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION))
+    {
+        assert(bw4 > 1 && bh4 > 1);
+        const Dav2dWarpedMotionParams *wm;
+        if (b->motion_mode > MM_INTERINTRA) {
+            s_src.lmv[0] = b->mv[0];
+            s_src.lmv[1].y = INVALID_MV;
+            s_src.mf = 2;
+            wm = &t->warpmv[0];
+            memcpy(s_src.m, wm->matrix, sizeof(int32_t) * 6);
+            s_src.warp_type = wm->type;
+        } else {
+            s_src.mv[0] = b->mv[0];
+            s_src.mf = 1;
+            wm = &f->frame_hdr->gmv.m[b->ref.ref[0]];
+        }
+        const int32_t *const mat = wm->matrix;
         const int64_t mvx = (int64_t) (mat[2] - 0x10000) * (t->bx + 1) * 4 +
                             (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
-        memcpy(s_src.m, mat, sizeof(int32_t) * 6);
-        s_src.warp_type = t->warpmv[0].type;
-        s_src.lmv[0] = b->mv[0];
-        s_src.lmv[1].y = INVALID_MV;
         f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                      mvy, mvx, &t->warpmv[0], bw4, bh4);
+                                      mvy, mvx, wm, bw4, bh4);
     } else {
         s_src.mv[0] = b->mv[0];
-        s_src.mf = b->inter_mode == GLOBALMV;
+        s_src.mf = b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1;
         // this is invalid for TIP, but that will be overwritten in tip_pred()
         t_src.mv.mv[0] = t_src.mv.mv[1] = quantize_mv(b->mv[0]);
         if (t_src.mv.mv[0].n == INVALID_TRAJ) t_src.ref.pair = -1;
@@ -679,11 +690,28 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     s_src.mf = b->cwp_idx << 2;
     const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
         WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
-    if (b->motion_mode > MM_INTERINTRA) {
-        assert(bw4 > 1 && bh4 > 1 && b->inter_mode != GLOBALMV);
-        s_src.mf |= 2;
-        const int32_t *const mat1 = t->warpmv[0].matrix;
-        const int32_t *const mat2 = t->warpmv[1].matrix;
+    if (b->motion_mode > MM_INTERINTRA ||
+        (b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1 &&
+         (f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION ||
+          f->frame_hdr->gmv.m[b->ref.ref[1]].type > DAV2D_WM_TYPE_TRANSLATION)))
+    {
+        assert(bw4 > 1 && bh4 > 1);
+        const Dav2dWarpedMotionParams *wm1, *wm2;
+        if (b->motion_mode > MM_INTERINTRA) {
+            COPY2MV(s_src.lmv, b->mv);
+            s_src.mf |= 2;
+            wm1 = &t->warpmv[0];
+            wm2 = &t->warpmv[1];
+            memcpy(s_src.m, wm1->matrix, sizeof(int32_t) * 6);
+            s_src.warp_type = wm1->type;
+        } else {
+            COPY2MV(s_src.mv, b->mv);
+            s_src.mf |= 1;
+            wm1 = &f->frame_hdr->gmv.m[b->ref.ref[0]];
+            wm2 = &f->frame_hdr->gmv.m[b->ref.ref[1]];
+        }
+        const int32_t *const mat1 = wm1->matrix;
+        const int32_t *const mat2 = wm2->matrix;
         const int64_t mvx1 = (int64_t) (mat1[2] - 0x10000) * (t->bx + 1) * 4 +
                              (int64_t) mat1[3] * (t->by + 1) * 4 + mat1[0];
         const int64_t mvy1 = (int64_t) mat1[4] * (t->bx + 1) * 4 + mat1[1] +
@@ -693,16 +721,13 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         const int64_t mvy2 = (int64_t) mat2[4] * (t->bx + 1) * 4 + mat2[1] +
                              (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
         // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
-        memcpy(s_src.m, mat1, sizeof(int32_t) * 6);
-        s_src.warp_type = t->warpmv[0].type;
-        COPY2MV(s_src.lmv, b->mv);
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                            mvy1, mvx1, mvy2, mvx2,
-                                           t->warpmv, bw4, bh4, t_swap,
+                                           wm1, wm2, bw4, bh4, t_swap,
                                            mask, b->wedge_sign ^ t_swap);
     } else {
         COPY2MV(s_src.mv, b->mv);
-        s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV;
+        s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1;
         t_src.mv.mv[0] = quantize_mv(b->mv[t_swap]);
         t_src.mv.mv[1] = quantize_mv(b->mv[!t_swap]);
         if (!mask) {
@@ -2473,9 +2498,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     }
                 }
             } else {
-                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref.ref[0]], t->bx, t->by,
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv.m[b->ref.ref[0]], t->bx, t->by,
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
-                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv[b->ref.ref[1]], t->bx, t->by,
+                b->mv[1] = get_gmv_2d(&f->frame_hdr->gmv.m[b->ref.ref[1]], t->bx, t->by,
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
             }
 
@@ -2512,9 +2537,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
                 !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
-                (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1 ||
-                 f->frame_hdr->gmv[b->ref.ref[0]].type == DAV2D_WM_TYPE_TRANSLATION ||
-                 f->frame_hdr->gmv[b->ref.ref[1]].type == DAV2D_WM_TYPE_TRANSLATION);
+                (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1);
 
             b->comp_type = COMP_INTER_AVG;
             if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
@@ -2916,7 +2939,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                        ts->msac.rng);
                 }
             } else {
-                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv[b->ref.ref[0]], t->bx, t->by,
+                b->mv[0] = get_gmv_2d(&f->frame_hdr->gmv.m[b->ref.ref[0]], t->bx, t->by,
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
             }
 
@@ -3047,8 +3070,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             has_subpel_filter = !is_tip && b->inter_mode <= NEWMV &&
-                (b->inter_mode != GLOBALMV || imin(bw4, bh4) == 1 ||
-                 f->frame_hdr->gmv[b->ref.ref[0]].type == DAV2D_WM_TYPE_TRANSLATION);
+                (b->inter_mode != GLOBALMV || imin(bw4, bh4) == 1);
         }
 
         // subpel filter
@@ -3215,7 +3237,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             {
                 affine_lowest_px_luma(t, &lowest_px[b->ref.ref[0]][0], b_dim,
                                       b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
-                                      &f->frame_hdr->gmv[b->ref.ref[0]]);
+                                      &f->frame_hdr->gmv.m[b->ref.ref[0]]);
             } else {
                 mc_lowest_px(&lowest_px[b->ref.ref[0]][0], t->by, bh4, b->mv[0].y,
                              0, &f->svc[b->ref.ref[0]][1]);
@@ -3265,7 +3287,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     {
                         affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[0]][1], b_dim,
                                                 b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
-                                                &f->frame_hdr->gmv[b->ref.ref[0]]);
+                                                &f->frame_hdr->gmv.m[b->ref.ref[0]]);
                     } else {
                         mc_lowest_px(&lowest_px[b->ref.ref[0]][1],
                                      t->by & ~ss_ver, bh4 << (bh4 == ss_ver),
@@ -3278,7 +3300,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             for (int i = 0; i < 2; i++) {
                 if (b->inter_mode == GLOBALMV_GLOBALMV && f->gmv_warp_allowed[b->ref.ref[i]]) {
                     affine_lowest_px_luma(t, &lowest_px[b->ref.ref[i]][0], b_dim,
-                                          &f->frame_hdr->gmv[b->ref.ref[i]]);
+                                          &f->frame_hdr->gmv.m[b->ref.ref[i]]);
                 } else {
                     mc_lowest_px(&lowest_px[b->ref.ref[i]][0], t->by, bh4,
                                  b->mv[i].y, 0, &f->svc[b->ref.ref[i]][1]);
@@ -3291,7 +3313,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     imin(cbw4, cbh4) > 1 && f->gmv_warp_allowed[b->ref.ref[i]])
                 {
                     affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[i]][1], b_dim,
-                                            &f->frame_hdr->gmv[b->ref.ref[i]]);
+                                            &f->frame_hdr->gmv.m[b->ref.ref[i]]);
                 } else {
                     mc_lowest_px(&lowest_px[b->ref.ref[i]][1], t->by, bh4,
                                  b->mv[i].y, ss_ver, &f->svc[b->ref.ref[i]][1]);
@@ -5169,9 +5191,9 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             } else {
                 f->svc[i][0].scale = f->svc[i][1].scale = 0;
             }
-            f->gmv_warp_allowed[i] = f->frame_hdr->gmv[i].type > DAV2D_WM_TYPE_TRANSLATION &&
+            f->gmv_warp_allowed[i] = f->frame_hdr->gmv.m[i].type > DAV2D_WM_TYPE_TRANSLATION &&
                                      !f->frame_hdr->force_integer_mv &&
-                                     !dav2d_get_shear_params(&f->frame_hdr->gmv[i]) &&
+                                     !dav2d_get_shear_params(&f->frame_hdr->gmv.m[i]) &&
                                      !f->svc[i][0].scale;
         }
     }

@@ -393,10 +393,12 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                st->dr, &st->drvd_cnt, 4, weight, 8,
                                cand_mv, &st->drvd_iter_cntr, 2);
         }
+        const mv cand_mv = ((b->mf & 1) && gmv[nc].y != INVALID_MV) ?
+                           gmv[ns] : b->mv[nc];
         add_candidate_c2s(DB_ARGS(rf, st->by4, st->bx4,
                                   y_off, x_off, "sngl-c", ns)
                           st->sngl, &st->sngl_cnt, 4, b->ref.ref[nc],
-                          b->mv[nc], &st->sngl_iter_cntr, 2);
+                          cand_mv, &st->sngl_iter_cntr, 2);
     }
 }
 
@@ -579,10 +581,10 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     assert(ref.ref[0] >= -1 && ref.ref[0] <= TIP_FRAME &&
            ref.ref[1] >= -1 && ref.ref[1] < TIP_FRAME);
     gmv[0] = (unsigned) ref.ref[0] >= TIP_FRAME ? (mv) { .n = 0 } :
-             get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[0]],
+             get_gmv_2d(&rf->frm_hdr->gmv.m[ref.ref[0]],
                         bx4, by4, bw4, bh4, rf->iw4, rf->ih4, rf->frm_hdr);
     if (comp) {
-        gmv[1] = get_gmv_2d(&rf->frm_hdr->gmv[ref.ref[1]],
+        gmv[1] = get_gmv_2d(&rf->frm_hdr->gmv.m[ref.ref[1]],
                             bx4, by4, bw4, bh4, rf->iw4, rf->ih4, rf->frm_hdr);
         DEBUG_REFMV_printf("Gmv2d: y=%d,x=%d, y2=%d,x2=%d\n",
                            gmv[0].y, gmv[0].x, gmv[1].y, gmv[1].x);
@@ -1030,8 +1032,8 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 
         DEBUG_REFMV_printf("Warp gmv [%d|%d]\n", *cnt, cnt[1]);
         if (cnt[1] < 4) {
-            const int32_t *const mat = rf->frm_hdr->gmv[ref.ref[0]].matrix;
-            warp[cnt[1]][6] = rf->frm_hdr->gmv[ref.ref[0]].type;
+            const int32_t *const mat = rf->frm_hdr->gmv.m[ref.ref[0]].matrix;
+            warp[cnt[1]][6] = rf->frm_hdr->gmv.m[ref.ref[0]].type;
             DEBUG_REFMV_printf("GMV[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
                                cnt[1], mat[0], mat[1], mat[2],
                                mat[3], mat[4], mat[5], warp[cnt[1]][6]);
@@ -2315,11 +2317,15 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 {
     assert(bw4 > 1 && bh4 > 1);
     if (mat->type == DAV2D_WM_TYPE_INVALID) {
-        // FIXME this condition is probably incomplete, AVM's code suggests
-        // we should only use this behaviour for MM_WARP_{CAUSAL/EXTEND},
-        // not for MM_WARP_DELTA
-        s_src->mv[0].n = 0;
-        t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->lmv[0]);
+        if (s_src->mf & 2) {
+            // FIXME this condition is probably incomplete, AVM's code suggests
+            // we should only use this behaviour for MM_WARP_{CAUSAL/EXTEND},
+            // not for MM_WARP_DELTA
+            s_src->mv[0].n = 0;
+            t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->lmv[0]);
+        } else {
+            t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->mv[0]);
+        }
     }
     s_src->oy4 = 0;
     do {
@@ -2327,11 +2333,15 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
         s_src->ox4 = 0;
         for (int x = 0; x < bw4; x += 2, s_src->ox4 += 2) {
             if (mat->type != DAV2D_WM_TYPE_INVALID) {
-                s_src->mv[0].y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
-                                       -0xffff, 0xffff);
-                s_src->mv[0].x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
-                                       -0xffff, 0xffff);
-                t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->mv[0]);
+                const union mv warpmv = (union mv) {
+                    .y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
+                               -0xffff, 0xffff),
+                    .x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
+                               -0xffff, 0xffff),
+                };
+                if (s_src->mf & 2)
+                    s_src->mv[0] = warpmv;
+                t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(warpmv);
             }
             s_dst[x] = *s_src;
             s_src->ox4++;
@@ -2360,15 +2370,16 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                                 refmvs_temporal_block *t_src, int64_t mvy1, int64_t mvx1,
                                 int64_t mvy2, int64_t mvx2,
-                                const Dav2dWarpedMotionParams *const mat,
+                                const Dav2dWarpedMotionParams *const wm1,
+                                const Dav2dWarpedMotionParams *const wm2,
                                 const int bw4, int bh4, const int t_swap,
                                 const uint8_t *mask, const int w_swap)
 {
     assert(bw4 > 1 && bh4 > 1);
-    if (mat[0].type == DAV2D_WM_TYPE_INVALID) {
+    if (wm1->type == DAV2D_WM_TYPE_INVALID && s_src->mf & 2) {
         s_src->mv[0].n = 0;
     }
-    if (mat[1].type == DAV2D_WM_TYPE_INVALID) {
+    if (wm2->type == DAV2D_WM_TYPE_INVALID && s_src->mf & 2) {
         s_src->mv[1].n = 0;
     }
     s_src->oy4 = 0;
@@ -2376,23 +2387,33 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         s_src->ox4 = 0;
         for (int x = 0; x < bw4; x += 2, s_src->ox4 += 2) {
-            if (mat[0].type != DAV2D_WM_TYPE_INVALID) {
-                s_src->mv[0].y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
-                                       -0xffff, 0xffff);
-                s_src->mv[0].x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
-                                       -0xffff, 0xffff);
-                t_src->mv.mv[t_swap] = quantize_mv(s_src->mv[0]);
+            if (wm1->type != DAV2D_WM_TYPE_INVALID) {
+                const union mv warpmv = (union mv) {
+                    .y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
+                               -0xffff, 0xffff),
+                    .x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
+                               -0xffff, 0xffff),
+                };
+                if (s_src->mf & 2)
+                    s_src->mv[0] = warpmv;
+                t_src->mv.mv[t_swap] = quantize_mv(warpmv);
             } else {
-                t_src->mv.mv[t_swap] = quantize_mv(s_src->lmv[0]);
+                t_src->mv.mv[t_swap] =
+                    quantize_mv(s_src->mf & 2 ? s_src->lmv[0] : s_src->mv[0]);
             }
-            if (mat[1].type != DAV2D_WM_TYPE_INVALID) {
-                s_src->mv[1].y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
-                                       -0xffff, 0xffff);
-                s_src->mv[1].x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
-                                       -0xffff, 0xffff);
-                t_src->mv.mv[!t_swap] = quantize_mv(s_src->mv[1]);
+            if (wm2->type != DAV2D_WM_TYPE_INVALID) {
+                const union mv warpmv = (union mv) {
+                    .y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
+                               -0xffff, 0xffff),
+                    .x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
+                               -0xffff, 0xffff),
+                };
+                if (s_src->mf & 2)
+                    s_src->mv[1] = warpmv;
+                t_src->mv.mv[!t_swap] = quantize_mv(warpmv);
             } else {
-                t_src->mv.mv[!t_swap] = quantize_mv(s_src->lmv[1]);
+                t_src->mv.mv[!t_swap] =
+                    quantize_mv(s_src->mf & 2 ? s_src->lmv[1] : s_src->mv[1]);
             }
             if (mask) {
                 const int d = mask[x >> 1];
@@ -2421,15 +2442,15 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                     t_dst[x >> 1] = *t_src;
                 }
             }
-            mvxi1 += (mat[0].matrix[2] - 0x10000) * 8;
-            mvyi1 += mat[0].matrix[4] * 8;
-            mvxi2 += (mat[1].matrix[2] - 0x10000) * 8;
-            mvyi2 += mat[1].matrix[4] * 8;
+            mvxi1 += (wm1->matrix[2] - 0x10000) * 8;
+            mvyi1 += wm1->matrix[4] * 8;
+            mvxi2 += (wm2->matrix[2] - 0x10000) * 8;
+            mvyi2 += wm2->matrix[4] * 8;
         }
-        mvx1 += mat[0].matrix[3] * 8;
-        mvy1 += (mat[0].matrix[5] - 0x10000) * 8;
-        mvx2 += mat[1].matrix[3] * 8;
-        mvy2 += (mat[1].matrix[5] - 0x10000) * 8;
+        mvx1 += wm1->matrix[3] * 8;
+        mvy1 += (wm1->matrix[5] - 0x10000) * 8;
+        mvx2 += wm2->matrix[3] * 8;
+        mvy2 += (wm2->matrix[5] - 0x10000) * 8;
         if (mask) mask += bw4 >> 1;
         s_dst += 2 * 128;
         t_dst += t_stride;
