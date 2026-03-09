@@ -58,11 +58,66 @@ static void cctx_c(coef *const u, coef *const v, const int16_t angle[3],
     }
 }
 
+static void residual_add(pixel *dst, const ptrdiff_t stride,
+                         const int32_t *c, const int w, const int h,
+                         const int rnd, const int shift,
+                         const enum TxfmType txtp HIGHBD_DECL_SUFFIX)
+{
+    const int dpcm_flag = txtp >> 8;
+    assert(!dpcm_flag || (txtp & 0xe7) == IDTX || (txtp & 0xe7) == WHT_WHT);
+    switch (dpcm_flag) {
+    default: assert(0);
+    case 0:
+        for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
+            for (int x = 0; x < w; x++)
+                dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> shift));
+        break;
+    case 1:
+        for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
+            for (int x = 0, acc = 0; x < w; x++) {
+                acc += (*c++ + rnd) >> shift;
+                dst[x] = iclip_pixel(dst[x] + acc);
+            }
+        break;
+    case 2:
+        for (int x = 0; x < w; x++, c++, dst++)
+            for (int y = 0, acc = 0; y < h; y++) {
+                acc += (c[y * w] + rnd) >> shift;
+                dst[y * PXSTRIDE(stride)] =
+                    iclip_pixel(dst[y * PXSTRIDE(stride)] + acc);
+            }
+        break;
+    }
+}
+
+static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
+                                       coef *const coeff, const enum TxfmType txtp,
+                                       const int eob HIGHBD_DECL_SUFFIX)
+{
+    int32_t tmp[4 * 4], *c = tmp;
+    for (int y = 0; y < 4; y++, c += 4) {
+        for (int x = 0; x < 4; x++)
+            c[x] = coeff[y + x * 4] >> 3;
+        dav2d_inv_wht4_1d_c(c, 1);
+    }
+    memset(coeff, 0, sizeof(*coeff) * 4 * 4);
+
+    for (int x = 0; x < 4; x++)
+        dav2d_inv_wht4_1d_c(&tmp[x], 4);
+
+    residual_add(dst, stride, tmp, 4, 4, 0, 0, txtp HIGHBD_TAIL_SUFFIX);
+}
+
 static NOINLINE void
 inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
                const enum TxfmType txtp, const int eob,
                const /*enum RectTxfmSize*/ int tx HIGHBD_DECL_SUFFIX)
 {
+    if ((txtp & 0xff) == WHT_WHT) {
+        assert(tx == TX_4X4);
+        inv_txfm_add_wht_wht_4x4_c(dst, stride, coeff, txtp, eob HIGHBD_TAIL_SUFFIX);
+        return;
+    }
     const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
     const uint8_t *const tx_shift = dav2d_tx_shift[tx];
     const int w = 4 * t_dim->w, h = 4 * t_dim->h;
@@ -89,7 +144,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
     }
 
     const itx_1d_fn first_1d_fn = dav2d_tx1d_fns[t_dim->lw][txtp & 7];
-    const itx_1d_fn second_1d_fn = dav2d_tx1d_fns[t_dim->lh][txtp >> 5];
+    const itx_1d_fn second_1d_fn = dav2d_tx1d_fns[t_dim->lh][(txtp >> 5) & 7];
     const int sh = imin(h, 32), sw = imin(w, 32);
 #if BITDEPTH == 8
     const int row_clip_min = INT16_MIN;
@@ -181,9 +236,7 @@ inv_txfm_add_c(pixel *dst, const ptrdiff_t stride, coef *const coeff,
             }
         }
     } else {
-        for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
-            for (int x = 0; x < w; x++)
-                dst[x] = iclip_pixel(dst[x] + ((*c++ + rnd) >> shift));
+        residual_add(dst, stride, c, w, h, rnd, shift, txtp HIGHBD_TAIL_SUFFIX);
     }
 }
 
@@ -223,27 +276,6 @@ inv_txfm_fn(R, 64, 16)
 inv_txfm_fn(R, 64, 32)
 inv_txfm_fn( , 64, 64)
 
-static void inv_txfm_add_wht_wht_4x4_c(pixel *dst, const ptrdiff_t stride,
-                                       coef *const coeff, const enum TxfmType txtp,
-                                       const int eob HIGHBD_DECL_SUFFIX)
-{
-    int32_t tmp[4 * 4], *c = tmp;
-    for (int y = 0; y < 4; y++, c += 4) {
-        for (int x = 0; x < 4; x++)
-            c[x] = coeff[y + x * 4] >> 2;
-        dav2d_inv_wht4_1d_c(c, 1);
-    }
-    memset(coeff, 0, sizeof(*coeff) * 4 * 4);
-
-    for (int x = 0; x < 4; x++)
-        dav2d_inv_wht4_1d_c(&tmp[x], 4);
-
-    c = tmp;
-    for (int y = 0; y < 4; y++, dst += PXSTRIDE(stride))
-        for (int x = 0; x < 4; x++)
-            dst[x] = iclip_pixel(dst[x] + *c++);
-}
-
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
 #include "src/arm/itx.h"
@@ -263,7 +295,6 @@ COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c) {
     c->itxfm_add[pfx##TX_##w##X##h] = inv_txfm_add_##w##x##h##_c
 
     c->cctx = cctx_c;
-    c->iwht_add_4x4 = inv_txfm_add_wht_wht_4x4_c;
     assign_itx( 4,  4, );
     assign_itx( 4,  8, R);
     assign_itx( 4, 16, R);

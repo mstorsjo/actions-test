@@ -45,6 +45,10 @@ static const char *const itx_1d_names[] = {
     [WHT]      = "wht",
 };
 
+static const char *const dpcm_names[] = {
+    "", "_vdpcm", "_hdpcm"
+};
+
 static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
                           const enum TxfmType txtp, const int sw, const int sh,
                           const int subsh, int *const max_eob, const int coef_max)
@@ -209,44 +213,48 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
         const enum TxfmType txtp = valid_txtp_per_txsz[tx][txtp_idx];
         const enum Tx1dType hor1d = txtp & 0x7, ver1d = txtp >> 5;
         const int is_inv = ((txtp >> 3) & 0x3) == TX_CLASS_2D_INV;
-        for (int subsh = !!txtp; subsh < subsh_max; subsh++)
-            if (check_func(txtp == WHT_WHT ? c->iwht_add_4x4: c->itxfm_add[tx],
-                           "inv_txfm_add_%dx%d_%s_%s%s_%d_%dbpc",
-                           w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
-                           is_inv ? "_inv" : "", subsh, BITDEPTH))
-            {
-                int max_eob;
-                const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
-                                               subsh, &max_eob, coef_max);
-                memcpy(coeff[1], coeff[0], sizeof(*coeff));
-
-                CLEAR_PIXEL_RECT(c_dst);
-                CLEAR_PIXEL_RECT(a_dst);
-
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        c_dst[y*PXSTRIDE(c_dst_stride) + x] =
-                        u_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
-
-                call_ref(c_dst, c_dst_stride, coeff[0], txtp, eob
-                         HIGHBD_TAIL_SUFFIX);
-                call_new(u_dst, a_dst_stride, coeff[1], txtp, eob
-                         HIGHBD_TAIL_SUFFIX);
-
-                if (checkasm_check_pixel_padded(c_dst, c_dst_stride,
-                                                u_dst, a_dst_stride,
-                                                w, h, "dst"))
+        const int n_dpcm =
+            1 + 2 * (txtp == WHT_WHT || (hor1d == IDENTITY && ver1d == IDENTITY));
+        for (int dpcm = 0; dpcm < n_dpcm; dpcm++)
+            for (int subsh = !!txtp; subsh < subsh_max; subsh++)
+                if (check_func(c->itxfm_add[tx],
+                               "inv_txfm_add_%dx%d_%s_%s%s%s_%d_%dbpc",
+                               w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
+                               is_inv ? "_inv" : "", dpcm_names[dpcm], subsh,
+                               BITDEPTH))
                 {
-                    fprintf(stderr, "eob = %d\n", eob);
-                }
-                if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
-                    fail();
+                    int max_eob;
+                    const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
+                                                   subsh, &max_eob, coef_max);
+                    memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
-                if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT)
-                    bench_new(alternate(c_dst, a_dst), a_dst_stride,
-                              alternate(coeff[0], coeff[1]), txtp,
-                              max_eob HIGHBD_TAIL_SUFFIX);
-            }
+                    CLEAR_PIXEL_RECT(c_dst);
+                    CLEAR_PIXEL_RECT(a_dst);
+
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                            c_dst[y*PXSTRIDE(c_dst_stride) + x] =
+                            u_dst[y*PXSTRIDE(a_dst_stride) + x] = rnd() & bitdepth_max;
+
+                    call_ref(c_dst, c_dst_stride, coeff[0], txtp | (dpcm << 8), eob
+                             HIGHBD_TAIL_SUFFIX);
+                    call_new(u_dst, a_dst_stride, coeff[1], txtp | (dpcm << 8), eob
+                             HIGHBD_TAIL_SUFFIX);
+
+                    if (checkasm_check_pixel_padded(c_dst, c_dst_stride,
+                                                    u_dst, a_dst_stride,
+                                                    w, h, "dst"))
+                    {
+                        fprintf(stderr, "eob = %d\n", eob);
+                    }
+                    if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
+                        fail();
+
+                    if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT)
+                        bench_new(alternate(c_dst, a_dst), a_dst_stride,
+                                  alternate(coeff[0], coeff[1]), txtp | (dpcm << 8),
+                                  max_eob HIGHBD_TAIL_SUFFIX);
+                }
     }
 }
 

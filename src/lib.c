@@ -286,7 +286,8 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
         t->f = &c->fc[0];
         t->task_thread.ttd = &c->task_thread;
         t->c = c;
-        memset(t->cf_16bpc, 0, sizeof(t->cf_16bpc));
+        memset(t->cf_y_16bpc, 0, sizeof(t->cf_y_16bpc));
+        memset(t->cf_uv_16bpc, 0, sizeof(t->cf_uv_16bpc));
         if (c->n_tc > 1) {
             if (pthread_mutex_init(&t->task_thread.td.lock, NULL)) goto error;
             if (pthread_cond_init(&t->task_thread.td.cond, NULL)) {

@@ -683,6 +683,12 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(25612),   6 << 8 },
             { CDF1(12366),   1 << 8 },
             { CDF1( 3320),  90 << 8 },
+        }, .dpcm = {
+            { CDF1(16384) },
+            { CDF1(16384) },
+        }, .dpcm_dir = {
+            { CDF1(16384) },
+            { CDF1(16384) },
         }, .intra_y_set = {
             CDF3(28863, 31022, 31724),  93 << 8
         }, .intra_y_idx0 = {
@@ -1124,6 +1130,20 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(27980),  56 << 8 },
             { CDF1(29163),  56 << 8 },
             { CDF1(30658),  62 << 8 },
+        }, .txsz_lossless = {
+            {
+                { CDF1(16384),   1 << 8 },
+                { CDF1(16384),   1 << 8 },
+            }, {
+                { CDF1(16384),  75 << 8 },
+                { CDF1(16384),  75 << 8 },
+            }, {
+                { CDF1(16384),  75 << 8 },
+                { CDF1(16384),  75 << 8 },
+            }, {
+                { CDF1(16384),  75 << 8 },
+                { CDF1(16384),  75 << 8 },
+            },
         }, .tx_split = {
             {
                 {
@@ -1236,7 +1256,7 @@ static const CdfDefaultContext default_cdf = {
                     { CDF6( 4681,  9362, 14043, 18725, 23406, 28087),   0 << 8 },
                 }
             }
-       }, .tx_part_1d = {
+        }, .tx_part_1d = {
             {
                 {
                     { CDF1(25131),  30 << 8 },
@@ -1254,6 +1274,8 @@ static const CdfDefaultContext default_cdf = {
                     { CDF1(16384),   0 << 8 },
                 }
             }
+        }, .txtp_lossless = {
+            CDF1(16384),   0
         }, .txtp_long32_dct = {
             { CDF1(   36),   0 << 8 },
             { CDF1(  128),  31 << 8 },
@@ -6825,6 +6847,8 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(6, 1 + j, m, cdef_idx, op); \
     update_cdf_3d(3, 4, 1, m, ccso, op); \
     update_cdf_2d(6, 1, m, skip_txfm, op); \
+    update_cdf_2d(2, 1, m, dpcm, op); \
+    update_cdf_2d(2, 1, m, dpcm_dir, op); \
     update_cdf_1d(3, m, intra_y_set, op); \
     update_cdf_2d(3, 7, m, intra_y_idx0, op); \
     update_cdf_2d(3, 5, m, intra_y_idx1, op); \
@@ -6847,9 +6871,11 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_1d(1, m, intrabc_mode, op); \
     update_cdf_1d(1, m, intrabc_precision, op); \
     update_cdf_2d(3, 1, m, morph_pred, op); \
+    update_cdf_3d(4, 2, 1, m, txsz_lossless, op); \
     update_cdf_4d(2, 2, 9, 1, m, tx_split, op); \
     update_cdf_4d(2, 2, 14, 6, m, tx_part_2d, op); \
     update_cdf_4d(2, 2, 2, 1, m, tx_part_1d, op); \
+    update_cdf_1d(1, m, txtp_lossless, op); \
     update_cdf_2d(2, 1, m, txtp_long32_dct, op); \
     update_cdf_2d(4, 3, m, txtp_intra_short_1d, op); \
     update_cdf_3d(3, 4, 3, m, txtp_inter_short_1d, op); \

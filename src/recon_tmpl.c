@@ -71,7 +71,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
                                     const enum BlockSize bs,
                                     const uint8_t *const a,
                                     const uint8_t *const l,
-                                    const int plane,
+                                    const int plane, const int u_has_cf,
                                     const enum Dav2dPixelLayout layout)
 {
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
@@ -112,11 +112,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         }
 #undef MERGE_CTX
 
-        // we assume here that the ccoef array is [2][64], and for V, ca is
-        // ccoef[1][x], and U has been decoded before. Therefore, we can
-        // go "up" 64 bytes in ca/cl and get the "skip" state of the U plane.
-        const int offset = plane == 1 ? 7 :
-            6 * (((uint8_t(*)[64]) a)[-1][0] != 0x40) + not_one_blk * 3;
+        const int offset = plane == 1 ? 7 : 6 * u_has_cf + not_one_blk * 3;
         return offset + ca + cl;
     } else if (b_dim[2] == t_dim->lw && b_dim[3] == t_dim->lh) {
         return 0;
@@ -358,7 +354,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     // does this block have any non-zero coefficients
     const int sctx = (b->fsc && !chroma && f->seq_hdr->fsc) ? 13 :
-                     get_skip_ctx(t_dim, bs, a, l, plane, f->cur.p.p.layout);
+                     get_skip_ctx(t_dim, bs, a, l, plane, t->u_has_cf, f->cur.p.p.layout);
     const int all_skip =
         dav2d_msac_decode_bool_adapt(&ts->msac,
             (plane == 2 ? ts->cdf.coef.skip_v :
@@ -423,9 +419,24 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         },
     };
     if (lossless) {
-        // FIXME this can be IDTX or WHT_WHT
-        assert(t_dim->max == TX_4X4);
-        *txtp = WHT_WHT;
+        // if luma but inter, this can be coded
+        if (chroma) {
+            if (intra) {
+                const int y_fsc = b->lbs != BS_INVALID ? b->fsc :
+                    t->luma_fsc_map[(t->cby & 15) * 16 + (t->cbx & 15)];
+                *txtp = y_fsc ? IDTX : WHT_WHT;
+            } else {
+                assert(*txtp == WHT_WHT || *txtp == IDTX || *txtp == IDTX_INV);
+                *txtp &= 0xe7; // IDTX_INV -> IDTX
+            }
+        } else if (intra) {
+            *txtp = b->fsc ? IDTX : WHT_WHT;
+        } else if (t_dim->max == TX_4X4) {
+            *txtp = dav2d_msac_decode_bool_adapt(&ts->msac,
+                        ts->cdf.m.txtp_lossless) ? IDTX : WHT_WHT;
+        } else {
+            *txtp = IDTX;
+        }
     } else if (chroma) {
         if (f->seq_hdr->chroma_dctonly) {
             *txtp = DCT_DCT;
@@ -685,6 +696,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             depth, "", stx_type, stx_set, ts->msac.rng);
         }
     } else if (f->seq_hdr->cctx && plane == 1 && eob >= intra &&
+               !f->frame_hdr->segmentation.lossless[b->seg_id] &&
                (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || t_dim->max < 8))
     {
         const int cctx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
@@ -2148,7 +2160,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         eob = -1;
         stx = 0;
     } else {
-        cf = bitfn(t->cf)[0];
+        cf = bitfn(t->cf_y);
         eob = decode_coefs(t, DB_ONLY(depth + 1)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
                            tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
@@ -2165,7 +2177,14 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                              imin(t_dim->w, f->bw - t->bx));
     dav2d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
                              imin(t_dim->h, f->bh - t->by));
-    t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)] = txtp & 0xff;
+    uint8_t *txtp_map = &t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+#define set_ctx(rep_macro) \
+    for (int y = 0; y < t_dim->h; y++) { \
+        rep_macro(txtp_map, 0, txtp); \
+        txtp_map += 16; \
+    }
+    case_set(t_dim->lw);
+#undef set_ctx
 
     pixel *dst = ((pixel *) f->cur.p.data[0]) +
         4 * (t->by * PXSTRIDE(f->cur.p.stride[0]) + t->bx);
@@ -2315,7 +2334,11 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                           imin(t_dim->w, 8) * 4, 3, "dq");
             }
         }
-        if (f->seq_hdr->inter_ddt && !b->intra)
+        if (f->frame_hdr->segmentation.lossless[b->seg_id] &&
+            b->intra && !b->intrabc && b->dpcm[0])
+        {
+            txtp += (1 + (b->y_mode == VERT_PRED)) << 8;
+        } else if (f->seq_hdr->inter_ddt && !b->intra)
             txtp += txtp & dav2d_tx_ddt_mask[tx]; // (flip)adst -> (f)ddt
         dsp->itx.itxfm_add[tx](dst, f->cur.p.stride[0],
                                cf, txtp, eob HIGHBD_CALL_SUFFIX);
@@ -3033,10 +3056,23 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // luma
-    const enum RectTxfmSize tx = tp[b->tx_part];
+    enum RectTxfmSize tx = tp[b->tx_part];
     t->pb.col_start = t->bx;
     t->pb.row_start = t->by;
-    switch (b->tx_part) {
+    if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
+        int res = 0, y, x;
+        tx = b->tx_size_ll ? dav2d_max_txfm_size_for_bs[bs][3] : (int) TX_4X4;
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w, th4 = t_dim->h;
+        for (y = 0; y < h4 && !res; y += th4, t->by += th4) {
+            for (x = 0; x < w4 && !res; x += tw4, t->bx += tw4) {
+                res = recon_b_luma_tx(t, DB_ONLY(depth) (int) tx, b);
+            }
+            t->bx -= x;
+        }
+        t->by -= y;
+        if (res < 0) return res;
+    } else switch (b->tx_part) {
     case TX_PARTITION_NONE: {
         const int res = recon_b_luma_tx(t, DB_ONLY(depth) tx, b);
         if (res < 0) return res;
@@ -3214,7 +3250,11 @@ chroma: {}
     const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
     const int cbw4 = cb_dim[0], cw4 = imin(f->bw - t->cbx, cbw4);
     const int cbh4 = cb_dim[1], ch4 = imin(f->bh - t->cby, cbh4);
-    const enum RectTxfmSize uvtx = dav2d_max_txfm_size_for_bs[cbs][f->cur.p.p.layout];
+    const int cbw4ss = (cbw4 + ss_hor) >> ss_hor;
+    const int cw4ss = (cw4 + ss_hor) >> ss_hor, ch4ss = (ch4 + ss_ver) >> ss_ver;
+    const enum RectTxfmSize uvtx =
+        f->frame_hdr->segmentation.lossless[b->seg_id] ? (int) TX_4X4 :
+        dav2d_max_txfm_size_for_bs[cbs][DAV2D_PIXEL_LAYOUT_I444 - f->cur.p.p.layout];
     const TxfmInfo *const uv_t_dim = &dav2d_txfm_dimensions[uvtx];
     const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     const int cth4 = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
@@ -3235,31 +3275,52 @@ chroma: {}
     if (cbs_stage[0] != BS_INVALID) {
         if (b->skip_txfm) {
             for (int pl = 0; pl < 2; pl++) {
-                dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, ctw4);
-                dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, cth4);
+                dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, cw4ss);
+                dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, ch4ss);
             }
         } else {
-            const enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
-            enum TxfmType *const txtp = t->chroma_txtp;
-            int *const eob = t->chroma_eob;
+            enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+            uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
+            int16_t (*const uv_eob)[2] = t->chroma_eob;
             uint8_t cf_ctx[2];
-            coef *const cf[2] = { bitfn(t->cf)[1], bitfn(t->cf)[2] };
+            coef (*const cf)[64 * 64] = bitfn(t->cf_uv);
             // decode coefficients
             for (int pl = 0; pl < 2; pl++) {
-                txtp[pl] = y_txtp;
-                eob[pl] = decode_coefs(t, DB_ONLY(depth + 1)
-                                       &t->a->ccoef[pl][cbx4], &t->l.ccoef[pl][cby4],
-                                       uvtx, b->bs, b, pl + 1,
-                                       cf[pl], &txtp[pl], &cf_ctx[pl]);
-                if (eob[pl] == INT_MIN) return -1;
-                DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
-                                   depth + 1, "", "uv"[pl], uv_t_dim->w * 4,
-                                   uv_t_dim->h * 4,
-                                   dav2d_tx1d_names[txtp[pl] & 7],
-                                   dav2d_tx1d_names[(txtp[pl] >> 5) & 7],
-                                   eob[pl], t->ts->msac.rng);
-                dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], cf_ctx[pl], ctw4);
-                dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], cf_ctx[pl], cth4);
+                int y;
+                for (y = 0; y < ch4ss; y += uv_t_dim->h) {
+                    int x;
+                    for (x = 0; x < cw4ss; x += uv_t_dim->w) {
+                        const ptrdiff_t i = y * cbw4ss + x;
+                        if (b->lbs == b->cbs)
+                            y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+                        enum TxfmType uv_txtp = y_txtp;
+                        const int eob =
+                            decode_coefs(t, DB_ONLY(depth + 1)
+                                         &t->a->ccoef[pl][cbx4 + x],
+                                         &t->l.ccoef[pl][cby4 + y],
+                                         uvtx, b->cbs, b, pl + 1,
+                                         &cf[pl][i * 16],
+                                         &uv_txtp, &cf_ctx[pl]);
+                        if (!pl) t->u_has_cf = eob >= 0;
+                        txtp[i][pl] = uv_txtp;
+                        if (eob == INT_MIN) return -1;
+                        DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,"
+                                           "eob=%d]: r=%d\n",
+                                           depth + 1, "", "uv"[pl], ctw, cth,
+                                           dav2d_tx1d_names[uv_txtp & 7],
+                                           dav2d_tx1d_names[(uv_txtp >> 5) & 7],
+                                           eob, t->ts->msac.rng);
+                        uv_eob[i][pl] = eob;
+                        dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4 + x],
+                                                 cf_ctx[pl], ctw4);
+                        dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4 + y],
+                                                 cf_ctx[pl], cth4);
+                        t->bx += uv_t_dim->w << ss_hor;
+                    }
+                    t->bx -= x << ss_hor;
+                    t->by += uv_t_dim->h << ss_ver;
+                }
+                t->by -= y << ss_ver;
             }
         }
         if (cbs_stage[1] == BS_INVALID) {
@@ -3444,133 +3505,143 @@ chroma: {}
         }
     }
 
-    for (int pl = 0; pl < 2; pl++) {
-        pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) +
-            4 * (ssby * PXSTRIDE(stride) + ssbx);
-        if (intra && !(can_cfl & (pl + 1))) {
-            // intra prediction
-            pixel *const edge = bitfn(t->scratch.edge) + 128;
-            const pixel *top_sb_edge = NULL;
-            if (!(t->cby & (sbsz - 1))) {
-                top_sb_edge = f->ipred_edge[1 + pl];
-                const int sby = t->cby >> f->sb_shift;
-                top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
-            }
+    // x/y recon loop
+    for (int y = 0; y < ch4ss; y += uv_t_dim->h) {
+        for (int x = 0; x < cw4ss; x += uv_t_dim->w) {
+            const ptrdiff_t i = y * cbw4ss + x;
+            for (int pl = 0; pl < 2; pl++) {
+                pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) +
+                    4 * ((ssby + y) * PXSTRIDE(stride) + ssbx + x);
+                if (intra && !(can_cfl & (pl + 1))) {
+                    // intra prediction
+                    pixel *const edge = bitfn(t->scratch.edge) + 128;
+                    const pixel *top_sb_edge = NULL;
+                    if (!((t->cby + (y << ss_ver)) & (sbsz - 1))) {
+                        top_sb_edge = f->ipred_edge[1 + pl];
+                        const int sby = t->cby >> f->sb_shift;
+                        top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
+                    }
 
-            int n_tr = 0, n_bl = 0;
-            if (t->cby > ts->tiling.row_start && ctw < 64) {
-                const int csbsz = sbsz >> ss_hor;
-                const int tile_end = ts->tiling.col_end >> ss_hor;
-                int w = imin(ctw4, tile_end - ssbx - ctw4);
-                if (!(t->cby & (sbsz - 1))) {
-                    n_tr = w; // top sb boundary
-                } else {
-                    const int end = imin((ssbx + csbsz) & ~(csbsz - 1), tile_end);
-                    int w = imin(ctw4, end - ssbx - ctw4);
-                    if (!w) {
-                        // right sb boundary
-                        n_tr = w;
-                    } else {
-                        const unsigned bits = (unsigned)
-                            (t->is_coded[1][cby4 - 1] >> (cbx4 + ctw4));
-                        n_tr = imin(ctz(0x10000 | ~bits), w);
+                    int n_tr = 0, n_bl = 0;
+                    if (t->cby + (y << ss_ver) > ts->tiling.row_start && ctw < 64) {
+                        const int csbsz = sbsz >> ss_hor;
+                        const int tile_end = ts->tiling.col_end >> ss_hor;
+                        int w = imin(ctw4, tile_end - (ssbx + x) - ctw4);
+                        if (!((t->cby + y) & (sbsz - 1))) {
+                            n_tr = w; // top sb boundary
+                        } else {
+                            const int end = imin((ssbx + x + csbsz) & ~(csbsz - 1), tile_end);
+                            int w = imin(ctw4, end - (ssbx + x) - ctw4);
+                            if (!w) {
+                                // right sb boundary
+                                n_tr = w;
+                            } else {
+                                const unsigned bits = (unsigned)
+                                    (t->is_coded[1][cby4 + y - 1] >> (cbx4 + x + ctw4));
+                                n_tr = imin(ctz(0x10000 | ~bits), w);
+                            }
+                        }
+                    }
+                    if (t->cbx + (x << ss_hor) > ts->tiling.col_start && cth < 64) {
+                        const int csbsz = sbsz >> ss_ver;
+                        const int end = imin((ssby + y + csbsz) & ~(csbsz - 1),
+                                             ts->tiling.row_end >> ss_ver);
+                        const int h = imin(cth4, end - (ssby + y) - cth4);
+                        if (!((t->cbx + x) & (sbsz - 1)) || !h) {
+                            // left or bottom sb boundary
+                            n_bl = h;
+                        } else {
+                            const uint64_t mask = 1ULL << (cbx4 + x - 1);
+                            for (; n_bl < h; n_bl++)
+                                if (!(t->is_coded[1][cby4 + y + n_bl + cth4] & mask))
+                                    break;
+                        }
+                    }
+
+                    int apply_ibp = f->seq_hdr->ibp && uvtx != (enum RectTxfmSize) TX_4X4;
+                    const int sm_top = t->pb.is_sm[1].a;
+                    const int sm_left = t->pb.is_sm[1].l;
+                    const int is_sm_flag = apply_ibp ?
+                        (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
+                        (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
+                        (sm_top | sm_left) * (ANGLE_SMOOTH_TOP_EDGE_FLAG |
+                                              ANGLE_SMOOTH_LEFT_EDGE_FLAG);
+                    apply_ibp &= b->uv_mode == DC_PRED;
+                    int intra_flags = is_sm_flag |
+                        (apply_ibp ? ANGLE_IBP_FLAG : 0) |
+                        (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
+                        ((t->cbx + (x << ss_hor) > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
+                        ((t->cby + (y << ss_ver) > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
+                    const enum IntraPredMode uv_mode =
+                        b->uv_mode == CFL_PRED ? DC_PRED : b->uv_mode;
+
+                    const enum IntraPredMode m = bytefn(dav2d_prepare_intra_edges)(
+                        // don't print chroma as avm does things in a different order
+                        // (decode coefs of both planes first then pred + itx)
+                        DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx + x, ssby + y,
+                        ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
+                        n_tr, n_bl, dst, stride, top_sb_edge, uv_mode, uv_t_dim->w,
+                        uv_t_dim->h, angle | intra_flags, edge HIGHBD_CALL_SUFFIX);
+
+                    dsp->ipred.intra_pred[m](dst, stride,
+                                             edge, ctw, cth, angle | intra_flags,
+                                             4 * f->bw - 4 * (t->cbx + x),
+                                             4 * f->bh - 4 * (t->cby + y) HIGHBD_CALL_SUFFIX);
+
+                    if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                        hex_dump(dst, stride, ctw, cth, pl ? "v-intra-pred" : "u-intra-pred");
                     }
                 }
             }
-            if (t->cbx > ts->tiling.col_start && cth < 64) {
-                const int csbsz = sbsz >> ss_ver;
-                const int end = imin((ssby + csbsz) & ~(csbsz - 1),
-                                     ts->tiling.row_end >> ss_ver);
-                const int h = imin(cth4, end - ssby - cth4);
-                if (!(t->cbx & (sbsz - 1)) || !h) {
-                    // left or bottom sb boundary
-                    n_bl = h;
-                } else {
-                    const uint64_t mask = 1ULL << (cbx4 - 1);
-                    for (; n_bl < h; n_bl++)
-                        if (!(t->is_coded[1][cby4 + n_bl + cth4] & mask))
-                            break;
+
+            if (!b->skip_txfm) {
+                const int cctx = f->seq_hdr->cctx &&
+                    (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
+                uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
+                int16_t (*const eob)[2] = t->chroma_eob;
+                coef (*const cf)[64 * 64] = bitfn(t->cf_uv);
+                int cctx_type = cctx && eob[i][0] >= intra ? (txtp[i][0] >> 8) : 0;
+                if (cctx_type) {
+                    dsp->itx.cctx(&cf[0][i * 16], &cf[1][i * 16],
+                                  dav2d_cctx_angle[cctx_type - 1],
+                                  umin(ctw, 32) * umin(cth, 32) HIGHBD_CALL_SUFFIX);
+                    const int gt = eob[i][1] > eob[i][0];
+                    eob[i][!gt] = eob[i][gt];
+                    txtp[i][1] = txtp[i][0] &= 0xff;
+                }
+                // inverse transform
+                for (int pl = 0; pl < 2; pl++) {
+                    if (eob[i][pl] != -1) {
+                        // don't print chroma as avm does things in a different order
+                        // (decode coefs of both planes first then pred + itx)
+                        if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+                            coef_dump(&cf[pl][i * 16], imin(cth, 32), imin(ctw, 32), 3, "dq");
+                        }
+                        pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) +
+                            4 * ((ssby + y) * PXSTRIDE(stride) + ssbx + x);
+                        if (f->frame_hdr->segmentation.lossless[b->seg_id] &&
+                            b->intra && !b->intrabc && b->dpcm[1])
+                        {
+                            txtp[i][pl] += (1 + (b->uv_mode == VERT_PRED)) << 8;
+                        } else if (f->seq_hdr->inter_ddt && !b->intra) // (flip)adst -> (f)ddt
+                            txtp[i][pl] += txtp[i][pl] & dav2d_tx_ddt_mask[uvtx];
+                        dsp->itx.itxfm_add[uvtx](dst, stride, &cf[pl][i * 16], txtp[i][pl], eob[i][pl]
+                                                 HIGHBD_CALL_SUFFIX);
+                    }
                 }
             }
-
-            int apply_ibp = f->seq_hdr->ibp && uvtx != (enum RectTxfmSize) TX_4X4;
-            const int sm_top = t->pb.is_sm[1].a;
-            const int sm_left = t->pb.is_sm[1].l;
-            const int is_sm_flag = apply_ibp ?
-                (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
-                (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
-                (sm_top | sm_left) * (ANGLE_SMOOTH_TOP_EDGE_FLAG |
-                                      ANGLE_SMOOTH_LEFT_EDGE_FLAG);
-            apply_ibp &= b->uv_mode == DC_PRED;
-            int intra_flags = is_sm_flag |
-                (apply_ibp ? ANGLE_IBP_FLAG : 0) |
-                (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
-                ((t->cbx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
-                ((t->cby > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);
-            const enum IntraPredMode uv_mode =
-                b->uv_mode == CFL_PRED ? DC_PRED : b->uv_mode;
-
-            const enum IntraPredMode m = bytefn(dav2d_prepare_intra_edges)(
-                // don't print chroma as avm does things in a different order
-                // (decode coefs of both planes first then pred + itx)
-                DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
-                ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-                n_tr, n_bl, dst, stride, top_sb_edge, uv_mode, uv_t_dim->w,
-                uv_t_dim->h, angle | intra_flags, edge HIGHBD_CALL_SUFFIX);
-
-            dsp->ipred.intra_pred[m](dst, stride,
-                                     edge, ctw, cth, angle | intra_flags,
-                                     4 * f->bw - 4 * t->cbx,
-                                     4 * f->bh - 4 * t->cby HIGHBD_CALL_SUFFIX);
-
-            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                hex_dump(dst, stride, ctw, cth, pl ? "v-intra-pred" : "u-intra-pred");
-            }
-        }
-    }
-
-    if (!b->skip_txfm) {
-        const int cctx = f->seq_hdr->cctx &&
-            (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
-        enum TxfmType *const txtp = t->chroma_txtp;
-        int *const eob = t->chroma_eob;
-        coef *const cf[2] = { bitfn(t->cf)[1], bitfn(t->cf)[2] };
-        int cctx_type = cctx && eob[0] >= intra ? (txtp[0] >> 8) : 0;
-        if (cctx_type) {
-            dsp->itx.cctx(cf[0], cf[1], dav2d_cctx_angle[cctx_type - 1],
-                          umin(ctw, 32) * umin(cth, 32) HIGHBD_CALL_SUFFIX);
-            const int gt = eob[1] > eob[0];
-            eob[!gt] = eob[gt];
-            txtp[1] = txtp[0] &= 0xff;
-        }
-        // inverse transform
-        for (int pl = 0; pl < 2; pl++) {
-            if (eob[pl] != -1) {
-                // don't print chroma as avm does things in a different order
-                // (decode coefs of both planes first then pred + itx)
+            for (int pl = 1; pl <= 2; pl++) {
                 if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                    coef_dump(cf[pl], imin(cth, 32), imin(ctw, 32), 3, "dq");
+                    const pixel *const dst = ((pixel *) f->cur.p.data[pl]) +
+                        4 * ((ssby + y) * PXSTRIDE(stride) + ssbx + x);
+                    hex_dump(dst, stride, ctw, cth, "recon");
                 }
-                pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) +
-                    4 * (ssby * PXSTRIDE(stride) + ssbx);
-                if (f->seq_hdr->inter_ddt && !b->intra)
-                    txtp[pl] += txtp[pl] & dav2d_tx_ddt_mask[uvtx]; // (flip)adst -> (f)ddt
-                dsp->itx.itxfm_add[uvtx](dst, stride, cf[pl], txtp[pl], eob[pl]
-                                         HIGHBD_CALL_SUFFIX);
             }
+            const uint64_t mask = ((1ULL << ctw4) - 1) << (cbx4 + x);
+            for (int yy = 0; yy < cth4; yy++)
+                t->is_coded[1][cby4 + y + yy] |= mask;
         }
     }
-    for (int pl = 1; pl <= 2; pl++) {
-        if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-            const pixel *const dst = ((pixel *) f->cur.p.data[pl]) +
-                4 * (ssby * PXSTRIDE(stride) + ssbx);
-            hex_dump(dst, stride, ctw, cth, "recon");
-        }
-    }
-
-    const uint64_t mask = ((1ULL << ctw4) - 1) << cbx4;
-    for (int y = 0; y < cth4; y++)
-        t->is_coded[1][cby4 + y] |= mask;
 
     b->uv_mode = orig_uv_mode;
     return 0;

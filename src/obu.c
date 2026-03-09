@@ -1553,12 +1553,12 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                     hdr->cdef.uv_strength[i] = dav2d_get_bits(gb, 6 - 4 * dav2d_get_bit(gb));
             }
         }
-    }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-cdef[%d]: off=%td\n",
-           hdr->cdef.enabled,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-cdef[%d]: off=%td\n",
+               hdr->cdef.enabled,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    }
     const int n_bits = hdr->n_ref_frames <= 2 ? hdr->n_ref_frames - 1 :
                        1 + ulog2(hdr->n_ref_frames - 1);
 
@@ -1752,14 +1752,14 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                 }
             }
         }
-    }
 #if DEBUG_FRAME_HDR
-    printf("HDR: post-restoration[y:%d,u:%d,v:%d]: off=%td\n",
-           hdr->restoration.p[0].type,
-           hdr->restoration.p[1].type,
-           hdr->restoration.p[2].type,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+        printf("HDR: post-restoration[y:%d,u:%d,v:%d]: off=%td\n",
+               hdr->restoration.p[0].type,
+               hdr->restoration.p[1].type,
+               hdr->restoration.p[2].type,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+    }
 
     if (!hdr->all_lossless && seqhdr->ccso) {
         hdr->ccso.enabled = seqhdr->reduced_still_picture_header ||

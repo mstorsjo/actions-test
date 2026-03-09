@@ -275,7 +275,7 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
     if (b->intra || !b->skip_txfm) {
         const enum TxPartition tx_part = chroma ? TX_PARTITION_NONE : b->tx_part;
         const enum RectTxfmSize tx = chroma ?
-            dav2d_max_txfm_size_for_bs[bs][layout] :
+            dav2d_max_txfm_size_for_bs[bs][DAV2D_PIXEL_LAYOUT_I444 - layout] :
             dav2d_tx_part_tbl[bs][tx_part];
         const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
         mask_edges_part(masks, by4, bx4, bw4, bh4, tx_part, t_dim,

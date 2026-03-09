@@ -838,6 +838,40 @@ static NOINLINE void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *con
 }
 #endif
 
+static const uint8_t size_group_lookup[] = {
+    [BS_4x4] = 0,
+    [BS_4x8] = 0,
+    [BS_8x4] = 0,
+    [BS_8x8] = 1,
+    [BS_8x16] = 1,
+    [BS_16x8] = 1,
+    [BS_16x16] = 2,
+    [BS_16x32] = 2,
+    [BS_32x16] = 2,
+    [BS_32x32] = 3,
+    [BS_32x64] = 3,
+    [BS_64x32] = 3,
+    [BS_64x64] = 3,
+    [BS_64x128] = 3,
+    [BS_128x64] = 3,
+    [BS_128x128] = 3,
+    [BS_128x256] = 3,
+    [BS_256x128] = 3,
+    [BS_256x256] = 3,
+    [BS_4x16] = 0,
+    [BS_16x4] = 0,
+    [BS_8x32] = 1,
+    [BS_32x8] = 1,
+    [BS_16x64] = 2,
+    [BS_64x16] = 2,
+    [BS_4x32] = 1,
+    [BS_32x4]= 1,
+    [BS_8x64] = 2,
+    [BS_64x8] = 2,
+    [BS_4x64] = 2,
+    [BS_64x4] = 2,
+};
+
 static void read_tx_part(Dav2dTaskContext *const t,
                          DB_ONLY(const int depth) Av2Block *const b,
                          const enum BlockSize bs)
@@ -848,9 +882,18 @@ static void read_tx_part(Dav2dTaskContext *const t,
     const int bw4 = b_dim[0], bh4 = b_dim[1];
 
     b->tx_part = TX_PARTITION_NONE;
-    if (f->frame_hdr->segmentation.lossless[b->seg_id] || b->skip_txfm) {
-        // FIXME I believe lossless can be wht as well as idtx?
-    } else {
+    if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
+        b->tx_size_ll = 0;
+        if (bs != BS_4x4 && ((b->intra && !b->intrabc) ? b->fsc : !b->skip_txfm)) {
+            const int szctx = size_group_lookup[bs];
+            const int inter = !b->intra || b->intrabc;
+            b->tx_size_ll = dav2d_msac_decode_bool_adapt(&ts->msac,
+                                ts->cdf.m.txsz_lossless[szctx][inter]);
+            DEBUG_BLOCK_printf("%*sPost-lltxsz[ctx=%d|%d,%d]: r=%d\n",
+                               depth, "", szctx, inter,
+                               b->tx_size_ll, ts->msac.rng);
+        }
+    } else if (!b->skip_txfm) {
         if (f->frame_hdr->txfm_mode == DAV2D_TX_SWITCHABLE &&
             bs != BS_4x4 && imax(bw4, bh4) <= 16)
         {
@@ -921,10 +964,11 @@ static void read_tx_part(Dav2dTaskContext *const t,
                                                 TX_PARTITION_V;
                 }
             }
+            DEBUG_BLOCK_printf("%*sPost-txpart[ctx=%d|%d|%d,%d]: r=%d\n",
+                               depth, "", b->fsc, inter, szctx,
+                               b->tx_part, ts->msac.rng);
         }
     }
-    DEBUG_BLOCK_printf("%*sPost-tx[%d]: r=%d\n",
-                       depth, "", b->tx_part, ts->msac.rng);
 }
 
 static int read_wedge_idx(Dav2dTileState *const ts) {
@@ -1115,40 +1159,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     b->bs = bs;
-
-    static const uint8_t size_group_lookup[] = {
-        [BS_4x4] = 0,
-        [BS_4x8] = 0,
-        [BS_8x4] = 0,
-        [BS_8x8] = 1,
-        [BS_8x16] = 1,
-        [BS_16x8] = 1,
-        [BS_16x16] = 2,
-        [BS_16x32] = 2,
-        [BS_32x16] = 2,
-        [BS_32x32] = 3,
-        [BS_32x64] = 3,
-        [BS_64x32] = 3,
-        [BS_64x64] = 3,
-        [BS_64x128] = 3,
-        [BS_128x64] = 3,
-        [BS_128x128] = 3,
-        [BS_128x256] = 3,
-        [BS_256x128] = 3,
-        [BS_256x256] = 3,
-        [BS_4x16] = 0,
-        [BS_16x4] = 0,
-        [BS_8x32] = 1,
-        [BS_32x8] = 1,
-        [BS_16x64] = 2,
-        [BS_64x16] = 2,
-        [BS_4x32] = 1,
-        [BS_32x4]= 1,
-        [BS_8x64] = 2,
-        [BS_64x8] = 2,
-        [BS_4x64] = 2,
-        [BS_64x4] = 2,
-    };
+    b->lbs = lbs;
+    b->cbs = cbs;
 
     // segment_id (if seg_feature for skip/ref/gmv is enabled)
     int seg_pred = 0;
@@ -1534,97 +1546,114 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         };
 
         if (has_luma) {
-            const int y_set = dav2d_msac_decode_symbol_adapt4(&ts->msac,
-                                  ts->cdf.m.intra_y_set, 3);
-            int y_mode_idx, y_mode_ctx;
-            if (!y_set) {
-                y_mode_ctx = (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) +
-                             (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff);
-                y_mode_idx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                 ts->cdf.m.intra_y_idx0[y_mode_ctx], 7);
-                if (y_mode_idx == 7)
-                    y_mode_idx += dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                      ts->cdf.m.intra_y_idx1[y_mode_ctx], 5);
-            } else {
-                y_mode_idx = y_set * 16 - 3 +
-                             dav2d_msac_decode_bools_bypass(&ts->msac, 4);
-            }
-            if (y_mode_idx < 5) {
-                b->y_mode = reordered_nondir_y_mode[y_mode_idx];
+            b->dpcm[0] = f->frame_hdr->segmentation.lossless[b->seg_id] &&
+                         dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.dpcm[0]);
+            if (b->dpcm[0]) {
+                if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.dpcm_dir[0])) {
+                    b->y_mode = HOR_PRED;
+                    midx = 45;
+                } else {
+                    b->y_mode = VERT_PRED;
+                    midx = 17;
+                }
+                b->mrl_index = 0;
+                b->multi_mrl = 0;
                 b->y_angle = 0;
+                DEBUG_BLOCK_printf("%*sPost-ydpcm[dir=%d]: r=%d\n",
+                                   depth, "", b->y_mode == HOR_PRED, ts->msac.rng);
             } else {
-                const int dir_y_mode_idx = y_mode_idx - 5;
-                static const uint8_t default_mode_list_y[] = {
-                    17, 45, 3, 10, 24, 31, 38, 52,
-                    //  (-2, +2)
-                    15, 19, 43, 47, 1, 5, 8, 12, 22, 26, 29, 33, 36, 40, 50, 54,
-                    //  (-1, +1)
-                    16, 18, 44, 46, 2, 4, 9, 11, 23, 25, 30, 32, 37, 39, 51, 53,
-                    //  (-3, +3)
-                    14, 20, 42, 48, 0, 6, 7, 13, 21, 27, 28, 34, 35, 41, 49, 55
-                };
-                uint8_t custom_mode_list_y[56];
-                const uint8_t *reorder = default_mode_list_y;
-                if (bw4 * bh4 > 2) {
-                    // modes are reordered if neighbour (above/left) modes used
-                    // directional intra prediction modes
-                    uint64_t mask = 0;
-                    uint8_t *ptr = custom_mode_list_y;
-                    *ptr = -1;
-                    if (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff) {
-                        const int lmidx = t->l.midx[by4 + bh4 - 1];
-                        *ptr++ = lmidx;
-                        mask |= 1ULL << lmidx;
-                    }
-                    if (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) {
-                        const int amidx = t->a->midx[bx4 + bw4 - 1];
-                        if (amidx != custom_mode_list_y[0]) {
-                            *ptr++ = amidx;
-                            mask |= 1ULL << amidx;
+                const int y_set = dav2d_msac_decode_symbol_adapt4(&ts->msac,
+                                      ts->cdf.m.intra_y_set, 3);
+                int y_mode_idx, y_mode_ctx;
+                if (!y_set) {
+                    y_mode_ctx = (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) +
+                                 (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff);
+                    y_mode_idx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                     ts->cdf.m.intra_y_idx0[y_mode_ctx], 7);
+                    if (y_mode_idx == 7)
+                        y_mode_idx += dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                          ts->cdf.m.intra_y_idx1[y_mode_ctx], 5);
+                } else {
+                    y_mode_idx = y_set * 16 - 3 +
+                                 dav2d_msac_decode_bools_bypass(&ts->msac, 4);
+                }
+                if (y_mode_idx < 5) {
+                    b->y_mode = reordered_nondir_y_mode[y_mode_idx];
+                    b->y_angle = 0;
+                } else {
+                    const int dir_y_mode_idx = y_mode_idx - 5;
+                    static const uint8_t default_mode_list_y[] = {
+                        17, 45, 3, 10, 24, 31, 38, 52,
+                        //  (-2, +2)
+                        15, 19, 43, 47, 1, 5, 8, 12, 22, 26, 29, 33, 36, 40, 50, 54,
+                        //  (-1, +1)
+                        16, 18, 44, 46, 2, 4, 9, 11, 23, 25, 30, 32, 37, 39, 51, 53,
+                        //  (-3, +3)
+                        14, 20, 42, 48, 0, 6, 7, 13, 21, 27, 28, 34, 35, 41, 49, 55
+                    };
+                    uint8_t custom_mode_list_y[56];
+                    const uint8_t *reorder = default_mode_list_y;
+                    if (bw4 * bh4 > 2) {
+                        // modes are reordered if neighbour (above/left) modes used
+                        // directional intra prediction modes
+                        uint64_t mask = 0;
+                        uint8_t *ptr = custom_mode_list_y;
+                        *ptr = -1;
+                        if (h4 == bh4 && t->l.midx[by4 + bh4 - 1] != 0xff) {
+                            const int lmidx = t->l.midx[by4 + bh4 - 1];
+                            *ptr++ = lmidx;
+                            mask |= 1ULL << lmidx;
                         }
-                    }
-                    int n_dirs = (int)(ptr - custom_mode_list_y);
-                    if (n_dirs > 0) {
-                        reorder = custom_mode_list_y;
-                        if (bw4 * bh4 > 4 && dir_y_mode_idx >= n_dirs) {
-                            // add surrounding [-3..+3] angles
-                            for (int i = 1; i < 5; i++) {
-                                for (int n = 0; n < n_dirs; n++) {
-                                    const int cmidx = custom_mode_list_y[n];
-                                    for (int delta = -i, j = 0; j < 2; delta = +i, j++) {
-                                        // FIXME replace modulo with fastdiv
-                                        const int dmidx = (cmidx + delta + 56) % 56;
-                                        if (!(mask & (1ULL << dmidx))) {
-                                            *ptr++ = dmidx;
-                                            mask |= 1ULL << dmidx;
+                        if (w4 == bw4 && t->a->midx[bx4 + bw4 - 1] != 0xff) {
+                            const int amidx = t->a->midx[bx4 + bw4 - 1];
+                            if (amidx != custom_mode_list_y[0]) {
+                                *ptr++ = amidx;
+                                mask |= 1ULL << amidx;
+                            }
+                        }
+                        int n_dirs = (int)(ptr - custom_mode_list_y);
+                        if (n_dirs > 0) {
+                            reorder = custom_mode_list_y;
+                            if (bw4 * bh4 > 4 && dir_y_mode_idx >= n_dirs) {
+                                // add surrounding [-3..+3] angles
+                                for (int i = 1; i < 5; i++) {
+                                    for (int n = 0; n < n_dirs; n++) {
+                                        const int cmidx = custom_mode_list_y[n];
+                                        for (int delta = -i, j = 0; j < 2; delta = +i, j++) {
+                                            // FIXME replace modulo with fastdiv
+                                            const int dmidx = (cmidx + delta + 56) % 56;
+                                            if (!(mask & (1ULL << dmidx))) {
+                                                *ptr++ = dmidx;
+                                                mask |= 1ULL << dmidx;
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        n_dirs = (int)(ptr - custom_mode_list_y);
-                        if (dir_y_mode_idx >= n_dirs) {
-                            // remainder of modes in default order
-                            for (unsigned long n = 0;
-                                 n < ARRAY_SIZE(default_mode_list_y); n++)
-                            {
-                                const int fmidx = default_mode_list_y[n];
-                                const uint64_t bit = 1ULL << fmidx;
-                                if (!(mask & bit)) *ptr++ = fmidx;
+                            n_dirs = (int)(ptr - custom_mode_list_y);
+                            if (dir_y_mode_idx >= n_dirs) {
+                                // remainder of modes in default order
+                                for (unsigned long n = 0;
+                                     n < ARRAY_SIZE(default_mode_list_y); n++)
+                                {
+                                    const int fmidx = default_mode_list_y[n];
+                                    const uint64_t bit = 1ULL << fmidx;
+                                    if (!(mask & bit)) *ptr++ = fmidx;
+                                }
                             }
                         }
                     }
+                    const int dir_y_mode_reord = midx = reorder[dir_y_mode_idx];
+                    // FIXME division/modulo can be replaced with fastdiv
+                    b->y_mode = reordered_dir_y_mode[dir_y_mode_reord / 7];
+                    b->y_angle = dir_y_mode_reord % 7 - 3;
                 }
-                const int dir_y_mode_reord = midx = reorder[dir_y_mode_idx];
-                // FIXME division/modulo can be replaced with fastdiv
-                b->y_mode = reordered_dir_y_mode[dir_y_mode_reord / 7];
-                b->y_angle = dir_y_mode_reord % 7 - 3;
+                DEBUG_BLOCK_printf("%*sPost-intra_y_mode[set=%d,idx=%d,ctx=%d,mode=%d,angle=%d]: r=%d\n",
+                                   depth, "", y_set, y_mode_idx,
+                                   y_set > 0 ? -1 : y_mode_ctx,
+                                   b->y_mode, b->y_angle, ts->msac.rng);
             }
-            DEBUG_BLOCK_printf("%*sPost-intra_y_mode[set=%d,idx=%d,ctx=%d,mode=%d,angle=%d]: r=%d\n",
-                               depth, "", y_set, y_mode_idx,
-                               y_set > 0 ? -1 : y_mode_ctx,
-                               b->y_mode, b->y_angle, ts->msac.rng);
 
             // =min(5,floor(log2(bw4+bh4)*1.99-1.62)) or
             // =      floor(log2(bw4+bh4)*1.55-0.555) - or anything in between
@@ -1659,7 +1688,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
 
             b->mrl_index = b->multi_mrl = 0;
-            if (midx != 0xff /* directional mode */ && f->seq_hdr->mrls) {
+            if (!b->dpcm[0] && midx != 0xff /* directional mode */ &&
+                f->seq_hdr->mrls)
+            {
                 const int ctx = (boff[0] == -1 ? 0 : nb[0]->mrl[boff[0]]) +
                                 (boff[1] == -1 ? 0 : nb[1]->mrl[boff[1]]);
                 b->mrl_index = dav2d_msac_decode_symbol_adapt4(&ts->msac,
@@ -1679,102 +1710,116 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         if (has_chroma) {
-            const int mhccp_allowed = f->seq_hdr->mhccp &&
-                                      imax(cbw4, cbh4) <= 8 && cbw4 * cbh4 > 1;
-            const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
-            const int cfl_allowed = (f->seq_hdr->cfl || mhccp_allowed) &&
-                (imax(bw4, bh4) > 16 || !t->sdp_cfl_disallowed) &&
-                imax(cbw4, cbh4) <= (ll ? 1 : 16);
-            int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
-            if (cfl_allowed) {
-                cfl_ctx = (t->a->uvmode[cbx4] == CFL_PRED) +
-                          (t->l.uvmode[cby4] == CFL_PRED);
-                is_cfl = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                                      ts->cdf.m.cfl[cfl_ctx]);
-            }
-            if (is_cfl) {
-                b->uv_mode = CFL_PRED;
-                b->uv_angle = 0;
-            } else {
+            b->dpcm[1] = f->frame_hdr->segmentation.lossless[b->seg_id] &&
+                         dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.dpcm[1]);
+            if (b->dpcm[1]) {
+                b->uv_mode = dav2d_msac_decode_bool_adapt(&ts->msac,
+                                 ts->cdf.m.dpcm_dir[1]) ? HOR_PRED : VERT_PRED;
                 if (lbs == BS_INVALID)
                     midx = t->luma_intra_dir_mode_map[(t->by & 15) * 16 +
                                                       (t->bx & 15)];
-                uv_mode_ctx = midx != 0xff;
-                uv_mode_idx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                  ts->cdf.m.intra_uv_mode[uv_mode_ctx], 7);
-                if (uv_mode_idx == 7)
-                    uv_mode_idx += dav2d_msac_decode_bools_bypass(&ts->msac, 3);
-                if (uv_mode_idx > 12) return -1;
-                if (uv_mode_idx < uv_mode_ctx) {
-                    b->uv_mode = reordered_dir_y_mode[midx / 7];
-                    b->uv_angle = (midx % 7) - 3;
+                const int uv_mode_idx = b->uv_mode == HOR_PRED ? 45 : 17;
+                b->uv_angle = abs(midx - uv_mode_idx) >= 4 ? 0 : (midx % 7) - 3;
+                DEBUG_BLOCK_printf("%*sPost-uvdpcm[dir=%d]: r=%d\n",
+                                   depth, "", b->uv_mode == HOR_PRED, ts->msac.rng);
+            } else {
+                const int ll = f->frame_hdr->segmentation.lossless[b->seg_id];
+                const int mhccp_allowed = f->seq_hdr->mhccp &&
+                    imax(cbw4, cbh4) <= (ll ? 1 : 8) && cbw4 * cbh4 >= 2 - ll;
+                const int cfl_allowed = (f->seq_hdr->cfl || mhccp_allowed) &&
+                    (imax(bw4, bh4) > 16 || !t->sdp_cfl_disallowed) &&
+                    imax(cbw4, cbh4) <= (ll ? 1 : 16);
+                int is_cfl = 0, uv_mode_idx, cfl_ctx, uv_mode_ctx;
+                if (cfl_allowed) {
+                    cfl_ctx = (t->a->uvmode[cbx4] == CFL_PRED) +
+                              (t->l.uvmode[cby4] == CFL_PRED);
+                    is_cfl = dav2d_msac_decode_bool_adapt(&ts->msac,
+                                                          ts->cdf.m.cfl[cfl_ctx]);
+                }
+                if (is_cfl) {
+                    b->uv_mode = CFL_PRED;
+                    b->uv_angle = 0;
                 } else {
-                    if (uv_mode_idx - uv_mode_ctx < 5) {
-                        b->uv_mode = reordered_nondir_y_mode[uv_mode_idx -
-                                                             uv_mode_ctx];
-                        b->uv_angle = 0;
+                    if (lbs == BS_INVALID)
+                        midx = t->luma_intra_dir_mode_map[(t->by & 15) * 16 +
+                                                          (t->bx & 15)];
+                    uv_mode_ctx = midx != 0xff;
+                    uv_mode_idx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                      ts->cdf.m.intra_uv_mode[uv_mode_ctx], 7);
+                    if (uv_mode_idx == 7)
+                        uv_mode_idx += dav2d_msac_decode_bools_bypass(&ts->msac, 3);
+                    if (uv_mode_idx > 12) return -1;
+                    if (uv_mode_idx < uv_mode_ctx) {
+                        b->uv_mode = reordered_dir_y_mode[midx / 7];
+                        b->uv_angle = (midx % 7) - 3;
                     } else {
-                        static const uint8_t default_mode_list_uv[] = {
-                            VERT_PRED, HOR_PRED, DIAG_DOWN_LEFT_PRED,
-                            DIAG_DOWN_RIGHT_PRED, VERT_LEFT_PRED,
-                            VERT_RIGHT_PRED, HOR_DOWN_PRED, HOR_UP_PRED,
-                        };
-                        static const uint8_t intra_dir_mode_y_to_uv_idx[] = {
-                            2, 4, 0, 5, 3, 6, 1, 7
-                        };
-                        int idx = uv_mode_idx - 5 - uv_mode_ctx;
-                        idx += uv_mode_ctx &&
-                               idx >= intra_dir_mode_y_to_uv_idx[midx / 7];
-                        b->uv_mode = default_mode_list_uv[idx];
-                        b->uv_angle = 0;
-                    }
-                }
-            }
-            DEBUG_BLOCK_printf("%*sPost-intra_uv_mode[cfl=%d,idx=%d,ctx=%d|%d,mode=%d,angle=%d]: r=%d\n",
-                               depth, "", is_cfl, is_cfl ? -1 : uv_mode_idx,
-                               cfl_allowed ? cfl_ctx : -1,
-                               is_cfl ? -1 : uv_mode_ctx, b->uv_mode,
-                               b->uv_angle, ts->msac.rng);
-            if (b->uv_mode == CFL_PRED) {
-                memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
-                if (mhccp_allowed &&
-                    (!f->seq_hdr->cfl ||
-                     dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp)))
-                {
-                    const int sz_ctx = size_group_lookup[bs];
-                    b->cfl_type = CFL_MHCCP;
-                    b->cfl_mh_dir =
-                        dav2d_msac_decode_symbol_adapt4(&ts->msac,
-                            ts->cdf.m.mhccp_filter_dir[sz_ctx], 2);
-                } else {
-                    b->cfl_type = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                      ts->cdf.m.cfl_type);
-                    if (b->cfl_type == CFL_EXPLICIT) {
-                        const int sign = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                             ts->cdf.m.cfl_sign, 7) + 1;
-                        const int sign_u = sign * 0x56 >> 8;
-                        const int sign_v = sign - sign_u * 3;
-                        assert(sign_u == sign / 3);
-                        if (sign_u) {
-                            const int ctx = (sign_u == 2) * 3 + sign_v;
-                            b->cfl_alpha[0] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                    ts->cdf.m.cfl_alpha[ctx], 7) + 1;
-                            if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
-                        }
-                        if (sign_v) {
-                            const int ctx = (sign_v == 2) * 3 + sign_u;
-                            b->cfl_alpha[1] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                    ts->cdf.m.cfl_alpha[ctx], 7) + 1;
-                            if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
+                        if (uv_mode_idx - uv_mode_ctx < 5) {
+                            b->uv_mode = reordered_nondir_y_mode[uv_mode_idx -
+                                                                 uv_mode_ctx];
+                            b->uv_angle = 0;
+                        } else {
+                            static const uint8_t default_mode_list_uv[] = {
+                                VERT_PRED, HOR_PRED, DIAG_DOWN_LEFT_PRED,
+                                DIAG_DOWN_RIGHT_PRED, VERT_LEFT_PRED,
+                                VERT_RIGHT_PRED, HOR_DOWN_PRED, HOR_UP_PRED,
+                            };
+                            static const uint8_t intra_dir_mode_y_to_uv_idx[] = {
+                                2, 4, 0, 5, 3, 6, 1, 7
+                            };
+                            int idx = uv_mode_idx - 5 - uv_mode_ctx;
+                            idx += uv_mode_ctx &&
+                                   idx >= intra_dir_mode_y_to_uv_idx[midx / 7];
+                            b->uv_mode = default_mode_list_uv[idx];
+                            b->uv_angle = 0;
                         }
                     }
                 }
-                DEBUG_BLOCK_printf("%*sPost-cfl[type=%d,%s=%d|%d]: r=%d\n",
-                                   depth, "", b->cfl_type,
-                                   b->cfl_type == CFL_MHCCP ? "mhdir" : "alpha",
-                                   b->cfl_type == CFL_MHCCP ? b->cfl_mh_dir :
-                                                              b->cfl_alpha[0],
-                                   b->cfl_alpha[1], ts->msac.rng);
+                DEBUG_BLOCK_printf("%*sPost-intra_uv_mode[cfl=%d,idx=%d,ctx=%d|%d,mode=%d,angle=%d]: r=%d\n",
+                                   depth, "", is_cfl, is_cfl ? -1 : uv_mode_idx,
+                                   cfl_allowed ? cfl_ctx : -1,
+                                   is_cfl ? -1 : uv_mode_ctx, b->uv_mode,
+                                   b->uv_angle, ts->msac.rng);
+                if (b->uv_mode == CFL_PRED) {
+                    memset(b->cfl_alpha, 0, sizeof(b->cfl_alpha));
+                    if (mhccp_allowed &&
+                        (!f->seq_hdr->cfl ||
+                         dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.mhccp)))
+                    {
+                        const int sz_ctx = size_group_lookup[bs];
+                        b->cfl_type = CFL_MHCCP;
+                        b->cfl_mh_dir =
+                            dav2d_msac_decode_symbol_adapt4(&ts->msac,
+                                ts->cdf.m.mhccp_filter_dir[sz_ctx], 2);
+                    } else {
+                        b->cfl_type = dav2d_msac_decode_bool_adapt(&ts->msac,
+                                          ts->cdf.m.cfl_type);
+                        if (b->cfl_type == CFL_EXPLICIT) {
+                            const int sign = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                                 ts->cdf.m.cfl_sign, 7) + 1;
+                            const int sign_u = sign * 0x56 >> 8;
+                            const int sign_v = sign - sign_u * 3;
+                            assert(sign_u == sign / 3);
+                            if (sign_u) {
+                                const int ctx = (sign_u == 2) * 3 + sign_v;
+                                b->cfl_alpha[0] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                        ts->cdf.m.cfl_alpha[ctx], 7) + 1;
+                                if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
+                            }
+                            if (sign_v) {
+                                const int ctx = (sign_v == 2) * 3 + sign_u;
+                                b->cfl_alpha[1] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                        ts->cdf.m.cfl_alpha[ctx], 7) + 1;
+                                if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
+                            }
+                        }
+                    }
+                    DEBUG_BLOCK_printf("%*sPost-cfl[type=%d,%s=%d|%d]: r=%d\n",
+                                       depth, "", b->cfl_type,
+                                       b->cfl_type == CFL_MHCCP ? "mhdir" : "alpha",
+                                       b->cfl_type == CFL_MHCCP ? b->cfl_mh_dir :
+                                                                  b->cfl_alpha[0],
+                                       b->cfl_alpha[1], ts->msac.rng);
+                }
             }
         }
 
@@ -3212,13 +3257,16 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     if (f->seq_hdr->sdp && f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 &&
         cbs == BS_INVALID)
     {
-        uint8_t *dirmap = &t->luma_intra_dir_mode_map[(t->by & 15) * 16 +
-                                                      (t->bx & 15)];
+        const ptrdiff_t off = (t->by & 15) * 16 + (t->bx & 15);
+        uint8_t *dirmap = &t->luma_intra_dir_mode_map[off];
+        uint8_t *fscmap = &t->luma_fsc_map[off];
         const int bh4_max16 = imin(bh4, 16);
 #define set_ctx(rep_macro) \
         for (int y = 0; y < bh4_max16; y++) { \
             rep_macro(dirmap, 0, midx); \
+            rep_macro(fscmap, 0, b->fsc); \
             dirmap += 16; \
+            fscmap += 16; \
         }
         case_set(b_dim[2]);
 #undef set_ctx

@@ -311,11 +311,11 @@ enum CflMhDir {
 #define TIP_FRAME 7
 
 typedef struct Av2Block {
-    uint8_t bs;
-    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, fsc;
+    int8_t bs, lbs, cbs;
+    uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, fsc, tx_size_ll;
     union {
         struct {
-            uint8_t y_mode, mrl_index, multi_mrl, dip;
+            uint8_t dpcm[2], y_mode, mrl_index, multi_mrl, dip;
             uint8_t uv_mode, pal_sz;
             int8_t y_angle, uv_angle, cfl_type;
             union {

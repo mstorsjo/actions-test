@@ -44,7 +44,7 @@ EXTERN const TxfmInfo dav2d_txfm_dimensions[N_RECT_TX_SIZES];
 EXTERN const uint8_t dav2d_tx_shift[N_RECT_TX_SIZES][2];
 EXTERN const uint8_t dav2d_tx_ddt_mask[N_RECT_TX_SIZES];
 EXTERN const uint8_t /* enum (Rect)TxfmSize */
-                     dav2d_max_txfm_size_for_bs[N_BS_SIZES][4 /* y, 420, 422, 444 */];
+                     dav2d_max_txfm_size_for_bs[N_BS_SIZES][4 /* 444, 422, 420, ll */];
 EXTERN const uint8_t /* enum BlockSize */
                      dav2d_ss_bs[N_BS_SIZES][3 /* 420, 422, 444 */];
 

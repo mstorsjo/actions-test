@@ -435,17 +435,22 @@ struct Dav2dTaskContext {
     } pb;
     refmvs_tile rt;
     // chroma backups
-    enum TxfmType chroma_txtp[2];
-    int chroma_eob[2];
+    uint16_t /*enum TxfmType*/ chroma_txtp[16 * 16][2]; // why 2?
+    int16_t chroma_eob[16 * 16][2];
     ALIGN(union, 64) {
-        int16_t cf_8bpc [3][32 * 32];
-        int32_t cf_16bpc[3][32 * 32];
+        int16_t cf_y_8bpc [32 * 32];
+        int32_t cf_y_16bpc[32 * 32];
+    };
+    ALIGN(union, 64) {
+        int16_t cf_uv_8bpc [2][64 * 64];
+        int32_t cf_uv_16bpc[2][64 * 64];
     };
     union {
         uint8_t  al_pal_8bpc [2 /* a/l */][64 /* bx/y4 */][8 /* palette_idx */];
         uint16_t al_pal_16bpc[2 /* a/l */][64 /* bx/y4 */][8 /* palette_idx */];
     };
     uint8_t luma_intra_dir_mode_map[16 * 16];
+    uint8_t luma_fsc_map[16 * 16];
     ALIGN(union, 64) {
         struct {
             int16_t compinter[2][64 * 64];
@@ -493,6 +498,7 @@ struct Dav2dTaskContext {
     };
     Av2Filter *lf_mask;
     int top_pre_cdef_toggle;
+    uint8_t u_has_cf;
 
     struct {
         int pass;

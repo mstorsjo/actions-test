@@ -61,7 +61,6 @@ decl_itx_w_fns(64, ext)
 typedef struct Dav2dInvTxfmDSPContext {
     cctx_fn cctx;
     itxfm_fn itxfm_add[N_RECT_TX_SIZES];
-    itxfm_fn iwht_add_4x4;
 } Dav2dInvTxfmDSPContext;
 
 bitfn_decls(void dav2d_itx_dsp_init, Dav2dInvTxfmDSPContext *c);
