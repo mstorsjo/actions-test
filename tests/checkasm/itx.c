@@ -238,9 +238,10 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                 if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
                     fail();
 
-                bench_new(alternate(c_dst, a_dst), a_dst_stride,
-                          alternate(coeff[0], coeff[1]), txtp,
-                          max_eob HIGHBD_TAIL_SUFFIX);
+                if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT)
+                    bench_new(alternate(c_dst, a_dst), a_dst_stride,
+                              alternate(coeff[0], coeff[1]), txtp,
+                              max_eob HIGHBD_TAIL_SUFFIX);
             }
     }
 }
