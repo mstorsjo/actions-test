@@ -28,6 +28,7 @@
 #include "tests/checkasm/internal.h"
 
 #include <math.h>
+#include <stdio.h>
 
 #include "src/itx.h"
 #include "src/levels.h"
@@ -232,9 +233,12 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                 call_new(u_dst, a_dst_stride, coeff[1], txtp, eob
                          HIGHBD_TAIL_SUFFIX);
 
-                checkasm_check_pixel_padded(c_dst, c_dst_stride,
-                                            u_dst, a_dst_stride,
-                                            w, h, "dst");
+                if (checkasm_check_pixel_padded(c_dst, c_dst_stride,
+                                                u_dst, a_dst_stride,
+                                                w, h, "dst"))
+                {
+                    fprintf(stderr, "eob = %d\n", eob);
+                }
                 if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
                     fail();
 
