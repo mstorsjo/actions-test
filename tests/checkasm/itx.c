@@ -64,12 +64,12 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
 
     for (n = 0, eob = 0; n < sw * sh; n++) {
         int rc, rcx, rcy;
-        if (tx_class == TX_CLASS_2D)
-            rc = scan[n], rcx = rc % sh, rcy = rc / sh;
-        else if (tx_class == TX_CLASS_H)
+        if (tx_class == TX_CLASS_H)
             rcx = n % sh, rcy = n / sh, rc = n;
-        else /* tx_class == TX_CLASS_V */
+        else if (tx_class == TX_CLASS_V)
             rcx = n / sw, rcy = n % sw, rc = rcy * sh + rcx;
+        else
+            rc = scan[n], rcx = rc % sh, rcy = rc / sh;
 
         /* Pick a random eob within this sub-itx */
         if (rcx > sub_high || rcy > sub_high)
@@ -83,20 +83,29 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
 
     if (eob)
         eob += rnd() % (n - eob - 1);
-    if (tx_class == TX_CLASS_2D)
-        for (n = eob + 1; n < sw * sh; n++)
-            coeff[scan[n]] = 0;
-    else if (tx_class == TX_CLASS_H)
+    if (tx_class == TX_CLASS_H)
         for (n = eob + 1; n < sw * sh; n++)
             coeff[n] = 0;
-    else /* tx_class == TX_CLASS_V */ {
+    else if (tx_class == TX_CLASS_V) {
         for (int rcx = eob / sw, rcy = eob % sw; rcx < sh; rcx++, rcy = -1)
             while (++rcy < sw)
                 coeff[rcy * sh + rcx] = 0;
         n = sw * sh;
+    } else {
+        for (n = eob + 1; n < sw * sh; n++)
+            coeff[scan[n]] = 0;
+        if (tx_class == TX_CLASS_2D_INV) {
+            /* Reverse the coefficient array */
+            for (int i = 0, j = n - 1; i < j; i++, j--) {
+                int tmp = coeff[i];
+                coeff[i] = coeff[j];
+                coeff[j] = tmp;
+            }
+        }
     }
     for (; n < 32 * 32; n++)
         coeff[n] = rnd();
+
     return eob;
 }
 
@@ -208,13 +217,6 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                 int max_eob;
                 const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
                                                subsh, &max_eob, coef_max);
-                if (is_inv) {
-                    for (int i = 0, n = sw * sh - 1; i <= n >> 1; i++) {
-                        int tmp = coeff[0][i];
-                        coeff[0][i] = coeff[0][n - i];
-                        coeff[0][n - i] = tmp;
-                    }
-                }
                 memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
                 CLEAR_PIXEL_RECT(c_dst);
