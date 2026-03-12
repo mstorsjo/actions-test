@@ -93,7 +93,8 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
                  HIGHBD_DECL_SUFFIX);
 
     for (int mode = 0; mode < N_IMPL_INTRA_PRED_MODES; mode++) {
-        for (int w = 4; w <= 64; w <<= 1)
+        for (int w = 4; w <= 64; w <<= 1) {
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
             if (check_func(c->intra_pred[mode], "intra_pred_%s_w%d_%dbpc",
                 intra_pred_mode_names[mode], w, BITDEPTH))
             {
@@ -106,21 +107,33 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
                         if (mode >= Z1_PRED && mode <= Z3_PRED) { /* angle */
                             a = (90 * (mode - Z1_PRED) + z_angles[rnd() % 27]) |
                                 (rnd() & 0xffe00);
+                            if (imin(w, h) == 4)
+                                a &= ~(ANGLE_MULTI_MRL_FLAG | ANGLE_IBP_FLAG);
                             if (a & ANGLE_MULTI_MRL_FLAG) a |= ANGLE_IS_LUMA;
                             maxw = gen_z_max_wh(w);
                             maxh = gen_z_max_wh(h);
-                        } else if (mode == DIP_PRED) /* dip_idx */
+                        } else if (mode == DIP_PRED) {
+                            /* dip_idx */
                             a = (rnd() % 5) | (rnd() & 16);
+                        } else if (mode == HOR_PRED || mode == VERT_PRED) {
+                            if (imax(w, h) > 4)
+                                a = (rnd() & 1) * ANGLE_MULTI_MRL_FLAG;
+                        } else if (mode == DC_PRED || mode == LEFT_DC_PRED ||
+                                   mode == TOP_DC_PRED)
+                        {
+                            if (imax(w, h) > 4)
+                                a = (rnd() & 1) * ANGLE_IBP_FLAG;
+                        }
                         pixel *const topleft = topleft_buf + 128 + 9;
 
                         CLEAR_PIXEL_RECT(c_dst);
                         CLEAR_PIXEL_RECT(a_dst);
                         call_ref(c_dst, stride, topleft, w, h, a, maxw, maxh
                                  HIGHBD_TAIL_SUFFIX);
-                        call_new(a_dst, stride, topleft, w, h, a, maxw, maxh
+                        call_new(u_dst, stride, topleft, w, h, a, maxw, maxh
                                  HIGHBD_TAIL_SUFFIX);
                         if (checkasm_check_pixel_padded(c_dst, stride,
-                                                        a_dst, stride,
+                                                        u_dst, stride,
                                                         w, h, "dst"))
                         {
                             if (mode >= Z1_PRED && mode <= Z3_PRED)
@@ -129,6 +142,13 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
                                         a & 0x1ff, a & 0xffe00, maxw, maxh);
                             else if (mode == DIP_PRED)
                                 fprintf(stderr, "dip tp = %d, mode = %d\n", a > 7, a & 7);
+                            else if (mode == HOR_PRED || mode == VERT_PRED)
+                                fprintf(stderr, "multimrl=%d\n", !!a);
+                            else if (mode == DC_PRED || mode == LEFT_DC_PRED ||
+                                     mode == TOP_DC_PRED)
+                            {
+                                fprintf(stderr, "ibp=%d\n", !!a);
+                            }
                             break;
                         }
 
@@ -137,6 +157,7 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
                     }
                 }
             }
+        }
     }
     report("intra_pred");
 }
