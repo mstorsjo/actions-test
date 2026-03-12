@@ -641,6 +641,43 @@ static void check_emuedge(Dav2dMCDSPContext *const c) {
     report("emu_edge");
 }
 
+static void check_morph(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, c_dst, 64 * 64,);
+    ALIGN_STK_64(pixel, a_dst, 64 * 64 + 4,);
+    ALIGN_STK_64(pixel, src, 64 * 64,);
+
+    declare_func(void, pixel *dst, ptrdiff_t dst_stride, int alpha, int beta,
+                 int w, int h HIGHBD_DECL_SUFFIX);
+
+    for (int w = 4; w <= 64; w <<= 1) {
+        pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+        if (check_func(c->morph, "morph_w%d_%dbpc", w, BITDEPTH)) {
+#if BITDEPTH == 16
+            const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+            const int bitdepth_max = 0xff;
+#endif
+            for (int i = 0; i < 64 * 64; i++)
+                src[i] = rnd() & bitdepth_max;
+            int a, b;
+            for (int h = 4; h <= 64; h <<= 1) {
+                a = (rnd() % 1023) - 511;
+                b = (rnd() & (bitdepth_max * 2)) - bitdepth_max;
+                b += bitdepth_max * 0x80 - (a * bitdepth_max >> 1);
+                pixel_copy(c_dst, src, 64 * h);
+                pixel_copy(u_dst, src, 64 * h);
+                call_ref(c_dst, 64 * sizeof(pixel), a, b, w, h HIGHBD_TAIL_SUFFIX);
+                call_new(u_dst, 64 * sizeof(pixel), a, b, w, h HIGHBD_TAIL_SUFFIX);
+                checkasm_check_pixel(c_dst, 64 * sizeof(pixel),
+                                     u_dst, 64 * sizeof(pixel),
+                                     w, h, "dst");
+            }
+            bench_new(a_dst, 64 * sizeof(pixel), a, b, w, w HIGHBD_TAIL_SUFFIX);
+        }
+    }
+    report("morph");
+}
+
 void bitfn(checkasm_check_mc)(void) {
     Dav2dMCDSPContext c;
     bitfn(dav2d_mc_dsp_init)(&c);
@@ -657,4 +694,5 @@ void bitfn(checkasm_check_mc)(void) {
     check_warp8x8(&c);
     check_warp8x8t(&c);
     check_emuedge(&c);
+    check_morph(&c);
 }
