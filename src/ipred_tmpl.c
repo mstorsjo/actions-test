@@ -1535,6 +1535,7 @@ static void pal_pred_c(pixel *dst, const ptrdiff_t stride,
                        const pixel *const pal, const uint8_t *idx,
                        const int w, const int h)
 {
+    assert(w * h >= 64); // >= 4x16, >= 8x8 or >= 16x4; 4x4/4x8/8x4 are not allowed
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x += 2) {
             const int i = *idx++;
@@ -1725,7 +1726,6 @@ COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
 
     c->pal_pred = pal_pred_c;
 
-#if 0
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
     intra_pred_dsp_init_arm(c);
@@ -1735,7 +1735,6 @@ COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
     intra_pred_dsp_init_x86(c);
 #elif ARCH_LOONGARCH64
     intra_pred_dsp_init_loongarch(c);
-#endif
 #endif
 #endif
 }

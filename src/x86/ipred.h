@@ -73,6 +73,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 
     if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
 
+#if 0
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       ssse3);
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   ssse3);
     init_angular_ipred_fn(TOP_DC_PRED,   ipred_dc_top,   ssse3);
@@ -96,12 +97,14 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_cfl_ac_fn(DAV2D_PIXEL_LAYOUT_I420 - 1, ipred_cfl_ac_420, ssse3);
     init_cfl_ac_fn(DAV2D_PIXEL_LAYOUT_I422 - 1, ipred_cfl_ac_422, ssse3);
     init_cfl_ac_fn(DAV2D_PIXEL_LAYOUT_I444 - 1, ipred_cfl_ac_444, ssse3);
+#endif
 
     c->pal_pred = BF(dav2d_pal_pred, ssse3);
 
 #if ARCH_X86_64
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
+#if 0
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       avx2);
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   avx2);
     init_angular_ipred_fn(TOP_DC_PRED,   ipred_dc_top,   avx2);
@@ -125,11 +128,13 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_cfl_ac_fn(DAV2D_PIXEL_LAYOUT_I420 - 1, ipred_cfl_ac_420, avx2);
     init_cfl_ac_fn(DAV2D_PIXEL_LAYOUT_I422 - 1, ipred_cfl_ac_422, avx2);
     init_cfl_ac_fn(DAV2D_PIXEL_LAYOUT_I444 - 1, ipred_cfl_ac_444, avx2);
+#endif
 
     c->pal_pred = BF(dav2d_pal_pred, avx2);
 
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
+#if 0
 #if BITDEPTH == 8
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       avx512icl);
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   avx512icl);
@@ -146,6 +151,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_angular_ipred_fn(Z2_PRED,       ipred_z2,       avx512icl);
     init_angular_ipred_fn(Z3_PRED,       ipred_z3,       avx512icl);
     //init_angular_ipred_fn(DIP_PRED,      ipred_dip,   avx512icl);
+#endif
 
     c->pal_pred = BF(dav2d_pal_pred, avx512icl);
 #endif

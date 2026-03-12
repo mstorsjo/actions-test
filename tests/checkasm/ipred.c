@@ -256,10 +256,10 @@ static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
     declare_func(void, pixel *dst, ptrdiff_t stride, const pixel *pal,
                  const uint8_t *idx, int w, int h);
 
-    for (int w = 4; w <= 64; w <<= 1)
+    for (int w = 4; w <= 64; w <<= 1) {
+        pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
         if (check_func(c->pal_pred, "pal_pred_w%d_%dbpc", w, BITDEPTH))
-            for (int h = imax(w / 4, 4); h <= imin(w * 4, 64); h <<= 1)
-            {
+            for (int h = imax(4, 64 / w); h <= 64; h <<= 1) {
 #if BITDEPTH == 16
                 const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
@@ -276,12 +276,13 @@ static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
                 CLEAR_PIXEL_RECT(a_dst);
 
                 call_ref(c_dst, c_dst_stride, pal, idx, w, h);
-                call_new(a_dst, a_dst_stride, pal, idx, w, h);
+                call_new(u_dst, a_dst_stride, pal, idx, w, h);
                 checkasm_check_pixel_padded(c_dst, c_dst_stride,
-                                            a_dst, a_dst_stride, w, h, "dst");
+                                            u_dst, a_dst_stride, w, h, "dst");
 
                 bench_new(a_dst, a_dst_stride, pal, idx, w, h);
             }
+    }
     report("pal_pred");
 }
 

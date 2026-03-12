@@ -2447,7 +2447,7 @@ cglobal pal_pred_16bpc, 4, 7, 7, dst, stride, pal, idx, w, h, stride3
     add                idxq, 16
     vpmultishiftqb       m0, m4, m0
     vpermw               m0, m0, m6
-    mova          [dstq+strideq*0], xm0
+    movu          [dstq+strideq*0], xm0
     vextracti32x4 [dstq+strideq*1], ym0, 1
     vextracti32x4 [dstq+strideq*2], m0, 2
     vextracti32x4 [dstq+stride3q ], m0, 3
@@ -2463,9 +2463,9 @@ cglobal pal_pred_16bpc, 4, 7, 7, dst, stride, pal, idx, w, h, stride3
     vpermw               m0, m1, m6
     psrlw                m1, 8
     vpermw               m1, m1, m6
-    mova          [dstq+strideq*0], ym0
+    movu          [dstq+strideq*0], ym0
     vextracti32x8 [dstq+strideq*1], m0, 1
-    mova          [dstq+strideq*2], ym1
+    movu          [dstq+strideq*2], ym1
     vextracti32x8 [dstq+stride3q ], m1, 1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
@@ -2479,13 +2479,13 @@ cglobal pal_pred_16bpc, 4, 7, 7, dst, stride, pal, idx, w, h, stride3
     vpermw               m0, m1, m6
     psrlw                m1, 8
     vpermw               m1, m1, m6
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     vpermw               m0, m2, m6
     psrlw                m2, 8
     vpermw               m1, m2, m6
-    mova   [dstq+strideq*2], m0
-    mova   [dstq+stride3q ], m1
+    movu   [dstq+strideq*2], m0
+    movu   [dstq+stride3q ], m1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .w32

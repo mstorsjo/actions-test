@@ -3527,8 +3527,8 @@ cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
     pshufb               m2, m4, m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     jg .w16
@@ -3541,8 +3541,8 @@ cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
     pshufb               m2, m4, m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova        [dstq+16*0], m0
-    mova        [dstq+16*1], m1
+    movu        [dstq+16*0], m0
+    movu        [dstq+16*1], m1
     add                dstq, strideq
     dec                  hd
     jg .w32

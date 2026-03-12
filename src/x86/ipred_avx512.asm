@@ -1242,7 +1242,7 @@ cglobal pal_pred_8bpc, 4, 7, 6, dst, stride, pal, idx, w, h, stride3
     add                idxq, 32
     vpmultishiftqb       m0, m3, m0
     pshufb               m0, m5, m0
-    mova          [dstq+strideq*0], xm0
+    movu          [dstq+strideq*0], xm0
     vextracti32x4 [dstq+strideq*1], ym0, 1
     vextracti32x4 [dstq+strideq*2], m0, 2
     vextracti32x4 [dstq+stride3q ], m0, 3
@@ -1265,9 +1265,9 @@ cglobal pal_pred_8bpc, 4, 7, 6, dst, stride, pal, idx, w, h, stride3
     vpmultishiftqb       m1, m4, m1
     pshufb               m0, m5, m0
     pshufb               m1, m5, m1
-    mova          [dstq+strideq*0], ym0
+    movu          [dstq+strideq*0], ym0
     vextracti32x8 [dstq+strideq*1], m0, 1
-    mova          [dstq+strideq*2], ym1
+    movu          [dstq+strideq*2], ym1
     vextracti32x8 [dstq+stride3q ], m1, 1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4

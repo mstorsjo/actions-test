@@ -4906,8 +4906,8 @@ DEFINE_ARGS dst, stride, stride3, idx, w, h
     pshufb               m2, m5, m2
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova         [dstq+strideq*0], xm0
-    mova         [dstq+strideq*1], xm1
+    movu         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*1], xm1
     vextracti128 [dstq+strideq*2], m0, 1
     vextracti128 [dstq+stride3q ], m1, 1
     lea                dstq, [dstq+strideq*4]
@@ -4925,14 +4925,14 @@ DEFINE_ARGS dst, stride, stride3, idx, w, h
     pshufb               m2, m5, m2
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     pshufb               m1, m4, m3
     pshufb               m3, m5, m3
     punpcklbw            m0, m1, m3
     punpckhbw            m1, m3
-    mova   [dstq+strideq*2], m0
-    mova   [dstq+stride3q ], m1
+    movu   [dstq+strideq*2], m0
+    movu   [dstq+stride3q ], m1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .w16
@@ -4948,14 +4948,14 @@ DEFINE_ARGS dst, stride, stride3, idx, w, h
     pshufb               m2, m5, m2
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova          [dstq+ 0], m0
-    mova          [dstq+32], m1
+    movu          [dstq+ 0], m0
+    movu          [dstq+32], m1
     pshufb               m1, m4, m3
     pshufb               m3, m5, m3
     punpcklbw            m0, m1, m3
     punpckhbw            m1, m3
-    mova  [dstq+strideq+ 0], m0
-    mova  [dstq+strideq+32], m1
+    movu  [dstq+strideq+ 0], m0
+    movu  [dstq+strideq+32], m1
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     jg .w32

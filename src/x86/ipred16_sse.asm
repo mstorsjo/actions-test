@@ -4006,15 +4006,15 @@ cglobal pal_pred_16bpc, 4, 5, 6, dst, stride, pal, idx, w, h
     pshufb               m2, m5, m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     lea                dstq, [dstq+strideq*2]
     pshufb               m1, m4, m3
     pshufb               m2, m5, m3
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 4
     jg .w8
@@ -4029,14 +4029,14 @@ cglobal pal_pred_16bpc, 4, 5, 6, dst, stride, pal, idx, w, h
     pshufb               m2, m5, m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova          [dstq+ 0], m0
-    mova          [dstq+16], m1
+    movu          [dstq+ 0], m0
+    movu          [dstq+16], m1
     pshufb               m1, m4, m3
     pshufb               m2, m5, m3
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova  [dstq+strideq+ 0], m0
-    mova  [dstq+strideq+16], m1
+    movu  [dstq+strideq+ 0], m0
+    movu  [dstq+strideq+16], m1
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     jg .w16
@@ -4051,14 +4051,14 @@ cglobal pal_pred_16bpc, 4, 5, 6, dst, stride, pal, idx, w, h
     pshufb               m2, m5, m0
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova        [dstq+16*0], m0
-    mova        [dstq+16*1], m1
+    movu        [dstq+16*0], m0
+    movu        [dstq+16*1], m1
     pshufb               m1, m4, m3
     pshufb               m2, m5, m3
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova        [dstq+16*2], m0
-    mova        [dstq+16*3], m1
+    movu        [dstq+16*2], m0
+    movu        [dstq+16*3], m1
     add                dstq, strideq
     dec                  hd
     jg .w32

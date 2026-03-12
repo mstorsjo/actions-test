@@ -296,6 +296,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
 
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
+#if 0
     c->intra_pred[DC_PRED]       = BF(dav2d_ipred_dc, neon);
     c->intra_pred[DC_128_PRED]   = BF(dav2d_ipred_dc_128, neon);
     c->intra_pred[TOP_DC_PRED]   = BF(dav2d_ipred_dc_top, neon);
@@ -323,4 +324,5 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
     c->cfl_ac[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_ipred_cfl_ac_444, neon);
 
     c->pal_pred                  = BF(dav2d_pal_pred, neon);
+#endif
 }

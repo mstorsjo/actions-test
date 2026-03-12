@@ -5322,8 +5322,8 @@ cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
     pshufb               m2, m4, m2
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova         [dstq+strideq*0], xm0
-    mova         [dstq+strideq*1], xm1
+    movu         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*1], xm1
     vextracti128 [dstq+strideq*2], m0, 1
     vextracti128 [dstq+r2       ], m1, 1
     lea                dstq, [dstq+strideq*4]
@@ -5338,8 +5338,8 @@ cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
     pshufb               m2, m4, m2
     punpcklbw            m0, m1, m2
     punpckhbw            m1, m2
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m1
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m1
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     jg .w32
