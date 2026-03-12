@@ -1605,7 +1605,7 @@ union OpflMvDeltaBlock {
 };
 
 static void opfl_mv_adj(const struct OpflRegressionData *const r,
-                        union OpflMvDeltaBlock *const dd, const int8_t d[2])
+                        union OpflMvDeltaBlock *const dd, const union aliasi16 d)
 {
     int su2 = r->su2, suv = r->suv, sv2 = r->sv2, suw = r->suw, svw = r->svw;
     const int nbits_su2 = 1 + ulog2(su2 + !su2);
@@ -1642,10 +1642,10 @@ static void opfl_mv_adj(const struct OpflRegressionData *const r,
                 abss = (abss * idet + ((1 << -ibits) >> 1)) >> -ibits;
             s[i] = apply_sign(abss, s[i]);
         }
-        dd->d[0].x = -iclip(d[0] * s[0], -16, 16);
-        dd->d[0].y = -iclip(d[0] * s[1], -16, 16);
-        dd->d[1].x = -iclip(d[1] * s[0], -16, 16);
-        dd->d[1].y = -iclip(d[1] * s[1], -16, 16);
+        dd->d[0].x = -iclip(d.i8[0] * s[0], -16, 16);
+        dd->d[0].y = -iclip(d.i8[0] * s[1], -16, 16);
+        dd->d[1].x = +iclip(d.i8[1] * s[0], -16, 16);
+        dd->d[1].y = +iclip(d.i8[1] * s[1], -16, 16);
     } else dd->n = 0;
 }
 
@@ -1702,14 +1702,14 @@ static int tip_pred(Dav2dTaskContext *const t,
     const Dav2dThreadPicture *const refp[2] = { &f->refp[ref.ref[0]], &f->refp[ref.ref[1]] };
     pixel *p[2];
     ptrdiff_t p_stride;
-    int8_t d[2];
+    union aliasi16 d;
     if (opfl) {
         p[0] = bitfn(t->scratch.p)[0];
         p[1] = bitfn(t->scratch.p)[1];
         p_stride = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
         const int d0 = f->absrefdist[ref.ref[0]], d1 = f->absrefdist[ref.ref[1]];
-        d[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
-        d[1] = apply_sign(1 + (d1 > d0), -f->refdist[ref.ref[1]]);
+        d.i8[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
+        d.i8[1] = apply_sign(1 + (d1 > d0), +f->refdist[ref.ref[1]]);
     }
 
     union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
@@ -1865,10 +1865,10 @@ static int opfl_pred(Dav2dTaskContext *const t,
     // FIXME namespace opfl symbols
     // find reduced distance as inverse weights
     const int d0 = f->absrefdist[b->ref.ref[0]], d1 = f->absrefdist[b->ref.ref[1]];
-    const int8_t d[2] = {
+    const union aliasi16 d = { .i8 = {
         apply_sign(1 + (d0 > d1), -f->refdist[b->ref.ref[0]]),
-        apply_sign(1 + (d1 > d0), -f->refdist[b->ref.ref[1]]),
-    };
+        apply_sign(1 + (d1 > d0), +f->refdist[b->ref.ref[1]]),
+    }};
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
     union OpflMvDeltaBlock dd[2 * 2];
 

@@ -132,6 +132,7 @@ void (name)(const pixel *p0, ptrdiff_t p0_stride, \
             struct OpflOffset *o HIGHBD_DECL_SUFFIX)
 typedef decl_sad_refine_mv_fn(*sad_refine_mv_fn);
 
+PACKED(union aliasi16 { uint16_t u16; int8_t i8[2]; }) ATTR_ALIAS;
 struct OpflRegressionData {
     int32_t su2, suv, sv2, suw, svw;
 };
@@ -139,7 +140,7 @@ struct OpflRegressionData {
 void (name)(struct OpflRegressionData *out, \
             const pixel *p0, ptrdiff_t p0_stride, \
             const pixel *p1, ptrdiff_t p1_stride, \
-            int w, int h, int bs, const int8_t d[2] HIGHBD_DECL_SUFFIX)
+            int w, int h, int bs, const union aliasi16 d HIGHBD_DECL_SUFFIX)
 typedef decl_opfl_derive_mv_fn(*opfl_derive_mv_fn);
 
 #define decl_sad8x8_fn(name) \

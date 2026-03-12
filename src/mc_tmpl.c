@@ -1031,7 +1031,7 @@ static void opfl_derive_mv_c(struct OpflRegressionData *out,
                              const pixel *p0, const ptrdiff_t p0_stride,
                              const pixel *p1, const ptrdiff_t p1_stride,
                              const int w, const int h, const int bs,
-                             const int8_t d[2] HIGHBD_DECL_SUFFIX)
+                             const union aliasi16 d HIGHBD_DECL_SUFFIX)
 {
 #if BITDEPTH != 8
     const int bd_min8 = bitdepth_from_max(bitdepth_max) - 8;
@@ -1050,7 +1050,7 @@ static void opfl_derive_mv_c(struct OpflRegressionData *out,
         for (int x = 0; x < w; x++) {
             const int p0p = p0[y * PXSTRIDE(p0_stride) + x];
             const int p1p = p1[y * PXSTRIDE(p1_stride) + x];
-            const int v = d[0] * p0p - d[1] * p1p;
+            const int v = d.i8[0] * p0p + d.i8[1] * p1p;
 #if BITDEPTH == 8
             tmp0[y * 64 + x] = v;
             tmp1[y * 64 + x] = p0p - p1p;
