@@ -794,6 +794,41 @@ static void check_opflrefinemv(Dav2dMCDSPContext *const c) {
     report("opfl");
 }
 
+static void check_sad8x8(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, src1, 8 * 8,);
+    ALIGN_STK_64(pixel, src2, 8 * 16,);
+
+    declare_func(unsigned,
+                 const pixel *p0, ptrdiff_t p0_stride,
+                 const pixel *p1, ptrdiff_t p1_stride HIGHBD_DECL_SUFFIX);
+
+    if (check_func(c->sad8x8, "sad8x8_%dbpc", BITDEPTH)) {
+#if BITDEPTH == 16
+        const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+        const int bitdepth_max = 0xff;
+#endif
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                src1[y * 8 + x] = rnd() & bitdepth_max;
+                src2[y * 16 + x] = rnd() & bitdepth_max;
+            }
+        }
+
+        const unsigned c_o =
+            call_ref(src1, 8 * sizeof(pixel), src2, 16 * sizeof(pixel)
+                     HIGHBD_TAIL_SUFFIX);
+        const unsigned a_o =
+            call_new(src1, 8 * sizeof(pixel), src2, 16 * sizeof(pixel)
+                     HIGHBD_TAIL_SUFFIX);
+        if (c_o != a_o && fail())
+            fprintf(stderr, "c_sad:%u != simd_sad:%u\n", c_o, a_o);
+        bench_new(src1, 8 * sizeof(pixel), src2, 16 * sizeof(pixel)
+                  HIGHBD_TAIL_SUFFIX);
+    }
+    report("sad8x8");
+}
+
 void bitfn(checkasm_check_mc)(void) {
     Dav2dMCDSPContext c;
     bitfn(dav2d_mc_dsp_init)(&c);
@@ -813,4 +848,5 @@ void bitfn(checkasm_check_mc)(void) {
     check_morph(&c);
     check_sadrefinemv(&c);
     check_opflrefinemv(&c);
+    check_sad8x8(&c);
 }
