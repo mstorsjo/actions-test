@@ -25,6 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdio.h>
+
 #include "tests/checkasm/internal.h"
 
 #include "src/levels.h"
@@ -678,6 +680,67 @@ static void check_morph(Dav2dMCDSPContext *const c) {
     report("morph");
 }
 
+static void check_sadrefinemv(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, src1, 24 * 24,);
+    ALIGN_STK_64(pixel, src2, 24 * 24,);
+
+    declare_func(void, const pixel *p0, ptrdiff_t p0_stride,
+                 const pixel *p1, ptrdiff_t p1_stride, int w, int h,
+                 int is_implicit, struct OpflOffset *o HIGHBD_DECL_SUFFIX);
+
+    for (int w = 8; w <= 16; w <<= 1)
+        for (int h = 8; h <= 16; h <<= 1)
+            if (check_func(c->sad_refine_mv, "sad_refine_mv_%dx%d_%dbpc", w, h, BITDEPTH)) {
+#if BITDEPTH == 16
+                const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+                const int bitdepth_max = 0xff;
+#endif
+                const int is_impl = rnd() & 1;
+                const int sw = w + 8, sh = h + 8;
+                // semi-random input
+                src1[0] = rnd() & bitdepth_max;
+                const int range = 1 + (rnd() % (bitdepth_max >> 4));
+                const int drange = 2 * range;
+                for (int x = 1; x < sw; x++) {
+                    src1[x] = iclip_pixel(src1[x - 1] + (rnd() % drange) - range);
+                }
+                for (int y = 1; y < sh; y++) {
+                    src1[y * sw] = iclip_pixel(src1[(y - 1) * sw] + (rnd() % drange) - range);
+                    for (int x = 1; x < sw; x++) {
+                        const int in1 = src1[(y - 1) * sw + x];
+                        const int in2 = src1[y * sw + x - 1];
+                        src1[y * sw + x] = iclip_pixel(((in1 + in2 + 1) >> 1) +
+                                                       (rnd() % drange) - range);
+                    }
+                }
+                // bias towards a particular outcome
+                const int dx = (rnd() % 5) - 2;
+                const int dy = (rnd() % 5) - 2;
+                for (int y = 0; y < sh; y++) {
+                    const int yy = (dy + y + sh) % sh;
+                    for (int x = 0; x < sw; x++) {
+                        const int xx = (dx + x + sw) % sw;
+                        const int in = src1[yy * sw + xx];
+                        src2[y * 24 + x] = iclip_pixel(in + (rnd() % drange) - range);
+                    }
+                }
+                struct OpflOffset c_o, a_o;
+                call_ref(src1, sw * sizeof(pixel), src2, 24 * sizeof(pixel),
+                         w, h, is_impl, &c_o HIGHBD_TAIL_SUFFIX);
+                call_new(src1, sw * sizeof(pixel), src2, 24 * sizeof(pixel),
+                         w, h, is_impl, &a_o HIGHBD_TAIL_SUFFIX);
+                if (c_o.x != a_o.x || c_o.y != a_o.y)
+                    if (fail())
+                        fprintf(stderr, "c_off=y:%d,x:%d != simd_off=y:%d,x:%d "
+                                "for input d=y:%d,x:%d @ size=%dx%d [r=%d]\n",
+                                c_o.y, c_o.x, a_o.y, a_o.x, dy, dx, w, h, range);
+                bench_new(src1, sw * sizeof(pixel), src2, 24 * sizeof(pixel),
+                          w, h, is_impl, &a_o HIGHBD_TAIL_SUFFIX);
+            }
+    report("sad_refine_mv");
+}
+
 void bitfn(checkasm_check_mc)(void) {
     Dav2dMCDSPContext c;
     bitfn(dav2d_mc_dsp_init)(&c);
@@ -695,4 +758,5 @@ void bitfn(checkasm_check_mc)(void) {
     check_warp8x8t(&c);
     check_emuedge(&c);
     check_morph(&c);
+    check_sadrefinemv(&c);
 }
