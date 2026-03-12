@@ -137,7 +137,6 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_angular_ipred_fn(LEFT_DC_PRED,  ipred_dc_left,  avx512icl);
     init_angular_ipred_fn(HOR_PRED,      ipred_h,        avx512icl);
     init_angular_ipred_fn(VERT_PRED,     ipred_v,        avx512icl);
-    init_angular_ipred_fn(Z2_PRED,       ipred_z2,       avx512icl);
 #endif
     init_angular_ipred_fn(PAETH_PRED,    ipred_paeth,    avx512icl);
     init_angular_ipred_fn(SMOOTH_PRED,   ipred_smooth,   avx512icl);
