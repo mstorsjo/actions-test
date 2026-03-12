@@ -741,6 +741,59 @@ static void check_sadrefinemv(Dav2dMCDSPContext *const c) {
     report("sad_refine_mv");
 }
 
+static void check_opflrefinemv(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, src1, 64 * 16,);
+    ALIGN_STK_64(pixel, src2, 64 * 16,);
+
+    declare_func(void, struct OpflRegressionData *out,
+                 const pixel *p0, ptrdiff_t p0_stride,
+                 const pixel *p1, ptrdiff_t p1_stride, int w, int h,
+                 int bs, const union aliasi16 d HIGHBD_DECL_SUFFIX);
+
+    for (int bs = 4; bs <= 8; bs <<= 1)
+        for (int w = 8; w <= (bs == 4 ? 8 : 64); w <<= 1)
+            for (int h = 8; h <= bs * 2; h <<= 1)
+                if (check_func(c->opfl_derive_mv, "opfl_refine_mv_%dx%d_bs%d_%dbpc",
+                               w, h, bs, BITDEPTH))
+                {
+#if BITDEPTH == 16
+                    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+                    const int bitdepth_max = 0xff;
+#endif
+                    for (int y = 0; y < h; y++) {
+                        for (int x = 0; x < w; x++) {
+                            src1[y * w + x] = rnd() & bitdepth_max;
+                            src2[y * 64 + x] = rnd() & bitdepth_max;
+                        }
+                    }
+                    int d0 = 1 + (rnd() & 1);
+                    int d1 = d0 == 2 ? 1 : 1 + (rnd() & 1);
+                    if (rnd() & 1) d0 = -d0;
+                    if (rnd() & 1) d1 = -d1;
+                    const union aliasi16 d = { .i8 = { d0, d1 } };
+                    struct OpflRegressionData c_o[16], a_o[16];
+                    call_ref(c_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
+                             w, h, bs, d HIGHBD_TAIL_SUFFIX);
+                    call_new(a_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
+                             w, h, bs, d HIGHBD_TAIL_SUFFIX);
+                    const int cnt = (w * h) / (bs * bs);
+                    for (int n = 0; n < cnt; n++)
+                        if (memcmp(&c_o[n], &a_o[n], sizeof(*a_o)) && fail())
+                            fprintf(stderr, "c:u2=%d,uv=%d,v2=%d,uw=%d,vw=%d != "
+                                    "simd:u2=%d,uv=%d,v2=%d,uw=%d,vw=%d "
+                                    "for n=%d/%d,bs=%d,sz=%dx%d,d=%d|%d\n",
+                                    c_o[n].su2, c_o[n].suv, c_o[n].sv2,
+                                    c_o[n].suw, c_o[n].svw, a_o[n].su2,
+                                    a_o[n].suv, a_o[n].sv2, a_o[n].suw,
+                                    a_o[n].svw, n, cnt, bs, w, h, d0, d1);
+                    if (w == h || (w >= 32 && h == 16))
+                        bench_new(c_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
+                                  w, h, bs, d HIGHBD_TAIL_SUFFIX);
+                }
+    report("opfl");
+}
+
 void bitfn(checkasm_check_mc)(void) {
     Dav2dMCDSPContext c;
     bitfn(dav2d_mc_dsp_init)(&c);
@@ -759,4 +812,5 @@ void bitfn(checkasm_check_mc)(void) {
     check_emuedge(&c);
     check_morph(&c);
     check_sadrefinemv(&c);
+    check_opflrefinemv(&c);
 }
