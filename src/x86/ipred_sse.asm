@@ -5127,7 +5127,7 @@ ALIGN function_align
     pxor                 m1, m1
     pshufb               m3, m1
     PAETH                 6, 7
-    mova             [dstq], m1
+    movu             [dstq], m1
     add                dstq, strideq
     sub                  hd, 1
     jg .w16_loop
@@ -5152,10 +5152,10 @@ ALIGN function_align
     pshufb               m3, m1
     mova                 m6, [rsp]
     PAETH                 6, [rsp+16]
-    mova          [dstq   ], m1
+    movu          [dstq   ], m1
     mova                 m6, [rsp+32]
     PAETH                 6, 7
-    mova          [dstq+16], m1
+    movu          [dstq+16], m1
     add                dstq, strideq
     dec                  hd
     jg .w32_loop

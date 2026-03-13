@@ -191,7 +191,7 @@ cglobal ipred_paeth_16bpc, 3, 7, 10, dst, stride, tl, w, h
     vpbroadcastq        m2, [tlq]
     pshufb              m2, m7
     PAETH                4, 5, 6
-    mova          [dstq+strideq*0], xm0
+    movu          [dstq+strideq*0], xm0
     vextracti32x4 [dstq+strideq*1], m0, 2
     vextracti32x4 [dstq+strideq*2], ym0, 1
     vextracti32x4 [dstq+r6       ], m0, 3
@@ -209,7 +209,7 @@ cglobal ipred_paeth_16bpc, 3, 7, 10, dst, stride, tl, w, h
     vpbroadcastd        m2, [tlq]
     pshufb              m2, m7
     PAETH                4, 5, 6
-    mova          [dstq+strideq*0], ym0
+    movu          [dstq+strideq*0], ym0
     vextracti32x8 [dstq+strideq*1], m0, 1
     lea               dstq, [dstq+strideq*2]
     sub                 hd, 2
@@ -223,7 +223,7 @@ cglobal ipred_paeth_16bpc, 3, 7, 10, dst, stride, tl, w, h
     sub                tlq, 2
     vpbroadcastw        m2, [tlq]
     PAETH                4, 5, 6
-    mova            [dstq], m0
+    movu            [dstq], m0
     add               dstq, strideq
     dec                 hd
     jg .w32_loop

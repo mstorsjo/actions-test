@@ -569,7 +569,7 @@ ALIGN function_align
     vpbroadcastd        m1, [tlq]
     pshufb              m1, m6
     PAETH                2, 4, 5
-    mova         [dstq+strideq*0], xm0
+    movu         [dstq+strideq*0], xm0
     vextracti128 [dstq+strideq*1], m0, 1
     lea               dstq, [dstq+strideq*2]
     sub                 hd, 2
@@ -584,7 +584,7 @@ ALIGN function_align
     sub                tlq, 2
     vpbroadcastw        m1, [tlq]
     PAETH                2, 4, 5
-    mova            [dstq], m0
+    movu            [dstq], m0
     add               dstq, strideq
     dec                 hd
     jg .w16_loop
@@ -605,9 +605,9 @@ ALIGN function_align
     sub                tlq, 2
     vpbroadcastw        m1, [tlq]
     PAETH                2, 4, 5
-    mova       [dstq+32*0], m0
+    movu       [dstq+32*0], m0
     PAETH                6, 8, 9
-    mova       [dstq+32*1], m0
+    movu       [dstq+32*1], m0
     add               dstq, strideq
     dec                 hd
     jg .w32_loop

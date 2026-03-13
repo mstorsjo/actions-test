@@ -565,7 +565,8 @@ cglobal ipred_h_16bpc, 3, 6, 4, dst, stride, tl, w, h, stride3
 cglobal ipred_paeth_16bpc, 4, 6, 8, dst, stride, tl, w, h, left
 %define base r5-ipred_paeth_16bpc_ssse3_table
     movifnidn            hd, hm
-    pshuflw              m4, [tlq], q0000
+    movd                 m4, [tlq]
+    pshuflw              m4, m4, q0000
     mov               leftq, tlq
     add                  hd, hd
     punpcklqdq           m4, m4      ; topleft
@@ -633,7 +634,7 @@ cglobal ipred_paeth_16bpc, 4, 6, 8, dst, stride, tl, w, h, left
     punpcklqdq           m1, m1
 %endif
     PAETH
-    mova               [r6], m0
+    movu               [r6], m0
     add                  r6, strideq
     sub                  hd, 1*2
     jg .w8_loop

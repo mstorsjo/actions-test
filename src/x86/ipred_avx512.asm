@@ -661,7 +661,7 @@ INIT_ZMM avx512icl
     vpbroadcastd         m4, [tlq+hq-4]
     pshufb               m4, m9
     PAETH
-    mova          [dstq+strideq*0], xm0
+    movu          [dstq+strideq*0], xm0
     vextracti32x4 [dstq+strideq*1], m0, 2
     vextracti32x4 [dstq+strideq*2], ym0, 1
     vextracti32x4 [dstq+stride3q ], m0, 3
@@ -679,7 +679,7 @@ INIT_ZMM avx512icl
     vpbroadcastd         m4, [tlq+hq-2]
     pshufb               m4, m9
     PAETH
-    mova          [dstq+strideq*0], ym0
+    movu          [dstq+strideq*0], ym0
     vextracti32x8 [dstq+strideq*1], m0, 1
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
