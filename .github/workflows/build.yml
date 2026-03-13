@@ -25,3 +25,5 @@ jobs:
             df -h
             ls /etc/apt/apt.conf.d/
             cat /etc/apt/apt.conf.d/90assumeyes
+            which cmake
+            cmake --version
