@@ -138,6 +138,15 @@ enum Dav2dFrameType {
     DAV2D_FRAME_TYPE_SWITCH = 3, ///< Switch Inter frame
 };
 
+enum Dav2dColorDescription {
+    DAV2D_COLOR_DESC_EXPLICIT = 0,   // Explicitly signaled
+    DAV2D_COLOR_DESC_BT709SDR = 1,   // CP=1, TC=1, MC=5
+    DAV2D_COLOR_DESC_BT2100PQ = 2,   // CP=9, TC=16, MC=9
+    DAV2D_COLOR_DESC_BT2100HLG = 3,  // CP=9, TC=14, MC=9
+    DAV2D_COLOR_DESC_SRGB = 4,       // CP=1, TC=13, MC=0
+    DAV2D_COLOR_DESC_SRGBSYCC = 5,   // CP=1, TC=13, MC=5
+};
+
 enum Dav2dColorPrimaries {
     DAV2D_COLOR_PRI_BT709 = 1,
     DAV2D_COLOR_PRI_UNKNOWN = 2,
@@ -190,6 +199,9 @@ enum Dav2dMatrixCoefficients {
     DAV2D_MC_CHROMAT_NCL = 12, ///< Chromaticity-derived
     DAV2D_MC_CHROMAT_CL = 13,
     DAV2D_MC_ICTCP = 14,
+    DAV2D_MC_IPT_C2 = 15,
+    DAV2D_MC_YCGCO_RE = 16,
+    DAV2D_MC_YCGCO_RO = 17,
     DAV2D_MC_RESERVED = 255,
 };
 
@@ -202,6 +214,63 @@ enum Dav2dChromaSamplePosition {
     DAV2D_CHR_BOTTOM = 5,
     DAV2D_CHR_UNKNOWN = 6,
 };
+
+enum Dav2dAspectRatio {
+    DAV2D_SAR_UNKNOWN = 0,
+    DAV2D_SAR_1_1 = 1,
+    DAV2D_SAR_12_11 = 2,
+    DAV2D_SAR_10_11 = 3,
+    DAV2D_SAR_16_11 = 4,
+    DAV2D_SAR_40_33 = 5,
+    DAV2D_SAR_24_11 = 6,
+    DAV2D_SAR_20_11 = 7,
+    DAV2D_SAR_32_11 = 8,
+    DAV2D_SAR_80_33 = 9,
+    DAV2D_SAR_18_11 = 10,
+    DAV2D_SAR_15_11 = 11,
+    DAV2D_SAR_64_33 = 12,
+    DAV2D_SAR_160_99 = 13,
+    DAV2D_SAR_4_3 = 14,
+    DAV2D_SAR_3_2 = 15,
+    DAV2D_SAR_2_1 = 16,
+    DAV2D_SAR_EXPLICIT = 255,
+};
+
+enum Dav2dScanType {
+    DAV2D_SCAN_TYPE_UNKNOWN = 0,
+    DAV2D_SCAN_TYPE_PROGRESSIVE = 1,
+    DAV2D_SCAN_TYPE_INTERLACE = 2,
+    DAV2D_SCAN_TYPE_INTERLACE_COMPLEMENTARY = 3,
+};
+
+// Specifies the params related to the content in the sequence
+typedef struct Dav2dContentInterpretation {
+    uint8_t /*enum Dav2dScanType*/ scan_type;
+    uint8_t color_description_present;
+    uint8_t chroma_sample_position_present;
+    uint8_t aspect_ratio_info_present;
+    uint8_t timing_info_present;
+    uint8_t extension_present;
+    uint8_t /*enum Dav2dChromaSamplePosition*/ chr[2];
+
+    struct {
+        uint8_t /*enum Dav2dColorDescription*/ type;
+        uint8_t /*enum Dav2dColorPrimaries*/ pri;
+        uint8_t /*enum Dav2dTransferCharacteristics*/ trc;
+        uint8_t /*enum Dav2dMatrixCoefficients*/ mtrx;
+        uint8_t range;
+    } color;
+    struct {
+        uint8_t /*enum Dav2dAspectRatio*/ type;
+        uint32_t w, h;
+    } sar;
+    struct {
+        uint32_t num_units_in_display_tick;
+        uint32_t time_scale;
+        uint8_t equal_elemental_interval;
+        uint32_t num_ticks_per_elemental_duration;
+    } timing;
+} Dav2dContentInterpretation;
 
 typedef struct Dav2dContentLightLevel {
     uint16_t max_content_light_level;

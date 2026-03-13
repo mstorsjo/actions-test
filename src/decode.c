@@ -5299,6 +5299,11 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         dav2d_ref_inc(f->cur.p.fgm_ref);
         f->cur.p.fgm = f->cur.p.fgm_ref->data;
     }
+    if (c->ci_ref) {
+        f->cur.p.ci_ref = c->ci_ref;
+        dav2d_ref_inc(f->cur.p.ci_ref);
+        f->cur.p.ci = f->cur.p.ci_ref->data;
+    }
 
     // move f->cur into output queue
     struct OutputQueue *q = NULL;

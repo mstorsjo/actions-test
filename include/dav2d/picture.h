@@ -86,6 +86,7 @@ typedef struct Dav2dPicture {
      */
     Dav2dITUTT35 *itut_t35;
     Dav2dFilmGrainData *fgm;
+    Dav2dContentInterpretation *ci;
 
     /**
      * Number of ITU-T T35 metadata entries in the array
@@ -100,6 +101,7 @@ typedef struct Dav2dPicture {
     struct Dav2dRef *mastering_display_ref; ///< Dav2dMasteringDisplay allocation origin
     struct Dav2dRef *itut_t35_ref; ///< Dav2dITUTT35 allocation origin
     struct Dav2dRef *fgm_ref;
+    struct Dav2dRef *ci_ref;
     uintptr_t reserved_ref[4]; ///< reserved for future use
     struct Dav2dRef *ref; ///< Frame data allocation origin
 

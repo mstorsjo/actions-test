@@ -258,6 +258,12 @@ int dav2d_picture_alloc_copy(Dav2dContext *const c, Dav2dPicture *const dst,
         dst->fgm = src->fgm;
     }
 
+    if (src->ci_ref) {
+        dst->ci_ref = src->ci_ref;
+        dav2d_ref_inc(dst->ci_ref);
+        dst->ci = src->ci;
+    }
+
     return 0;
 }
 
@@ -277,6 +283,7 @@ void dav2d_picture_ref(Dav2dPicture *const dst, const Dav2dPicture *const src) {
     if (src->mastering_display_ref) dav2d_ref_inc(src->mastering_display_ref);
     if (src->itut_t35_ref) dav2d_ref_inc(src->itut_t35_ref);
     if (src->fgm_ref) dav2d_ref_inc(src->fgm_ref);
+    if (src->ci_ref) dav2d_ref_inc(src->ci_ref);
     *dst = *src;
 }
 
@@ -327,6 +334,7 @@ void dav2d_picture_unref_internal(Dav2dPicture *const p) {
     dav2d_ref_dec(&p->mastering_display_ref);
     dav2d_ref_dec(&p->itut_t35_ref);
     dav2d_ref_dec(&p->fgm_ref);
+    dav2d_ref_dec(&p->ci_ref);
     memset(p, 0, sizeof(*p));
     dav2d_data_props_set_defaults(&p->m);
 }

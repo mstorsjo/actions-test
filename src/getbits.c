@@ -111,6 +111,17 @@ unsigned dav2d_get_uleb128(GetBits *const c) {
     return (unsigned) val;
 }
 
+unsigned dav2d_get_golomb(GetBits *const c, const unsigned k) {
+    int bits;
+    assert(k < 32);
+    for (bits = 0; bits < 32 - k; bits++)
+        if (!dav2d_get_bit(c))
+            break;
+    if (bits + k == 32) return ~0U;
+    return (bits << k) | dav2d_get_bits(c, k);
+}
+
+
 unsigned dav2d_get_uniform(GetBits *const c, const unsigned max) {
     // Output in range [0..max-1]
     // max must be > 1, or else nothing is read from the bitstream

@@ -44,6 +44,7 @@ int dav2d_get_sbits(GetBits *c, int n);
 unsigned dav2d_get_uleb128(GetBits *c);
 
 // Output in range 0..max-1
+unsigned dav2d_get_golomb(GetBits *c, unsigned k);
 unsigned dav2d_get_uniform(GetBits *c, unsigned max);
 unsigned dav2d_get_vlc(GetBits *c);
 unsigned dav2d_get_bits_subexp_u(GetBits *c, unsigned ref, unsigned n, int k);

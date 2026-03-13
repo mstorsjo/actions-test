@@ -1,13 +1,14 @@
-From 84a652af9e732bf730539752556fe76a7ab00962 Mon Sep 17 00:00:00 2001
+From 3677425bdec05ce85fd6e6c3d1a48522cdb3d5a2 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 09:07:44 -0500
 Subject: [PATCH 2/5] Frame header debugging.
 
 ---
  av2/decoder/decodeframe.c | 212 +++++++++++++++++++++++++++++++++++++-
+ av2/decoder/obu_ci.c      |  41 +++++++-
  av2/decoder/obu_fgm.c     |  44 +++++++-
  avm/debug.h               |   1 +
- 3 files changed, 252 insertions(+), 5 deletions(-)
+ 4 files changed, 292 insertions(+), 6 deletions(-)
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
 index 9ed482186c..c3728850e5 100644
@@ -451,6 +452,87 @@ index 9ed482186c..c3728850e5 100644
    setup_film_grain(pbi, rb);
    features->enable_ext_seg = seq_params->enable_ext_seg;
    return 0;
+diff --git a/av2/decoder/obu_ci.c b/av2/decoder/obu_ci.c
+index f4a60e03bd..f6adb3de4b 100644
+--- a/av2/decoder/obu_ci.c
++++ b/av2/decoder/obu_ci.c
+@@ -26,6 +26,8 @@
+ #include "av2/common/av2_common_int.h"
+ #if CONFIG_CWG_F270_CI_OBU
+ 
++#define DEBUG_CI_HDR 0
++
+ static void av2_set_color_info(ContentInterpretation *ci_params) {
+   assert(ci_params->color_info.color_description_idc !=
+          AVM_COLOR_DESC_IDC_EXPLICIT);
+@@ -198,11 +200,28 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
+   ci_temp.ci_timing_info_present_flag = avm_rb_read_bit(rb);
+   ci_temp.ci_extension_present_flag = avm_rb_read_bit(rb);
+   (void)avm_rb_read_bit(rb);  // ci_reserved_1bit
++#if DEBUG_CI_HDR
++  printf("CI: post-flags[scan=%d,colordesc=%d,chrsamplepos=%d,"
++         "aspectratio=%d,timinginfo=%d,extension=%d]: off=%u\n",
++         ci_temp.ci_scan_type_idc, ci_temp.ci_color_description_present_flag,
++         ci_temp.ci_chroma_sample_position_present_flag,
++         ci_temp.ci_aspect_ratio_info_present_flag,
++         ci_temp.ci_timing_info_present_flag, ci_temp.ci_extension_present_flag,
++         rb->bit_offset);
++#endif
+ 
+   if (ci_temp.ci_color_description_present_flag) {
+     av2_read_color_info(&ci_temp, rb);
+     if (ci_temp.color_info.color_description_idc != AVM_COLOR_DESC_IDC_EXPLICIT)
+       av2_set_color_info(&ci_temp);
++#if DEBUG_CI_HDR
++    printf("CI: post-colordesc[id=%d,pri=%d,trc=%d,mtrx=%d,rng=%d]: off=%u\n",
++           ci_temp.color_info.color_description_idc,
++           ci_temp.color_info.color_primaries,
++           ci_temp.color_info.matrix_coefficients,
++           ci_temp.color_info.transfer_characteristics,
++           ci_temp.color_info.full_range_flag, rb->bit_offset);
++#endif
+   } else {
+     ci_temp.color_info.color_primaries = AVM_CICP_CP_UNSPECIFIED;
+     ci_temp.color_info.matrix_coefficients = AVM_CICP_MC_UNSPECIFIED;
+@@ -217,6 +236,11 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
+     else
+       ci_temp.ci_chroma_sample_position[1] =
+           ci_temp.ci_chroma_sample_position[0];
++#if DEBUG_CI_HDR
++    printf("CI: post-chromasampleposition[chr=%d/%d]: off=%u\n",
++           ci_temp.ci_chroma_sample_position[0],
++           ci_temp.ci_chroma_sample_position[1], rb->bit_offset);
++#endif
+   } else {
+     ci_temp.ci_chroma_sample_position[0] = AVM_CSP_UNSPECIFIED;
+     ci_temp.ci_chroma_sample_position[1] = AVM_CSP_UNSPECIFIED;
+@@ -228,10 +252,25 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
+       avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
+                          "Incorrect SAR values");
+     }
++#if DEBUG_CI_HDR
++    printf("CI: post-sampleaspectratio[id=%d,sar=%d:%d]: off=%u\n",
++           ci_temp.sar_info.sar_aspect_ratio_idc,
++           ci_temp.sar_info.sar_width,
++           ci_temp.sar_info.sar_height, rb->bit_offset);
++#endif
+   }
+ 
+-  if (ci_temp.ci_timing_info_present_flag)
++  if (ci_temp.ci_timing_info_present_flag) {
+     av2_read_timing_info_header(&ci_temp.timing_info, &cm->error, rb);
++#if DEBUG_CI_HDR
++    printf("CI: post-timinginfo[nuidt:%d,ts:%d,eei:%d,ntped:%d]: off=%u\n",
++           ci_temp.timing_info.num_units_in_display_tick,
++           ci_temp.timing_info.time_scale,
++           ci_temp.timing_info.equal_elemental_interval,
++           ci_temp.timing_info.num_ticks_per_elemental_duration,
++           rb->bit_offset);
++#endif
++  }
+ 
+   if (ci_temp.ci_extension_present_flag) {
+     // TODO: issue #1111 - Add the extension mechanism
 diff --git a/av2/decoder/obu_fgm.c b/av2/decoder/obu_fgm.c
 index fe02659a55..93cc4f3b18 100644
 --- a/av2/decoder/obu_fgm.c

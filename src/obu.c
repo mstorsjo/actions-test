@@ -2056,6 +2056,165 @@ error:
     return -1;
 }
 
+static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb) {
+#define DEBUG_CI_HDR 0
+#if DEBUG_CI_HDR
+    const uint8_t *const init_ptr = gb->ptr;
+#endif
+    Dav2dContentInterpretation *const ci = c->ci_ref->data;
+
+    memset(ci, 0, sizeof(*ci));
+    ci->scan_type = dav2d_get_bits(gb, 2);
+    ci->color_description_present = dav2d_get_bit(gb);
+    ci->chroma_sample_position_present = dav2d_get_bit(gb);
+    ci->aspect_ratio_info_present = dav2d_get_bit(gb);
+    ci->timing_info_present = dav2d_get_bit(gb);
+    ci->extension_present = dav2d_get_bit(gb);
+    dav2d_get_bit(gb); // reserved
+
+#if DEBUG_CI_HDR
+    printf("CI: post-flags[scan=%d,colordesc=%d,chrsamplepos=%d,"
+           "aspectratio=%d,timinginfo=%d,extension=%d]: off=%td\n",
+           ci->scan_type, ci->color_description_present,
+           ci->chroma_sample_position_present, ci->aspect_ratio_info_present,
+           ci->timing_info_present, ci->extension_present,
+           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+
+    if (ci->color_description_present) {
+        ci->color.type = dav2d_get_golomb(gb, 2);
+        switch (ci->color.type) {
+        case DAV2D_COLOR_DESC_EXPLICIT:
+            ci->color.pri = dav2d_get_bits(gb, 8);
+            ci->color.trc = dav2d_get_bits(gb, 8);
+            ci->color.mtrx = dav2d_get_bits(gb, 8);
+            break;
+        case DAV2D_COLOR_DESC_BT709SDR:
+            ci->color.pri = DAV2D_COLOR_PRI_BT709;
+            ci->color.trc = DAV2D_TRC_BT709;
+            ci->color.mtrx = DAV2D_MC_BT470BG;
+            break;
+        case DAV2D_COLOR_DESC_BT2100PQ:
+            ci->color.pri = DAV2D_COLOR_PRI_BT2020;
+            ci->color.trc = DAV2D_TRC_SMPTE2084;
+            ci->color.mtrx = DAV2D_MC_BT2020_NCL;
+            break;
+        case DAV2D_COLOR_DESC_BT2100HLG:
+            ci->color.pri = DAV2D_COLOR_PRI_BT2020;
+            ci->color.trc = DAV2D_TRC_BT2020_10BIT;
+            ci->color.mtrx = DAV2D_MC_BT2020_NCL;
+            break;
+        case DAV2D_COLOR_DESC_SRGB:
+            ci->color.pri = DAV2D_COLOR_PRI_BT709;
+            ci->color.trc = DAV2D_TRC_SRGB;
+            ci->color.mtrx = DAV2D_MC_IDENTITY;
+            break;
+        case DAV2D_COLOR_DESC_SRGBSYCC:
+            ci->color.pri = DAV2D_COLOR_PRI_BT709;
+            ci->color.trc = DAV2D_TRC_SRGB;
+            ci->color.mtrx = DAV2D_MC_BT470BG;
+            break;
+        default:
+            ci->color.pri = DAV2D_COLOR_PRI_UNKNOWN;
+            ci->color.trc = DAV2D_TRC_UNKNOWN;
+            ci->color.mtrx = DAV2D_MC_UNKNOWN;
+            break;
+        }
+        ci->color.range = dav2d_get_bit(gb);
+
+#if DEBUG_CI_HDR
+        printf("CI: post-colordesc[id=%d,pri=%d,trc=%d,mtrx=%d,rng=%d]: off=%td\n",
+               ci->color.type, ci->color.pri, ci->color.trc, ci->color.mtrx,
+               ci->color.range, (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+    } else {
+        ci->color.pri = DAV2D_COLOR_PRI_UNKNOWN;
+        ci->color.mtrx = DAV2D_MC_UNKNOWN;
+        ci->color.trc = DAV2D_TRC_UNKNOWN;
+    }
+
+    if (ci->chroma_sample_position_present) {
+        ci->chr[0] = dav2d_get_vlc(gb);
+        ci->chr[1] = ci->scan_type == DAV2D_SCAN_TYPE_PROGRESSIVE ?
+                     ci->chr[0] : dav2d_get_vlc(gb);
+
+#if DEBUG_CI_HDR
+        printf("CI: post-chromasampleposition[chr=%d/%d]: off=%td\n",
+               ci->chr[0], ci->chr[1], (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+    } else {
+        ci->chr[0] = ci->chr[1] = DAV2D_CHR_UNKNOWN;
+    }
+
+    if (ci->aspect_ratio_info_present) {
+        ci->sar.type = dav2d_get_bits(gb, 8);
+        switch (ci->sar.type) {
+        case DAV2D_SAR_UNKNOWN:
+            break;
+#define case_sar(width, height) \
+        case DAV2D_SAR_##width##_##height: \
+            ci->sar.w = width; \
+            ci->sar.h = height; \
+            break
+        case_sar(1, 1);
+        case_sar(12, 11);
+        case_sar(10, 11);
+        case_sar(16, 11);
+        case_sar(40, 33);
+        case_sar(24, 11);
+        case_sar(20, 11);
+        case_sar(32, 11);
+        case_sar(80, 33);
+        case_sar(18, 11);
+        case_sar(15, 11);
+        case_sar(64, 33);
+        case_sar(160, 99);
+        case_sar(4, 3);
+        case_sar(3, 2);
+        case_sar(2, 1);
+#undef case_sar
+        case DAV2D_SAR_EXPLICIT:
+            ci->sar.w = dav2d_get_vlc(gb);
+            ci->sar.h = dav2d_get_vlc(gb);
+            break;
+        default: goto error;
+        }
+
+#if DEBUG_CI_HDR
+        printf("CI: post-sampleaspectratio[id=%d,sar=%d:%d]: off=%td\n",
+               ci->sar.type, ci->sar.w, ci->sar.h,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+    }
+
+    if (ci->timing_info_present) {
+        ci->timing.num_units_in_display_tick = dav2d_get_bits(gb, 32);
+        ci->timing.time_scale = dav2d_get_bits(gb, 32);
+        if (!ci->timing.num_units_in_display_tick || !ci->timing.time_scale)
+            goto error;
+        ci->timing.equal_elemental_interval = dav2d_get_bit(gb);
+        if (ci->timing.equal_elemental_interval) {
+            const unsigned t = dav2d_get_vlc(gb);
+            if (t == ~0U) goto error;
+            ci->timing.num_ticks_per_elemental_duration = t + 1;
+        }
+
+#if DEBUG_CI_HDR
+        printf("CI: post-timinginfo[nuidt:%d,ts:%d,eei:%d,ntped:%d]: off=%td\n",
+               ci->timing.num_units_in_display_tick,
+               ci->timing.time_scale,
+               ci->timing.equal_elemental_interval,
+               ci->timing.num_ticks_per_elemental_duration,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
 static void parse_tile_hdr(Dav2dContext *const c, GetBits *const gb) {
     const int n_tiles = c->frame_hdr->tiling.t.cols * c->frame_hdr->tiling.t.rows;
     const int have_tile_pos = n_tiles > 1 ? dav2d_get_bit(gb) : 0;
@@ -2155,6 +2314,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 dav2d_cdf_thread_unref(&c->cdf[i]);
                 dav2d_ref_dec(&c->fgm[i]);
             }
+            dav2d_ref_dec(&c->ci_ref);
 #if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
         // If operating_parameter_info changed, signal it
@@ -2269,6 +2429,15 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     }
     case DAV2D_OBU_FGM: {
         parse_fgm_hdr(c, &gb);
+        if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
+            goto error;
+        break;
+    }
+    case DAV2D_OBU_CONTENT_INTERP: {
+        if (c->ci_ref) dav2d_ref_dec(&c->ci_ref);
+        c->ci_ref = dav2d_ref_create_using_pool(c->ci_pool,
+                                                sizeof(Dav2dContentInterpretation));
+        parse_ci_hdr(c, &gb);
         if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
             goto error;
         break;

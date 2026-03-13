@@ -188,6 +188,8 @@ struct Dav2dContext {
     CdfThreadContext cdf[8];
     Dav2dMemPool *fgm_pool;
     Dav2dRef *fgm[8];
+    Dav2dMemPool *ci_pool;
+    Dav2dRef *ci_ref;
 
     Dav2dDSPContext dsp[3 /* 8, 10, 12 bits/component */];
     Dav2dPalDSPContext pal_dsp;
