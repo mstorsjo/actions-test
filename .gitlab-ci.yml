@@ -123,6 +123,19 @@ build-debian:
               fi
           done
 
+build-debian-avx512:
+    extends: .debian-amd64-common
+    tags:
+        - docker
+        - amd64-avx512
+    variables:
+        CFLAGS: '-mavx'
+    script:
+        - meson setup build --buildtype debugoptimized
+        - ninja -C build
+        - cd build
+        - time meson test -v --suite checkasm
+
 build-debian-aarch64:
     extends: .debian-aarch64-common
     script:
