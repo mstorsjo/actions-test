@@ -54,6 +54,8 @@ decl_emu_edge_fn(BF(dav2d_emu_edge, neon));
 
 decl_sad_refine_mv_fn(BF(dav2d_sad_refine_mv, neon));
 
+decl_sad8x8_fn(BF(dav2d_sad8x8, neon));
+
 static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
 #define init_mc_fn(type, name, suffix) \
     c->mc[type] = BF(dav2d_put_##name, suffix)
@@ -80,6 +82,7 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
     c->emu_edge = BF(dav2d_emu_edge, neon);
 #if BITDEPTH == 8
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, neon);
+    c->sad8x8 = BF(dav2d_sad8x8, neon);
 #endif
 
 #if ARCH_AARCH64

@@ -3413,3 +3413,27 @@ function sad_refine_mv_8bpc_neon, export=1
         sad_refine_mv_8bpc_w 16
 1:      sad_refine_mv_8bpc_w 8
 endfunc
+
+// unsigned dav2d_sad8x8_8bpc_neon(const pixel *p0, const ptrdiff_t p0_stride,
+//                                 const pixel *p1, const ptrdiff_t p1_stride
+//                                 HIGHBD_DECL_SUFFIX)
+function sad8x8_8bpc_neon, export=1
+        ld1             {v0.8b}, [x0], x1
+        ld1             {v1.8b}, [x2], x3
+        ld1             {v5.8b}, [x0], x1
+        ld1             {v6.8b}, [x2], x3
+        uabdl           v2.8h, v0.8b, v1.8b
+        uabdl           v4.8h, v5.8b, v6.8b
+.rept 3
+        ld1             {v0.8b}, [x0], x1
+        ld1             {v1.8b}, [x2], x3
+        ld1             {v5.8b}, [x0], x1
+        ld1             {v6.8b}, [x2], x3
+        uabal           v2.8h, v0.8b, v1.8b
+        uabal           v4.8h, v5.8b, v6.8b
+.endr
+        add             v2.8h, v2.8h, v4.8h
+        uaddlv          s5, v2.8h
+        fmov            w0, s5
+        ret
+endfunc
