@@ -2002,7 +2002,7 @@ const int8_t ALIGN(dav2d_mc_warp_filter[7*64+1][8], 8) = {
 };
 
 // FIXME we might not need this table anymore (I guess it depends on the SIMD)
-const uint8_t ALIGN(dav2d_avm_sm_weights[3 /* scale */][64], 16) = {
+const uint8_t ALIGN(dav2d_sm_weights[3 /* scale */][64], 16) = {
     // The ith element is computed as 32 >> min(6, (i << 2) >> scale)
     // This table merges the AVM scales 0 and 2 into 0 (since they are complementary)
     [0] = { 32,  8,  2,  0,  0,  0,  0,  0, },

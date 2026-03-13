@@ -419,7 +419,7 @@ static void ipred_smooth_c(pixel *dst, const ptrdiff_t stride,
     const int rnd_hor = width >> 1;
     const int n_pel = width * height;
     const int scale = (n_pel >= 64) + (n_pel > 512);
-    const uint8_t *const weights = dav2d_avm_sm_weights[scale];
+    const uint8_t *const weights = dav2d_sm_weights[scale];
     const int right = topleft[width + 1], bottom = topleft[-(height + 1)];
 
     for (int y = 0; y < height; y++) {
@@ -451,7 +451,7 @@ static void ipred_smooth_v_c(pixel *dst, const ptrdiff_t stride,
     const int rnd = height >> 1;
     const int n_pel = width * height;
     const int scale = (n_pel >= 64) + (n_pel > 512);
-    const uint8_t *const weights = dav2d_avm_sm_weights[scale];
+    const uint8_t *const weights = dav2d_sm_weights[scale];
     const int bottom = topleft[-(height + 1)];
 
     for (int y = 0; y < height; y++) {
@@ -477,7 +477,7 @@ static void ipred_smooth_h_c(pixel *dst, const ptrdiff_t stride,
     const int rnd = width >> 1;
     const int n_pel = width * height;
     const int scale = (n_pel >= 64) + (n_pel > 512);
-    const uint8_t *const weights = dav2d_avm_sm_weights[scale];
+    const uint8_t *const weights = dav2d_sm_weights[scale];
     const int right = topleft[width + 1];
 
     for (int y = 0; y < height; y++) {

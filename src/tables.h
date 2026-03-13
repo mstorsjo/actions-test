@@ -87,7 +87,7 @@ EXTERN const int8_t dav2d_mc_subpel_filters[6][15][8];
 EXTERN const int8_t dav2d_ext_warp_filter[63][8];
 EXTERN const int8_t dav2d_mc_warp_filter[7*64+1][8];
 
-EXTERN const uint8_t dav2d_avm_sm_weights[3][64];
+EXTERN const uint8_t dav2d_sm_weights[3][64];
 EXTERN const uint16_t dav2d_dr_intra_derivative[90];
 EXTERN const uint16_t dav2d_div_recip[128 + 1];
 EXTERN const uint16_t dav2d_div_scale_sh_offset[8];
