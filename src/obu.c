@@ -1958,13 +1958,13 @@ error:
 
 static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
 #define DEBUG_FGM_HDR 0
-#if DEBUG_FRAME_HDR
+#if DEBUG_FGM_HDR
     const uint8_t *const init_ptr = gb->ptr;
 #endif
     const unsigned mask = dav2d_get_bits(gb, 8);
     enum Dav2dPixelLayout layout = dav2d_get_vlc(gb);
     if (layout > 3) goto error;
-#if DEBUG_FRAME_HDR
+#if DEBUG_FGM_HDR
     printf("FGM: post-init[mask=0x%x,layout=%d]: off=%td\n",
            mask, layout,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
@@ -1996,7 +1996,7 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
                 fgd->points[pl][i][0] = base;
                 fgd->points[pl][i][1] = dav2d_get_bits(gb, scaling_bits);
             }
-#if DEBUG_FRAME_HDR
+#if DEBUG_FGM_HDR
             printf("FGM: post-scaling_points[id=%d,pl=%d,cnt=%d,bits=%d|%d]: off=%td\n",
                    idx, pl, fgd->num_points[pl], index_bits, scaling_bits,
                    (gb->ptr - init_ptr) * 8 - gb->bits_left);
@@ -2019,7 +2019,7 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
             const int coef_bits = 5 + dav2d_get_bits(gb, 2);
             for (int i = 0; i < num_pl_pos; i++)
                 fgd->ar_coeffs[pl][i] = dav2d_get_bits(gb, coef_bits) - 128;
-#if DEBUG_FRAME_HDR
+#if DEBUG_FGM_HDR
             printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%td\n",
                    idx, pl, fgd->ar_coeff_lag, num_pl_pos, coef_bits,
                    (gb->ptr - init_ptr) * 8 - gb->bits_left);
@@ -2038,7 +2038,7 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
         if (fgd->clip_to_restricted_range)
             fgd->mc_identity = dav2d_get_bit(gb);
         fgd->block_size = dav2d_get_bit(gb);
-#if DEBUG_FRAME_HDR
+#if DEBUG_FGM_HDR
         printf("FGM: post-data[id=%d,sh=%d|%"PRIu64"|%d,uvm=%d|%d|%d|%d|%d|%d,"
                "overlap=%d,clip=%d,mcid=%d,bs=%d]: off=%td\n", idx,
                fgd->scaling_shift, fgd->ar_coeff_shift, fgd->grain_scale_shift,
