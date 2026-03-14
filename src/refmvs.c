@@ -1689,7 +1689,9 @@ static void check_traj_intersect(const refmvs_frame *const rf,
                                  const int ref1 /* src */,
                                  const int ref2 /* dst */,
                                  const int y, const int x,
-                                 const union mv mv_in)
+                                 const union mv mv_in,
+                                 const int col_start8_shifted,
+                                 const int col_end8_shifted)
 {
     assert(ref2 != -1);
     const unsigned sbsz8 = rf->sbsz >> 1;
@@ -1698,7 +1700,9 @@ static void check_traj_intersect(const refmvs_frame *const rf,
     const int shift = rf->mfmv_k_shift, mask = ~(rf->frm_hdr->tmvp_sample_step - 1);
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t pos = (y & (sbsz8 - 1)) * stride + x;
-    for (int k = 0; k < 3; k++) {
+    const int min_k = imax(-1, col_start8_shifted - (x >> shift));
+    const int max_k = imin(+1, col_end8_shifted - (x >> shift));
+    for (int k = min_k + 1; k <= max_k + 1; k++) {
         refmvs_traj_map *const map1 = &map[k][ref1][pos];
         if (map1->n == INVALID_TRAJ) continue;
         const int x1 = x + map1->x;
@@ -1738,7 +1742,9 @@ static void check_traj_intersect(const refmvs_frame *const rf,
     if (imin(y1, x1) < 0 || y1 >= rf->ih8 || x1 >= rf->iw8) return;
     y1 &= mask;
     x1 &= mask;
-    for (int k = 0; k < 3; k++) {
+    const int min_k1 = imax(-1, col_start8_shifted - (x1 >> shift));
+    const int max_k1 = imin(+1, col_end8_shifted - (x1 >> shift));
+    for (int k = min_k1 + 1; k <= max_k1 + 1; k++) {
         const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
         refmvs_traj_map *const map1 = &map[k][ref2][pos1];
         if (map1->n == INVALID_TRAJ) continue;
@@ -1815,6 +1821,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     mv *rp_traj[7];
     refmvs_traj_map *rp_map[3][7];
     if (rf->seq_hdr->mv_traj) {
+        const int mask = mfmv_sbsz8 - 1;
         for (int n = 0; n < 7 /*rf->frm_hdr->n_ref_frames*/; n++) {
             mv *tj = rp_traj[n] = &rf->rp_traj[n][offset];
             for (int y = row_start8; y < row_end8; y++) {
@@ -1822,10 +1829,13 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     tj[x].y = INVALID_MV;
                 tj += stride;
             }
-            for (int m = 0; m < 3; m++) {
-                refmvs_traj_map *map = rp_map[m][n] = &rf->rp_map[m][n][offset];
+            for (int k = -1; k <= +1; k++) {
+                const int x_start = imax(0, col_start8 - k * mfmv_sbsz8);
+                const int x_end =
+                    imin(rf->iw8, ((col_end8 + mask) & ~mask) - k * mfmv_sbsz8);
+                refmvs_traj_map *map = rp_map[k + 1][n] = &rf->rp_map[k + 1][n][offset];
                 for (int y = row_start8; y < row_end8; y++) {
-                    for (int x = col_start8; x < col_end8; x++)
+                    for (int x = x_start; x < x_end; x++)
                         map[x].n = INVALID_TRAJ;
                     map += stride;
                 }
@@ -1835,6 +1845,8 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
 
     rp_proj = &rf->rp_proj[poffset];
     const int shift = rf->mfmv_k_shift, mask = ~(sample_step - 1);
+    const int col_start8_shifted = col_start8 >> shift;
+    const int col_end8_shifted = (col_end8 - 1) >> shift;
     for (int n = 0; n < rf->n_mfmvs; n++) {
         const int ref2cur = rf->mfmv_ref2cur[n];
         if (ref2cur == INVALID_REF2CUR) continue;
@@ -1854,7 +1866,8 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 if (b_mv.y == INVALID_MV) continue;
                 if (rf->seq_hdr->mv_traj && ref2idx != -1)
                     check_traj_intersect(rf, rp_traj, rp_map,
-                                         ref, ref2idx, y, x, b_mv);
+                                         ref, ref2idx, y, x, b_mv,
+                                         col_start8_shifted, col_end8_shifted);
                 int ref2ref = rf->mfmv_ref2ref[n][b_ref];
                 if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
                 const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref][0]);
@@ -1862,15 +1875,15 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 if (y1 < 0 || y1 >= rf->ih8) continue;
                 y1 &= mask;
                 int x1 = x - apply_sign(abs(mv1.x) >> 6, mv1.x);
-                if (x1 < 0 || x1 >= rf->iw8) continue;
+                if (x1 < col_start8 || x1 >= col_end8) continue;
                 x1 &= mask;
                 const int y_proj_start = y1 & ~(mfmv_sbsz8 - 1);
                 const int y_proj_end = imin(y_proj_start + mfmv_sbsz8, row_end8);
                 if (y < y_proj_start || y >= y_proj_end) continue;
                 const int x_sb_align = x1 & ~(mfmv_sbsz8 - 1);
-                const int x_proj_start = imax(x_sb_align - mfmv_edge, col_start8);
+                const int x_proj_start = imax(x_sb_align - mfmv_edge, 0);
                 const int x_proj_end =
-                    imin(x_sb_align + mfmv_sbsz8 + rf->mfmv_edge, col_end8);
+                    imin(x_sb_align + mfmv_sbsz8 + rf->mfmv_edge, rf->iw8);
                 if (x < x_proj_start || x >= x_proj_end) continue;
                 const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
                 if (rp_proj[pos1].mv.y != INVALID_MV &&
@@ -1886,6 +1899,8 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     rp_traj[ref][pos1].x = iclip(mv1.x, -2047, 2047);
                     rp_map[k1 + 1][ref][pos].y = y1 - y;
                     rp_map[k1 + 1][ref][pos].x = x1 - x;
+                    assert((x >> shift) + k1 >= col_start8_shifted &&
+                           (x >> shift) + k1 <= col_end8_shifted);
                     do /* so we can "break" out of it, saves indentation */ {
                         if (ref2idx < 0) break;
                         const mv mv2 =
@@ -1903,6 +1918,8 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                         assert(k2 >= -1 && k2 <= +1);
                         rp_map[k2 + 1][ref2idx][pos2].y = y1 - y2;
                         rp_map[k2 + 1][ref2idx][pos2].x = x1 - x2;
+                        assert((x2 >> shift) + k2 >= col_start8_shifted &&
+                               (x2 >> shift) + k2 <= col_end8_shifted);
                     } while (0);
                 }
                 if (ref2ref < 0) {
