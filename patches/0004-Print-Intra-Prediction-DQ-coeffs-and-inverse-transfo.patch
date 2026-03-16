@@ -1,4 +1,4 @@
-From cb10205d4347f25a3c91b5fd9bb90d48c01dfe10 Mon Sep 17 00:00:00 2001
+From 153967afd319e4dd86f30a59eb9fbea11b296ab8 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -6,13 +6,13 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
 ---
  av2/common/idct.c         |  19 +++-
  av2/common/idct.h         |   7 +-
- av2/common/reconintra.c   | 189 ++++++++++++++++++++++++++++++++++++--
+ av2/common/reconintra.c   | 187 ++++++++++++++++++++++++++++++++++++--
  av2/decoder/decodeframe.c |  39 +++++++-
  av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 8 files changed, 301 insertions(+), 22 deletions(-)
+ 8 files changed, 299 insertions(+), 22 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af6944168..699c7c3b2f 100644
@@ -104,7 +104,7 @@ index c5c7647c4f..37a23f92a5 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av2/common/reconintra.c b/av2/common/reconintra.c
-index 27fbd5045e..df4e86259b 100644
+index 27fbd5045e..66fb34de05 100644
 --- a/av2/common/reconintra.c
 +++ b/av2/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -141,7 +141,7 @@ index 27fbd5045e..df4e86259b 100644
    uint16_t *const second_pred = second_pred_data + 16;
    uint16_t *dst_mrl_line_0 = mrl_line_0_data + 16;
    const int txwpx = tx_size_wide[tx_size];
-@@ -1174,20 +1185,40 @@ static void build_intra_predictors_high(
+@@ -1174,20 +1185,38 @@ static void build_intra_predictors_high(
        val = (n_left_px > 0) ? left_ref_1st[0] : base - 1;
      }
      for (i = 0; i < txhpx; ++i) {
@@ -153,15 +153,13 @@ index 27fbd5045e..df4e86259b 100644
 +    if (BLOCK_TO_DEBUG) {
 +      if (0 || plane == AVM_PLANE_Y) {
 +        if (need_left) {
-+          int num_left_pixels_needed = txhpx + 3 + (mrl_index << 1);
 +          printf("l\n");
-+          for (int x = 0; x < num_left_pixels_needed; x++)
++          for (int x = 0; x < txhpx; x++)
 +            printf(" %02x", val);
 +          printf("\n");
 +        } else {
-+          int num_left_pixels_needed = txwpx + (mrl_index << 1);
 +          printf("t\n");
-+          for (int x = 0; x < num_left_pixels_needed; x++)
++          for (int x = 0; x < txwpx; x++)
 +            printf(" %02x", val);
 +          printf("\n");
 +        }
@@ -185,7 +183,7 @@ index 27fbd5045e..df4e86259b 100644
          txhpx + (need_bottom ? txwpx : 3) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires left edge + 1/4 tx height for overhang feature.
-@@ -1219,12 +1250,13 @@ static void build_intra_predictors_high(
+@@ -1219,12 +1248,13 @@ static void build_intra_predictors_high(
    }
  
    // NEED_ABOVE
@@ -200,7 +198,7 @@ index 27fbd5045e..df4e86259b 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1279,6 +1311,123 @@ static void build_intra_predictors_high(
+@@ -1279,6 +1309,123 @@ static void build_intra_predictors_high(
      }
    }
  
@@ -239,7 +237,7 @@ index 27fbd5045e..df4e86259b 100644
 +    default:
 +      assert(is_dr_mode);
 +      const int tl_filter = !disable_edge_filter && !mrl_index &&
-+        p_angle != 90 && p_angle != 180 && need_above && need_left &&
++        p_angle != 90 && p_angle != 180 && n_left_px > 0 && n_top_px > 0 &&
 +        txwpx + txhpx >= 24;
 +      const int ibp = apply_ibp && !mrl_index && !(angle_delta & 1);
 +      if (p_angle == 90 || (p_angle < 90 && !ibp && !n_top_px)) { // v
@@ -324,7 +322,7 @@ index 27fbd5045e..df4e86259b 100644
    if (use_intra_dip) {
      av2_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1287,6 +1436,13 @@ static void build_intra_predictors_high(
+@@ -1287,6 +1434,13 @@ static void build_intra_predictors_high(
                                     mbmi->intra_dip_features
  #endif  // CONFIG_DIP_EXT_PRUNING
      );
@@ -338,7 +336,7 @@ index 27fbd5045e..df4e86259b 100644
      return;
    }
  
-@@ -1406,6 +1562,14 @@ static void build_intra_predictors_high(
+@@ -1406,6 +1560,14 @@ static void build_intra_predictors_high(
        }
      }
  
@@ -353,7 +351,7 @@ index 27fbd5045e..df4e86259b 100644
      return;
    }
    // predict
-@@ -1427,6 +1591,13 @@ static void build_intra_predictors_high(
+@@ -1427,6 +1589,13 @@ static void build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -367,7 +365,7 @@ index 27fbd5045e..df4e86259b 100644
  }
  
  #define ARITHMETIC_LEFT_SHIFT(x, shift) \
-@@ -1455,6 +1626,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1455,6 +1624,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          dst[r * dst_stride + c] = palette[map[(r + y) * wpx + c + x]];
        }
      }
@@ -380,7 +378,7 @@ index 27fbd5045e..df4e86259b 100644
      return;
    }
  
-@@ -1509,7 +1686,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1509,7 +1684,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  
@@ -390,7 +388,7 @@ index 27fbd5045e..df4e86259b 100644
        disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index dce25fb054..b2c661f064 100644
+index 84fcd9fedd..c43bbc07dc 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -207,11 +207,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
