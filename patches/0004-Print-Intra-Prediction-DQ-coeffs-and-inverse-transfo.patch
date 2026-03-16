@@ -1,4 +1,4 @@
-From 153967afd319e4dd86f30a59eb9fbea11b296ab8 Mon Sep 17 00:00:00 2001
+From e68024b8f2e1c5841c4ebca58a7dc07472462087 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -7,12 +7,13 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
  av2/common/idct.c         |  19 +++-
  av2/common/idct.h         |   7 +-
  av2/common/reconintra.c   | 187 ++++++++++++++++++++++++++++++++++++--
+ av2/common/tip.c          |  14 +++
  av2/decoder/decodeframe.c |  39 +++++++-
  av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 8 files changed, 299 insertions(+), 22 deletions(-)
+ 9 files changed, 313 insertions(+), 22 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af6944168..699c7c3b2f 100644
@@ -387,6 +388,36 @@ index 27fbd5045e..66fb34de05 100644
        xd, ref, ref_stride, dst, dst_stride, mode, angle_delta, tx_size,
        disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
        have_top_right ? px_top_right : 0,
+diff --git a/av2/common/tip.c b/av2/common/tip.c
+index 46c81ff65f..5bbe30101e 100644
+--- a/av2/common/tip.c
++++ b/av2/common/tip.c
+@@ -15,6 +15,8 @@
+ #include "config/avm_dsp_rtcd.h"
+ #include "av2/common/reconinter.h"
+ 
++#include "avm/debug.h"
++
+ // Percentage threshold of number of blocks with available motion
+ // projection in a frame to allow TIP mode
+ #define TIP_ENABLE_COUNT_THRESHOLD 60
+@@ -947,4 +949,16 @@ void av2_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd, uint16_t **mc_buf,
+   tip_setup_tip_frame_planes(cm, xd, 0, 0, mvs_rows, mvs_cols, mvs_cols, mc_buf,
+                              tmp_conv_dst, calc_subpel_params_func,
+                              copy_refined_mvs);
++#if DEBUG_B_PIXELS
++  const YV12_BUFFER_CONFIG *src = &cm->tip_ref.tip_frame->buf;
++  const ptrdiff_t stride = src->strides[0];
++  const int h = mvs_rows * 8, w = mvs_cols * 8;
++  for (int y = 0; y < h; y += 256)
++    for (int x = 0; x < w; x += 256)
++      for (int yy = y; yy < AVMMIN(h, y + 256); yy += 64)
++        for (int xx = x; xx < AVMMIN(w, x + 256); xx += 64)
++          hex_dump(&src->buffers[0][yy * stride + xx], stride,
++                   AVMMIN(h - yy, 64), AVMMIN(w - xx, 64),
++                   "y-pred", !!(xd->bd - 8));
++#endif
+ }
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
 index 84fcd9fedd..c43bbc07dc 100644
 --- a/av2/decoder/decodeframe.c
