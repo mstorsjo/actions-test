@@ -1702,7 +1702,8 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         refmvs_traj_map *const map1 = &map[k][ref1][pos];
         if (map1->n == INVALID_TRAJ) continue;
         const int x1 = x + map1->x;
-        if ((x1 >> shift) % 3 != k) continue;
+        const int k1 = (x1 >> shift) - (x >> shift);
+        if (k1 + 1 != k) continue;
         const int x_sb_align = x1 & ~(mfmv_sbsz8 - 1);
         const int x_proj_start = imax(x_sb_align - mfmv_edge, 0);
         const int x_proj_end =
@@ -1725,7 +1726,9 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         y2 &= mask;
         x2 &= mask;
         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
-        refmvs_traj_map *const map2 = &map[k][ref2][pos2];
+        const int k2 = (x1 >> shift) - (x2 >> shift);
+        assert(k2 >= -1 && k2 <= +1);
+        refmvs_traj_map *const map2 = &map[k2 + 1][ref2][pos2];
         map2->y = y1 - y2;
         map2->x = x1 - x2;
     }
@@ -1740,7 +1743,8 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         refmvs_traj_map *const map1 = &map[k][ref2][pos1];
         if (map1->n == INVALID_TRAJ) continue;
         const int x2 = x1 + map1->x;
-        if ((x2 >> shift) % 3 != k) continue;
+        const int k2 = (x2 >> shift) - (x1 >> shift);
+        if (k2 + 1 != k) continue;
         const int x_sb_align = x2 & ~(mfmv_sbsz8 - 1);
         const int x_proj_start = imax(x_sb_align - mfmv_edge, 0);
         const int x_proj_end =
@@ -1768,7 +1772,9 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         y3 &= mask;
         x3 &= mask;
         const ptrdiff_t pos3 = (y3 & (sbsz8 - 1)) * stride + x3;
-        refmvs_traj_map *const map2 = &map[k][ref1][pos3];
+        const int k3 = (x2 >> shift) - (x3 >> shift);
+        assert(k3 >= -1 && k3 <= +1);
+        refmvs_traj_map *const map2 = &map[k3 + 1][ref1][pos3];
         map2->y = y2 - y3;
         map2->x = x2 - x3;
     }
@@ -1874,11 +1880,12 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     continue;
                 }
                 if (rf->seq_hdr->mv_traj) {
-                    const int k = (x1 >> shift) % 3;
+                    const int k1 = (x1 >> shift) - (x >> shift);
+                    assert(k1 >= -1 && k1 <= +1);
                     rp_traj[ref][pos1].y = iclip(mv1.y, -2047, 2047);
                     rp_traj[ref][pos1].x = iclip(mv1.x, -2047, 2047);
-                    rp_map[k][ref][pos].y = y1 - y;
-                    rp_map[k][ref][pos].x = x1 - x;
+                    rp_map[k1 + 1][ref][pos].y = y1 - y;
+                    rp_map[k1 + 1][ref][pos].x = x1 - x;
                     do /* so we can "break" out of it, saves indentation */ {
                         if (ref2idx < 0) break;
                         const mv mv2 =
@@ -1892,8 +1899,10 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                         if (x2 < x_proj_start || x2 >= x_proj_end) break;
                         x2 &= mask;
                         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
-                        rp_map[k][ref2idx][pos2].y = y1 - y2;
-                        rp_map[k][ref2idx][pos2].x = x1 - x2;
+                        const int k2 = (x1 >> shift) - (x2 >> shift);
+                        assert(k2 >= -1 && k2 <= +1);
+                        rp_map[k2 + 1][ref2idx][pos2].y = y1 - y2;
+                        rp_map[k2 + 1][ref2idx][pos2].x = x1 - x2;
                     } while (0);
                 }
                 if (ref2ref < 0) {
