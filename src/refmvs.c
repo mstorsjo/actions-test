@@ -2112,7 +2112,6 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         const int d2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                     tip1poc, tip0poc);
         rf->tip.delta = d2;
-        assert(d2 > 0);
         const int d1 = rf->pocdiff[rf->tip.ref.ref[0]];
         const int dv = div_mult[imin(abs(d2), 31)];
         rf->tip.sf[0] = imin(abs(d1), 31) * dv;

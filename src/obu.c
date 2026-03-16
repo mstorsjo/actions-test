@@ -1114,6 +1114,14 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             // implicit ref frame scoring (this will fill hdr->refidx[])
             hdr->n_ref_frames = get_ref_frames(c, 0);
         }
+        const unsigned poc = hdr->frame_offset;
+        for (int n = 0; n < hdr->n_ref_frames; n++) {
+            const int pocdiff =
+                get_poc_diff(seqhdr->order_hint_n_bits, poc,
+                             c->refs[hdr->refidx[n]].p.p.frame_hdr->frame_offset);
+            hdr->has_future_refs |= pocdiff < 0;
+            hdr->has_past_refs |= pocdiff > 0;
+        }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-refs[explicit:%d,refs:%d,%d,%d,%d,%d,%d,%d]: off=%td\n",
                seqhdr->explicit_ref_frame_map, hdr->refidx[0],
@@ -1172,7 +1180,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             if (hdr->tip.frame_mode) {
                 if (seqhdr->tip_hole_fill)
                     hdr->tip.hole_fill = dav2d_get_bit(gb);
-                if (/* do not have both-sides-refs || */
+                if (!(hdr->has_future_refs && hdr->has_past_refs) ||
                     !seqhdr->tip_refine_mv ||
                     (!seqhdr->opfl_refine && !seqhdr->refine_mv))
                 {
