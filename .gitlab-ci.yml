@@ -62,6 +62,7 @@ build-debian:
           sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' avm/debug.h
           sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' av2/common/mvref_common.c
           sed -i 's|#define DEBUG_CI_HDR 0|#define DEBUG_CI_HDR 1|' av2/decoder/obu_ci.c
+          sed -i 's|#define DEBUG_FGM_HDR 0|#define DEBUG_FGM_HDR 1|' av2/decoder/obu_fgm.c
           sed -i 's|cm->current_frame.frame_number == 0|cm->current_frame.frame_number <= 4|' avm/debug.h
           git diff
         - |
@@ -78,6 +79,7 @@ build-debian:
           sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
           sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' src/refmvs.c
           sed -i 's|#define DEBUG_CI_HDR 0|#define DEBUG_CI_HDR 1|' src/obu.c
+          sed -i 's|#define DEBUG_FGM_HDR 0|#define DEBUG_FGM_HDR 1|' src/obu.c
           sed -i 's|frame_offset == 0|frame_offset <= 4|' src/debug.h
           git diff
         - meson setup build --buildtype debugoptimized -Dtrim_dsp=false && ninja -C build
@@ -90,6 +92,7 @@ build-debian:
               "./media/avm-v13.0.0-bus.64x64.l5.obu"
               "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
               "./media/avm-v13.0.0-bus.64x64.l5.lossless.obu"
+              "./media/avm-v13.0.0-hm.64x64.l5.filmgrain.obu"
           )
           for file in "${files[@]}"; do
               avm/x86-64/avmdec $file -o /dev/null > avm.log
@@ -114,13 +117,14 @@ build-debian:
               "./media/avm-v13.0.0-bus.64x64.l5.lossless.obu"
               "./media/avm-v13.0.0-bus.352x288.l5.seg1.obu"
               "./media/avm-v13.0.0-bus.352x288.l10.deltaq1.obu"
+              "./media/avm-v13.0.0-hm.64x64.l5.filmgrain.obu"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"
               # avmdec's --md5 only outputs the MD5 of the first frame (see AVM #1267)
               ./avm/x86-64/avmdec "$file" -o /tmp/avm.yuv --rawvideo
               a_md5=$(md5sum /tmp/avm.yuv | cut -d' ' -f1)
-              d_md5=$(./build/tools/dav2d -i "$file" -o - --threads=1 --quiet --muxer=md5)
+              d_md5=$(./build/tools/dav2d -i "$file" -o - --threads=1 --quiet --muxer=md5 --filmgrain=1)
               if [[ "$a_md5" == "$d_md5" ]]; then
                   echo $base "[OK] md5:$a_md5"
               else
