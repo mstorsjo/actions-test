@@ -112,6 +112,8 @@ build-debian:
               "./media/avm-v13.0.0-bus.64x64.l5.obu"
               "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
               "./media/avm-v13.0.0-bus.64x64.l5.lossless.obu"
+              "./media/avm-v13.0.0-bus.352x288.l5.seg1.obu"
+              "./media/avm-v13.0.0-bus.352x288.l10.deltaq1.obu"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"
