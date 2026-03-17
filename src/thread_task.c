@@ -251,7 +251,8 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
 
     Dav2dTask *t = &tasks[0];
     t->sby = 0;
-    t->recon_progress = 1;
+    t->recon_progress = pass != 1 && (has_deblock || has_cdef || has_lr) ?
+        f->frame_hdr->tiling.t.row_start_sb[1] : 1;
     t->deblock_progress = 0;
     t->type = pass == 1 ? DAV2D_TASK_TYPE_ENTROPY_PROGRESS :
               has_deblock ? DAV2D_TASK_TYPE_DEBLOCK_COLS :
@@ -638,10 +639,12 @@ void *dav2d_worker_task(void *data) {
                         *next_t = *t;
                         next_t->sby++;
                         const int ntr = f->frame_thread.next_tile_row[p] + 1;
-                        const int start = f->frame_hdr->tiling.t.row_start_sb[ntr];
-                        if (next_t->sby == start)
+                        int start = f->frame_hdr->tiling.t.row_start_sb[ntr];
+                        if (next_t->sby == start) {
                             f->frame_thread.next_tile_row[p] = ntr;
-                        next_t->recon_progress = next_t->sby + 1;
+                            start = f->frame_hdr->tiling.t.row_start_sb[ntr + 1];
+                        }
+                        next_t->recon_progress = start; //next_t->sby + 1;
                         insert_task(f, next_t, 0);
                     }
                     goto found;
