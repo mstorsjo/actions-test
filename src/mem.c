@@ -222,8 +222,9 @@ static COLD void mem_pool_destroy(Dav2dMemPool *const pool) {
     dav2d_free(pool);
 }
 
-void dav2d_mem_pool_push(Dav2dMemPool *const pool, Dav2dMemPoolBuffer *const buf) {
+void dav2d_mem_pool_push(Dav2dMemPool *const pool, void *const ptr) {
     pthread_mutex_lock(&pool->lock);
+    Dav2dMemPoolBuffer *const buf = (Dav2dMemPoolBuffer*)((uintptr_t)ptr - 64);
     const int ref_cnt = --pool->ref_cnt;
     if (!pool->end) {
         buf->next = pool->buf;
@@ -232,24 +233,22 @@ void dav2d_mem_pool_push(Dav2dMemPool *const pool, Dav2dMemPoolBuffer *const buf
         assert(ref_cnt > 0);
     } else {
         pthread_mutex_unlock(&pool->lock);
-        dav2d_free_aligned(buf->data);
+        dav2d_free_aligned(buf);
         if (!ref_cnt) mem_pool_destroy(pool);
     }
 }
 
-Dav2dMemPoolBuffer *dav2d_mem_pool_pop(Dav2dMemPool *const pool, const size_t size) {
-    assert(!(size & (sizeof(void*) - 1)));
+void *dav2d_mem_pool_pop(Dav2dMemPool *const pool, const size_t size) {
     pthread_mutex_lock(&pool->lock);
     Dav2dMemPoolBuffer *buf = pool->buf;
     pool->ref_cnt++;
-    uint8_t *data;
+
     if (buf) {
         pool->buf = buf->next;
         pthread_mutex_unlock(&pool->lock);
-        data = buf->data;
-        if ((uintptr_t)buf - (uintptr_t)data != size) {
+        if (buf->size != size) {
             /* Reallocate if the size has changed */
-            dav2d_free_aligned(data);
+            dav2d_free_aligned(buf);
             goto alloc;
         }
 #if TRACK_HEAP_ALLOCATIONS
@@ -258,20 +257,18 @@ Dav2dMemPoolBuffer *dav2d_mem_pool_pop(Dav2dMemPool *const pool, const size_t si
     } else {
         pthread_mutex_unlock(&pool->lock);
 alloc:
-        data = dav2d_alloc_aligned(pool->type,
-                                   size + sizeof(Dav2dMemPoolBuffer), 64);
-        if (!data) {
+        buf = dav2d_alloc_aligned(pool->type, size + 64, 64);
+        if (!buf) {
             pthread_mutex_lock(&pool->lock);
             const int ref_cnt = --pool->ref_cnt;
             pthread_mutex_unlock(&pool->lock);
             if (!ref_cnt) mem_pool_destroy(pool);
             return NULL;
         }
-        buf = (Dav2dMemPoolBuffer*)(data + size);
-        buf->data = data;
+        buf->size = size;
     }
 
-    return buf;
+    return (void*)((uintptr_t)buf + 64);
 }
 
 COLD int dav2d_mem_pool_init(const enum AllocationType type,
@@ -306,9 +303,9 @@ COLD void dav2d_mem_pool_end(Dav2dMemPool *const pool) {
         pthread_mutex_unlock(&pool->lock);
 
         while (buf) {
-            void *const data = buf->data;
+            void *const ptr = buf;
             buf = buf->next;
-            dav2d_free_aligned(data);
+            dav2d_free_aligned(ptr);
         }
         if (!ref_cnt) mem_pool_destroy(pool);
     }
