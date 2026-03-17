@@ -121,13 +121,16 @@ static COLD void get_num_threads(Dav2dContext *const c, const Dav2dSettings *con
         6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,       /* 26-36 */
         7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, /* 37-49 */
     };
+#endif
     *n_tc = s->n_threads ? s->n_threads :
         iclip(dav2d_num_logical_processors(c), 1, DAV2D_MAX_THREADS);
+#if 0
     *n_fc = s->max_frame_delay ? umin(s->max_frame_delay, *n_tc) :
             *n_tc < 50 ? fc_lut[*n_tc - 1] : 8; // min(8, ceil(sqrt(n)))
+#else
+    // FIXME re-enable frame threading
+    *n_fc = 1;
 #endif
-    // FIXME re-enable threading
-    *n_tc = *n_fc = 1;
 }
 
 COLD int dav2d_get_frame_delay(const Dav2dSettings *const s) {
