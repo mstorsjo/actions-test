@@ -800,8 +800,11 @@ void *dav2d_worker_task(void *data) {
                 reset_task_cur(c, ttd, t->frame_idx);
                 error = atomic_load(&f->task_thread.error);
                 if (!f->frame_hdr->disable_cdf_update &&
-                    tc->frame_thread.pass <= 1 && f->task_thread.update_set &&
-                    f->frame_hdr->tiling.update == tile_idx)
+                    tc->frame_thread.pass <= 1 &&
+                    ((f->task_thread.update_set &&
+                      f->frame_hdr->tiling.update == tile_idx) ||
+                     (f->seq_hdr->avg_cdf_type &&
+                      atomic_fetch_add(&f->task_thread.entropy_task_counter, -1) == 1)))
                 {
                     if (!error) {
                         const int shift = f->frame_hdr->tiling.t.log2_cols +

@@ -4910,12 +4910,18 @@ int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
                 tile_col = 0;
                 tile_row++;
             }
-            if (j == f->frame_hdr->tiling.update && !f->frame_hdr->disable_cdf_update)
+            if (j == f->frame_hdr->tiling.update && !f->frame_hdr->disable_cdf_update &&
+                !(f->seq_hdr->avg_cdf_type && f->frame_hdr->tiling.t.log2_cols +
+                                              f->frame_hdr->tiling.t.log2_rows))
+            {
                 f->task_thread.update_set = 1;
+            }
             data += tile_sz;
             size -= tile_sz;
         }
     }
+    atomic_store(&f->task_thread.entropy_task_counter,
+                 f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows);
 
     if (c->n_tc > 1) {
         const int uses_2pass = c->n_fc > 1;
@@ -5065,7 +5071,9 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
             res = f->task_thread.retval;
         } else {
             res = dav2d_decode_frame_main(f);
-            if (!res && !f->frame_hdr->disable_cdf_update && f->task_thread.update_set) {
+            if (!res && !f->frame_hdr->disable_cdf_update &&
+                (f->task_thread.update_set || f->seq_hdr->avg_cdf_type))
+            {
                 const int shift = f->frame_hdr->tiling.t.log2_cols +
                                   f->frame_hdr->tiling.t.log2_rows;
                 if (shift && f->seq_hdr->avg_cdf_type) {
