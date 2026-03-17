@@ -112,7 +112,7 @@ unsigned dav2d_get_uleb128(GetBits *const c) {
 }
 
 unsigned dav2d_get_golomb(GetBits *const c, const unsigned k) {
-    int bits;
+    unsigned bits;
     assert(k < 32);
     for (bits = 0; bits < 32 - k; bits++)
         if (!dav2d_get_bit(c))
