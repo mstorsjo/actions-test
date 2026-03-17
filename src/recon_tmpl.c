@@ -2768,6 +2768,7 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             }
             refw += n_tr * 4;
         }
+        int subleft = 0;
         if (has_left) {
             const int csbsz = sbsz >> ss_ver;
             const int end = imax(0, imin((ssby + csbsz) & ~(csbsz - 1),
@@ -2783,8 +2784,12 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             }
             refh += n_bl * 4;
             refw += 2;
+            subleft = b->cfl_mh_dir != CFL_DIR_LEFT;
         }
-        refw = imin(refw, 128 >> ss_hor);
+        if (refw > (128 >> ss_hor)) {
+            refw = 128 >> ss_hor;
+            subleft = 0;
+        }
         refh = imin(refh, (128 >> ss_ver) - 2 * has_top);
 
         luma_top_stride = (refw * sizeof(pixel) + 63) & ~63;
@@ -2793,7 +2798,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                                (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
         dsp->ipred.cfl_gen_y[layout][filter_type](luma, luma_top_stride,
                                                   y_src, ytop_sb_edge, ystride,
-                                                  refw, refh, ctw, cth,
+                                                  refw - subleft,
+                                                  refh, ctw, cth,
                                                   edge_flags | b->cfl_mh_dir);
         refh += has_top;
         if (has_top || has_left)
