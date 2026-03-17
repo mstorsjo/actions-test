@@ -188,7 +188,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                     } else if (!sbrow_start && by + 2 >= by_end) {
                         offset = sby * 4 * y_stride + sbx * sbsz * 4;
                         top = &f->lf.cdef_line[tf][0][offset];
-                        offset = sby * (4 << sb128) + 4 * sb128 + 2 * y_stride +
+                        offset = ((sby + 1) * (4 << sb128) - 2) * y_stride +
                                  sbx * sbsz * 4;
                         bot = &f->lf.lr_db_line[0][offset];
                     } else {
@@ -281,7 +281,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                     bot = bptrs[0] + 8 * y_stride;
                 } else if (!sbrow_start && by + 2 >= by_end) {
                     top = &f->lf.cdef_line[tf][0][sby * 4 * y_stride + bx * 4];
-                    const int line = sby * (4 << sb128) + 4 * sb128 + 2;
+                    const int line = (sby + 1) * (4 << sb128) - 2;
                     offset = line * y_stride + bx * 4;
                     bot = &f->lf.lr_db_line[0][offset];
                 } else {
@@ -316,7 +316,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                         const ptrdiff_t top_offset = sby * 8 * uv_stride +
                                                      (bx * 4 >> ss_hor);
                         top = &f->lf.cdef_line[tf][pl][top_offset];
-                        const int line = sby * (4 << sb128) + 4 * sb128 + 2;
+                        const int line = (sby + 1) * (4 << sb128) - 2;
                         offset = line * uv_stride + (bx * 4 >> ss_hor);
                         bot = &f->lf.lr_db_line[pl][offset];
                     } else {
