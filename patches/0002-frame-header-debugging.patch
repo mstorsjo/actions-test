@@ -1,4 +1,4 @@
-From 3677425bdec05ce85fd6e6c3d1a48522cdb3d5a2 Mon Sep 17 00:00:00 2001
+From 11e5420272508f032c41de8895c2f73310f71231 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 09:07:44 -0500
 Subject: [PATCH 2/5] Frame header debugging.
@@ -534,7 +534,7 @@ index f4a60e03bd..f6adb3de4b 100644
    if (ci_temp.ci_extension_present_flag) {
      // TODO: issue #1111 - Add the extension mechanism
 diff --git a/av2/decoder/obu_fgm.c b/av2/decoder/obu_fgm.c
-index fe02659a55..93cc4f3b18 100644
+index fe02659a55..0debefa5fa 100644
 --- a/av2/decoder/obu_fgm.c
 +++ b/av2/decoder/obu_fgm.c
 @@ -26,6 +26,8 @@
@@ -610,7 +610,7 @@ index fe02659a55..93cc4f3b18 100644
    fgm->block_size = avm_rb_read_bit(rb);
 +#if DEBUG_FGM_HDR
 +  printf("FGM: post-data[id=%d,sh=%d|%d|%d,uvm=%d|%d|%d|%d|%d|%d,overlap=%d,"
-+         "clip=%d,mcid=%d,bs=%d]: off=%td\n", idx,
++         "clip=%d,mcid=%d,bs=%d]: off=%u\n", idx,
 +         fgm->scaling_shift, fgm->ar_coeff_shift, fgm->grain_scale_shift,
 +         fgm->cb_mult - 128, fgm->cb_luma_mult - 128, fgm->cb_offset - 256,
 +         fgm->cr_mult - 128, fgm->cr_luma_mult - 128, fgm->cr_offset - 256,
