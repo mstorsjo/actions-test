@@ -358,10 +358,10 @@ ALIGN function_align
     pxor                         m1, m1
     pshufb                       m0, m1
 .s16:
-    mova           [dstq+strideq*0], m0
-    mova           [dstq+strideq*1], m0
-    mova           [dstq+strideq*2], m0
-    mova           [dstq+stride3q ], m0
+    movu           [dstq+strideq*0], m0
+    movu           [dstq+strideq*1], m0
+    movu           [dstq+strideq*2], m0
+    movu           [dstq+stride3q ], m0
     lea                        dstq, [dstq+strideq*4]
     sub                          hd, 4
     jg .s16
@@ -402,14 +402,14 @@ ALIGN function_align
     pshufb                       m0, m1
     mova                         m1, m0
 .s32:
-    mova                     [dstq], m0
-    mova                  [dstq+16], m1
-    mova             [dstq+strideq], m0
-    mova          [dstq+strideq+16], m1
-    mova           [dstq+strideq*2], m0
-    mova        [dstq+strideq*2+16], m1
-    mova            [dstq+stride3q], m0
-    mova         [dstq+stride3q+16], m1
+    movu                     [dstq], m0
+    movu                  [dstq+16], m1
+    movu             [dstq+strideq], m0
+    movu          [dstq+strideq+16], m1
+    movu           [dstq+strideq*2], m0
+    movu        [dstq+strideq*2+16], m1
+    movu            [dstq+stride3q], m0
+    movu         [dstq+stride3q+16], m1
     lea                        dstq, [dstq+strideq*4]
     sub                          hd, 4
     jg .s32

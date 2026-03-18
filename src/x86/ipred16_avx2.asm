@@ -281,10 +281,10 @@ ALIGN function_align
 .w8_end:
     vpbroadcastw        xm0, xm0
 .s8:
-    mova   [dstq+strideq*0], xm0
-    mova   [dstq+strideq*1], xm0
-    mova   [dstq+strideq*2], xm0
-    mova   [dstq+stride3q ], xm0
+    movu   [dstq+strideq*0], xm0
+    movu   [dstq+strideq*1], xm0
+    movu   [dstq+strideq*2], xm0
+    movu   [dstq+stride3q ], xm0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s8
@@ -318,10 +318,10 @@ ALIGN function_align
 .w16_end:
     vpbroadcastw         m0, xm0
 .s16:
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m0
-    mova   [dstq+strideq*2], m0
-    mova   [dstq+stride3q ], m0
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m0
+    movu   [dstq+strideq*2], m0
+    movu   [dstq+stride3q ], m0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s16
@@ -357,14 +357,14 @@ ALIGN function_align
     vpbroadcastw         m0, xm0
     mova                 m1, m0
 .s32:
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m1
-    mova [dstq+strideq*1+32*0], m0
-    mova [dstq+strideq*1+32*1], m1
-    mova [dstq+strideq*2+32*0], m0
-    mova [dstq+strideq*2+32*1], m1
-    mova [dstq+stride3q +32*0], m0
-    mova [dstq+stride3q +32*1], m1
+    movu [dstq+strideq*0+32*0], m0
+    movu [dstq+strideq*0+32*1], m1
+    movu [dstq+strideq*1+32*0], m0
+    movu [dstq+strideq*1+32*1], m1
+    movu [dstq+strideq*2+32*0], m0
+    movu [dstq+strideq*2+32*1], m1
+    movu [dstq+stride3q +32*0], m0
+    movu [dstq+stride3q +32*1], m1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s32

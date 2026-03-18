@@ -258,10 +258,10 @@ cglobal ipred_dc_16bpc, 4, 7, 6, dst, stride, tl, w, h, stride3
     pshuflw              m0, m0, q0000
     punpcklqdq           m0, m0
 .s8:
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m0
-    mova   [dstq+strideq*2], m0
-    mova   [dstq+stride3q ], m0
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m0
+    movu   [dstq+strideq*2], m0
+    movu   [dstq+stride3q ], m0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s8
@@ -299,14 +299,14 @@ cglobal ipred_dc_16bpc, 4, 7, 6, dst, stride, tl, w, h, stride3
 .s16c:
     mova                 m1, m0
 .s16:
-    mova [dstq+strideq*0+16*0], m0
-    mova [dstq+strideq*0+16*1], m1
-    mova [dstq+strideq*1+16*0], m0
-    mova [dstq+strideq*1+16*1], m1
-    mova [dstq+strideq*2+16*0], m0
-    mova [dstq+strideq*2+16*1], m1
-    mova [dstq+stride3q +16*0], m0
-    mova [dstq+stride3q +16*1], m1
+    movu [dstq+strideq*0+16*0], m0
+    movu [dstq+strideq*0+16*1], m1
+    movu [dstq+strideq*1+16*0], m0
+    movu [dstq+strideq*1+16*1], m1
+    movu [dstq+strideq*2+16*0], m0
+    movu [dstq+strideq*2+16*1], m1
+    movu [dstq+stride3q +16*0], m0
+    movu [dstq+stride3q +16*1], m1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s16
@@ -352,14 +352,14 @@ cglobal ipred_dc_16bpc, 4, 7, 6, dst, stride, tl, w, h, stride3
     mova                 m2, m0
     mova                 m3, m0
 .s32:
-    mova [dstq+strideq*0+16*0], m0
-    mova [dstq+strideq*0+16*1], m1
-    mova [dstq+strideq*0+16*2], m2
-    mova [dstq+strideq*0+16*3], m3
-    mova [dstq+strideq*1+16*0], m0
-    mova [dstq+strideq*1+16*1], m1
-    mova [dstq+strideq*1+16*2], m2
-    mova [dstq+strideq*1+16*3], m3
+    movu [dstq+strideq*0+16*0], m0
+    movu [dstq+strideq*0+16*1], m1
+    movu [dstq+strideq*0+16*2], m2
+    movu [dstq+strideq*0+16*3], m3
+    movu [dstq+strideq*1+16*0], m0
+    movu [dstq+strideq*1+16*1], m1
+    movu [dstq+strideq*1+16*2], m2
+    movu [dstq+strideq*1+16*3], m3
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     jg .s32

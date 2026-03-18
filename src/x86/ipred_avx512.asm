@@ -382,10 +382,10 @@ cglobal ipred_dc_8bpc, 3, 7, 5, dst, stride, tl, w, h, stride3
 .w16_end:
     vpbroadcastb        xm0, xmm0
 .s16:
-    mova   [dstq+strideq*0], xm0
-    mova   [dstq+strideq*1], xm0
-    mova   [dstq+strideq*2], xm0
-    mova   [dstq+stride3q ], xm0
+    movu   [dstq+strideq*0], xm0
+    movu   [dstq+strideq*1], xm0
+    movu   [dstq+strideq*2], xm0
+    movu   [dstq+stride3q ], xm0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s16
@@ -414,10 +414,10 @@ cglobal ipred_dc_8bpc, 3, 7, 5, dst, stride, tl, w, h, stride3
 .w32_end:
     vpbroadcastb        ym0, xmm0
 .s32:
-    mova   [dstq+strideq*0], ym0
-    mova   [dstq+strideq*1], ym0
-    mova   [dstq+strideq*2], ym0
-    mova   [dstq+stride3q ], ym0
+    movu   [dstq+strideq*0], ym0
+    movu   [dstq+strideq*1], ym0
+    movu   [dstq+strideq*2], ym0
+    movu   [dstq+stride3q ], ym0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s32

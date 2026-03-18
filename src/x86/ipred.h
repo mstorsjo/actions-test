@@ -75,7 +75,9 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 
 #if 0
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       ssse3);
+#endif
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   ssse3);
+#if 0
     init_angular_ipred_fn(TOP_DC_PRED,   ipred_dc_top,   ssse3);
     init_angular_ipred_fn(LEFT_DC_PRED,  ipred_dc_left,  ssse3);
     init_angular_ipred_fn(HOR_PRED,      ipred_h,        ssse3);
@@ -108,7 +110,9 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 
 #if 0
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       avx2);
+#endif
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   avx2);
+#if 0
     init_angular_ipred_fn(TOP_DC_PRED,   ipred_dc_top,   avx2);
     init_angular_ipred_fn(LEFT_DC_PRED,  ipred_dc_left,  avx2);
 #endif
@@ -140,10 +144,12 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
-#if 0
 #if BITDEPTH == 8
+#if 0
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       avx512icl);
+#endif
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   avx512icl);
+#if 0
     init_angular_ipred_fn(TOP_DC_PRED,   ipred_dc_top,   avx512icl);
     init_angular_ipred_fn(LEFT_DC_PRED,  ipred_dc_left,  avx512icl);
     init_angular_ipred_fn(HOR_PRED,      ipred_h,        avx512icl);
