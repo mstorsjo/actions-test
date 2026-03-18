@@ -356,10 +356,10 @@ ALIGN function_align
 .w16_end:
     vpbroadcastb        xm0, xm0
 .s16:
-    mova   [dstq+strideq*0], xm0
-    mova   [dstq+strideq*1], xm0
-    mova   [dstq+strideq*2], xm0
-    mova   [dstq+stride3q ], xm0
+    movu   [dstq+strideq*0], xm0
+    movu   [dstq+strideq*1], xm0
+    movu   [dstq+strideq*2], xm0
+    movu   [dstq+stride3q ], xm0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s16
@@ -392,10 +392,10 @@ ALIGN function_align
 .w32_end:
     vpbroadcastb         m0, xm0
 .s32:
-    mova   [dstq+strideq*0], m0
-    mova   [dstq+strideq*1], m0
-    mova   [dstq+strideq*2], m0
-    mova   [dstq+stride3q ], m0
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m0
+    movu   [dstq+strideq*2], m0
+    movu   [dstq+stride3q ], m0
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s32
@@ -459,13 +459,24 @@ cglobal ipred_dc_128_8bpc, 2, 7, 6, dst, stride, tl, w, h, stride3
     jmp                  wq
 
 cglobal ipred_v_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
-    lea                  r5, [ipred_dc_splat_avx2_table]
-    tzcnt                wd, wm
+    lea                  r6, [ipred_dc_splat_avx2_table]
     movu                 m0, [tlq+ 1]
     movu                 m1, [tlq+33]
+    movifnidn            wd, wm
     movifnidn            hd, hm
-    movsxd               wq, [r5+wq*4]
-    add                  wq, r5
+%if UNIX64
+    test                r5w, 0x8000         ; multi-mrl
+%else
+    test           word r5m, 0x8000         ; multi-mrl
+%endif
+    jz .no_multi_mrl
+    lea                 r5d, [wd+hd]
+    pavgb                m0, [tlq+r5*2+2]
+    pavgb                m1, [tlq+r5*2+34]
+.no_multi_mrl:
+    tzcnt                wd, wd
+    movsxd               wq, [r6+wq*4]
+    add                  wq, r6
     lea            stride3q, [strideq*3]
     jmp                  wq
 
