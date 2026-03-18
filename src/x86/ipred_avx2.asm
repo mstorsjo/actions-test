@@ -161,7 +161,7 @@ JMP_TABLE ipred_filter,     avx2, w4, w8, w16, w32
 JMP_TABLE ipred_dc,         avx2, h4, h8, h16, h32, h64, w4, w8, w16, w32, w64, \
                                   s4-10*4, s8-10*4, s16-10*4, s32-10*4, s64-10*4
 JMP_TABLE ipred_dc_left,    avx2, h4, h8, h16, h32, h64
-JMP_TABLE ipred_h,          avx2, w4, w8, w16, w32, w64
+JMP_TABLE ipred_h,          avx2, w4, w8, w16, w32, w64, w4m, w8m, w16m, w32m, w64m
 JMP_TABLE ipred_z1,         avx2, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z2,         avx2, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z3,         avx2, h4, h8, h16, h32, h64
@@ -480,59 +480,86 @@ cglobal ipred_v_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     lea            stride3q, [strideq*3]
     jmp                  wq
 
-%macro IPRED_H 2 ; w, store_type
+%macro IPRED_H 2-3 ; w, store_type, multi-mrl-suffix
+.w%1%3:
+%ifidn %3, m
+    movd                xm0, [tlq-4]
+    movd                xm1, [tlq+r5*2-3]
+    sub                 tlq, 4
+    pavgb               xm0, xm1
+    vpbroadcastb         m3, xm0
+    psrld               xm0, 8
+    vpbroadcastb         m2, xm0
+    psrld               xm0, 8
+    vpbroadcastb         m1, xm0
+    psrld               xm0, 8
+    vpbroadcastb         m0, xm0
+%else
     vpbroadcastb         m0, [tlq-1]
     vpbroadcastb         m1, [tlq-2]
     vpbroadcastb         m2, [tlq-3]
     sub                 tlq, 4
     vpbroadcastb         m3, [tlq+0]
+%endif
     mov%2  [dstq+strideq*0], m0
+%if %1 == 64
+    mov%2  [dstq+strideq*0+32], m0
+%endif
     mov%2  [dstq+strideq*1], m1
+%if %1 == 64
+    mov%2  [dstq+strideq*1+32], m1
+%endif
     mov%2  [dstq+strideq*2], m2
+%if %1 == 64
+    mov%2  [dstq+strideq*2+32], m2
+%endif
     mov%2  [dstq+stride3q ], m3
+%if %1 == 64
+    mov%2  [dstq+stride3q +32], m3
+%endif
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
-    jg .w%1
+    jg .w%1%3
     RET
 ALIGN function_align
 %endmacro
 
 INIT_XMM avx2
-cglobal ipred_h_8bpc, 3, 6, 4, dst, stride, tl, w, h, stride3
-    lea                  r5, [ipred_h_avx2_table]
-    tzcnt                wd, wm
+cglobal ipred_h_8bpc, 3, 7, 4, dst, stride, tl, w, h, _, stride3
+    lea                  r6, [ipred_h_avx2_table]
+    movifnidn            wd, wm
     movifnidn            hd, hm
-    movsxd               wq, [r5+wq*4]
-    add                  wq, r5
+%if UNIX64
+    test                r5w, 0x8000         ; multi-mrl
+%else
+    test           word r5m, 0x8000         ; multi-mrl
+%endif
+    jnz .multi_mrl
+    tzcnt                wd, wd
+    movsxd               wq, [r6+wq*4]
+    add                  wq, r6
     lea            stride3q, [strideq*3]
     jmp                  wq
-.w4:
     IPRED_H               4, d
-.w8:
     IPRED_H               8, q
-.w16:
-    IPRED_H              16, a
+    IPRED_H              16, u
 INIT_YMM avx2
-.w32:
-    IPRED_H              32, a
-.w64:
-    vpbroadcastb         m0, [tlq-1]
-    vpbroadcastb         m1, [tlq-2]
-    vpbroadcastb         m2, [tlq-3]
-    sub                 tlq, 4
-    vpbroadcastb         m3, [tlq+0]
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m0
-    mova [dstq+strideq*1+32*0], m1
-    mova [dstq+strideq*1+32*1], m1
-    mova [dstq+strideq*2+32*0], m2
-    mova [dstq+strideq*2+32*1], m2
-    mova [dstq+stride3q +32*0], m3
-    mova [dstq+stride3q +32*1], m3
-    lea                dstq, [dstq+strideq*4]
-    sub                  hd, 4
-    jg .w64
-    RET
+    IPRED_H              32, u
+    IPRED_H              64, u
+.multi_mrl:
+    lea                 r5d, [hd+wd]
+    tzcnt                wd, wd
+    movsxd               wq, [r6+wq*4+5*4]
+    add                  wq, r6
+    lea            stride3q, [strideq*3]
+    jmp                  wq
+INIT_XMM avx2
+    IPRED_H               4, d, m
+    IPRED_H               8, q, m
+    IPRED_H              16, u, m
+INIT_YMM avx2
+    IPRED_H              32, u, m
+    IPRED_H              64, u, m
 
 %macro PAETH 2 ; top, ldiff
     pavgb                m1, m%1, m3 ; Calculating tldiff normally requires
