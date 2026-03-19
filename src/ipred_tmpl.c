@@ -79,16 +79,6 @@ static const DRFilter4Tap dr_interp_filter[32] = {
     {  -1,   4, 127,  -2 }
 };
 
-static const uint8_t ibp_weights[32] = {
-    /* Unused */ 0,
-    /* len  1 */ 96,
-    /* len  2 */ 86, 107,
-    /* len  4 */ 77,  90, 102, 115,
-    /* len  8 */ 71,  78,  86,  92, 100, 107, 114, 121,
-    /* len 16 */ 68,  72,  76,  79,  83,  87,  90,  94,
-                 98, 102, 106, 109, 113, 117, 121, 124
-};
-
 static NOINLINE void
 splat_dc(pixel *dst, const ptrdiff_t stride,
          const int width, int height, const int dc)
@@ -134,7 +124,7 @@ static void ipred_dc_top_c(pixel *dst, const ptrdiff_t stride,
 
     if (a & ANGLE_IBP_FLAG) {
         const int h = height >> 2;
-        const uint8_t *w_y = &ibp_weights[h];
+        const uint8_t *w_y = &dav2d_dc_ibp_weights[h];
         for (int y = 0; y < h; y++) {
             const int wy = 128 - w_y[y];
             const int dc_wy = dc * w_y[y];
@@ -182,7 +172,7 @@ static void ipred_dc_left_c(pixel *dst, const ptrdiff_t stride,
 
     if (a & ANGLE_IBP_FLAG) {
         const int w = width >> 2;
-        const uint8_t *w_x = &ibp_weights[w];
+        const uint8_t *w_x = &dav2d_dc_ibp_weights[w];
         for (int y = 0; y < height; y++) {
             const int left = topleft[-(y + 1)];
             for (int x = 0; x < w; x++) {
@@ -252,7 +242,7 @@ static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
         const int h = height >> 2;
         const int w = width >> 2;
         const int x_start = width < height ? w : 0;
-        const uint8_t *const w_y = &ibp_weights[h];
+        const uint8_t *const w_y = &dav2d_dc_ibp_weights[h];
         for (int y = 0; y < h; y++) {
             const int wy = 128 - w_y[y];
             const int dc_wy = dc * w_y[y];
@@ -264,7 +254,7 @@ static void ipred_dc_c(pixel *dst, const ptrdiff_t stride,
 
         const int y_start = width >= height ? h : 0;
         dst = p_dst + y_start * PXSTRIDE(stride);
-        const uint8_t *const w_x = &ibp_weights[w];
+        const uint8_t *const w_x = &dav2d_dc_ibp_weights[w];
         for (int y = y_start; y < height; y++) {
             const int left = topleft[-(y + 1)];
             for (int x = 0; x < w; x++) {
