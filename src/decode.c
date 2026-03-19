@@ -5031,6 +5031,9 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
                     ts->tiling.col_end = imin(col_sb_end << sb_shift, f->bw);
                     ts->tiling.row_start = row_sb_start << sb_shift;
                     ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
+                    if (f->c->n_tc > 1)
+                        for (int p = 0; p < 2; p++)
+                            atomic_init(&ts->progress[p], row_sb_start);
                 }
             }
         }
