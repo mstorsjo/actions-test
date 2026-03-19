@@ -176,7 +176,7 @@ JMP_TABLE ipred_paeth,      avx2, w4, w8, w16, w32, w64
 JMP_TABLE ipred_filter,     avx2, w4, w8, w16, w32
 JMP_TABLE ipred_dc,         avx2, h4, h8, h16, h32, h64, w4, w8, w16, w32, w64, \
                                   s4, s8, s16, s32, s64, s4i, s8i, s16i, s32i, s64i
-JMP_TABLE ipred_dc_left,    avx2, h4, h8, h16, h32, h64
+JMP_TABLE ipred_dc_left,    avx2, h4, h8, h16, h32, h64, w4i, w8i, w16i, w32i, w64i
 JMP_TABLE ipred_h,          avx2, w4, w8, w16, w32, w64, w4m, w8m, w16m, w32m, w64m
 JMP_TABLE ipred_z1,         avx2, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z2,         avx2, w4, w8, w16, w32, w64
@@ -212,22 +212,39 @@ cglobal ipred_dc_top_8bpc, 3, 7, 6, dst, stride, tl, w, h
     lea                  wq, [wq+r5+ipred_dc_avx2_table-ipred_dc_left_avx2_table]
     jmp                  r6
 
-cglobal ipred_dc_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
+%if WIN64
+DECLARE_REG_TMP 5
+%else
+DECLARE_REG_TMP 8
+%endif
+
+cglobal ipred_dc_left_8bpc, 3, 8, 6, dst, stride, tl, w, h, stride3
     mov                  hd, hm ; zero upper half
     tzcnt               r6d, hd
     sub                 tlq, hq
     tzcnt                wd, wm
     movu                 m0, [tlq]
-    mov                 r5d, 0x8000
-    shrx                r5d, r5d, r6d
-    movd                xm3, r5d
-    lea                  r5, [ipred_dc_left_avx2_table]
-    movsxd               r6, [r5+r6*4]
+    mov                 t0d, 0x8000
+    shrx                t0d, t0d, r6d
+    movd                xm3, t0d
+    lea                  t0, [ipred_dc_left_avx2_table]
+    movsxd               r6, [t0+r6*4]
     pcmpeqd              m2, m2
     pmaddubsw            m0, m2
-    add                  r6, r5
-    movsxd               wq, [r5+ipred_dc_avx2_table-ipred_dc_left_avx2_table+wq*4+10*4]
-    lea                  wq, [wq+r5+ipred_dc_avx2_table-ipred_dc_left_avx2_table]
+    add                  r6, t0
+%if UNIX64
+    test                r5w, 0x1000     ; ibp
+%else
+    test           word r5m, 0x1000     ; ibp
+%endif
+    jnz .ibp
+    movsxd               wq, [t0+ipred_dc_avx2_table-ipred_dc_left_avx2_table+wq*4+10*4]
+    lea                  wq, [wq+t0+ipred_dc_avx2_table-ipred_dc_left_avx2_table]
+    jmp                  r6
+.ibp:
+    movsxd               wq, [t0+wq*4+5*4]
+    add                  wq, t0
+    vpbroadcastd         m5, [t0+pw_256-ipred_dc_left_avx2_table]
     jmp                  r6
 .h64:
     movu                 m1, [tlq+32] ; unaligned when jumping here from dc_top
@@ -249,12 +266,24 @@ cglobal ipred_dc_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     vpbroadcastb         m0, xm0
     mova                 m1, m0
     jmp                  wq
-
-%if WIN64
-DECLARE_REG_TMP 5
-%else
-DECLARE_REG_TMP 8
-%endif
+.w4i:
+    pslld               xm3, xm2, 8
+    vpbroadcastw        xm2, [ibp_weights]
+    jmp mangle(private_prefix %+ _ipred_dc_8bpc_avx2).s4i_leftonly_loop
+.w8i:
+    vpbroadcastd        xm2, [ibp_weights+2]
+    jmp mangle(private_prefix %+ _ipred_dc_8bpc_avx2).s8i_leftonly_loop
+.w16i:
+    vpbroadcastq        xm3, [ibp_weights+6]
+    jmp mangle(private_prefix %+ _ipred_dc_8bpc_avx2).s16i_leftonly_loop
+.w32i:
+    WIN64_SPILL_XMM       9
+    vbroadcasti128       m3, [ibp_weights+14]
+    jmp mangle(private_prefix %+ _ipred_dc_8bpc_avx2).s32i_leftonly_loop
+    RESET_STACK_STATE
+.w64i:
+    movu                 m3, [ibp_weights+30]
+    jmp mangle(private_prefix %+ _ipred_dc_8bpc_avx2).s64i_leftonly_loop
 
 cglobal ipred_dc_8bpc, 3, 8, 6, dst, stride, tl, w, h, stride3
     mov                  hd, hm         ; zero upper half
