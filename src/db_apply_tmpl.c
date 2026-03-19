@@ -174,17 +174,21 @@ void bytefn(dav2d_copy_db)(Dav2dFrameContext *const f,
     }
 }
 
-// TODO: compute subpu shift
 static void setup_thr_cols_sb64(pixel *const q_thr_dst,
                                 pixel *const side_thr_dst,
                                 const ptrdiff_t dst_stride,
                                 const uint8_t *const segmap,
                                 const ptrdiff_t seg_stride,
+                                const uint16_t (*const mask)[5][4],
                                 const pixel thr_lut[2][16],
                                 pixel *const left_q_thr,
                                 pixel *const left_side_thr,
+                                const int y64,
                                 const int ss_hor, const int ss_ver)
 {
+    const int mask_idx = y64 >> ss_ver;
+    const int mask_shift = y64 & ss_ver ? 8 : 0;
+
     for (int y4 = 0; y4 < 16 >> ss_ver; y4++) {
         int prev_q_thr = left_q_thr[y4];
         int prev_side_thr = left_side_thr[y4];
@@ -193,6 +197,8 @@ static void setup_thr_cols_sb64(pixel *const q_thr_dst,
             const int seg_id = segmap[x4 + y4 * seg_stride];
             const int cur_q_thr = thr_lut[0][seg_id];
             const int cur_side_thr = thr_lut[1][seg_id];
+            const int subpu =
+                3 * ((mask[x4][4][mask_idx] >> (mask_shift + y4)) & 1);
 
             int edge_q_thr;
             int edge_side_thr;
@@ -207,8 +213,8 @@ static void setup_thr_cols_sb64(pixel *const q_thr_dst,
                 edge_side_thr = cur_side_thr | prev_side_thr;
 
             // store transposed
-            q_thr_dst[x4 * dst_stride + y4] = edge_q_thr;
-            side_thr_dst[x4 * dst_stride + y4] = edge_side_thr;
+            q_thr_dst[x4 * dst_stride + y4] = edge_q_thr >> subpu;
+            side_thr_dst[x4 * dst_stride + y4] = edge_side_thr >> subpu;
 
             prev_q_thr = cur_q_thr;
             prev_side_thr = cur_side_thr;
@@ -219,16 +225,20 @@ static void setup_thr_cols_sb64(pixel *const q_thr_dst,
     }
 }
 
-// TODO: compute subpu shift
 static void setup_thr_rows_sb64(pixel *const q_thr_dst,
                                 pixel *const side_thr_dst,
                                 const ptrdiff_t dst_stride,
                                 const uint8_t *const segmap,
                                 const ptrdiff_t seg_stride,
+                                const uint16_t (*const mask)[5][4],
                                 const pixel thr_lut[2][16],
                                 const pixel above_thr_lut[2][16],
+                                const int sb64x,
                                 const int ss_hor, const int ss_ver)
 {
+    const int mask_idx = sb64x >> ss_hor;
+    const int mask_shift = sb64x & ss_hor ? 8 : 0;
+
     pixel above_q_thr[16] = { 0 };
     pixel above_side_thr[16] = { 0 };
     if (above_thr_lut) {
@@ -247,6 +257,8 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
             const int seg_id = segmap[x4 + y4 * seg_stride];
             const int cur_q_thr = thr_lut[0][seg_id];
             const int cur_side_thr = thr_lut[1][seg_id];
+            const int subpu =
+                3 * ((mask[y4][4][mask_idx] >> (mask_shift + x4)) & 1);
 
             int edge_q_thr;
             int edge_side_thr;
@@ -260,8 +272,8 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
             else
                 edge_side_thr = cur_side_thr | prev_side_thr;
 
-            q_thr_dst[x4 + y4 * dst_stride] = edge_q_thr;
-            side_thr_dst[x4 + y4 * dst_stride] = edge_side_thr;
+            q_thr_dst[x4 + y4 * dst_stride] = edge_q_thr >> subpu;
+            side_thr_dst[x4 + y4 * dst_stride] = edge_side_thr >> subpu;
 
             prev_q_thr = cur_q_thr;
             prev_side_thr = cur_side_thr;
@@ -283,9 +295,9 @@ static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
     // filter edges between columns (e.g. block1 | block2)
     for (int x = 0; x < w4; x++, q_thr += 16, side_thr += 16) {
         if (!have_left && !x) continue;
-        uint16_t hmask[5] = {
+        uint16_t hmask[4] = {
             mask[x][0][y64], mask[x][1][y64], mask[x][2][y64],
-            mask[x][3][y64], mask[x][4][y64]
+            mask[x][3][y64]
         };
         dsp->lf.deblock_sb[0][0](&dst[x * 4], ls, hmask, q_thr, side_thr, tile_edge,
                                  h4 HIGHBD_CALL_SUFFIX);
@@ -309,9 +321,9 @@ static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
     //                                 block2
     for (int y = 0; y < h4; y++, dst += 4 * PXSTRIDE(ls), q_thr += 16, side_thr += 16) {
         if (!have_top && !y) continue;
-        const uint16_t vmask[5] = {
+        const uint16_t vmask[4] = {
             mask[y][0][sb64x], mask[y][1][sb64x], mask[y][2][sb64x],
-            mask[y][3][sb64x], mask[y][4][sb64x]
+            mask[y][3][sb64x]
         };
         dsp->lf.deblock_sb[0][1](dst, ls, vmask, q_thr, side_thr, !y,
                                  w4 HIGHBD_CALL_SUFFIX);
@@ -342,11 +354,10 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
                                  v_q_thr += 16, v_side_thr += 16)
     {
         if (!have_left && !x) continue;
-        uint16_t hmask[4] = {
+        uint16_t hmask[3] = {
             (mask[x][0][mask_idx] >> mask_shift) & bytes_mask,
             (mask[x][1][mask_idx] >> mask_shift) & bytes_mask,
             (mask[x][2][mask_idx] >> mask_shift) & bytes_mask,
-            (mask[x][4][mask_idx] >> mask_shift) & bytes_mask,
         };
         if (apply_u)
             dsp->lf.deblock_sb[1][0](&u[x * 4], ls, hmask, u_q_thr, u_side_thr,
@@ -386,11 +397,10 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
                             v_q_thr += 16, v_side_thr += 16)
     {
         if (!have_top && !y) continue;
-        const uint16_t vmask[4] = {
+        const uint16_t vmask[3] = {
             (mask[y][0][mask_idx] >> mask_shift) & bytes_mask,
             (mask[y][1][mask_idx] >> mask_shift) & bytes_mask,
             (mask[y][2][mask_idx] >> mask_shift) & bytes_mask,
-            (mask[y][4][mask_idx] >> mask_shift) & bytes_mask,
         };
         if (apply_u)
             dsp->lf.deblock_sb[1][1](&u[off_l], ls, vmask, u_q_thr, u_side_thr,
@@ -551,8 +561,9 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
 
             const uint8_t *const col_seg = segmap ? &segmap[x64 * 16] : placeholder_segmap;
             setup_thr_cols_sb64(edge_q_thr, edge_side_thr, 16,
-                                col_seg, seg_stride, lut,
-                                left_q_thr, left_side_thr, 0, 0);
+                                col_seg, seg_stride,
+                                &col_lflvl->filter_y[0][(x64 & 3) * 16], lut,
+                                left_q_thr, left_side_thr, y64 & 3, 0, 0);
             filter_plane_cols_y(f, have_left, &col_lflvl->filter_y[0][(x64 & 3) * 16],
                                 edge_q_thr, edge_side_thr, ptr, f->cur.p.stride[0],
                                 y64 & 3, imin(16, f->bw - x64 * 16), h4,
@@ -593,11 +604,15 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
         const uint8_t *const col_seg =
             uv_segmap ? &uv_segmap[x64 * (16 >> ss_hor)] : placeholder_segmap;
         setup_thr_cols_sb64(edge_q_thr[0], edge_side_thr[0], 16,
-                            col_seg, uv_seg_stride, lut[0],
-                            left_q_thr[0], left_side_thr[0], ss_hor, ss_ver);
+                            col_seg, uv_seg_stride,
+                            &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
+                            lut[0], left_q_thr[0], left_side_thr[0],
+                            y64 & 3, ss_hor, ss_ver);
         setup_thr_cols_sb64(edge_q_thr[1], edge_side_thr[1], 16,
-                            col_seg, uv_seg_stride, lut[1],
-                            left_q_thr[1], left_side_thr[1], ss_hor, ss_ver);
+                            col_seg, uv_seg_stride,
+                            &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
+                            lut[1], left_q_thr[1], left_side_thr[1],
+                            y64 & 3, ss_hor, ss_ver);
         filter_plane_cols_uv(f, have_left,
                              &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
                              edge_q_thr[0], edge_side_thr[0],
@@ -657,7 +672,8 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
                 segmap ? &segmap[x64 * 16] : placeholder_segmap;
             setup_thr_rows_sb64(edge_q_thr, edge_side_thr, 16,
                                 col_seg, seg_stride,
-                                lut, a_lut_ptr, 0, 0);
+                                &col_lflvl->filter_y[1][starty4],
+                                lut, a_lut_ptr, x64 & 3, 0, 0);
             filter_plane_rows_y(f, have_top, &col_lflvl->filter_y[1][starty4],
                                 edge_q_thr, edge_side_thr, ptr, f->cur.p.stride[0],
                                 x64 & 3, imin(16, f->bw - x64 * 16), h4);
@@ -696,10 +712,14 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
             uv_segmap ? &uv_segmap[x64 * (16 >> ss_hor)] : placeholder_segmap;
         setup_thr_rows_sb64(edge_q_thr[0], edge_side_thr[0], 16,
                             col_seg, uv_seg_stride,
-                            lut[0], a_lut_ptr ? a_lut_ptr[0] : NULL, ss_hor, ss_ver);
+                            &col_lflvl->filter_uv[1][starty4 >> ss_ver],
+                            lut[0], a_lut_ptr ? a_lut_ptr[0] : NULL,
+                            x64 & 3, ss_hor, ss_ver);
         setup_thr_rows_sb64(edge_q_thr[1], edge_side_thr[1], 16,
                             col_seg, uv_seg_stride,
-                            lut[1], a_lut_ptr ? a_lut_ptr[1] : NULL, ss_hor, ss_ver);
+                            &col_lflvl->filter_uv[1][starty4 >> ss_ver],
+                            lut[1], a_lut_ptr ? a_lut_ptr[1] : NULL,
+                            x64 & 3, ss_hor, ss_ver);
         filter_plane_rows_uv(f, have_top, &col_lflvl->filter_uv[1][starty4 >> ss_ver],
                              edge_q_thr[0], edge_side_thr[0],
                              edge_q_thr[1], edge_side_thr[1],

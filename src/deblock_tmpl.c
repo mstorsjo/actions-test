@@ -142,9 +142,8 @@ static void deblock_h_sb64y_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[3] & y) ? 3 : (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
-            const int is_sub_pu = !!(vmask[4] & y) * 3;
-            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
-                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+            deblock(dst, *q_thr, *side_thr, PXSTRIDE(stride), 1,
+                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
@@ -165,9 +164,8 @@ static void deblock_v_sb64y_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[3] & x) ? 3 : (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
-            const int is_sub_pu = !!(vmask[4] & x) * 3;
-            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
-                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+            deblock(dst, *q_thr, *side_thr, 1, PXSTRIDE(stride),
+                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
@@ -188,9 +186,8 @@ static void deblock_h_sb64uv_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
-            const int is_sub_pu = !!(vmask[3] & y) * 3;
-            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, PXSTRIDE(stride), 1,
-                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+            deblock(dst, *q_thr, *side_thr, PXSTRIDE(stride), 1,
+                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }
@@ -211,9 +208,8 @@ static void deblock_v_sb64uv_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
-            const int is_sub_pu = !!(vmask[3] & x) * 3;
-            deblock(dst, *q_thr >> is_sub_pu, *side_thr >> is_sub_pu, 1, PXSTRIDE(stride),
-                        max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+            deblock(dst, *q_thr, *side_thr, 1, PXSTRIDE(stride),
+                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
         }
     }
 }

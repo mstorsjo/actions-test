@@ -35,8 +35,6 @@
 
 #include "src/levels.h"
 
-// TODO: * Compute q_thr/side_thr from seg_ids in filter.
-//       * Add a flag to shift down q_thr/side_thr for sub_pu_edge
 #define decl_deblock_sb_fn(name) \
 void (name)(pixel *dst, ptrdiff_t stride, const uint16_t *mask, \
             const pixel *q_thr, const pixel *side_thr, int edge, \
