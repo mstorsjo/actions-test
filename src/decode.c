@@ -3748,7 +3748,8 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (IS_INTER_OR_SWITCH(f->frame_hdr) && f->seq_hdr->ext_sdp &&
             (cbs | lbs) != BS_INVALID && bp != PARTITION_NONE &&
             !(*dir_ptr & (1 << 24)) && // parent partition limits recursive extsdp
-            bp < PARTITION_H4A && imin(bw4, bh4) >= 2 && imax(bw4, bh4) <= 16)
+            bp < PARTITION_H4A && imin(bw4, bh4) >= 2 &&
+            bs != f->root_bs && imax(bw4, bh4) <= 16)
         {
             const int sz = b_dim[2] + b_dim[3];
             const int ctx = iclip(sz - 4, 0, 3) + (sz == 4);
