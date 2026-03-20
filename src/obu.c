@@ -1158,7 +1158,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (seqhdr->ref_frame_mvs)
             hdr->use_ref_frame_mvs = dav2d_get_bit(gb);
         hdr->tmvp_sample_step = 1 +
-            (hdr->use_ref_frame_mvs && hdr->n_ref_frames > 1 && dav2d_get_bit(gb));
+            (hdr->use_ref_frame_mvs && hdr->n_ref_frames > 1 &&
+             seqhdr->sb128 && dav2d_get_bit(gb));
 #if DEBUG_FRAME_HDR
         printf("HDR: post-refmvbits[%d,step:%d]: off=%td\n",
                hdr->use_ref_frame_mvs, hdr->tmvp_sample_step,
