@@ -108,7 +108,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 #if ARCH_X86_64
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
-#if 0
+#if BITDEPTH == 8
     init_angular_ipred_fn(DC_PRED,       ipred_dc,       avx2);
 #endif
     init_angular_ipred_fn(DC_128_PRED,   ipred_dc_128,   avx2);
