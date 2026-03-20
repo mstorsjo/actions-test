@@ -66,6 +66,8 @@ EXTERN const uint8_t /* enum InterPredMode */
 
 EXTERN const Dav2dWarpedMotionParams dav2d_default_wm_params;
 
+EXTERN const int8_t dav2d_tip_wts[8];
+
 EXTERN const int16_t dav2d_deblock_side_thresholds[296];
 
 EXTERN const int8_t dav2d_cdef_directions[12][2];

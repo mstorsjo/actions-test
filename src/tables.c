@@ -371,6 +371,8 @@ const Dav2dWarpedMotionParams dav2d_default_wm_params = {
     .u.p.delta = 0,
 };
 
+const int8_t dav2d_tip_wts[] = { 8,  12, 16, 18, 20, 4, 6, -4 };
+
 const int8_t dav2d_cdef_directions[2 + 8 + 2 /* dir */][2 /* pass */] = {
     {  1 * 12 + 0,  2 * 12 + 0 }, // 6
     {  1 * 12 + 0,  2 * 12 - 1 }, // 7
