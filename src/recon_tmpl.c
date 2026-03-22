@@ -695,8 +695,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             DEBUG_CF_printf("%*sPost-stx[type=%d,set=%d]: r=%d\n",
                             depth, "", stx_type, stx_set, ts->msac.rng);
         }
-    } else if (f->seq_hdr->cctx && plane == 1 && eob >= intra &&
-               !f->frame_hdr->segmentation.lossless[b->seg_id] &&
+    } else if (f->seq_hdr->cctx && plane == 1 && eob >= intra && !lossless &&
                (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || t_dim->max < 8))
     {
         const int cctx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
@@ -709,7 +708,8 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     // base tokens
     unsigned cul_level = 0;
     int dc_tok;
-    const int tcq_enabled = !chroma && f->frame_hdr->tcq && tx_class == TX_CLASS_2D;
+    const int tcq_enabled = !chroma && f->frame_hdr->tcq &&
+                            tx_class == TX_CLASS_2D && !lossless;
     int hr_avg = 0, tcq_state = tcq_enabled * -0x80000000;
     const uint8_t *const qm_tbl = *txtp < IDTX ? f->qm[tx][plane] : NULL;
     int dq_shift = tcq_enabled + 3 + imax(0, t_dim->ctx - 2);
