@@ -1312,7 +1312,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const unsigned pred_seg_id =
                 get_cur_frame_segid(t->by, t->bx, have_top, have_left,
                                     &seg_ctx, f->cur_segmap, f->b4_stride);
-            if (b->skip_txfm) {
+            if (b->skip_txfm && !f->frame_hdr->any_lossless) {
                 b->seg_id = pred_seg_id;
             } else {
                 const unsigned ext_flag = f->seq_hdr->segmentation.ext ?

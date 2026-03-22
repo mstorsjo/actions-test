@@ -520,7 +520,7 @@ typedef struct Dav2dFrameHeader {
             uint8_t res_log2;
         } q;
     } delta;
-    uint8_t all_lossless;
+    uint8_t all_lossless, any_lossless;
     uint8_t tcq, parity_hiding;
     struct {
         uint8_t sub_pu;

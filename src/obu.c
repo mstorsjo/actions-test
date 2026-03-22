@@ -1470,6 +1470,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     const int delta_lossless = !hdr->quant.ydc_delta && !hdr->quant.udc_delta &&
         !hdr->quant.uac_delta && !hdr->quant.vdc_delta && !hdr->quant.vac_delta;
     hdr->all_lossless = 1;
+    hdr->any_lossless = 0;
     for (int i = 0; i < DAV2D_MAX_SEGMENTS; i++) {
         hdr->segmentation.qidx[i] = hdr->segmentation.enabled ?
             iclip_u8(hdr->quant.yac + hdr->segmentation.d.delta_q[i]) :
@@ -1477,6 +1478,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         hdr->segmentation.lossless[i] =
             !hdr->segmentation.qidx[i] && delta_lossless;
         hdr->all_lossless &= hdr->segmentation.lossless[i];
+        hdr->any_lossless |= hdr->segmentation.lossless[i];
 
         // FIXME when using qm & segmentaiton, there are also some
         // bits here which qm to use per seg
