@@ -12,18 +12,12 @@ jobs:
         image:
           - ubuntu-22.04
           - ubuntu-24.04
-          - ubuntu-22.04-arm
-          - ubuntu-24.04-arm
     runs-on: ${{matrix.image}}
     steps:
-      - name: Inspect
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Try compiling for 32 bit
         run: |
-            set -x
-            uname -m
-            nproc
-            cat /proc/cpuinfo
-            df -h
-            ls /etc/apt/apt.conf.d/
-            cat /etc/apt/apt.conf.d/90assumeyes
-            which cmake
-            cmake --version
+            sudo apt-get update && sudo apt-get install gcc-multilib
+            gcc -v hello.c -o hello -m32
+            ./hello
