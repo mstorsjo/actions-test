@@ -122,7 +122,11 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 #if 0
     init_angular_ipred_fn(SMOOTH_PRED,   ipred_smooth,   avx2);
     init_angular_ipred_fn(SMOOTH_H_PRED, ipred_smooth_h, avx2);
+#endif
+#if BITDEPTH == 8
     init_angular_ipred_fn(SMOOTH_V_PRED, ipred_smooth_v, avx2);
+#endif
+#if 0
     init_angular_ipred_fn(Z1_PRED,       ipred_z1,       avx2);
     init_angular_ipred_fn(Z2_PRED,       ipred_z2,       avx2);
     init_angular_ipred_fn(Z3_PRED,       ipred_z3,       avx2);
