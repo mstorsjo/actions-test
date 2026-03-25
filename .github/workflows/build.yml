@@ -10,5 +10,9 @@ jobs:
     container: ghcr.io/btbn/ffmpeg-builds/win64-gpl:latest
     steps:
       - name: Inspect
+        env:
+          WINEPREFIX: /root/.wineprefix
         run: |
+          whoami
+          env
           wine wineboot
