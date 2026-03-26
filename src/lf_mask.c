@@ -272,11 +272,18 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
     const int ds_subpu_mask = (frame_hdr->tip.frame_mode != 2) * 15;
     int twl4c, thl4c;
 
+    const int lossless = frame_hdr->segmentation.lossless[b->seg_id];
     if (b->intra || !b->skip_txfm) {
         const enum TxPartition tx_part = chroma ? TX_PARTITION_NONE : b->tx_part;
-        const enum RectTxfmSize tx = chroma ?
-            dav2d_max_txfm_size_for_bs[bs][DAV2D_PIXEL_LAYOUT_I444 - layout] :
-            dav2d_tx_part_tbl[bs][tx_part];
+        enum RectTxfmSize tx;
+        if (lossless) {
+            tx = !chroma && b->tx_size_ll ?
+                dav2d_max_txfm_size_for_bs[bs][3] : (int) TX_4X4;
+        } else {
+            tx = chroma ?
+                dav2d_max_txfm_size_for_bs[bs][DAV2D_PIXEL_LAYOUT_I444 - layout] :
+                dav2d_tx_part_tbl[bs][tx_part];
+        }
         const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
         mask_edges_part(masks, by4, bx4, bw4, bh4, tx_part, t_dim,
                         iclip(subpu_l2 - ss_hor, 0, 3 - chroma),
@@ -284,10 +291,16 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
         twl4c = imin(subpu_l2, t_dim->lw);
         thl4c = imin(subpu_l2, t_dim->lh);
     } else {
-        mask_outer_edge_l(masks[0][bx4], by4, bh4,
-                          iclip(imin(subpu_l2, b_dim[2]) - ss_hor, 0, 3 - chroma), l);
-        mask_outer_edge_t(masks[1][by4], bx4, bw4,
-                          iclip(imin(subpu_l2, b_dim[3]) - ss_ver, 0, 3 - chroma), a);
+        int hlim, vlim;
+        if (lossless) {
+            hlim = 0;
+            vlim = 0;
+        } else {
+            hlim = iclip(imin(subpu_l2, b_dim[2]) - ss_hor, 0, 3 - chroma);
+            vlim = iclip(imin(subpu_l2, b_dim[3]) - ss_ver, 0, 3 - chroma);
+        }
+        mask_outer_edge_l(masks[0][bx4], by4, bh4, hlim, l);
+        mask_outer_edge_t(masks[1][by4], bx4, bw4, vlim, a);
         twl4c = thl4c = subpu_l2;
     }
 

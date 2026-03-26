@@ -37,6 +37,7 @@
 
 #define decl_deblock_sb_fn(name) \
 void (name)(pixel *dst, ptrdiff_t stride, const uint16_t *mask, \
+            const uint16_t *ll_mask, \
             const pixel *q_thr, const pixel *side_thr, int edge, \
             int w HIGHBD_DECL_SUFFIX)
 typedef decl_deblock_sb_fn(*deblock_sb_fn);

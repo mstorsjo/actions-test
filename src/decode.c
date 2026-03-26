@@ -3171,12 +3171,14 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     // update contexts
     if (f->frame_hdr->segmentation.enabled) {
+        int seg_id = b->seg_id;
         if (has_luma) {
-            uint8_t *seg_ptr = &f->cur_segmap[t->by * f->b4_stride + t->bx];
+            const ptrdiff_t seg_stride = f->b4_stride;
+            uint8_t *seg_ptr = &f->cur_segmap[t->by * seg_stride + t->bx];
 #define set_ctx(rep_macro) \
             for (int y = 0; y < bh4; y++) { \
-                rep_macro(seg_ptr, 0, b->seg_id); \
-                seg_ptr += f->b4_stride; \
+                rep_macro(seg_ptr, 0, seg_id); \
+                seg_ptr += seg_stride; \
             }
             case_set(b_dim[2]);
 #undef set_ctx
@@ -3184,16 +3186,48 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (has_chroma &&
             (f->frame_hdr->deblock.level_u || f->frame_hdr->deblock.level_v))
         {
-            ptrdiff_t seg_stride = f->lf.uv_segmap_stride;
+            const ptrdiff_t seg_stride = f->lf.uv_segmap_stride;
             uint8_t *seg_ptr =
                 &f->lf.segmap_uv[(t->cby >> ss_ver) * seg_stride + (t->cbx >> ss_hor)];
 #define set_ctx(rep_macro) \
             for (int y = 0; y < cbh4; y++) { \
-                rep_macro(seg_ptr, 0, b->seg_id); \
+                rep_macro(seg_ptr, 0, seg_id); \
                 seg_ptr += seg_stride; \
             }
             case_set(ulog2(cbw4));
 #undef set_ctx
+        }
+
+        if (f->frame_hdr->segmentation.lossless[seg_id]) {
+            if (has_luma) {
+                uint16_t (*const lossless)[4] = &t->lf_mask->lossless_mask_y[by4];
+                const uint64_t mask = (~0ULL >> (64 - bw4)) << bx4;
+                const unsigned mask1 = (unsigned) (mask & 0xffff);
+                const unsigned mask2 = (unsigned) ((mask >> 16) & 0xffff);
+                const unsigned mask3 = (unsigned) ((mask >> 32) & 0xffff);
+                const unsigned mask4 = (unsigned) ((mask >> 48));
+                for (int y = 0; y < bh4; y++) {
+                    if (mask1) lossless[y][0] |= mask1;
+                    if (mask2) lossless[y][1] |= mask2;
+                    if (mask3) lossless[y][2] |= mask3;
+                    if (mask4) lossless[y][3] |= mask4;
+                }
+            }
+            if (has_chroma) {
+                uint16_t (*const lossless)[4] = &t->lf_mask->lossless_mask_uv[cby4];
+                const uint64_t mask = (~0ULL >> (64 - cbw4)) << cbx4;
+                const uint64_t ss_mask = ss_hor ? 0xff : 0xffff;
+                const unsigned mask1 = (unsigned) (mask & ss_mask);
+                const unsigned mask2 = (unsigned) ((mask >> (16 >> ss_hor)) & ss_mask);
+                const unsigned mask3 = (unsigned) ((mask >> (32 >> ss_hor)) & ss_mask);
+                const unsigned mask4 = (unsigned) ((mask >> (48 >> ss_hor)) & ss_mask);
+                for (int y = 0; y < cbh4; y++) {
+                    if (mask1) lossless[y][0] |= mask1;
+                    if (mask2) lossless[y][1] |= mask2;
+                    if (mask3) lossless[y][2] |= mask3;
+                    if (mask4) lossless[y][3] |= mask4;
+                }
+            }
         }
     }
 

@@ -100,7 +100,8 @@ static int filter_choice(const pixel *const s, const pixel *const t, const ptrdi
 static NOINLINE void
 deblock(pixel *dst, unsigned q_thr, unsigned side_thr,
         const ptrdiff_t stridea, const ptrdiff_t strideb,
-        const int max_width_pos, const int max_width_neg
+        const int max_width_pos, const int max_width_neg,
+        const int pos_lossless, const int neg_lossless
         HIGHBD_DECL_SUFFIX)
 {
     const int width = filter_choice(dst, dst + 3 * stridea, strideb, max_width_neg, max_width_pos, q_thr, side_thr);
@@ -111,23 +112,31 @@ deblock(pixel *dst, unsigned q_thr, unsigned side_thr,
 
     const int q_thr_clamp = q_thr * q_thresh_mults[width - 1];
     for (int i = 0; i < 4; i++, dst += stridea) {
-        int delta_m2 = iclip(4 * (3 * (dst[0] - dst[-1 * strideb]) - (dst[strideb] - dst[-2 * strideb])), -q_thr_clamp, q_thr_clamp);
-        int delta_m2_neg = delta_m2 * w_mult[width_neg - 1];
-        for (int j = 0; j < width_neg; j++) {
-            pixel *dst_pix = &dst[(-j - 1) * strideb];
-            *dst_pix = iclip(*dst_pix + ((delta_m2_neg * (width_neg - j) + (1 << 10)) >> 11), 0, BITDEPTH_MAX);
+        const int delta_m2 =
+            iclip(4 * (3 * (dst[0] - dst[-1 * strideb]) - (dst[strideb] - dst[-2 * strideb])), -q_thr_clamp, q_thr_clamp);
+        if (!neg_lossless) {
+            const int delta_m2_neg = delta_m2 * w_mult[width_neg - 1];
+            for (int j = 0; j < width_neg; j++) {
+                pixel *const dst_pix = &dst[(-j - 1) * strideb];
+                const int diff = (delta_m2_neg * (width_neg - j) + (1 << 10)) >> 11;
+                *dst_pix = iclip(*dst_pix + diff, 0, BITDEPTH_MAX);
+            }
         }
 
-        int delta_m2_pos = delta_m2 * w_mult[width_pos - 1];
-        for (int j = 0; j < width_pos; j++) {
-            pixel *dst_pix = &dst[j * strideb];
-            *dst_pix = iclip(*dst_pix - ((delta_m2_pos * (width_pos - j) + (1 << 10)) >> 11), 0, BITDEPTH_MAX);
+        if (!pos_lossless) {
+            int delta_m2_pos = delta_m2 * w_mult[width_pos - 1];
+            for (int j = 0; j < width_pos; j++) {
+                pixel *const dst_pix = &dst[j * strideb];
+                const int diff = (delta_m2_pos * (width_pos - j) + (1 << 10)) >> 11;
+                *dst_pix = iclip(*dst_pix - diff, 0, BITDEPTH_MAX);
+            }
         }
     }
 }
 
 static void deblock_h_sb64y_c(pixel *dst, const ptrdiff_t stride,
                               const uint16_t *const vmask,
+                              const uint16_t *const ll_mask,
                               const pixel *q_thr,
                               const pixel *side_thr,
                               const int edge,
@@ -142,14 +151,18 @@ static void deblock_h_sb64y_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[3] & y) ? 3 : (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
+            const int pos_lossless = !!(ll_mask[1] & y);
+            const int neg_lossless = !!(ll_mask[0] & y);
             deblock(dst, *q_thr, *side_thr, PXSTRIDE(stride), 1,
-                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+                    max_width_pos, max_width_neg, pos_lossless, neg_lossless
+                    HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
 static void deblock_v_sb64y_c(pixel *dst, const ptrdiff_t stride,
                               const uint16_t *const vmask,
+                              const uint16_t *const ll_mask,
                               const pixel *q_thr,
                               const pixel *side_thr,
                               const int edge,
@@ -164,14 +177,18 @@ static void deblock_v_sb64y_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[3] & x) ? 3 : (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_y[idx];
             const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
+            const int pos_lossless = !!(ll_mask[1] & x);
+            const int neg_lossless = !!(ll_mask[0] & x);
             deblock(dst, *q_thr, *side_thr, 1, PXSTRIDE(stride),
-                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+                    max_width_pos, max_width_neg, pos_lossless, neg_lossless
+                    HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
 static void deblock_h_sb64uv_c(pixel *dst, const ptrdiff_t stride,
                                const uint16_t *const vmask,
+                               const uint16_t *const ll_mask,
                                const pixel *q_thr,
                                const pixel *side_thr,
                                const int edge,
@@ -186,14 +203,18 @@ static void deblock_h_sb64uv_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
+            const int pos_lossless = !!(ll_mask[1] & y);
+            const int neg_lossless = !!(ll_mask[0] & y);
             deblock(dst, *q_thr, *side_thr, PXSTRIDE(stride), 1,
-                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+                    max_width_pos, max_width_neg, pos_lossless, neg_lossless
+                    HIGHBD_TAIL_SUFFIX);
         }
     }
 }
 
 static void deblock_v_sb64uv_c(pixel *dst, const ptrdiff_t stride,
                                const uint16_t *const vmask,
+                               const uint16_t *const ll_mask,
                                const pixel *q_thr,
                                const pixel *side_thr,
                                const int edge,
@@ -208,8 +229,11 @@ static void deblock_v_sb64uv_c(pixel *dst, const ptrdiff_t stride,
             const int idx = (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_uv[idx];
             const int max_width_neg = edge ? imin(2, max_width_pos) : max_width_pos;
+            const int pos_lossless = !!(ll_mask[1] & x);
+            const int neg_lossless = !!(ll_mask[0] & x);
             deblock(dst, *q_thr, *side_thr, 1, PXSTRIDE(stride),
-                    max_width_pos, max_width_neg HIGHBD_TAIL_SUFFIX);
+                    max_width_pos, max_width_neg, pos_lossless, neg_lossless
+                    HIGHBD_TAIL_SUFFIX);
         }
     }
 }

@@ -174,6 +174,25 @@ void bytefn(dav2d_copy_db)(Dav2dFrameContext *const f,
     }
 }
 
+static void transpose_lossless_mask(uint16_t dst_mask[17],
+                                    const uint16_t (*const src_mask)[4],
+                                    const int x64,
+                                    const int ss_hor, const int ss_ver)
+{
+    // copy previous sb column
+    dst_mask[0] = dst_mask[16 >> ss_hor];
+
+    // transpose the original mask
+    // TODO: Use a faster bit matrix transpose implementation
+    for (int x = 0; x < 16 >> ss_hor; x++) {
+        unsigned col_mask = 0;
+        for (int y = 0; y < 16 >> ss_ver; y++) {
+            col_mask |= (1 & (src_mask[y][x64] >> x)) << y;
+        }
+        dst_mask[x+1] = col_mask;
+    }
+}
+
 static void setup_thr_cols_sb64(pixel *const q_thr_dst,
                                 pixel *const side_thr_dst,
                                 const ptrdiff_t dst_stride,
@@ -284,6 +303,7 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
 static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
                                        const int have_left,
                                        const uint16_t (*const mask)[5][4],
+                                       const uint16_t (*const ll_mask),
                                        const pixel *q_thr,
                                        const pixel *side_thr,
                                        pixel *dst, const ptrdiff_t ls,
@@ -299,8 +319,9 @@ static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
             mask[x][0][y64], mask[x][1][y64], mask[x][2][y64],
             mask[x][3][y64]
         };
-        dsp->lf.deblock_sb[0][0](&dst[x * 4], ls, hmask, q_thr, side_thr, tile_edge,
-                                 h4 HIGHBD_CALL_SUFFIX);
+        dsp->lf.deblock_sb[0][0](&dst[x * 4], ls, hmask, ll_mask + x,
+                                 q_thr, side_thr, tile_edge, h4
+                                 HIGHBD_CALL_SUFFIX);
         tile_edge = 0;
     }
 }
@@ -308,6 +329,7 @@ static inline void filter_plane_cols_y(const Dav2dFrameContext *const f,
 static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
                                        const int have_top,
                                        const uint16_t (*const mask)[5][4],
+                                       const uint16_t (*const ll_mask),
                                        const pixel *q_thr,
                                        const pixel *side_thr,
                                        pixel *dst, const ptrdiff_t ls,
@@ -325,14 +347,16 @@ static inline void filter_plane_rows_y(const Dav2dFrameContext *const f,
             mask[y][0][sb64x], mask[y][1][sb64x], mask[y][2][sb64x],
             mask[y][3][sb64x]
         };
-        dsp->lf.deblock_sb[0][1](dst, ls, vmask, q_thr, side_thr, !y,
-                                 w4 HIGHBD_CALL_SUFFIX);
+        dsp->lf.deblock_sb[0][1](dst, ls, vmask, ll_mask + y,
+                                 q_thr, side_thr, !y, w4
+                                 HIGHBD_CALL_SUFFIX);
     }
 }
 
 static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
                                         const int have_left,
                                         const uint16_t (*const mask)[5][4],
+                                        const uint16_t (*const ll_mask),
                                         const pixel *u_q_thr,
                                         const pixel *u_side_thr,
                                         const pixel *v_q_thr,
@@ -360,11 +384,13 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
             (mask[x][2][mask_idx] >> mask_shift) & bytes_mask,
         };
         if (apply_u)
-            dsp->lf.deblock_sb[1][0](&u[x * 4], ls, hmask, u_q_thr, u_side_thr,
-                                     tile_edge, h4 HIGHBD_CALL_SUFFIX);
+            dsp->lf.deblock_sb[1][0](&u[x * 4], ls, hmask, ll_mask + x,
+                                     u_q_thr, u_side_thr, tile_edge, h4
+                                     HIGHBD_CALL_SUFFIX);
         if (apply_v)
-            dsp->lf.deblock_sb[1][0](&v[x * 4], ls, hmask, v_q_thr, v_side_thr,
-                                     tile_edge, h4 HIGHBD_CALL_SUFFIX);
+            dsp->lf.deblock_sb[1][0](&v[x * 4], ls, hmask, ll_mask + x,
+                                     v_q_thr, v_side_thr, tile_edge, h4
+                                     HIGHBD_CALL_SUFFIX);
         tile_edge = 0;
     }
 }
@@ -372,6 +398,7 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
 static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
                                         const int have_top,
                                         const uint16_t (*const mask)[5][4],
+                                        const uint16_t (*const ll_mask),
                                         const pixel *u_q_thr,
                                         const pixel *u_side_thr,
                                         const pixel *v_q_thr,
@@ -403,11 +430,13 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
             (mask[y][2][mask_idx] >> mask_shift) & bytes_mask,
         };
         if (apply_u)
-            dsp->lf.deblock_sb[1][1](&u[off_l], ls, vmask, u_q_thr, u_side_thr,
-                                     !y, w4 HIGHBD_CALL_SUFFIX);
+            dsp->lf.deblock_sb[1][1](&u[off_l], ls, vmask, ll_mask + y,
+                                     u_q_thr, u_side_thr, !y, w4
+                                     HIGHBD_CALL_SUFFIX);
         if (apply_v)
-            dsp->lf.deblock_sb[1][1](&v[off_l], ls, vmask, v_q_thr, v_side_thr,
-                                     !y, w4 HIGHBD_CALL_SUFFIX);
+            dsp->lf.deblock_sb[1][1](&v[off_l], ls, vmask, ll_mask + y,
+                                     v_q_thr, v_side_thr, !y, w4
+                                     HIGHBD_CALL_SUFFIX);
     }
 }
 
@@ -541,6 +570,7 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
         pixel edge_side_thr[16 * 16];
         pixel left_q_thr[16] = { 0 };
         pixel left_side_thr[16] = { 0 };
+        uint16_t ll_mask[17] = { 0 };
         pixel *ptr;
         int tile_col = 1;
         int tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] << sbl2;
@@ -564,7 +594,11 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
                                 col_seg, seg_stride,
                                 &col_lflvl->filter_y[0][(x64 & 3) * 16], lut,
                                 left_q_thr, left_side_thr, y64 & 3, 0, 0);
-            filter_plane_cols_y(f, have_left, &col_lflvl->filter_y[0][(x64 & 3) * 16],
+            transpose_lossless_mask(ll_mask,
+                                    &col_lflvl->lossless_mask_y[starty4],
+                                    x64 & 3, 0, 0);
+            filter_plane_cols_y(f, have_left,
+                                &col_lflvl->filter_y[0][(x64 & 3) * 16], ll_mask,
                                 edge_q_thr, edge_side_thr, ptr, f->cur.p.stride[0],
                                 y64 & 3, imin(16, f->bw - x64 * 16), h4,
                                 tile_end == x64 * 16);
@@ -583,6 +617,7 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
     pixel edge_side_thr[2][16 * 16];
     pixel left_q_thr[2][16] = { 0 };
     pixel left_side_thr[2][16] = { 0 };
+    uint16_t ll_mask[17] = { 0 };
     ptrdiff_t uv_off;
     int tile_col = 1;
     int tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] << sbl2;
@@ -613,8 +648,12 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
                             &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
                             lut[1], left_q_thr[1], left_side_thr[1],
                             y64 & 3, ss_hor, ss_ver);
+        transpose_lossless_mask(ll_mask,
+                                &col_lflvl->lossless_mask_uv[starty4 >> ss_ver],
+                                x64 & 3, ss_hor, ss_ver);
         filter_plane_cols_uv(f, have_left,
                              &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
+                             ll_mask,
                              edge_q_thr[0], edge_side_thr[0],
                              edge_q_thr[1], edge_side_thr[1],
                              &p[1][uv_off], &p[2][uv_off], f->cur.p.stride[1],
@@ -633,7 +672,7 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
     const int starty4 = (y64 * 16) & 0x30;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
-    const int h4 =  imin(f->bh - y64 * 16, 16);
+    const int h4 = imin(f->bh - y64 * 16, 16);
     const int uv_h4 = h4 >> ss_ver;
     const int hbd = f->seq_hdr->hbd;
 
@@ -653,14 +692,22 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
         pixel (*const a_lut_ptr)[16] = a_lflvl ? a_lut : NULL;
         pixel edge_q_thr[16 * 16];
         pixel edge_side_thr[16 * 16];
+        uint16_t ll_mask[17] = { 0 };
+
         for (ptr = p[0], x64 = 0; x64 < (f->bw + 15) >> 4; x64++, ptr += 64) {
             const Av2Filter *const col_lflvl = &lflvl[x64 >> 2];
+
+            for (int y = 0; y < h4; y++)
+                ll_mask[y + 1] = col_lflvl->lossless_mask_y[starty4 + y][x64 & 3];
+
             const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
             if (cur_qidx != l_qidx) {
                 init_deblock_thr_lut_y(f->frame_hdr, hbd, 1, cur_qidx, lut);
                 l_qidx = cur_qidx;
             }
             if (a_lut_ptr) {
+                ll_mask[0] = a_lflvl[x64 >> 2].lossless_mask_y[(starty4 + 63) & 63][x64 & 3];
+
                 const int a_qidx = a_lflvl[x64 >> 2].qidx[(x64 & 3) + a_y64idx];
                 if (a_qidx != al_qidx) {
                     init_deblock_thr_lut_y(f->frame_hdr, hbd, 1, a_qidx, a_lut_ptr);
@@ -674,7 +721,8 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
                                 col_seg, seg_stride,
                                 &col_lflvl->filter_y[1][starty4],
                                 lut, a_lut_ptr, x64 & 3, 0, 0);
-            filter_plane_rows_y(f, have_top, &col_lflvl->filter_y[1][starty4],
+            filter_plane_rows_y(f, have_top,
+                                &col_lflvl->filter_y[1][starty4], ll_mask,
                                 edge_q_thr, edge_side_thr, ptr, f->cur.p.stride[0],
                                 x64 & 3, imin(16, f->bw - x64 * 16), h4);
         }
@@ -692,15 +740,21 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
     pixel (*const a_lut_ptr)[2][16] = a_lflvl ? a_lut : NULL;
     pixel edge_q_thr[2][16 * 16];
     pixel edge_side_thr[2][16 * 16];
+    uint16_t ll_mask[17] = { 0 };
     ptrdiff_t uv_off;
     for (uv_off = 0, x64 = 0; x64 < (f->bw + 15) >> 4; x64++, uv_off += 64 >> ss_hor) {
         const Av2Filter *const col_lflvl = &lflvl[x64 >> 2];
+        for (int y = 0; y < uv_h4; y++)
+            ll_mask[y + 1] = col_lflvl->lossless_mask_uv[(starty4 >> ss_ver) + y][x64 & 3];
+
         const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
         if (cur_qidx != l_qidx) {
             init_deblock_thr_lut_uv(f->frame_hdr, hbd, cur_qidx, lut);
             l_qidx = cur_qidx;
         }
         if (a_lut_ptr) {
+            ll_mask[0] = a_lflvl[x64 >> 2].lossless_mask_uv[((starty4 + 63) & 63) >> ss_ver][x64 & 3];
+
             const int a_qidx = a_lflvl[x64 >> 2].qidx[(x64 & 3) + a_y64idx];
             if (a_qidx != al_qidx) {
                 init_deblock_thr_lut_uv(f->frame_hdr, hbd, a_qidx, a_lut_ptr);
@@ -720,7 +774,8 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
                             &col_lflvl->filter_uv[1][starty4 >> ss_ver],
                             lut[1], a_lut_ptr ? a_lut_ptr[1] : NULL,
                             x64 & 3, ss_hor, ss_ver);
-        filter_plane_rows_uv(f, have_top, &col_lflvl->filter_uv[1][starty4 >> ss_ver],
+        filter_plane_rows_uv(f, have_top,
+                             &col_lflvl->filter_uv[1][starty4 >> ss_ver], ll_mask,
                              edge_q_thr[0], edge_side_thr[0],
                              edge_q_thr[1], edge_side_thr[1],
                              &p[1][uv_off], &p[2][uv_off], f->cur.p.stride[1],

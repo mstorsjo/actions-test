@@ -49,6 +49,8 @@ typedef struct Av2Filter {
     uint8_t ccso[3];
     uint16_t noskip_mask[32][4]; // for 8x8 blocks, but stored on a 4x8 basis
     uint16_t lr_noskip_mask[64][4]; // for 4x4 blocks
+    uint16_t lossless_mask_y[64][4];
+    uint16_t lossless_mask_uv[64][4];
 } Av2Filter;
 
 // each struct describes one 256x256 area (1, 4, or 16 SBs)
