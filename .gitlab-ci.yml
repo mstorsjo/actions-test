@@ -132,7 +132,22 @@ build-debian:
                   diff <(echo "$a_md5") <(echo "$d_md5")
               fi
           done
-
+          files=(
+              "./media/avm-v13.0.0-bus.352x288.l1.partial_lossless.obu"
+          )
+          for file in "${files[@]}"; do
+              base="$(basename "$file")"
+              # avmdec's --md5 only outputs the MD5 of the first frame (see AVM #1267)
+              ./avm/x86-64/avmdec "$file" -o /tmp/avm.yuv --rawvideo --inloopfilters=deblock
+              a_md5=$(md5sum /tmp/avm.yuv | cut -d' ' -f1)
+              d_md5=$(./build/tools/dav2d -i "$file" -o - --inloopfilters=deblock --threads=1 --quiet --muxer=md5 --filmgrain=1)
+              if [[ "$a_md5" == "$d_md5" ]]; then
+                  echo $base "[OK] md5:$a_md5"
+              else
+                  echo $base "[FAILED!]"
+                  diff <(echo "$a_md5") <(echo "$d_md5")
+              fi
+          done
 build-debian-avx512:
     extends: .debian-amd64-common
     tags:
