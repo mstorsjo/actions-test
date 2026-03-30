@@ -311,33 +311,34 @@ enum CflMhDir {
 #define TIP_FRAME 7
 
 typedef struct Av2Block {
-    int8_t bs, lbs, cbs;
+    int8_t bs, cbs;
     uint8_t intra, intrabc, seg_id, skip_mode, skip_txfm, tx_part, fsc, tx_size_ll;
+    union refpair ref;
     union {
         struct {
+            // it's also possible to access this using mv[0]
+            union mv intrabc_mv;
             uint8_t dpcm[2], y_mode, mrl_index, multi_mrl, dip;
+            uint8_t morph_pred, is_refmv, is_qpel; // for intrabc
             uint8_t uv_mode, pal_sz;
             int8_t y_angle, uv_angle, cfl_type;
             union {
                 int8_t cfl_alpha[2];
                 uint8_t cfl_mh_dir; // enum CflMhDir
             };
+            struct {
+                int a, l;
+            } is_sm[2 /* luma, chroma */];
         }; // intra
         struct {
-            union {
-                struct {
-                    union mv mv[2];
-                    int8_t wedge_idx, wedge_sign; // -1 for no wedge
-                    uint8_t mask_sign, interintra_mode, morph_pred;
-                };
-                struct {
-                    union mv mv2d;
-                    int16_t matrix[4];
-                };
-            };
+            union mv mv[2];
+            int8_t wedge_idx, wedge_sign; // -1 for no wedge
+            uint8_t mask_sign, interintra_mode;
+            int8_t matrix[4];
+            uint8_t drl_idx[2];
+            uint8_t warp_ref_idx, warpmv_with_mvd;
             uint8_t comp_type, inter_mode, motion_mode, warp_ii;
-            int8_t cwp_idx;
-            union refpair ref;
+            int8_t cwp_idx, mv_prec, amvd;
             uint8_t bawp[2], filter;
             uint8_t refine_mv; // 1 = enabled, 2 = implicitly enabled
         }; // inter

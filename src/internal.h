@@ -171,6 +171,7 @@ struct Dav2dContext {
             };
         } delayed_fg;
         int inited;
+        int uses_2pass;
     } task_thread;
 
     // reference/entropy state
@@ -311,14 +312,18 @@ struct Dav2dFrameContext {
         atomic_uint *frame_progress, *copy_db_progress;
         // indexed using t->by * f->b4_stride + t->bx
         Av2Block *b;
-        int16_t *cbi; /* bits 0-4: txtp, bits 5-15: eob */
+        struct CodedBlockInfo {
+            int16_t eob[3 /* plane */];
+            uint16_t txtp[3 /* plane */];
+        } *cbi;
         // indexed using (t->by >> 1) * (f->b4_stride >> 1) + (t->bx >> 1)
         pixel (*pal)[8 /* idx */];
         // iterated over inside tile state
         uint8_t *pal_idx;
         coef *cf;
+        uint8_t *partition;
         int prog_sz;
-        int cbi_sz, pal_sz, pal_idx_sz, cf_sz;
+        int cbi_sz, pal_sz, pal_idx_sz, cf_sz, part_sz;
         // start offsets per tile
         unsigned *tile_start_off;
     } frame_thread;
@@ -399,8 +404,10 @@ struct Dav2dTileState {
     atomic_int progress[2 /* 0: reconstruction, 1: entropy */];
     struct {
         uint8_t *pal_idx;
-        int16_t *cbi;
+        pixel (*pal)[8];
+        struct CodedBlockInfo *cbi;
         coef *cf;
+        uint8_t *partition;
     } frame_thread[2 /* 0: reconstruction, 1: entropy */];
 
     // in fullpel units, [0] = Y, [1] = UV, used for progress requirements
@@ -432,9 +439,6 @@ struct Dav2dTaskContext {
         int row_start;
         union {
             struct {
-                int a, l;
-            } is_sm[2 /* luma, chroma */];
-            struct {
                 int alpha, beta;
             } bawp[3 /* plane */];
         };
@@ -443,6 +447,7 @@ struct Dav2dTaskContext {
     // chroma backups
     uint16_t /*enum TxfmType*/ chroma_txtp[16 * 16][2]; // why 2?
     int16_t chroma_eob[16 * 16][2];
+    coef *cf_uv;
     ALIGN(union, 64) {
         int16_t cf_y_8bpc [32 * 32];
         int32_t cf_y_16bpc[32 * 32];

@@ -1,4 +1,4 @@
-From 43cd563447044f0d87c072118e640e086132cdaf Mon Sep 17 00:00:00 2001
+From fb1637ff40a34f818289aaadcc34c2cf62dfa91f Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -6,19 +6,21 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
 
 ---
  av2/common/av2_common_int.h |   2 +
- av2/common/mvref_common.c   | 666 ++++++++++++++++++++++++++++--
+ av2/common/mvref_common.c   | 717 ++++++++++++++++++++++++++++--
+ av2/common/mvref_common.h   |   4 +-
  av2/common/tip.c            |   2 +
- av2/decoder/decodeframe.c   | 234 ++++++++---
- av2/decoder/decodemv.c      | 796 ++++++++++++++++++++++++++++++------
- av2/decoder/decodemv.h      |  18 +-
+ av2/decoder/decodeframe.c   | 238 +++++++---
+ av2/decoder/decodemv.c      | 852 ++++++++++++++++++++++++++++++------
+ av2/decoder/decodemv.h      |  21 +-
  av2/decoder/decoder.c       |   5 +-
  av2/decoder/decoder.h       |  12 +-
- av2/decoder/decodetxb.c     | 229 +++++++++--
+ av2/decoder/decodetxb.c     | 229 ++++++++--
  av2/decoder/decodetxb.h     |  14 +-
  av2/decoder/detokenize.c    |   8 +-
  av2/decoder/detokenize.h    |   3 +-
+ av2/encoder/rdopt.c         |  10 +-
  avm/debug.h                 |  16 +
- 13 files changed, 1732 insertions(+), 273 deletions(-)
+ 15 files changed, 1837 insertions(+), 296 deletions(-)
 
 diff --git a/av2/common/av2_common_int.h b/av2/common/av2_common_int.h
 index 060e8ef70b..546a157ffb 100644
@@ -35,7 +37,7 @@ index 060e8ef70b..546a157ffb 100644
        const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
        const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av2/common/mvref_common.c b/av2/common/mvref_common.c
-index cada655229..eaa70cf9e1 100644
+index cada655229..766f5e075c 100644
 --- a/av2/common/mvref_common.c
 +++ b/av2/common/mvref_common.c
 @@ -12,6 +12,8 @@
@@ -57,7 +59,7 @@ index cada655229..eaa70cf9e1 100644
 +#define RDB_ONLY(x...) x
 +#define DB_ARGS(x...) x,
 +#define DEBUG_REFMV_printf(fmt...) \
-+    if (BLOCK_TO_DEBUG) { \
++    if (is_dbg && BLOCK_TO_DEBUG) { \
 +        printf(fmt); \
 +    }
 +#else
@@ -73,7 +75,7 @@ index cada655229..eaa70cf9e1 100644
  // Fetch MVP candidates from derived SMVP into MVP candidate list
  // when there is no enough MVP candidates.
  static AVM_INLINE void fill_mvp_from_derived_smvp(
-+    DB_ARGS(const AV2_COMMON *cm, int mi_row, int mi_col)
++    DB_ARGS(const AV2_COMMON *cm, int mi_row, int mi_col, int is_dbg)
      const MV_REFERENCE_FRAME rf[2], CANDIDATE_MV *ref_mv_stack,
      uint16_t *ref_mv_weight, uint8_t *refmv_count,
      CANDIDATE_MV *derived_mv_stack, uint8_t derived_mv_count,
@@ -163,7 +165,7 @@ index cada655229..eaa70cf9e1 100644
  }
  
  static AVM_INLINE void derive_ref_mv_candidate_from_tip_mode(
-+    DB_ARGS(int mi_row, int mi_col)
++    DB_ARGS(int mi_row, int mi_col, int is_dbg)
      const AV2_COMMON *cm, int mi_row_cand, int mi_col_cand,
      const MB_MODE_INFO *const candidate, uint8_t *refmv_count,
      uint8_t *ref_match_count, uint8_t *newmv_count, CANDIDATE_MV *ref_mv_stack,
@@ -206,6 +208,15 @@ index cada655229..eaa70cf9e1 100644
        ++(*refmv_count);
      }
    }
+@@ -817,7 +894,7 @@ static AVM_INLINE void add_ref_mv_candidate_ctx(
+   }
+ }
+ 
+-static AVM_INLINE void add_ref_mv_candidate(
++static AVM_INLINE void add_ref_mv_candidate(DB_ONLY(const int is_dbg)
+     int mi_row, int mi_col, int mi_row_cand, int mi_col_cand,
+     const MB_MODE_INFO *const candidate, const SUBMB_INFO *const submi,
+     const MV_REFERENCE_FRAME rf[2], uint8_t *refmv_count,
 @@ -871,6 +948,12 @@ static AVM_INLINE void add_ref_mv_candidate(
              ++(*drl_pr_count);
              if (ref_mv_stack[index].this_mv.as_int == this_refmv.as_int) {
@@ -402,7 +413,7 @@ index cada655229..eaa70cf9e1 100644
          rf[0] == tip_ref->ref_frame[0] && rf[1] == tip_ref->ref_frame[1] &&
          cm->features.tip_frame_mode) {
 -      derive_ref_mv_candidate_from_tip_mode(
-+      derive_ref_mv_candidate_from_tip_mode(DB_ARGS(mi_row, mi_col)
++      derive_ref_mv_candidate_from_tip_mode(DB_ARGS(mi_row, mi_col, is_dbg)
            cm, mi_row_cand, mi_col_cand, candidate, refmv_count, ref_match_count,
            newmv_count, ref_mv_stack, ref_mv_weight, weight, drl_pr_count);
      } else {
@@ -583,17 +594,18 @@ index cada655229..eaa70cf9e1 100644
                ++(*single_mv_count);
              }
            }
-@@ -1445,7 +1701,8 @@ void insert_neighbor_warp_candidate(
+@@ -1445,7 +1701,9 @@ void insert_neighbor_warp_candidate(
  
  // Check if the candidate warp parameters are already in the list or not.
  
 -void check_this_warp_candidate(
 +void check_this_warp_candidate(DB_ARGS(const int have_warp, const char *const tag,
-+                                       const int mi_row, const int mi_col)
++                                       const int mi_row, const int mi_col,
++                                       const int is_dbg)
      const AV2_COMMON *cm, const MB_MODE_INFO *const neighbor_mbmi,
      WARP_CANDIDATE warp_candidates[MAX_WARP_REF_CANDIDATES],
      const int ref_frame, const int max_num_of_candidates,
-@@ -1456,6 +1713,15 @@ void check_this_warp_candidate(
+@@ -1456,6 +1714,15 @@ void check_this_warp_candidate(
    WarpedMotionParams neigh_params;
    if (*curr_num_of_candidates < max_num_of_candidates &&
        is_valid_warp_parameters(cm, neighbor_mbmi, ref_frame, &neigh_params)) {
@@ -609,26 +621,45 @@ index cada655229..eaa70cf9e1 100644
      insert_neighbor_warp_candidate(warp_candidates, &neigh_params,
                                     *curr_num_of_candidates, proj_type);
      ++(*curr_num_of_candidates);
-@@ -1502,7 +1768,7 @@ static AVM_INLINE void scan_blk_mbmi_ctx(
+@@ -1502,7 +1769,8 @@ static AVM_INLINE void scan_blk_mbmi_ctx(
    }
  }
  
 -static AVM_INLINE void scan_blk_mbmi(
-+static AVM_INLINE void scan_blk_mbmi(DB_ARGS(const int have_warp, const char *const tag)
++static AVM_INLINE void scan_blk_mbmi(DB_ARGS(const int have_warp, const char *const tag,
++                                             const int is_dbg)
      const AV2_COMMON *cm, const MACROBLOCKD *xd, const int mi_row,
      const int mi_col, const MV_REFERENCE_FRAME rf[2], int row_offset,
      int col_offset, CANDIDATE_MV *ref_mv_stack, uint16_t *ref_mv_weight,
-@@ -1541,7 +1807,8 @@ static AVM_INLINE void scan_blk_mbmi(
+@@ -1541,14 +1809,15 @@ static AVM_INLINE void scan_blk_mbmi(
  
      if (warp_param_stack && valid_num_warp_candidates &&
          max_num_of_warp_candidates) {
 -      check_this_warp_candidate(cm, candidate, warp_param_stack, ref_frame,
-+      check_this_warp_candidate(DB_ARGS(have_warp, tag, mi_row, mi_col)
++      check_this_warp_candidate(DB_ARGS(have_warp, tag, mi_row, mi_col, is_dbg)
 +                                cm, candidate, warp_param_stack, ref_frame,
                                  max_num_of_warp_candidates,
                                  valid_num_warp_candidates, PROJ_SPATIAL);
      }
-@@ -1711,7 +1978,13 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+ 
+     if (*refmv_count >= MAX_REF_MV_STACK_SIZE) return;
+ 
+-    add_ref_mv_candidate(
++    add_ref_mv_candidate(DB_ONLY(is_dbg)
+         mi_row, mi_col, cand_mi_row, cand_mi_col, candidate, submi, rf,
+         refmv_count, ref_match_count, newmv_count, ref_mv_stack, ref_mv_weight,
+         gm_mv_candidates, cm->global_motion, cm, add_more_mvs, single_mv,
+@@ -1632,7 +1901,8 @@ static AVM_INLINE int compute_cur_to_ref_dist(const AV2_COMMON *cm,
+   return cur_ref_offset;
+ }
+ 
+-static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
++static int add_tpl_ref_mv(DB_ONLY(const int is_dbg)
++                          const AV2_COMMON *cm, const MACROBLOCKD *xd,
+                           int mi_row, int mi_col, MV_REFERENCE_FRAME ref_frame,
+                           int blk_row, int blk_col, uint8_t *const refmv_count,
+                           int *added_tmvp_cnt,
+@@ -1711,7 +1981,13 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          if (this_refmv.as_int == ref_mv_stack[idx].this_mv.as_int) break;
        }
  
@@ -643,7 +674,7 @@ index cada655229..eaa70cf9e1 100644
  
        if (idx == *refmv_count && *refmv_count < MAX_REF_MV_STACK_SIZE) {
          ref_mv_stack[idx].this_mv.as_int = this_refmv.as_int;
-@@ -1721,6 +1994,11 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1721,6 +1997,11 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_weight[idx] = weight;
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
@@ -655,7 +686,7 @@ index cada655229..eaa70cf9e1 100644
        }
      } else {
        if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
-@@ -1729,6 +2007,11 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1729,6 +2010,11 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = weight;
@@ -667,7 +698,7 @@ index cada655229..eaa70cf9e1 100644
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
        }
-@@ -1756,7 +2039,15 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1756,7 +2042,15 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
            break;
        }
  
@@ -684,7 +715,7 @@ index cada655229..eaa70cf9e1 100644
  
        if (idx == *refmv_count && *refmv_count < MAX_REF_MV_STACK_SIZE) {
          ref_mv_stack[idx].this_mv.as_int = this_refmv.as_int;
-@@ -1767,6 +2058,12 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1767,6 +2061,12 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_weight[idx] = weight;
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
@@ -697,7 +728,7 @@ index cada655229..eaa70cf9e1 100644
        }
      } else {
        if (*refmv_count < MAX_REF_MV_STACK_SIZE) {
-@@ -1776,6 +2073,12 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1776,6 +2076,12 @@ static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = weight;
@@ -710,11 +741,11 @@ index cada655229..eaa70cf9e1 100644
          ++(*refmv_count);
          ++(*added_tmvp_cnt);
        }
-@@ -1818,16 +2121,25 @@ static AVM_INLINE int get_rmb_list_index(const MV_REFERENCE_FRAME ref_frame) {
+@@ -1818,16 +2124,25 @@ static AVM_INLINE int get_rmb_list_index(const MV_REFERENCE_FRAME ref_frame) {
  }
  
  static AVM_INLINE bool check_rmb_cand(
-+    DB_ARGS(const AV2_COMMON *cm, int bank_idx, int bank_count)
++    DB_ARGS(const AV2_COMMON *cm, int bank_idx, int bank_count, const int is_dbg)
      CANDIDATE_MV cand_mv, CANDIDATE_MV *ref_mv_stack, uint16_t *ref_mv_weight,
      uint8_t *refmv_count, int is_comp, int mi_row, int mi_col, int block_width,
      int block_height, int frame_width, int frame_height, int *drl_pr_count) {
@@ -736,7 +767,7 @@ index cada655229..eaa70cf9e1 100644
          return false;
        }
      }
-@@ -1852,6 +2164,12 @@ static AVM_INLINE bool check_rmb_cand(
+@@ -1852,6 +2167,12 @@ static AVM_INLINE bool check_rmb_cand(
    ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
    ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
    ref_mv_stack[*refmv_count].cwp_idx = cand_mv.cwp_idx;
@@ -749,36 +780,71 @@ index cada655229..eaa70cf9e1 100644
    ++*refmv_count;
  
    return true;
-@@ -1945,7 +2263,8 @@ static AVM_INLINE void add_derived_smvp_candidates(
+@@ -1870,7 +2191,7 @@ static AVM_INLINE bool add_to_ref_bv_list(CANDIDATE_MV cand_mv,
+   return true;
+ }
+ 
+-static AVM_INLINE void add_tmvp_candidate(
++static AVM_INLINE void add_tmvp_candidate(DB_ONLY(const int is_dbg)
+     const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME ref_frame,
+     uint8_t *const refmv_count,
+     CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
+@@ -1902,7 +2223,8 @@ static AVM_INLINE void add_tmvp_candidate(
+     for (int iter = 0; iter < TMVP_SEARCH_COUNT; ++iter) {
+       if (added_tmvp_cnt) break;
+       if (tmvp_units_status[iter].is_available) {
+-        add_tpl_ref_mv(cm, xd, mi_row, mi_col, ref_frame,
++        add_tpl_ref_mv(DB_ONLY(is_dbg)
++                       cm, xd, mi_row, mi_col, ref_frame,
+                        tmvp_units_status[iter].row_offset,
+                        tmvp_units_status[iter].col_offset, refmv_count,
+                        &added_tmvp_cnt, ref_mv_stack, ref_mv_weight,
+@@ -1929,7 +2251,7 @@ static AVM_INLINE int assign_tmvp_high_priority(const AV2_COMMON *cm,
+   return 0;
+ }
+ 
+-static AVM_INLINE void add_derived_smvp_candidates(
++static AVM_INLINE void add_derived_smvp_candidates(DB_ONLY(const int is_dbg)
+     const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME *rf,
+     uint8_t *const refmv_count,
+     CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
+@@ -1945,13 +2267,14 @@ static AVM_INLINE void add_derived_smvp_candidates(
            ? AVMMIN(cm->features.max_bvp_drl_bits + 1, MAX_REF_BV_STACK_SIZE)
            : AVMMIN(cm->features.max_drl_bits + 1, MAX_REF_MV_STACK_SIZE);
    if (*refmv_count < max_ref_mv_count && derived_mv_count > 0) {
 -    fill_mvp_from_derived_smvp(rf, ref_mv_stack, ref_mv_weight, refmv_count,
-+    fill_mvp_from_derived_smvp(DB_ARGS(cm, xd->mi_row, xd->mi_col)
++    fill_mvp_from_derived_smvp(DB_ARGS(cm, xd->mi_row, xd->mi_col, is_dbg)
 +                               rf, ref_mv_stack, ref_mv_weight, refmv_count,
                                 derived_mv_stack, derived_mv_count,
                                 max_ref_mv_count, drl_pr_count);
    }
-@@ -1979,7 +2298,8 @@ static AVM_INLINE void add_ref_mv_bank_candidates(
+ }
+ 
+-static AVM_INLINE void add_ref_mv_bank_candidates(
++static AVM_INLINE void add_ref_mv_bank_candidates(DB_ONLY(const int is_dbg)
+     const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME *rf,
+     MV_REFERENCE_FRAME ref_frame, uint8_t *const refmv_count,
+     CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
+@@ -1979,7 +2302,8 @@ static AVM_INLINE void add_ref_mv_bank_candidates(
            rmb_ref_frame[idx] != ref_frame)
          continue;
  
 -      check_rmb_cand(cand_mv, ref_mv_stack, ref_mv_weight, refmv_count, is_comp,
-+      check_rmb_cand(DB_ARGS(cm, idx_bank, count)
++      check_rmb_cand(DB_ARGS(cm, idx_bank, count, is_dbg)
 +                     cand_mv, ref_mv_stack, ref_mv_weight, refmv_count, is_comp,
                       xd->mi_row, xd->mi_col, block_width, block_height,
                       xd->plane[0].dst.width, xd->plane[0].dst.height,
                       drl_pr_count);
-@@ -2192,6 +2512,8 @@ static AVM_INLINE int generate_points_from_corners(
+@@ -2192,6 +2516,8 @@ static AVM_INLINE int generate_points_from_corners(
  }
  
  static int insert_mvp_candidate(
 +    DB_ARGS(const AV2_COMMON *cm, int mi_row, int mi_col, int cidx,
-+            const int yidx, const int xidx)
++            const int yidx, const int xidx, const int is_dbg)
      MV_REFERENCE_FRAME rf[2], CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
      uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
      MV_COMP_DATA_TYPE this_mv_col, MV_COMP_DATA_TYPE this_mv_row,
-@@ -2211,6 +2533,20 @@ static int insert_mvp_candidate(
+@@ -2211,6 +2537,20 @@ static int insert_mvp_candidate(
            (rf[1] == NONE_FRAME ||
             (rf[1] > NONE_FRAME &&
              ref_mv_stack[idx].comp_mv.as_int == ext_mv.comp_mv.as_int))) {
@@ -799,7 +865,7 @@ index cada655229..eaa70cf9e1 100644
          break;
        }
      }
-@@ -2221,8 +2557,22 @@ static int insert_mvp_candidate(
+@@ -2221,8 +2561,22 @@ static int insert_mvp_candidate(
        ref_mv_stack[idx].row_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
@@ -823,7 +889,7 @@ index cada655229..eaa70cf9e1 100644
        return 1;
      }
      return 0;
-@@ -2233,7 +2583,21 @@ static int insert_mvp_candidate(
+@@ -2233,7 +2587,21 @@ static int insert_mvp_candidate(
        ref_mv_stack[*refmv_count].row_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
        ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
@@ -846,18 +912,20 @@ index cada655229..eaa70cf9e1 100644
        ++(*refmv_count);
        return 1;
      }
-@@ -2243,8 +2607,8 @@ static int insert_mvp_candidate(
+@@ -2242,9 +2610,9 @@ static int insert_mvp_candidate(
+   return 0;
  }
  
- static AVM_INLINE void setup_ref_mv_list(
+-static AVM_INLINE void setup_ref_mv_list(
 -    const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME ref_frame,
 -    uint8_t *const refmv_count,
++static AVM_INLINE void setup_ref_mv_list(DB_ONLY(const int is_dbg)
 +    const AV2_COMMON *cm, const MACROBLOCKD *xd, MB_MODE_INFO *mbmi,
 +    MV_REFERENCE_FRAME ref_frame, uint8_t *const refmv_count,
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
      uint16_t ref_mv_weight[MAX_REF_MV_STACK_SIZE],
      int_mv mv_ref_list[MAX_MV_REF_CANDIDATES], int_mv *gm_mv_candidates,
-@@ -2261,6 +2625,21 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2261,6 +2629,21 @@ static AVM_INLINE void setup_ref_mv_list(
    av2_set_ref_frame(rf, ref_frame);
    *refmv_count = 0;
  
@@ -879,7 +947,7 @@ index cada655229..eaa70cf9e1 100644
    int drl_pr_count = 0;
    int drl_dr_pr_count = 0;
    int drl_dr_single_pr_count = 0;
-@@ -2288,9 +2667,14 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2288,9 +2671,14 @@ static AVM_INLINE void setup_ref_mv_list(
    MVP_UNIT_STATUS row_smvp_state[4] = { 0 };
    get_row_smvp_states(cm, xd, row_smvp_state);
  
@@ -894,7 +962,7 @@ index cada655229..eaa70cf9e1 100644
  // 0: top_left, top_right, bottom_left
  // 1: top, top_right_next, bottom_left
  #define WRL_CORNER_MVS_NUM 2
-@@ -2326,6 +2710,14 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2326,6 +2714,14 @@ static AVM_INLINE void setup_ref_mv_list(
              xd->mi[0]->sb_type[PLANE_TYPE_Y],
              get_ref_scale_factors_const(cm, ref_frame));
          if (valid_model && !cand_warp_param.invalid) {
@@ -909,13 +977,15 @@ index cada655229..eaa70cf9e1 100644
            insert_neighbor_warp_candidate(warp_param_stack, &cand_warp_param,
                                           *valid_num_warp_candidates,
                                           PROJ_SPATIAL);
-@@ -2367,12 +2759,17 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2367,12 +2763,18 @@ static AVM_INLINE void setup_ref_mv_list(
  
    const int is_tmvp_high_priority = assign_tmvp_high_priority(cm, rf);
    if (is_tmvp_high_priority) {
+-    add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
 +      DEBUG_REFMV_printf("High-priority TMVP [%d|%d]\n", *refmv_count,
 +                         have_warp ? *valid_num_warp_candidates : 0);
-     add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
++    add_tmvp_candidate(DB_ONLY(is_dbg)
++                       cm, xd, ref_frame, refmv_count, ref_mv_stack,
                         ref_mv_weight, mi_row, mi_col, &drl_pr_count);
    }
  
@@ -923,68 +993,70 @@ index cada655229..eaa70cf9e1 100644
 +                     have_warp ? *valid_num_warp_candidates : 0);
    if (xd->left_available) {
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "bml")
++    scan_blk_mbmi(DB_ARGS(have_warp, "bml", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, (xd->height - 1), -1,
                    ref_mv_stack, ref_mv_weight, &col_match_count, &newmv_count,
                    gm_mv_candidates, 1, single_mv, &single_mv_count,
                    derived_mv_stack, derived_mv_weight, &derived_mv_count,
-@@ -2382,7 +2779,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2382,7 +2784,8 @@ static AVM_INLINE void setup_ref_mv_list(
    }
  
    if (row_smvp_state[0].is_available) {
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[0].row_offset,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "rmt")
++    scan_blk_mbmi(DB_ARGS(have_warp, "rmt", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, row_smvp_state[0].row_offset,
                    row_smvp_state[0].col_offset, ref_mv_stack, ref_mv_weight,
                    &row_match_count, &newmv_count, gm_mv_candidates, 1,
                    single_mv, &single_mv_count, derived_mv_stack,
-@@ -2393,7 +2791,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2393,7 +2796,8 @@ static AVM_INLINE void setup_ref_mv_list(
    }
  
    if (height_at_least_two) {
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, 0, -1, ref_mv_stack,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "tml")
++    scan_blk_mbmi(DB_ARGS(have_warp, "tml", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, 0, -1, ref_mv_stack,
                    ref_mv_weight, &col_match_count, &newmv_count,
                    gm_mv_candidates, 1, single_mv, &single_mv_count,
                    derived_mv_stack, derived_mv_weight, &derived_mv_count,
-@@ -2403,7 +2802,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2403,7 +2807,8 @@ static AVM_INLINE void setup_ref_mv_list(
    }
  
    if (row_smvp_state[1].is_available) {
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[1].row_offset,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "lmt")
++    scan_blk_mbmi(DB_ARGS(have_warp, "lmt", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, row_smvp_state[1].row_offset,
                    row_smvp_state[1].col_offset, ref_mv_stack, ref_mv_weight,
                    &row_match_count, &newmv_count, gm_mv_candidates, 1,
                    single_mv, &single_mv_count, derived_mv_stack,
-@@ -2413,7 +2813,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2413,7 +2818,8 @@ static AVM_INLINE void setup_ref_mv_list(
                    &drl_dr_single_pr_count);
    }
    if (has_bl) {
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, xd->height, -1, ref_mv_stack,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "bl")
++    scan_blk_mbmi(DB_ARGS(have_warp, "bl", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, xd->height, -1, ref_mv_stack,
                    ref_mv_weight, &col_match_count, &newmv_count,
                    gm_mv_candidates, 1, single_mv, &single_mv_count,
                    derived_mv_stack, derived_mv_weight, &derived_mv_count,
-@@ -2423,7 +2824,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2423,7 +2829,8 @@ static AVM_INLINE void setup_ref_mv_list(
    }
  
    if (row_smvp_state[2].is_available) {
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[2].row_offset,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "tr")
++    scan_blk_mbmi(DB_ARGS(have_warp, "tr", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, row_smvp_state[2].row_offset,
                    row_smvp_state[2].col_offset, ref_mv_stack, ref_mv_weight,
                    &row_match_count, &newmv_count, gm_mv_candidates, 1,
                    single_mv, &single_mv_count, derived_mv_stack,
-@@ -2434,14 +2836,19 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2434,14 +2841,20 @@ static AVM_INLINE void setup_ref_mv_list(
    }
  
    if (!is_tmvp_high_priority) {
+-    add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
 +    DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *refmv_count,
 +                       have_warp ? *valid_num_warp_candidates : 0);
-     add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
++    add_tmvp_candidate(DB_ONLY(is_dbg)
++                       cm, xd, ref_frame, refmv_count, ref_mv_stack,
                         ref_mv_weight, mi_row, mi_col, &drl_pr_count);
    }
  
@@ -994,12 +1066,12 @@ index cada655229..eaa70cf9e1 100644
      uint8_t dummy_ref_match_count = 0;
      uint8_t dummy_new_mv_count = 0;
 -    scan_blk_mbmi(cm, xd, mi_row, mi_col, rf, row_smvp_state[3].row_offset,
-+    scan_blk_mbmi(DB_ARGS(have_warp, "tl")
++    scan_blk_mbmi(DB_ARGS(have_warp, "tl", is_dbg)
 +                  cm, xd, mi_row, mi_col, rf, row_smvp_state[3].row_offset,
                    row_smvp_state[3].col_offset, ref_mv_stack, ref_mv_weight,
                    &dummy_ref_match_count, &dummy_new_mv_count, gm_mv_candidates,
                    1, single_mv, &single_mv_count, derived_mv_stack,
-@@ -2454,6 +2861,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2454,6 +2867,8 @@ static AVM_INLINE void setup_ref_mv_list(
    const uint8_t nearest_refmv_count = *refmv_count;
  
    if (xd->left_available) {
@@ -1008,26 +1080,46 @@ index cada655229..eaa70cf9e1 100644
      for (int idx = 2; idx <= MVREF_COLS; ++idx) {
        const int col_offset = -(idx << 1) + 1 + col_adj;
        const MVP_UNIT_STATUS col_units_status[SMVP_COL_SEARCH_COUNT] = {
-@@ -2466,7 +2875,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2466,7 +2881,8 @@ static AVM_INLINE void setup_ref_mv_list(
                is_valid_candidate(xd, mi_row, mi_col,
                                   col_units_status[unit_idx].row_offset,
                                   col_units_status[unit_idx].col_offset, -1)) {
 -            scan_blk_mbmi(cm, xd, mi_row, mi_col, rf,
-+            scan_blk_mbmi(DB_ARGS(have_warp, unit_idx ? "ext_tml" : "ext_bml")
++            scan_blk_mbmi(DB_ARGS(have_warp, unit_idx ? "ext_tml" : "ext_bml", is_dbg)
 +                          cm, xd, mi_row, mi_col, rf,
                            col_units_status[unit_idx].row_offset,
                            col_units_status[unit_idx].col_offset, ref_mv_stack,
                            ref_mv_weight, &col_match_count, &newmv_count,
-@@ -2507,6 +2917,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2507,18 +2923,24 @@ static AVM_INLINE void setup_ref_mv_list(
    }
  
    const int is_compound = is_inter_ref_frame(rf[1]);
 +  DEBUG_REFMV_printf("Derived Spatial MVP & refbank [%d|%d]\n", *refmv_count,
 +                     have_warp ? *valid_num_warp_candidates : 0);
    if (is_compound) {
-     add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
+-    add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
++    add_derived_smvp_candidates(DB_ONLY(is_dbg)
++                                cm, xd, rf, refmv_count, ref_mv_stack,
                                  ref_mv_weight, derived_mv_stack,
-@@ -2532,6 +2944,8 @@ static AVM_INLINE void setup_ref_mv_list(
+                                 derived_mv_count, &drl_pr_count);
+     if (cm->seq_params.enable_refmvbank)
+-      add_ref_mv_bank_candidates(cm, xd, rf, ref_frame, refmv_count,
++      add_ref_mv_bank_candidates(DB_ONLY(is_dbg)
++                                 cm, xd, rf, ref_frame, refmv_count,
+                                  ref_mv_stack, ref_mv_weight, &drl_pr_count);
+   } else {
+     if (cm->seq_params.enable_refmvbank)
+-      add_ref_mv_bank_candidates(cm, xd, rf, ref_frame, refmv_count,
++      add_ref_mv_bank_candidates(DB_ONLY(is_dbg)
++                                 cm, xd, rf, ref_frame, refmv_count,
+                                  ref_mv_stack, ref_mv_weight, &drl_pr_count);
+-    add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
++    add_derived_smvp_candidates(DB_ONLY(is_dbg)
++                                cm, xd, rf, refmv_count, ref_mv_stack,
+                                 ref_mv_weight, derived_mv_stack,
+                                 derived_mv_count, &drl_pr_count);
+   }
+@@ -2532,6 +2954,8 @@ static AVM_INLINE void setup_ref_mv_list(
      }
    }
  
@@ -1036,7 +1128,7 @@ index cada655229..eaa70cf9e1 100644
    if (rf[1] == NONE_FRAME && mv_ref_list != NULL) {
      for (int idx = *refmv_count; idx < MAX_MV_REF_CANDIDATES; ++idx) {
        mv_ref_list[idx].as_int = gm_mv_candidates[0].as_int;
-@@ -2555,6 +2969,13 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2555,6 +2979,13 @@ static AVM_INLINE void setup_ref_mv_list(
              (rf[1] == NONE_FRAME ||
               (rf[1] > NONE_FRAME && ref_mv_stack[idx].comp_mv.as_int ==
                                          gm_mv_candidates[1].as_int))) {
@@ -1050,7 +1142,7 @@ index cada655229..eaa70cf9e1 100644
            break;
          }
        }
-@@ -2567,6 +2988,13 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2567,6 +2998,13 @@ static AVM_INLINE void setup_ref_mv_list(
          ref_mv_stack[idx].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[idx].cwp_idx = CWP_EQUAL;
          ref_mv_weight[idx] = REF_CAT_LEVEL;
@@ -1064,7 +1156,7 @@ index cada655229..eaa70cf9e1 100644
          ++(*refmv_count);
        }
      } else {
-@@ -2577,6 +3005,13 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2577,6 +3015,13 @@ static AVM_INLINE void setup_ref_mv_list(
          ref_mv_stack[*refmv_count].col_offset = OFFSET_NONSPATIAL;
          ref_mv_stack[*refmv_count].cwp_idx = CWP_EQUAL;
          ref_mv_weight[*refmv_count] = REF_CAT_LEVEL;
@@ -1078,7 +1170,7 @@ index cada655229..eaa70cf9e1 100644
          ++(*refmv_count);
        }
      }
-@@ -2589,6 +3024,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2589,6 +3034,8 @@ static AVM_INLINE void setup_ref_mv_list(
        max_ext_stack_size = 6;
  
      if (max_ext_stack_size) {
@@ -1087,55 +1179,55 @@ index cada655229..eaa70cf9e1 100644
        MV_COMP_DATA_TYPE row = 0;
        MV_COMP_DATA_TYPE col = 0;
        MV_COMP_DATA_TYPE comp_mv_row = 0;
-@@ -2603,6 +3040,7 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2603,6 +3050,7 @@ static AVM_INLINE void setup_ref_mv_list(
          comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
          curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
          added_ext_cnt += insert_mvp_candidate(
-+            DB_ARGS(cm, mi_row, mi_col, 0, 0, 1)
++            DB_ARGS(cm, mi_row, mi_col, 0, 0, 1, is_dbg)
              rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
              curr_mv_weight, refmv_count, &drl_pr_count);
          if (*refmv_count < MAX_REF_MV_STACK_SIZE &&
-@@ -2614,6 +3052,7 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2614,6 +3062,7 @@ static AVM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[1] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 1, 1, 0)
++              DB_ARGS(cm, mi_row, mi_col, 1, 1, 0, is_dbg)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2627,6 +3066,7 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2627,6 +3076,7 @@ static AVM_INLINE void setup_ref_mv_list(
          comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
          curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
          added_ext_cnt += insert_mvp_candidate(
-+            DB_ARGS(cm, mi_row, mi_col, 2, 0, 2)
++            DB_ARGS(cm, mi_row, mi_col, 2, 0, 2, is_dbg)
              rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col, comp_mv_row,
              curr_mv_weight, refmv_count, &drl_pr_count);
  
-@@ -2639,6 +3079,7 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2639,6 +3089,7 @@ static AVM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[0].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[0] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 3, 2, 0)
++              DB_ARGS(cm, mi_row, mi_col, 3, 2, 0, is_dbg)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2652,6 +3093,7 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2652,6 +3103,7 @@ static AVM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[2].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 4, 1, 2)
++              DB_ARGS(cm, mi_row, mi_col, 4, 1, 2, is_dbg)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
          }
-@@ -2664,6 +3106,7 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2664,6 +3116,7 @@ static AVM_INLINE void setup_ref_mv_list(
            comp_mv_col = ref_mv_stack[1].comp_mv.as_mv.col;
            curr_mv_weight = (ref_mv_weight[1] + ref_mv_weight[2] + 1) / 2;
            added_ext_cnt += insert_mvp_candidate(
-+              DB_ARGS(cm, mi_row, mi_col, 5, 2, 1)
++              DB_ARGS(cm, mi_row, mi_col, 5, 2, 1, is_dbg)
                rf, ref_mv_stack, ref_mv_weight, col, row, comp_mv_col,
                comp_mv_row, curr_mv_weight, refmv_count, &drl_pr_count);
            (void)added_ext_cnt;
-@@ -2674,6 +3117,9 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2674,6 +3127,9 @@ static AVM_INLINE void setup_ref_mv_list(
  
    if (warp_param_stack && valid_num_warp_candidates &&
        *valid_num_warp_candidates < max_num_of_warp_candidates) {
@@ -1145,7 +1237,7 @@ index cada655229..eaa70cf9e1 100644
      // Insert warp parameters from the bank
  #if WARP_CU_BANK
      const WARP_PARAM_BANK *warp_param_bank = &xd->warp_param_bank;
-@@ -2694,20 +3140,43 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2694,20 +3150,43 @@ static AVM_INLINE void setup_ref_mv_list(
          insert_neighbor_warp_candidate(warp_param_stack, &cand_warp_param,
                                         *valid_num_warp_candidates,
                                         PROJ_PARAM_BANK);
@@ -1189,7 +1281,7 @@ index cada655229..eaa70cf9e1 100644
      // Filled with default values( currently all params are zeros)
      int max_num_of_default_allowed = AVMMIN(2, max_num_of_warp_candidates);
      int current_number_of_defaults = 0;
-@@ -2718,6 +3187,13 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2718,6 +3197,13 @@ static AVM_INLINE void setup_ref_mv_list(
           cand_num++) {
        warp_param_stack[cand_num].wm_params = default_warp_params;
        warp_param_stack[cand_num].proj_type = PROJ_DEFAULT;
@@ -1203,7 +1295,7 @@ index cada655229..eaa70cf9e1 100644
        (*valid_num_warp_candidates)++;
        current_number_of_defaults++;
      }
-@@ -2726,6 +3202,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2726,6 +3212,8 @@ static AVM_INLINE void setup_ref_mv_list(
    // If there are open slots in reference BV candidate list
    // fetch reference BVs from the default BVPs
    if (xd->mi[0]->use_intrabc[xd->tree_type == CHROMA_PART]) {
@@ -1212,7 +1304,7 @@ index cada655229..eaa70cf9e1 100644
      const int w = xd->width * MI_SIZE;
      const int h = xd->height * MI_SIZE;
      const int sb_width = block_size_wide[cm->sb_size];
-@@ -2748,6 +3226,8 @@ static AVM_INLINE void setup_ref_mv_list(
+@@ -2748,6 +3236,8 @@ static AVM_INLINE void setup_ref_mv_list(
        add_to_ref_bv_list(tmp_mv, ref_mv_stack, ref_mv_weight, refmv_count);
      }
    }
@@ -1221,21 +1313,42 @@ index cada655229..eaa70cf9e1 100644
  }
  
  void get_skip_mode_ref_offsets(const AV2_COMMON *cm, int ref_order_hint[2]) {
-@@ -2875,7 +3355,7 @@ void av2_find_mv_refs(
+@@ -2825,7 +3315,7 @@ void av2_initialize_ref_mv_stack(
+   }
+ }
+ 
+-void av2_find_mv_refs(
++void av2_find_mv_refs(DB_ONLY(const int is_dbg)
+     const AV2_COMMON *cm, const MACROBLOCKD *xd, MB_MODE_INFO *mi,
+     MV_REFERENCE_FRAME ref_frame, uint8_t ref_mv_count[MODE_CTX_REF_FRAMES],
+     CANDIDATE_MV ref_mv_stack[][MAX_REF_MV_STACK_SIZE],
+@@ -2838,6 +3328,9 @@ void av2_find_mv_refs(
+   const int mi_col = xd->mi_col;
+   int_mv gm_mv[2];
+ 
++#if DEBUG_BLOCK_INFO
++  if (!BLOCK_TO_DEBUG && is_dbg) return;
++#endif
+   if (ref_frame == INTRA_FRAME || is_tip_ref_frame(ref_frame)) {
+     gm_mv[0].as_int = gm_mv[1].as_int = 0;
+   } else {
+@@ -2875,7 +3368,8 @@ void av2_find_mv_refs(
          (SKIP_MODE_MVP_LIST *)&(xd->skip_mvp_candidate_list);
      av2_initialize_ref_mv_stack(skip_list->ref_mv_stack,
                                  USABLE_REF_MV_STACK_SIZE);
 -    setup_ref_mv_list(cm, xd, ref_frame, &(skip_list->ref_mv_count),
-+    setup_ref_mv_list(cm, xd, mi, ref_frame, &(skip_list->ref_mv_count),
++    setup_ref_mv_list(DB_ONLY(is_dbg)
++                      cm, xd, mi, ref_frame, &(skip_list->ref_mv_count),
                        skip_list->ref_mv_stack, skip_list->weight,
                        mv_ref_list ? mv_ref_list[ref_frame] : NULL, gm_mv,
                        mi_row, mi_col, NULL, 0, NULL);
-@@ -2897,14 +3377,14 @@ void av2_find_mv_refs(
+@@ -2897,14 +3391,15 @@ void av2_find_mv_refs(
      } else {
        av2_initialize_ref_mv_stack(ref_mv_stack[rf[0]], MAX_REF_MV_STACK_SIZE);
      }
 -    setup_ref_mv_list(cm, xd, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
-+    setup_ref_mv_list(cm, xd, mi, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
++    setup_ref_mv_list(DB_ONLY(is_dbg)
++                      cm, xd, mi, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
                        ref_mv_weight[rf[0]],
                        mv_ref_list ? mv_ref_list[rf[0]] : NULL, gm_mv, mi_row,
                        mi_col, derive_wrl ? warp_param_stack[rf[0]] : NULL,
@@ -1247,26 +1360,27 @@ index cada655229..eaa70cf9e1 100644
        assert(rf[0] == mi->ref_frame[0]);
        assert(rf[1] == mi->ref_frame[1]);
        const BLOCK_SIZE bsize = mi->sb_type[PLANE_TYPE_Y];
-@@ -2914,7 +3394,7 @@ void av2_find_mv_refs(
+@@ -2914,7 +3409,8 @@ void av2_find_mv_refs(
        gm_mv[1].as_int = 0;
  
        av2_initialize_ref_mv_stack(ref_mv_stack[rf[1]], MAX_REF_MV_STACK_SIZE);
 -      setup_ref_mv_list(cm, xd, rf[1], &ref_mv_count[rf[1]],
-+      setup_ref_mv_list(cm, xd, mi, rf[1], &ref_mv_count[rf[1]],
++      setup_ref_mv_list(DB_ONLY(is_dbg)
++                        cm, xd, mi, rf[1], &ref_mv_count[rf[1]],
                          ref_mv_stack[rf[1]], ref_mv_weight[rf[1]],
                          mv_ref_list ? mv_ref_list[rf[1]] : NULL, gm_mv, mi_row,
                          mi_col, derive_wrl ? warp_param_stack[rf[1]] : NULL,
-@@ -4687,6 +5167,9 @@ void decide_rmb_unit_update_count(const AV2_COMMON *const cm,
+@@ -4687,6 +5183,9 @@ void decide_rmb_unit_update_count(const AV2_COMMON *const cm,
    if (xd->tree_type == CHROMA_PART) return;
    const int mi_sb_size = cm->mib_size;
    const int mi_sb_size_log2 = cm->mib_size_log2;
 +#if DEBUG_BLOCK_INFO && DEBUG_REFMV
-+    const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++  const int mi_row = xd->mi_row, mi_col = xd->mi_col, is_dbg = 1;
 +#endif
    const int mi_row_in_sb = xd->mi_row % mi_sb_size;
    const int mi_col_in_sb = xd->mi_col % mi_sb_size;
    const int rmb_unit_mi_size_log2 = mi_sb_size_log2 - SB_TO_RMB_UNITS_LOG2;
-@@ -4701,23 +5184,79 @@ void decide_rmb_unit_update_count(const AV2_COMMON *const cm,
+@@ -4701,23 +5200,80 @@ void decide_rmb_unit_update_count(const AV2_COMMON *const cm,
      xd->ref_mv_bank.remain_hits =
          AVMMAX(rmb_units_count, BANK_1ST_UNIT_UPDATE_COUNT);
      xd->ref_mv_bank.rmb_unit_hits = 0;
@@ -1290,13 +1404,14 @@ index cada655229..eaa70cf9e1 100644
 +                         xd->ref_mv_bank.rmb_unit_hits,
 +                         xd->ref_mv_bank.rmb_sb_hits);
 +    }
-+  }
-+}
-+
+   }
+ }
+ 
 +#if DEBUG_BLOCK_INFO && DEBUG_REFMV
 +static void debug_refbank(const AV2_COMMON *cm, const int mi_row, const int mi_col,
 +                          REF_MV_BANK *ref_mv_bank, const int rmb_list_index)
 +{
++  const int is_dbg = 1;
 +  CANDIDATE_MV *queue = ref_mv_bank->rmb_buffer[rmb_list_index];
 +  MV_REFERENCE_FRAME *rmb_ref_frame = ref_mv_bank->rmb_ref_frame;
 +  const int start_idx = ref_mv_bank->rmb_start_idx[rmb_list_index];
@@ -1320,18 +1435,18 @@ index cada655229..eaa70cf9e1 100644
 +                       rf[0] == INTRA_FRAME ? -1 : rf[0],
 +                       rmb_list_index < 6 ? -1 :
 +                       rmb_list_index < 8 ? rmb_list_index - 6 : rf[1]);
-   }
- }
++  }
++}
 +#else
 +#define debug_refbank(...)
 +#endif
- 
++
  static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
                                        MACROBLOCKD *const xd, int from_within_sb,
                                        const MB_MODE_INFO *const mbmi,
                                        REF_MV_BANK *ref_mv_bank) {
 +#if DEBUG_BLOCK_INFO && DEBUG_REFMV
-+  const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++  const int mi_row = xd->mi_row, mi_col = xd->mi_col, is_dbg = 1;
 +#endif
    if (from_within_sb) {
      decide_rmb_unit_update_count(cm, xd, mbmi);
@@ -1346,7 +1461,7 @@ index cada655229..eaa70cf9e1 100644
        return;
      }
  
-@@ -4725,7 +5264,13 @@ static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
+@@ -4725,7 +5281,13 @@ static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
      ref_mv_bank->rmb_unit_hits++;
    } else {
      // If max hits have been reached return.
@@ -1361,7 +1476,7 @@ index cada655229..eaa70cf9e1 100644
    }
  
    // else increment count and proceed with updating.
-@@ -4765,11 +5310,18 @@ static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
+@@ -4765,11 +5327,18 @@ static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
          rmb_ref_frame[idx0] = rmb_ref_frame[idx1];
        }
      }
@@ -1380,7 +1495,7 @@ index cada655229..eaa70cf9e1 100644
      return;
    }
  
-@@ -4782,11 +5334,16 @@ static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
+@@ -4782,11 +5351,16 @@ static INLINE void update_ref_mv_bank(const AV2_COMMON *const cm,
      rmb_ref_frame[idx] = ref_frame;
    }
    queue[idx].cwp_idx = mbmi->cwp_idx;
@@ -1397,7 +1512,7 @@ index cada655229..eaa70cf9e1 100644
  }
  
  void av2_update_ref_mv_bank(const AV2_COMMON *const cm, MACROBLOCKD *const xd,
-@@ -4849,12 +5406,40 @@ void span_submv(const AV2_COMMON *cm, SUBMB_INFO **submi, int mi_row,
+@@ -4849,12 +5423,41 @@ void span_submv(const AV2_COMMON *cm, SUBMB_INFO **submi, int mi_row,
    }
  }
  
@@ -1406,6 +1521,7 @@ index cada655229..eaa70cf9e1 100644
 +                           const int mi_row, const int mi_col,
 +                           WARP_PARAM_BANK *warp_param_bank,
 +                           MV_REFERENCE_FRAME ref_frame) {
++  const int is_dbg = 1;
 +  WarpedMotionParams *queue = warp_param_bank->wpb_buffer[ref_frame];
 +  const int start_idx = warp_param_bank->wpb_start_idx[ref_frame];
 +  const int count = warp_param_bank->wpb_count[ref_frame];
@@ -1439,7 +1555,17 @@ index cada655229..eaa70cf9e1 100644
  #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
                                            int cand_from_sb_above,
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
-@@ -4874,7 +5459,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4865,6 +5468,9 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+ #else
+   const int can_use_second_model = is_inter_compound_mode(mbmi->mode);
+ #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
++#if DEBUG_BLOCK_INFO
++  const int is_dbg = 1;
++#endif
+   for (int ref_idx = 0; ref_idx < 1 + can_use_second_model; ref_idx++) {
+     if (!mbmi->wm_params[ref_idx].invalid) {
+       const MV_REFERENCE_FRAME ref_frame = mbmi->ref_frame[ref_idx];
+@@ -4874,7 +5480,11 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
        int found = -1;
  
        // If max hits have been reached return.
@@ -1452,7 +1578,7 @@ index cada655229..eaa70cf9e1 100644
        // else increment count and proceed with updating.
        ++warp_param_bank->wpb_sb_hits;
  
-@@ -4908,6 +5497,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4908,6 +5518,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
          }
          const int tail = (start_idx + count - 1) % WARP_PARAM_BANK_SIZE;
          queue[tail] = cand;
@@ -1469,7 +1595,7 @@ index cada655229..eaa70cf9e1 100644
          continue;
        }
  
-@@ -4927,6 +5526,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
+@@ -4927,6 +5547,16 @@ static INLINE void update_warp_param_bank(const MB_MODE_INFO *const mbmi,
        } else {
          ++warp_param_bank->wpb_start_idx[ref_frame];
        }
@@ -1486,7 +1612,7 @@ index cada655229..eaa70cf9e1 100644
      }
    }
  }
-@@ -4938,7 +5547,8 @@ void av2_update_warp_param_bank(const AV2_COMMON *const cm,
+@@ -4938,7 +5568,8 @@ void av2_update_warp_param_bank(const AV2_COMMON *const cm,
                                  const MB_MODE_INFO *const mbmi) {
    (void)cm;
    if (is_warp_mode(mbmi->motion_mode)) {
@@ -1496,6 +1622,28 @@ index cada655229..eaa70cf9e1 100644
  #if COMPOUND_WARP_LINE_BUFFER_REDUCTION
                             cand_from_sb_above,
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
+diff --git a/av2/common/mvref_common.h b/av2/common/mvref_common.h
+index b5919c7eac..4e96bcee11 100644
+--- a/av2/common/mvref_common.h
++++ b/av2/common/mvref_common.h
+@@ -16,6 +16,8 @@
+ #include "av2/common/blockd.h"
+ #include "av2/common/mv.h"
+ 
++#include "avm/debug.h"
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+@@ -589,7 +591,7 @@ void av2_find_mode_ctx(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+ // The global_mvs output parameter points to an array of REF_FRAMES elements.
+ // The caller may pass a null global_mvs if it does not need the global_mvs
+ // output.
+-void av2_find_mv_refs(
++void av2_find_mv_refs(DB_ONLY(const int is_dbg)
+     const AV2_COMMON *cm, const MACROBLOCKD *xd, MB_MODE_INFO *mi,
+     MV_REFERENCE_FRAME ref_frame, uint8_t ref_mv_count[MODE_CTX_REF_FRAMES],
+     CANDIDATE_MV ref_mv_stack[][MAX_REF_MV_STACK_SIZE],
 diff --git a/av2/common/tip.c b/av2/common/tip.c
 index f1fe660e6c..46c81ff65f 100644
 --- a/av2/common/tip.c
@@ -1510,7 +1658,7 @@ index f1fe660e6c..46c81ff65f 100644
        cm, xd, plane, tip_plane, mv, bw, bh, mi_x, mi_y, mc_buf, tmp_conv_dst,
        calc_subpel_params_func);
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 8ddc37a2ce..e6c2b09915 100644
+index c3728850e5..3e08c188a4 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -220,7 +220,7 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -1881,7 +2029,7 @@ index 8ddc37a2ce..e6c2b09915 100644
    const int num_planes = av2_num_planes(cm);
    MB_MODE_INFO *mbmi = xd->mi[0];
    int inter_block_tx = is_inter_block(mbmi, xd->tree_type) ||
-@@ -1510,10 +1574,12 @@ static AVM_INLINE void parse_decode_block(AV2Decoder *const pbi,
+@@ -1510,14 +1574,20 @@ static AVM_INLINE void parse_decode_block(AV2Decoder *const pbi,
  
        for (int idy = 0; idy < height; idy += bh)
          for (int idx = 0; idx < width; idx += bw)
@@ -1896,7 +2044,15 @@ index 8ddc37a2ce..e6c2b09915 100644
                         !mbmi->skip_txfm[xd->tree_type == CHROMA_PART], r);
      }
    }
-@@ -1550,7 +1616,7 @@ static AVM_INLINE void parse_decode_block(AV2Decoder *const pbi,
+ 
++#if DEBUG_BLOCK_INFO
++  resolve_refmvs(depth, pbi, dcb);
++#endif
++
+   if (cm->delta_q_info.delta_q_present_flag) {
+     for (int i = 0; i < MAX_SEGMENTS; i++) {
+       const int current_qindex = av2_get_qindex(
+@@ -1550,7 +1620,7 @@ static AVM_INLINE void parse_decode_block(AV2Decoder *const pbi,
    // For optimized decoder, only do reocn when support SB
    if (!pbi->bru_opt_mode ||
        (pbi->bru_opt_mode && bru_is_sb_active(cm, mi_col, mi_row)))
@@ -1905,7 +2061,7 @@ index 8ddc37a2ce..e6c2b09915 100644
  
    // Note: the copying here must match corresponding encoder-side copying in
    // av2_update_state().
-@@ -1646,7 +1712,8 @@ static AVM_INLINE void set_offsets_for_pred_and_recon(AV2Decoder *const pbi,
+@@ -1646,7 +1716,8 @@ static AVM_INLINE void set_offsets_for_pred_and_recon(AV2Decoder *const pbi,
                         num_planes, &chroma_ref_info);
  }
  
@@ -1915,7 +2071,7 @@ index 8ddc37a2ce..e6c2b09915 100644
                                      int mi_row, int mi_col, avm_reader *r,
                                      PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                      PARTITION_TREE *parent, int index) {
-@@ -1664,7 +1731,7 @@ static AVM_INLINE void decode_block(AV2Decoder *const pbi, ThreadData *const td,
+@@ -1664,7 +1735,7 @@ static AVM_INLINE void decode_block(AV2Decoder *const pbi, ThreadData *const td,
          max_aspect_ratio);
    }
    set_offsets_for_pred_and_recon(pbi, td, mi_row, mi_col, bsize);
@@ -1924,7 +2080,7 @@ index 8ddc37a2ce..e6c2b09915 100644
  }
  
  /*!\brief Maps (ext_part, 4way, 4way_type, rect_type) to partition_type. */
-@@ -1829,7 +1896,7 @@ static void set_sb_mv_precision(SB_INFO *sbi, AV2Decoder *const pbi) {
+@@ -1829,7 +1900,7 @@ static void set_sb_mv_precision(SB_INFO *sbi, AV2Decoder *const pbi) {
  }
  
  // TODO(slavarnway): eliminate bsize and subsize in future commits
@@ -1933,7 +2089,7 @@ index 8ddc37a2ce..e6c2b09915 100644
      AV2Decoder *const pbi, ThreadData *const td, int mi_row, int mi_col,
      avm_reader *reader, BLOCK_SIZE bsize, SB_INFO *sbi, PARTITION_TREE *ptree,
      PARTITION_TREE *ptree_luma, int parse_decode_flag) {
-@@ -1859,11 +1926,13 @@ static AVM_INLINE void decode_partition(
+@@ -1859,11 +1930,13 @@ static AVM_INLINE void decode_partition(
        is_intra_sdp_enabled && bsize == BLOCK_64X64 ? 2 : 1;
    if (total_loop_num == 2 && xd->tree_type == SHARED_PART) {
      xd->tree_type = LUMA_PART;
@@ -1949,7 +2105,7 @@ index 8ddc37a2ce..e6c2b09915 100644
                       ptree, parse_decode_flag);
      xd->tree_type = SHARED_PART;
      return;
-@@ -1905,6 +1974,13 @@ static AVM_INLINE void decode_partition(
+@@ -1905,6 +1978,13 @@ static AVM_INLINE void decode_partition(
    }
  
    if (parse_decode_flag & 1) {
@@ -1963,7 +2119,7 @@ index 8ddc37a2ce..e6c2b09915 100644
      if (is_sb_root) {
        if (cm->bru.enabled || cm->bridge_frame_info.is_bridge_frame) {
          const int mi_grid_idx = get_mi_grid_idx(&cm->mi_params, mi_row, mi_col);
-@@ -1937,6 +2013,11 @@ static AVM_INLINE void decode_partition(
+@@ -1937,6 +2017,11 @@ static AVM_INLINE void decode_partition(
            for (int rcol = rcol0; rcol < rcol1; ++rcol) {
              const int runit_idx = rcol + rrow * rstride;
              loop_restoration_read_sb_coeffs(cm, xd, reader, plane, runit_idx);
@@ -1975,7 +2131,7 @@ index 8ddc37a2ce..e6c2b09915 100644
            }
          }
        }
-@@ -1956,17 +2037,41 @@ static AVM_INLINE void decode_partition(
+@@ -1956,17 +2041,41 @@ static AVM_INLINE void decode_partition(
            CFL_DISALLOWED_FOR_CHROMA;
      }
  
@@ -2023,7 +2179,7 @@ index 8ddc37a2ce..e6c2b09915 100644
      ptree->is_cfl_allowed_for_this_chroma_partition |=
          is_cfl_allowed_for_sdp(cm, xd, ptree_luma, partition, bsize);
      CFL_ALLOWED_FOR_SDP_TYPE is_cfl_allowed_in_sdp =
-@@ -1990,6 +2095,8 @@ static AVM_INLINE void decode_partition(
+@@ -1990,6 +2099,8 @@ static AVM_INLINE void decode_partition(
          ptree->region_type =
              avm_read_symbol(reader, xd->tile_ctx->region_type_cdf[ctx],
                              REGION_TYPES, ACCT_INFO("region_type"));
@@ -2032,7 +2188,7 @@ index 8ddc37a2ce..e6c2b09915 100644
          if (ptree->region_type == INTRA_REGION) xd->tree_type = LUMA_PART;
        } else if (!frame_is_intra_only(cm)) {
          ptree->region_type = parent->region_type;
-@@ -2130,11 +2237,13 @@ static AVM_INLINE void decode_partition(
+@@ -2130,11 +2241,13 @@ static AVM_INLINE void decode_partition(
  #define DEC_BLOCK_STX_ARG
  #define DEC_BLOCK_EPT_ARG partition,
  #define DEC_BLOCK(db_r, db_c, db_subsize, index)                               \
@@ -2048,7 +2204,7 @@ index 8ddc37a2ce..e6c2b09915 100644
                     (db_subsize), sbi, ptree->sub_tree[(index)],      \
                     get_partition_subtree_const(ptree_luma, index),   \
                     parse_decode_flag)
-@@ -2294,7 +2403,7 @@ static AVM_INLINE void decode_partition_sb(AV2Decoder *const pbi,
+@@ -2294,7 +2407,7 @@ static AVM_INLINE void decode_partition_sb(AV2Decoder *const pbi,
      av2_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
      if (is_intra_sdp_enabled) av2_reset_ptree_in_sbi(xd->sbi, CHROMA_PART);
    }
@@ -2057,7 +2213,7 @@ index 8ddc37a2ce..e6c2b09915 100644
        pbi, td, mi_row, mi_col, reader, bsize, xd->sbi,
        td->dcb.xd.sbi->ptree_root[av2_get_sdp_idx(xd->tree_type)],
        (is_intra_sdp_enabled ? td->dcb.xd.sbi->ptree_root[1] : NULL),
-@@ -4852,6 +4961,17 @@ static const uint8_t *decode_tiles(AV2Decoder *pbi, const uint8_t *data,
+@@ -4852,6 +4965,17 @@ static const uint8_t *decode_tiles(AV2Decoder *pbi, const uint8_t *data,
        td->dcb.xd.tile_ctx = &tile_data->tctx;
  
        // decode tile
@@ -2076,7 +2232,7 @@ index 8ddc37a2ce..e6c2b09915 100644
        avm_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av2/decoder/decodemv.c b/av2/decoder/decodemv.c
-index a918b816ea..3041bd9592 100644
+index a918b816ea..b717c6323f 100644
 --- a/av2/decoder/decodemv.c
 +++ b/av2/decoder/decodemv.c
 @@ -42,7 +42,8 @@
@@ -2783,26 +2939,17 @@ index a918b816ea..3041bd9592 100644
                                avm_reader *r) {
    MACROBLOCKD *const xd = &dcb->xd;
    MB_MODE_INFO *const mbmi = xd->mi[0];
-@@ -1447,6 +1652,18 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
-     av2_find_mv_refs(cm, xd, mbmi, INTRA_FRAME, dcb->ref_mv_count,
+@@ -1444,7 +1649,8 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+     // ref_mvs
+     int_mv ref_mvs[INTRA_FRAME + 1][MAX_MV_REF_CANDIDATES];
+ 
+-    av2_find_mv_refs(cm, xd, mbmi, INTRA_FRAME, dcb->ref_mv_count,
++    av2_find_mv_refs(DB_ONLY(0)
++                     cm, xd, mbmi, INTRA_FRAME, dcb->ref_mv_count,
                       xd->ref_mv_stack, xd->weight, ref_mvs, /*global_mvs=*/NULL,
                       NULL, 0, NULL);
-+#if DEBUG_BLOCK_INFO
-+    const int mi_row = xd->mi_row, mi_col = xd->mi_col;
-+    if (BLOCK_TO_DEBUG) {
-+      printf("%*sfind_mv_refs(intra)\n", depth, "");
-+      for (int n = 0; n < dcb->ref_mv_count[INTRA_FRAME]; n++)
-+        printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
-+               depth + 1, "", n, dcb->ref_mv_count[INTRA_FRAME],
-+               xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.row,
-+               xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.col,
-+               xd->weight[INTRA_FRAME][n]);
-+    }
-+#endif
  
-     mbmi->intrabc_mode =
-         avm_read_symbol(r, ec_ctx->intrabc_mode_cdf, 2, ACCT_INFO());
-@@ -1465,7 +1682,8 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -1465,7 +1671,8 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
        mbmi->pb_mv_precision = av2_intraBc_precision_sets.precision[index];
      }
  
@@ -2812,7 +2959,7 @@ index a918b816ea..3041bd9592 100644
                                       xd->mi_col, bsize, r);
      if (!valid_dv) {
        // Intra bc motion vectors are not valid - signal corrupt frame
-@@ -1476,8 +1694,9 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -1476,8 +1683,9 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
      assert(is_this_mv_precision_compliant(mbmi->mv[0].as_mv,
                                            mbmi->pb_mv_precision));
  
@@ -2823,15 +2970,17 @@ index a918b816ea..3041bd9592 100644
        mbmi->morph_pred = avm_read_symbol(
            r, ec_ctx->morph_pred_cdf[morph_pred_ctx], 2, ACCT_INFO());
        if (mbmi->morph_pred != 0) {
-@@ -1491,35 +1710,59 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -1491,35 +1699,61 @@ static void read_intrabc_info(AV2_COMMON *const cm, DecoderCodingBlock *dcb,
                             "Invalid intrabc BAWP dv");
        }
      }
-+    DEBUG_BLOCK_printf("%*sPost-intrabc_info[mode=%d,drl=%d,mv=y:%d,x:%d,"
++#if DEBUG_BLOCK_INFO
++    const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++#endif
++    DEBUG_BLOCK_printf("%*sPost-intrabc_info[mode=%d,drl=%d,"
 +                       "prec=%d,morphctx=%d,morph=%d]: r=%d\n",
 +                       depth, "", mbmi->intrabc_mode,
-+                       mbmi->intrabc_drl_idx, mbmi->mv[0].as_mv.row,
-+                       mbmi->mv[0].as_mv.col,
++                       mbmi->intrabc_drl_idx,
 +                       mbmi->pb_mv_precision == MV_PRECISION_QTR_PEL,
 +                       morph_pred_ctx, morph_pred_ctx == -1 ? 0 : mbmi->morph_pred,
 +                       r->ec.rng);
@@ -2888,7 +3037,7 @@ index a918b816ea..3041bd9592 100644
    int mode_set_index =
        avm_read_symbol(r, ec_ctx->y_mode_set_cdf, INTRA_MODE_SETS,
                        ACCT_INFO("mode_set_index", "y_mode_set_cdf"));
-@@ -1535,6 +1778,9 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
+@@ -1535,6 +1769,9 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
    } else {
      mode_idx = FIRST_MODE_COUNT + (mode_set_index - 1) * SECOND_MODE_COUNT +
                 avm_read_literal(r, 4, ACCT_INFO("mode_idx"));
@@ -2898,7 +3047,7 @@ index a918b816ea..3041bd9592 100644
    }
    assert(mode_idx < LUMA_MODE_COUNT);
    get_y_intra_mode_set(mbmi, xd);
-@@ -1543,30 +1789,40 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
+@@ -1543,30 +1780,40 @@ static void read_intra_luma_mode(MACROBLOCKD *const xd, avm_reader *r) {
    mbmi->y_mode_idx = mode_idx;
    if (mbmi->joint_y_mode_delta_angle < NON_DIRECTIONAL_MODES_COUNT)
      assert(mbmi->joint_y_mode_delta_angle == mbmi->y_mode_idx);
@@ -2944,7 +3093,7 @@ index a918b816ea..3041bd9592 100644
        avm_read_symbol(r, ec_ctx->uv_mode_cdf[context],
                        CHROMA_INTRA_MODE_INDEX_COUNT, ACCT_INFO("uv_mode_idx"));
    if (uv_mode_idx == (CHROMA_INTRA_MODE_INDEX_COUNT - 1))
-@@ -1582,9 +1838,24 @@ static void read_intra_uv_mode(MACROBLOCKD *const xd,
+@@ -1582,9 +1829,24 @@ static void read_intra_uv_mode(MACROBLOCKD *const xd,
      mbmi->angle_delta[PLANE_TYPE_UV] = mbmi->angle_delta[PLANE_TYPE_Y];
    else
      mbmi->angle_delta[PLANE_TYPE_UV] = 0;
@@ -2970,7 +3119,7 @@ index a918b816ea..3041bd9592 100644
                                         DecoderCodingBlock *dcb, avm_reader *r) {
    MACROBLOCKD *const xd = &dcb->xd;
    MB_MODE_INFO *const mbmi = xd->mi[0];
-@@ -1593,8 +1864,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1593,8 +1855,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
  
    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
  
@@ -2985,7 +3134,7 @@ index a918b816ea..3041bd9592 100644
  
    mbmi->skip_mode = 0;
    if (xd->tree_type != CHROMA_PART) mbmi->morph_pred = 0;
-@@ -1608,10 +1884,15 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1608,10 +1875,15 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          avm_read_symbol(r, ec_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -3002,7 +3151,7 @@ index a918b816ea..3041bd9592 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -1622,19 +1903,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1622,19 +1894,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
    }
  
    if (!seg->segid_preskip && xd->tree_type != CHROMA_PART)
@@ -3027,7 +3176,7 @@ index a918b816ea..3041bd9592 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -1653,7 +1934,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1653,7 +1925,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
    }
  
    if (av2_allow_intrabc(cm, xd, bsize) && xd->tree_type != CHROMA_PART) {
@@ -3036,7 +3185,7 @@ index a918b816ea..3041bd9592 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -1665,9 +1946,11 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1665,9 +1937,11 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_y = read_dpcm_mode(ec_ctx, r);
        if (mbmi->use_dpcm_y == 0) {
@@ -3049,7 +3198,7 @@ index a918b816ea..3041bd9592 100644
          if (mbmi->dpcm_mode_y == 0) {
            mbmi->joint_y_mode_delta_angle = 22;
            mbmi->mode = V_PRED;
-@@ -1681,11 +1964,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1681,11 +1955,19 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
@@ -3070,7 +3219,7 @@ index a918b816ea..3041bd9592 100644
      } else {
        mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
      }
-@@ -1694,10 +1985,11 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1694,10 +1976,11 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
        if (mbmi->use_dpcm_y == 0) {
          mbmi->mrl_index =
              (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3084,7 +3233,7 @@ index a918b816ea..3041bd9592 100644
                ec_ctx, r, xd->neighbors[0], xd->neighbors[1]);
          } else {
            mbmi->multi_line_mrl = 0;
-@@ -1709,11 +2001,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1709,11 +1992,13 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->mrl_index =
            (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3100,7 +3249,7 @@ index a918b816ea..3041bd9592 100644
        } else {
          mbmi->multi_line_mrl = 0;
        }
-@@ -1725,7 +2019,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1725,7 +2010,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
        if (xd->lossless[mbmi->segment_id]) {
          mbmi->use_dpcm_uv = read_dpcm_uv_mode(ec_ctx, r);
          if (mbmi->use_dpcm_uv == 0) {
@@ -3109,7 +3258,7 @@ index a918b816ea..3041bd9592 100644
                xd,
                is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                    is_mhccp_allowed(cm, xd),
-@@ -1734,6 +2028,8 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1734,6 +2019,8 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
          } else {
            get_uv_intra_mode_set(mbmi);
            mbmi->dpcm_mode_uv = read_dpcm_uv_vert_horz_mode(ec_ctx, r);
@@ -3118,7 +3267,7 @@ index a918b816ea..3041bd9592 100644
            mbmi->uv_mode = mbmi->dpcm_mode_uv + 1;
            if (mbmi->uv_mode == mbmi->mode)
              mbmi->angle_delta[PLANE_TYPE_UV] = mbmi->angle_delta[PLANE_TYPE_Y];
-@@ -1741,7 +2037,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1741,7 +2028,7 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
              mbmi->angle_delta[PLANE_TYPE_UV] = 0;
          }
        } else {
@@ -3127,7 +3276,7 @@ index a918b816ea..3041bd9592 100644
              xd,
              is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                  is_mhccp_allowed(cm, xd),
-@@ -1774,6 +2070,20 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1774,6 +2061,20 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
          if (mbmi->cfl_idx == 0)
            mbmi->cfl_alpha_idx =
                read_cfl_alphas(ec_ctx, r, &mbmi->cfl_alpha_signs);
@@ -3148,7 +3297,7 @@ index a918b816ea..3041bd9592 100644
        }
      } else {
        // Avoid decoding angle_info if there is is no chroma prediction
-@@ -1789,10 +2099,10 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
+@@ -1789,10 +2090,10 @@ static void read_intra_frame_mode_info(AV2_COMMON *const cm,
    mbmi->palette_mode_info.palette_size[1] = 0;
    if (av2_allow_palette(PLANE_TYPE_Y, cm->features.allow_screen_content_tools,
                          bsize))
@@ -3161,7 +3310,7 @@ index a918b816ea..3041bd9592 100644
    }
  }
  
-@@ -2077,7 +2387,9 @@ static void set_ref_frames_for_skip_mode(AV2_COMMON *const cm,
+@@ -2077,7 +2378,9 @@ static void set_ref_frames_for_skip_mode(AV2_COMMON *const cm,
  }
  
  // Read the reference frame
@@ -3172,7 +3321,7 @@ index a918b816ea..3041bd9592 100644
                              avm_reader *r, int segment_id,
                              MV_REFERENCE_FRAME ref_frame[2]) {
    if (xd->mi[0]->skip_mode) {
-@@ -2093,9 +2405,12 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -2093,9 +2396,12 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
                          ACCT_INFO("tip_cdf"))) {
        ref_frame[0] = TIP_FRAME;
      }
@@ -3186,7 +3335,7 @@ index a918b816ea..3041bd9592 100644
  
    if (segfeature_active(&cm->seg, segment_id, SEG_LVL_SKIP) ||
        segfeature_active(&cm->seg, segment_id, SEG_LVL_GLOBALMV)) {
-@@ -2113,9 +2428,16 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -2113,9 +2419,16 @@ static void read_ref_frames(AV2_COMMON *const cm, MACROBLOCKD *const xd,
        assert(0 && "Invalid prediction mode.");
      }
    }
@@ -3204,7 +3353,7 @@ index a918b816ea..3041bd9592 100644
                                           InterpFilter interp_filter,
                                           const AV2_COMMON *cm,
                                           MB_MODE_INFO *const mbmi,
-@@ -2135,10 +2457,13 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
+@@ -2135,10 +2448,13 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
          r, ec_ctx->switchable_interp_cdf[ctx], SWITCHABLE_FILTERS,
          ACCT_INFO("switchable_interp_cdf"));
      mbmi->interp_fltr = filter;
@@ -3219,7 +3368,7 @@ index a918b816ea..3041bd9592 100644
                                         MACROBLOCKD *const xd,
                                         MB_MODE_INFO *const mbmi,
                                         avm_reader *r) {
-@@ -2160,14 +2485,19 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2160,14 +2476,19 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
    mbmi->motion_mode = SIMPLE_TRANSLATION;
  
    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
@@ -3240,7 +3389,7 @@ index a918b816ea..3041bd9592 100644
          if (mbmi->dpcm_mode_y == 0) {
            mbmi->joint_y_mode_delta_angle = 22;
            mbmi->mode = V_PRED;
-@@ -2181,14 +2511,22 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2181,14 +2502,22 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
@@ -3264,7 +3413,7 @@ index a918b816ea..3041bd9592 100644
    } else {
      mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
    }
-@@ -2200,10 +2538,11 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2200,10 +2529,11 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
        if (mbmi->use_dpcm_y == 0) {
          mbmi->mrl_index =
              (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3278,7 +3427,7 @@ index a918b816ea..3041bd9592 100644
                ec_ctx, r, xd->neighbors[0], xd->neighbors[1]);
          } else {
            mbmi->multi_line_mrl = 0;
-@@ -2215,11 +2554,13 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2215,11 +2545,13 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->mrl_index =
            (cm->seq_params.enable_mrls && av2_is_directional_mode(mbmi->mode))
@@ -3294,7 +3443,7 @@ index a918b816ea..3041bd9592 100644
        } else {
          mbmi->multi_line_mrl = 0;
        }
-@@ -2231,7 +2572,7 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2231,7 +2563,7 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      if (xd->lossless[mbmi->segment_id]) {
        mbmi->use_dpcm_uv = read_dpcm_uv_mode(ec_ctx, r);
        if (mbmi->use_dpcm_uv == 0) {
@@ -3303,7 +3452,7 @@ index a918b816ea..3041bd9592 100644
              xd,
              is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                  is_mhccp_allowed(cm, xd),
-@@ -2240,6 +2581,8 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2240,6 +2572,8 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
        } else {
          get_uv_intra_mode_set(mbmi);
          mbmi->dpcm_mode_uv = read_dpcm_uv_vert_horz_mode(ec_ctx, r);
@@ -3312,7 +3461,7 @@ index a918b816ea..3041bd9592 100644
          mbmi->uv_mode = mbmi->dpcm_mode_uv + 1;
          if (mbmi->uv_mode == mbmi->mode)
            mbmi->angle_delta[PLANE_TYPE_UV] = mbmi->angle_delta[PLANE_TYPE_Y];
-@@ -2249,7 +2592,8 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2249,7 +2583,8 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
      } else {
        mbmi->use_dpcm_uv = 0;
        mbmi->dpcm_mode_uv = 0;
@@ -3322,7 +3471,7 @@ index a918b816ea..3041bd9592 100644
                           is_cfl_allowed(cm->seq_params.enable_cfl_intra, xd) ||
                               is_mhccp_allowed(cm, xd),
                           r);
-@@ -2279,6 +2623,20 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2279,6 +2614,20 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
          mbmi->cfl_alpha_idx =
              read_cfl_alphas(xd->tile_ctx, r, &mbmi->cfl_alpha_signs);
        }
@@ -3343,7 +3492,7 @@ index a918b816ea..3041bd9592 100644
      }
    } else {
      // Avoid decoding angle_info if there is is no chroma prediction
-@@ -2289,14 +2647,16 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
+@@ -2289,14 +2638,16 @@ static void read_intra_block_mode_info(AV2_COMMON *const cm,
    mbmi->palette_mode_info.palette_size[1] = 0;
    if (av2_allow_palette(PLANE_TYPE_Y, cm->features.allow_screen_content_tools,
                          bsize))
@@ -3363,7 +3512,7 @@ index a918b816ea..3041bd9592 100644
                              PREDICTION_MODE mode,
                              MV_REFERENCE_FRAME ref_frame[2], int_mv mv[2],
                              int_mv ref_mv[2], int is_compound,
-@@ -2489,6 +2849,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
+@@ -2489,6 +2840,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
            }
          }
        }
@@ -3373,7 +3522,7 @@ index a918b816ea..3041bd9592 100644
      }
  
      for (int ref_idx = start_signaled_mvd_idx;
-@@ -2527,7 +2890,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
+@@ -2527,7 +2881,9 @@ static INLINE int assign_mv(AV2_COMMON *cm, MACROBLOCKD *xd,
    return 1;
  }
  
@@ -3384,7 +3533,7 @@ index a918b816ea..3041bd9592 100644
                                 int segment_id, avm_reader *r) {
    if (xd->mi[0]->sb_type[PLANE_TYPE_Y] == BLOCK_4X4) {
      return 0;
-@@ -2546,6 +2911,8 @@ static int read_is_inter_block(AV2_COMMON *const cm, MACROBLOCKD *const xd,
+@@ -2546,6 +2902,8 @@ static int read_is_inter_block(AV2_COMMON *const cm, MACROBLOCKD *const xd,
    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
    const int is_inter =
        avm_read_symbol(r, ec_ctx->intra_inter_cdf[ctx], 2, ACCT_INFO());
@@ -3393,7 +3542,7 @@ index a918b816ea..3041bd9592 100644
    return is_inter;
  }
  
-@@ -2583,7 +2950,9 @@ static void dec_dump_logs(AV2_COMMON *cm, MB_MODE_INFO *const mbmi, int mi_row,
+@@ -2583,7 +2941,9 @@ static void dec_dump_logs(AV2_COMMON *cm, MB_MODE_INFO *const mbmi, int mi_row,
  #endif  // DEC_MISMATCH_DEBUG
  
  // This function read the refinemv_flag ( if require) from the bitstream
@@ -3404,7 +3553,7 @@ index a918b816ea..3041bd9592 100644
                                 avm_reader *r, BLOCK_SIZE bsize) {
    MB_MODE_INFO *const mbmi = xd->mi[0];
    mbmi->refinemv_flag = get_default_refinemv_flag(cm, mbmi);
-@@ -2593,12 +2962,14 @@ static void read_refinemv_flag(AV2_COMMON *const cm, MACROBLOCKD *xd,
+@@ -2593,12 +2953,14 @@ static void read_refinemv_flag(AV2_COMMON *const cm, MACROBLOCKD *xd,
      mbmi->refinemv_flag =
          avm_read_symbol(r, xd->tile_ctx->refinemv_flag_cdf[refinemv_ctx],
                          REFINEMV_NUM_MODES, ACCT_INFO("refinemv_flag"));
@@ -3420,7 +3569,7 @@ index a918b816ea..3041bd9592 100644
    MB_MODE_INFO *const mbmi = xd->mi[0];
    assert(mbmi->max_mv_precision ==
           av2_get_mbmi_max_mv_precision(cm, xd->sbi, mbmi));
-@@ -2610,11 +2981,13 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
+@@ -2610,11 +2972,13 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
    assert(mbmi->most_probable_pb_mv_precision ==
           cm->features.most_probable_fr_mv_precision);
  
@@ -3435,7 +3584,7 @@ index a918b816ea..3041bd9592 100644
    const PRECISION_SET *precision_def =
        &av2_mv_precision_sets[mbmi->mb_precision_set];
    int nsymbs = precision_def->num_precisions - 1;
-@@ -2626,7 +2999,30 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
+@@ -2626,7 +2990,30 @@ MvSubpelPrecision av2_read_pb_mv_precision(AV2_COMMON *const cm,
    return av2_get_precision_from_index(mbmi, down);
  }
  
@@ -3467,7 +3616,7 @@ index a918b816ea..3041bd9592 100644
                                         DecoderCodingBlock *dcb,
                                         MB_MODE_INFO *const mbmi,
                                         avm_reader *r) {
-@@ -2668,7 +3064,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2668,7 +3055,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
  
    av2_collect_neighbors_ref_counts(xd);
  
@@ -3480,7 +3629,7 @@ index a918b816ea..3041bd9592 100644
    int is_compound = has_second_ref(mbmi);
  
    const MV_REFERENCE_FRAME ref_frame = av2_ref_frame_type(mbmi->ref_frame);
-@@ -2702,10 +3102,27 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2702,8 +3093,12 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
      read_drl_idx(cm->features.max_drl_bits,
                   av2_mode_context_pristine(inter_mode_ctx, mbmi->ref_frame),
                   ec_ctx, mbmi, r);
@@ -3488,27 +3637,13 @@ index a918b816ea..3041bd9592 100644
 +                       depth, "", mbmi->ref_mv_idx[0],
 +                       mbmi->ref_mv_idx[0], r->ec.rng);
  
-     av2_find_mv_refs(cm, xd, mbmi, ref_frame, dcb->ref_mv_count,
+-    av2_find_mv_refs(cm, xd, mbmi, ref_frame, dcb->ref_mv_count,
++    av2_find_mv_refs(DB_ONLY(0)
++                     cm, xd, mbmi, ref_frame, dcb->ref_mv_count,
                       xd->ref_mv_stack, xd->weight, ref_mvs, /*global_mvs=*/NULL,
                       NULL, 0, NULL);
-+#if DEBUG_BLOCK_INFO
-+    if (BLOCK_TO_DEBUG) {
-+      printf("%*sfind_mv_refs(%d,%d)\n", depth, "", mbmi->ref_frame[0],
-+             mbmi->ref_frame[1]);
-+      for (int n = 0; n < xd->skip_mvp_candidate_list.ref_mv_count; n++)
-+        printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
-+               depth + 1, "", n, xd->skip_mvp_candidate_list.ref_mv_count,
-+               xd->skip_mvp_candidate_list.ref_mv_stack[n].this_mv.as_mv.row,
-+               xd->skip_mvp_candidate_list.ref_mv_stack[n].this_mv.as_mv.col,
-+               xd->skip_mvp_candidate_list.ref_mv_stack[n].comp_mv.as_mv.row,
-+               xd->skip_mvp_candidate_list.ref_mv_stack[n].comp_mv.as_mv.col,
-+               xd->skip_mvp_candidate_list.weight[n]);
-+    }
-+#endif
  
-     is_compound = has_second_ref(mbmi);
-     if (!is_compound) {
-@@ -2722,9 +3139,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2722,9 +3117,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
        const int16_t mode_ctx =
            av2_mode_context_analyzer(inter_mode_ctx, mbmi->ref_frame);
        if (is_compound)
@@ -3522,7 +3657,7 @@ index a918b816ea..3041bd9592 100644
  
        mbmi->use_amvd = 0;
        if (cm->seq_params.enable_adaptive_mvd && allow_amvd_mode(mbmi->mode)) {
-@@ -2734,12 +3153,65 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2734,8 +3131,11 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
          mbmi->use_amvd =
              avm_read_symbol(r, ec_ctx->amvd_mode_cdf[amvd_index][amvd_ctx], 2,
                              ACCT_INFO("use_amvd"));
@@ -3530,65 +3665,12 @@ index a918b816ea..3041bd9592 100644
 +                           depth, "", amvd_index, amvd_ctx, mbmi->use_amvd,
 +                           r->ec.rng);
        }
-       av2_find_mv_refs(
+-      av2_find_mv_refs(
++      av2_find_mv_refs(DB_ONLY(0)
            cm, xd, mbmi, ref_frame, dcb->ref_mv_count, xd->ref_mv_stack,
            xd->weight, ref_mvs, /*global_mvs=*/NULL, xd->warp_param_stack,
            ref_frame < SINGLE_REF_FRAMES ? MAX_WARP_REF_CANDIDATES : 0,
-           xd->valid_num_warp_candidates);
-+#if DEBUG_BLOCK_INFO
-+      if (BLOCK_TO_DEBUG) {
-+        printf("%*sfind_mv_refs(%d,%d)\n", depth, "",
-+               mbmi->ref_frame[0] == TIP_FRAME ? 7 : mbmi->ref_frame[0],
-+               mbmi->ref_frame[1]);
-+        if (!has_second_ref(mbmi)) {
-+          for (int n = 0; n < dcb->ref_mv_count[ref_frame]; n++)
-+            printf("%*smv[%d/%d]: y=%d,x=%d,w=%d,y_off=%d,x_off=%d\n",
-+                   depth + 1, "", n, dcb->ref_mv_count[ref_frame],
-+                   xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.row,
-+                   xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.col,
-+                   xd->weight[ref_frame][n],
-+                   xd->ref_mv_stack[ref_frame][n].row_offset,
-+                   xd->ref_mv_stack[ref_frame][n].col_offset);
-+          if (mbmi->ref_frame[0] != TIP_FRAME && mbmi->mode > NEWMV) {
-+            const int n_warp =
-+              xd->valid_num_warp_candidates[mbmi->ref_frame[0]];
-+            for (int n = 0; n < n_warp; n++) {
-+              const int32_t *const mat =
-+                xd->warp_param_stack[mbmi->ref_frame[0]]
-+                                     [n].wm_params.wmmat;
-+              printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d, t=%d\n",
-+                     depth + 1, "", n, n_warp,
-+                     mat[0], mat[1], mat[2], mat[3], mat[4], mat[5],
-+                     xd->warp_param_stack[mbmi->ref_frame[0]]
-+                                         [n].wm_params.wmtype);
-+            }
-+          }
-+        } else if (has_second_drl(mbmi)) {
-+          for (int drl = 0; drl < 2; drl++) {
-+            const int rf = mbmi->ref_frame[drl];
-+            for (int n = 0; n < dcb->ref_mv_count[rf]; n++)
-+              printf("%*smv[%d:%d/%d]: y=%d,x=%d,w=%d\n",
-+                     depth + 1, "", drl, n, dcb->ref_mv_count[rf],
-+                     xd->ref_mv_stack[rf][n].this_mv.as_mv.row,
-+                     xd->ref_mv_stack[rf][n].this_mv.as_mv.col,
-+                     xd->weight[rf][n]);
-+          }
-+        } else {
-+          for (int n = 0; n < dcb->ref_mv_count[ref_frame]; n++)
-+            printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
-+                   depth + 1, "", n, dcb->ref_mv_count[ref_frame],
-+                   xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.row,
-+                   xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.col,
-+                   xd->ref_mv_stack[ref_frame][n].comp_mv.as_mv.row,
-+                   xd->ref_mv_stack[ref_frame][n].comp_mv.as_mv.col,
-+                   xd->weight[ref_frame][n]);
-+        }
-+      }
-+#endif
- 
-       if (cm->features.enable_bawp &&
-           av2_allow_bawp(cm, mbmi, xd->mi_row, xd->mi_col)) {
-@@ -2759,14 +3231,17 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2759,14 +3159,17 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
                r, xd->tile_ctx->explicit_bawp_scale_cdf, EXPLICIT_BAWP_SCALE_CNT,
                ACCT_INFO("explicit_bawp_scales"));
          }
@@ -3613,7 +3695,7 @@ index a918b816ea..3041bd9592 100644
        }
  
        for (int ref = 0; ref < 1 + has_second_ref(mbmi); ++ref) {
-@@ -2783,7 +3258,8 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2783,7 +3186,8 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
          if (has_second_ref(mbmi))
            mbmi->num_proj_ref[1] = av2_findSamples(cm, xd, pts1, pts1_inref, 1);
        }
@@ -3623,7 +3705,7 @@ index a918b816ea..3041bd9592 100644
        int is_warpmv_warp_causal =
            ((mbmi->motion_mode == WARP_CAUSAL) && mbmi->mode == WARPMV);
        if (mbmi->motion_mode == WARP_DELTA || is_warpmv_warp_causal) {
-@@ -2794,27 +3270,39 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2794,27 +3198,39 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
              xd->valid_num_warp_candidates[av2_ref_frame_type(mbmi->ref_frame)],
              NULL);
  
@@ -3667,7 +3749,7 @@ index a918b816ea..3041bd9592 100644
        }
        if (enable_adaptive_mvd_resolution(cm, mbmi))
          set_amvd_mv_precision(mbmi, mbmi->max_mv_precision);
-@@ -2864,13 +3352,14 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2864,13 +3280,14 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
    }
  
    const int mv_corrupted_flag =
@@ -3684,7 +3766,7 @@ index a918b816ea..3041bd9592 100644
    }
  
    mbmi->warp_inter_intra = 0;
-@@ -2903,10 +3392,15 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2903,10 +3320,15 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
          }
        }
      }  // if (mbmi->warp_inter_intra)
@@ -3701,7 +3783,7 @@ index a918b816ea..3041bd9592 100644
    }
  
    // init
-@@ -2921,8 +3415,9 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2921,8 +3343,9 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
      const int masked_compound_used = is_any_masked_compound_used(bsize) &&
                                       cm->seq_params.enable_masked_compound;
  
@@ -3712,7 +3794,7 @@ index a918b816ea..3041bd9592 100644
        mbmi->comp_group_idx = (uint8_t)avm_read_symbol(
            r, ec_ctx->comp_group_idx_cdf[ctx_comp_group_idx], 2,
            ACCT_INFO("comp_group_idx"));
-@@ -2961,11 +3456,28 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2961,11 +3384,28 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
              avm_read_literal(r, MAX_DIFFWTD_MASK_BITS, ACCT_INFO("mask_type"));
        }
      }
@@ -3742,7 +3824,7 @@ index a918b816ea..3041bd9592 100644
      if (is_cwp_allowed(mbmi) && mbmi->skip_mode)
        mbmi->cwp_idx =
            xd->skip_mvp_candidate_list.ref_mv_stack[mbmi->ref_mv_idx[0]].cwp_idx;
-@@ -2974,10 +3486,13 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
+@@ -2974,10 +3414,13 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
      mbmi->refinemv_flag = 0;
    }
  
@@ -3757,30 +3839,7 @@ index a918b816ea..3041bd9592 100644
  
    if (mbmi->motion_mode == WARP_CAUSAL) {
      mbmi->wm_params[0].wmtype = DEFAULT_WMTYPE;
-@@ -3068,13 +3583,31 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
-   }
- 
-   if (xd->tree_type != LUMA_PART) xd->cfl.store_y = store_cfl_required(cm, xd);
-+    if (is_inter_ref_frame(mbmi->ref_frame[1])) {
-+      if (mbmi->motion_mode >= WARP_CAUSAL) {
-+        for (int i = 0; i < 2; i++)
-+          debug_warp_matrix(cm, mi_row, mi_col, mbmi, i, depth);
-+      } else {
-+        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n", depth, "",
-+                           mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col,
-+                           mbmi->mv[1].as_mv.row, mbmi->mv[1].as_mv.col);
-+      }
-+    } else {
-+      if (mbmi->motion_mode >= WARP_CAUSAL) {
-+        debug_warp_matrix(cm, mi_row, mi_col, mbmi, 0, depth);
-+      } else {
-+        DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n", depth, "",
-+                           mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col);
-+      }
-+    }
- 
- #if DEC_MISMATCH_DEBUG
-   dec_dump_logs(cm, mi, mi_row, mi_col, mode_ctx);
+@@ -3074,7 +3517,8 @@ static void read_inter_block_mode_info(AV2Decoder *const pbi,
  #endif  // DEC_MISMATCH_DEBUG
  }
  
@@ -3790,7 +3849,7 @@ index a918b816ea..3041bd9592 100644
                                         DecoderCodingBlock *dcb, avm_reader *r) {
    AV2_COMMON *const cm = &pbi->common;
    MACROBLOCKD *const xd = &dcb->xd;
-@@ -3098,9 +3631,13 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3098,9 +3542,13 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
    mbmi->refinemv_flag = 0;
  
    if (xd->tree_type != CHROMA_PART)
@@ -3806,7 +3865,7 @@ index a918b816ea..3041bd9592 100644
  
    mbmi->fsc_mode[xd->tree_type == CHROMA_PART] = 0;
  
-@@ -3117,7 +3654,8 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3117,7 +3565,8 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
    }
  
    if (!mbmi->skip_mode) {
@@ -3816,7 +3875,7 @@ index a918b816ea..3041bd9592 100644
    }
  
    if (!inter_block &&
-@@ -3130,11 +3668,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3130,11 +3579,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
      mbmi->use_intrabc[xd->tree_type == CHROMA_PART] =
          avm_read_symbol(r, xd->tile_ctx->intrabc_cdf[intrabc_ctx], 2,
                          ACCT_INFO("use_intrabc", "chroma"));
@@ -3834,7 +3893,7 @@ index a918b816ea..3041bd9592 100644
    } else {
      // Segment SEG_LVL_SKIP should be disabled for intra prediction
      if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
-@@ -3150,16 +3693,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3150,16 +3604,16 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
    mbmi->warp_inter_intra = 0;
  
    if (!cm->seg.segid_preskip && xd->tree_type != CHROMA_PART)
@@ -3856,7 +3915,7 @@ index a918b816ea..3041bd9592 100644
  
    mbmi->current_qindex = xd->current_base_qindex;
  
-@@ -3176,7 +3719,7 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3176,7 +3630,7 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
      mbmi->ref_frame[1] = NONE_FRAME;
      mbmi->palette_mode_info.palette_size[0] = 0;
      mbmi->palette_mode_info.palette_size[1] = 0;
@@ -3865,7 +3924,7 @@ index a918b816ea..3041bd9592 100644
      if (is_intrabc_block(mbmi, xd->tree_type)) {
        mbmi->use_dpcm_y = 0;
        mbmi->dpcm_mode_y = 0;
-@@ -3185,9 +3728,9 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
+@@ -3185,9 +3639,9 @@ static void read_inter_frame_mode_info(AV2Decoder *const pbi,
      }
    }
    if (inter_block)
@@ -3877,49 +3936,201 @@ index a918b816ea..3041bd9592 100644
  }
  
  static void intra_copy_frame_mvs(AV2_COMMON *const cm, int mi_row, int mi_col,
-@@ -3213,7 +3756,8 @@ static void intra_copy_frame_mvs(AV2_COMMON *const cm, int mi_row, int mi_col,
+@@ -3213,7 +3667,143 @@ static void intra_copy_frame_mvs(AV2_COMMON *const cm, int mi_row, int mi_col,
    }
  }
  
 -void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
++#if DEBUG_BLOCK_INFO
++void resolve_refmvs(DB_ONLY(const int depth)
++                    AV2Decoder *const pbi,
++                    DecoderCodingBlock *dcb)
++{
++  AV2_COMMON *const cm = &pbi->common;
++  MACROBLOCKD *const xd = &dcb->xd;
++  MB_MODE_INFO *const mbmi = xd->mi[0];
++  const int mi_row = xd->mi_row, mi_col = xd->mi_col;
++
++  if (DEBUG_BLOCK_INFO) {
++    if (mbmi->use_intrabc[xd->tree_type == CHROMA_PART]) {
++      int_mv ref_mvs[INTRA_FRAME + 1][MAX_MV_REF_CANDIDATES];
++      av2_find_mv_refs(1, cm, xd, mbmi, INTRA_FRAME, dcb->ref_mv_count,
++                       xd->ref_mv_stack, xd->weight, ref_mvs, /*global_mvs=*/NULL,
++                       NULL, 0, NULL);
++      printf("%*sfind_mv_refs(intra)\n", depth, "");
++      for (int n = 0; n < dcb->ref_mv_count[INTRA_FRAME]; n++)
++        printf("%*smv[%d/%d]: y=%d,x=%d,w=%d\n",
++               depth + 1, "", n, dcb->ref_mv_count[INTRA_FRAME],
++               xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.row,
++               xd->ref_mv_stack[INTRA_FRAME][n].this_mv.as_mv.col,
++               xd->weight[INTRA_FRAME][n]);
++    } else if (mbmi->skip_mode) {
++      const MV_REFERENCE_FRAME ref_frame = av2_ref_frame_type(mbmi->ref_frame);
++      int_mv ref_mvs[MODE_CTX_REF_FRAMES][MAX_MV_REF_CANDIDATES] = { { { 0 } } };
++      av2_find_mv_refs(1, cm, xd, mbmi, ref_frame, dcb->ref_mv_count,
++                       xd->ref_mv_stack, xd->weight, ref_mvs, /*global_mvs=*/NULL,
++                       NULL, 0, NULL);
++      printf("%*sfind_mv_refs(%d,%d)\n", depth, "", mbmi->ref_frame[0],
++             mbmi->ref_frame[1]);
++      for (int n = 0; n < xd->skip_mvp_candidate_list.ref_mv_count; n++)
++        printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d,cwp=%d\n",
++               depth + 1, "", n, xd->skip_mvp_candidate_list.ref_mv_count,
++               xd->skip_mvp_candidate_list.ref_mv_stack[n].this_mv.as_mv.row,
++               xd->skip_mvp_candidate_list.ref_mv_stack[n].this_mv.as_mv.col,
++               xd->skip_mvp_candidate_list.ref_mv_stack[n].comp_mv.as_mv.row,
++               xd->skip_mvp_candidate_list.ref_mv_stack[n].comp_mv.as_mv.col,
++               xd->skip_mvp_candidate_list.weight[n],
++               xd->skip_mvp_candidate_list.ref_mv_stack[n].cwp_idx);
++    } else if (is_inter_block(mbmi, xd->tree_type) &&
++               ((has_second_ref(mbmi) && mbmi->mode != GLOBAL_GLOBALMV) ||
++                (!has_second_ref(mbmi) && mbmi->mode != GLOBALMV)))
++    {
++      const MV_REFERENCE_FRAME ref_frame = av2_ref_frame_type(mbmi->ref_frame);
++      int_mv ref_mvs[MODE_CTX_REF_FRAMES][MAX_MV_REF_CANDIDATES] = { { { 0 } } };
++      av2_find_mv_refs(1,
++          cm, xd, mbmi, ref_frame, dcb->ref_mv_count, xd->ref_mv_stack,
++          xd->weight, ref_mvs, /*global_mvs=*/NULL, xd->warp_param_stack,
++          ref_frame < SINGLE_REF_FRAMES ? MAX_WARP_REF_CANDIDATES : 0,
++          xd->valid_num_warp_candidates);
++      printf("%*sfind_mv_refs(%d,%d)\n", depth, "",
++             mbmi->ref_frame[0] == TIP_FRAME ? 7 : mbmi->ref_frame[0],
++             mbmi->ref_frame[1]);
++      if (!has_second_ref(mbmi)) {
++        for (int n = 0; n < dcb->ref_mv_count[ref_frame]; n++)
++          printf("%*smv[%d/%d]: y=%d,x=%d,w=%d,y_off=%d,x_off=%d\n",
++                 depth + 1, "", n, dcb->ref_mv_count[ref_frame],
++                 xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.row,
++                 xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.col,
++                 xd->weight[ref_frame][n],
++                 xd->ref_mv_stack[ref_frame][n].row_offset,
++                 xd->ref_mv_stack[ref_frame][n].col_offset);
++        if (mbmi->ref_frame[0] != TIP_FRAME && mbmi->mode > NEWMV) {
++          const int n_warp =
++            xd->valid_num_warp_candidates[mbmi->ref_frame[0]];
++          for (int n = 0; n < n_warp; n++) {
++            const int32_t *const mat =
++              xd->warp_param_stack[mbmi->ref_frame[0]]
++                                   [n].wm_params.wmmat;
++            printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d, t=%d\n",
++                   depth + 1, "", n, n_warp,
++                   mat[0], mat[1], mat[2], mat[3], mat[4], mat[5],
++                   xd->warp_param_stack[mbmi->ref_frame[0]]
++                                       [n].wm_params.wmtype);
++          }
++        }
++      } else if (has_second_drl(mbmi)) {
++        for (int drl = 0; drl < 2; drl++) {
++          const int rf = mbmi->ref_frame[drl];
++          for (int n = 0; n < dcb->ref_mv_count[rf]; n++)
++            printf("%*smv[%d:%d/%d]: y=%d,x=%d,w=%d\n",
++                   depth + 1, "", drl, n, dcb->ref_mv_count[rf],
++                   xd->ref_mv_stack[rf][n].this_mv.as_mv.row,
++                   xd->ref_mv_stack[rf][n].this_mv.as_mv.col,
++                   xd->weight[rf][n]);
++        }
++      } else {
++        for (int n = 0; n < dcb->ref_mv_count[ref_frame]; n++)
++          printf("%*smv[%d/%d]: y=%d,x=%d,y2=%d,x2=%d,w=%d\n",
++                 depth + 1, "", n, dcb->ref_mv_count[ref_frame],
++                 xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.row,
++                 xd->ref_mv_stack[ref_frame][n].this_mv.as_mv.col,
++                 xd->ref_mv_stack[ref_frame][n].comp_mv.as_mv.row,
++                 xd->ref_mv_stack[ref_frame][n].comp_mv.as_mv.col,
++                 xd->weight[ref_frame][n]);
++      }
++    }
++  }
++
++  if (is_inter_ref_frame(mbmi->ref_frame[1])) {
++    if (mbmi->motion_mode >= WARP_CAUSAL) {
++      for (int i = 0; i < 2; i++)
++        debug_warp_matrix(cm, mi_row, mi_col, mbmi, i, depth);
++    } else {
++      DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d | y=%d,x=%d\n", depth, "",
++                         mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col,
++                         mbmi->mv[1].as_mv.row, mbmi->mv[1].as_mv.col);
++    }
++  } else if (is_inter_block(mbmi, xd->tree_type)) {
++    if (mbmi->motion_mode >= WARP_CAUSAL) {
++      debug_warp_matrix(cm, mi_row, mi_col, mbmi, 0, depth);
++    } else {
++      DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n", depth, "",
++                         mbmi->mv[0].as_mv.row, mbmi->mv[0].as_mv.col);
++    }
++  }
++
++  if (cm->seq_params.enable_refmvbank) {
++    if (is_inter_block(mbmi, xd->tree_type)) {
++      av2_update_ref_mv_bank(cm, xd, 1, mbmi);
++    } else {
++      decide_rmb_unit_update_count(cm, xd, mbmi);
++    }
++  }
++
++  if (!frame_is_intra_only(cm))
++    av2_update_warp_param_bank(cm, xd,
++#if COMPOUND_WARP_LINE_BUFFER_REDUCTION
++                               0,
++#endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
++                               mbmi);
++}
++#endif
++
 +void av2_read_mode_info(DB_ONLY(const int depth)
 +                        AV2Decoder *const pbi, DecoderCodingBlock *dcb,
                          avm_reader *r, int x_inside_boundary,
                          int y_inside_boundary) {
    AV2_COMMON *const cm = &pbi->common;
-@@ -3225,7 +3769,7 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3225,7 +3815,8 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
      mi->sb_type[PLANE_TYPE_UV] = mi->sb_type[PLANE_TYPE_Y];
  
    if (frame_is_intra_only(cm)) {
 -    read_intra_frame_mode_info(cm, dcb, r);
 +    read_intra_frame_mode_info(DB_ONLY(depth) cm, dcb, r);
++#if !DEBUG_BLOCK_INFO
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_intrabc_block(mbmi, xd->tree_type)) {
-@@ -3238,7 +3782,7 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -3234,11 +3825,13 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+         decide_rmb_unit_update_count(cm, xd, mbmi);
+       }
+     }
++#endif
+     if (cm->seq_params.order_hint_info.enable_ref_frame_mvs)
        intra_copy_frame_mvs(cm, xd->mi_row, xd->mi_col, x_inside_boundary,
                             y_inside_boundary);
    } else {
 -    read_inter_frame_mode_info(pbi, dcb, r);
 +    read_inter_frame_mode_info(DB_ONLY(depth) pbi, dcb, r);
++#if !DEBUG_BLOCK_INFO
      if (cm->seq_params.enable_refmvbank) {
        MB_MODE_INFO *const mbmi = xd->mi[0];
        if (is_inter_block(mbmi, xd->tree_type)) {
+@@ -3255,5 +3848,6 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+                                  0,
+ #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
+                                  mbmi_tmp);
++#endif
+   }
+ }
 diff --git a/av2/decoder/decodemv.h b/av2/decoder/decodemv.h
-index ca6a4a65fb..33555b8c22 100644
+index ca6a4a65fb..9869e5d737 100644
 --- a/av2/decoder/decodemv.h
 +++ b/av2/decoder/decodemv.h
-@@ -21,7 +21,8 @@
+@@ -21,7 +21,11 @@
  extern "C" {
  #endif
  
 -void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
++void resolve_refmvs(DB_ONLY(const int depth)
++                    AV2Decoder *pbi,
++                    DecoderCodingBlock *dcb);
 +void av2_read_mode_info(DB_ONLY(const int depth)
 +                        AV2Decoder *const pbi, DecoderCodingBlock *dcb,
                          avm_reader *r, int x_inside_boundary,
                          int y_inside_boundary);
  
-@@ -29,7 +30,8 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
+@@ -29,7 +33,8 @@ void av2_read_mode_info(AV2Decoder *const pbi, DecoderCodingBlock *dcb,
  }  // extern "C"
  #endif
  
@@ -3929,7 +4140,7 @@ index ca6a4a65fb..33555b8c22 100644
                            int blk_row, int blk_col, TX_SIZE tx_size,
                            uint16_t *eob, avm_reader *r);
  
-@@ -37,11 +39,15 @@ void av2_read_tx_type(const AV2_COMMON *const cm, MACROBLOCKD *xd, int blk_row,
+@@ -37,11 +42,15 @@ void av2_read_tx_type(const AV2_COMMON *const cm, MACROBLOCKD *xd, int blk_row,
                        int blk_col, TX_SIZE tx_size, avm_reader *r,
                        const int plane, const int eob, const int dc_skip);
  
@@ -4683,8 +4894,50 @@ index 56da03552b..b89610dbdc 100644
  
  #ifdef __cplusplus
  }  // extern "C"
+diff --git a/av2/encoder/rdopt.c b/av2/encoder/rdopt.c
+index 9f3051ea9a..5e48262610 100644
+--- a/av2/encoder/rdopt.c
++++ b/av2/encoder/rdopt.c
+@@ -814,7 +814,7 @@ static AVM_INLINE void setup_buffer_ref_mvs_inter(
+   }
+ 
+   // Gets an initial list of candidate vectors from neighbours and orders them
+-  av2_find_mv_refs(
++  av2_find_mv_refs(DB_ONLY(0)
+       cm, xd, mbmi, ref_frame, mbmi_ext->ref_mv_count, xd->ref_mv_stack,
+       xd->weight, NULL, mbmi_ext->global_mvs, xd->warp_param_stack,
+       ref_frame < INTER_REFS_PER_FRAME ? MAX_WARP_REF_CANDIDATES : 0,
+@@ -5619,7 +5619,8 @@ static int64_t rd_pick_intrabc_mode_sb(const AV2_COMP *cpi, MACROBLOCK *x,
+   MB_MODE_INFO_EXT *const mbmi_ext = x->mbmi_ext;
+   MV_REFERENCE_FRAME ref_frame = INTRA_FRAME;
+   mbmi->use_intrabc[xd->tree_type == CHROMA_PART] = 1;
+-  av2_find_mv_refs(cm, xd, mbmi, ref_frame, mbmi_ext->ref_mv_count,
++  av2_find_mv_refs(DB_ONLY(0)
++                   cm, xd, mbmi, ref_frame, mbmi_ext->ref_mv_count,
+                    xd->ref_mv_stack, xd->weight, NULL, mbmi_ext->global_mvs,
+                    NULL, 0, NULL);
+   mbmi->use_intrabc[xd->tree_type == CHROMA_PART] = 0;
+@@ -6374,7 +6375,8 @@ static AVM_INLINE void rd_pick_skip_mode(
+ 
+   const uint8_t ref_frame_type = av2_ref_frame_type(mbmi->ref_frame);
+ 
+-  av2_find_mv_refs(cm, xd, mbmi, ref_frame_type, mbmi_ext->ref_mv_count,
++  av2_find_mv_refs(DB_ONLY(0)
++                   cm, xd, mbmi, ref_frame_type, mbmi_ext->ref_mv_count,
+                    xd->ref_mv_stack, xd->weight, NULL, mbmi_ext->global_mvs,
+                    NULL, 0, NULL);
+ 
+@@ -6979,7 +6981,7 @@ static AVM_INLINE void set_params_rd_pick_inter_mode(
+       // Ref mv list population is not required, when compound references are
+       // pruned.
+       if (prune_ref_frame(cpi, x, ref_frame)) continue;
+-      av2_find_mv_refs(
++      av2_find_mv_refs(DB_ONLY(0)
+           cm, xd, mbmi, ref_frame, mbmi_ext->ref_mv_count, xd->ref_mv_stack,
+           xd->weight, NULL, mbmi_ext->global_mvs, xd->warp_param_stack,
+           ref_frame < INTER_REFS_PER_FRAME ? MAX_WARP_REF_CANDIDATES : 0,
 diff --git a/avm/debug.h b/avm/debug.h
-index b605a9125c..d3242f183b 100644
+index b605a9125c..ae277ab7a6 100644
 --- a/avm/debug.h
 +++ b/avm/debug.h
 @@ -31,5 +31,21 @@
@@ -4695,8 +4948,8 @@ index b605a9125c..d3242f183b 100644
 +#if DEBUG_BLOCK_INFO
 +#define DB_ONLY(x...) x,
 +#define BLOCK_TO_DEBUG \
-+    cm->current_frame.frame_number == 0 && \
-+    mi_row >= 0 && mi_row < 16 && mi_col >= 0 && mi_col < 16
++    (cm->current_frame.frame_number == 0 && \
++     mi_row >= 0 && mi_row < 16 && mi_col >= 0 && mi_col < 16)
 +#define DEBUG_BLOCK_printf(fmt...) \
 +    if (BLOCK_TO_DEBUG) printf(fmt)
 +#define DEBUG_CF_printf(fmt...) \

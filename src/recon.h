@@ -46,7 +46,8 @@ void (name)(Dav2dTaskContext *t)
 typedef decl_backup_ipred_edge_fn(*backup_ipred_edge_fn);
 
 #define decl_read_coef_blocks_fn(name) \
-void (name)(Dav2dTaskContext *t, enum BlockSize bs, const Av2Block *b)
+int (name)(Dav2dTaskContext *t, DB_ONLY(int depth) \
+           enum BlockSize lbs, enum BlockSize cbs, Av2Block *b)
 typedef decl_read_coef_blocks_fn(*read_coef_blocks_fn);
 
 #define decl_copy_pal_block_fn(name) \

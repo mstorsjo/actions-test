@@ -331,12 +331,13 @@ static inline int tcq_next_state(const int state, const int abs_level) {
 static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         uint8_t *const a, uint8_t *const l,
                         const enum RectTxfmSize tx, const enum BlockSize bs,
+                        const int sdp_active,
                         const Av2Block *const b, const int plane, coef *cf,
                         enum TxfmType *const txtp, uint8_t *res_ctx)
 {
     Dav2dTileState *const ts = t->ts;
     const int chroma = !!plane; // FIXME perhaps make this an inlined function arg?
-    const int intra = b->intra && !b->intrabc;
+    const int intra = b->intra && (sdp_active || !b->intrabc);
     const Dav2dFrameContext *const f = t->f;
     const int lossless = f->frame_hdr->segmentation.lossless[b->seg_id];
     const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
@@ -422,7 +423,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         // if luma but inter, this can be coded
         if (chroma) {
             if (intra) {
-                const int y_fsc = b->lbs != BS_INVALID ? b->fsc :
+                const int y_fsc = !sdp_active ? b->fsc :
                     t->luma_fsc_map[(t->cby & 15) * 16 + (t->cbx & 15)];
                 *txtp = y_fsc ? IDTX : WHT_WHT;
             } else {
@@ -1094,121 +1095,446 @@ end:
     return eob;
 }
 
-void bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
-                                    const enum BlockSize bs, const Av2Block *const b)
+static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
+                                           enum IntraPredMode mode,
+                                           int *const angle,
+                                           const int mrl_idx)
 {
-#if 0
+    if ((unsigned) mode - 1 > VERT_LEFT_PRED - 1) return mode;
+
+    // map directional modes
+    const int mrl_adj = (mrl_idx == 1) - (mrl_idx == 2);
+    *angle = dav2d_mode_to_angle_map[mode - 1] + *angle * 3 + mrl_adj;
+    static const uint8_t thresh[] = { 61, 73, 82, 86 };
+    const int rect = t_dim->lw - t_dim->lh;
+    // FIXME below, we should return 180 +/- angle after mode remapping,
+    // otherwise the actual intra prediction won't work correctly
+    if (rect > 0) {
+        assert(rect <= 4);
+        if (*angle > 270 - thresh[rect - 1]){
+            *angle -= 180;
+            return DIAG_DOWN_LEFT_PRED;
+        }
+    } else if (rect < 0) {
+        assert(rect >= -4);
+        if (*angle < thresh[-1 - rect]) {
+            *angle += 180;
+            return HOR_UP_PRED;
+        }
+    }
+
+    return mode;
+}
+
+static int read_luma_tx_cf(Dav2dTaskContext *const t, DB_ONLY(const int depth)
+                           const enum RectTxfmSize tx, Av2Block *const b)
+{
     const Dav2dFrameContext *const f = t->f;
-    const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-    const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+    Dav2dTileState *const ts = t->ts;
     const int bx4 = t->bx & 63, by4 = t->by & 63;
-    const int cbx4 = bx4 >> ss_hor, cby4 = by4 >> ss_ver;
+    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+    const int tw = t_dim->w * 4, th = t_dim->h * 4;
+
+    const enum IntraPredMode orig_y_mode = b->y_mode;
+    int angle = b->y_angle;
+    if (b->intra && !b->intrabc)
+        b->y_mode = wide_angle_remap(t_dim, b->y_mode, &angle, b->mrl_index);
+
+    // decode coefficients
+    uint8_t cf_ctx;
+    enum TxfmType txtp;
+    coef *cf = ts->frame_thread[0].cf;
+    ts->frame_thread[0].cf += imin(tw, 32) * imin(th, 32);
+    struct CodedBlockInfo *const cbi =
+        &f->frame_thread.cbi[t->by * f->b4_stride + t->bx];
+    const int eob = decode_coefs(t, DB_ONLY(depth + 1)
+                        &t->a->lcoef[bx4], &t->l.lcoef[by4],
+                        tx, b->bs, 0, b, 0, cf, &txtp, &cf_ctx);
+    if (eob == INT_MIN) return -1;
+    cbi->txtp[0] = txtp;
+    cbi->eob[0] = eob;
+    txtp &= 0xff;
+    DEBUG_BLOCK_printf("%*sPost-y_cf_blk[tx=%dx%d,txtp=%s/%s,eob=%d]: r=%d\n",
+                       depth + 1, "", tw, th,
+                       dav2d_tx1d_names[txtp & 7],
+                       dav2d_tx1d_names[txtp >> 5],
+                       eob, ts->msac.rng);
+    dav2d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
+                             imin(t_dim->w, f->bw - t->bx));
+    dav2d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
+                             imin(t_dim->h, f->bh - t->by));
+    uint8_t *txtp_map = &t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+#define set_ctx(rep_macro) \
+    for (int y = 0; y < t_dim->h; y++) { \
+        rep_macro(txtp_map, 0, txtp); \
+        txtp_map += 16; \
+    }
+    case_set(t_dim->lw);
+#undef set_ctx
+
+    b->y_mode = orig_y_mode;
+
+    return 0;
+}
+
+int bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
+                                   DB_ONLY(const int depth)
+                                   const enum BlockSize lbs,
+                                   const enum BlockSize cbs,
+                                   Av2Block *const b)
+{
+    const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
+    assert(bs != BS_INVALID);
+    const int has_luma = lbs != BS_INVALID, has_chroma = cbs != BS_INVALID;
+    const Dav2dFrameContext *const f = t->f;
+    const int bx4 = t->bx & 63, by4 = t->by & 63;
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
-    const int cbw4 = (bw4 + ss_hor) >> ss_hor, cbh4 = (bh4 + ss_ver) >> ss_ver;
-    const int has_chroma = 0 && f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 &&
-                           (bw4 > ss_hor || t->bx & 1) &&
-                           (bh4 > ss_ver || t->by & 1);
+    const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
 
-    if (b->skip_txfm) {
+    if (has_luma && b->skip_txfm) {
         BlockContext *const a = t->a;
         dav2d_memset_pow2[b_dim[2]](&a->lcoef[bx4], 0x40);
         dav2d_memset_pow2[b_dim[3]](&t->l.lcoef[by4], 0x40);
         if (has_chroma) {
-            dav2d_memset_pow2_fn memset_cw = dav2d_memset_pow2[ulog2(cbw4)];
-            dav2d_memset_pow2_fn memset_ch = dav2d_memset_pow2[ulog2(cbh4)];
-            memset_cw(&a->ccoef[0][cbx4], 0x40);
-            memset_cw(&a->ccoef[1][cbx4], 0x40);
-            memset_ch(&t->l.ccoef[0][cby4], 0x40);
-            memset_ch(&t->l.ccoef[1][cby4], 0x40);
+            const int ss_ver = f->ss_ver, ss_hor = f->ss_hor;
+            const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
+            const int cbx4ss = (t->cbx & 63) >> ss_hor, cby4ss = (t->cby & 63) >> ss_ver;
+
+            dav2d_memset_pow2_fn memset_cw = dav2d_memset_pow2[cb_dim[2] - ss_hor];
+            dav2d_memset_pow2_fn memset_ch = dav2d_memset_pow2[cb_dim[3] - ss_ver];
+            memset_cw(&a->ccoef[0][cbx4ss], 0x40);
+            memset_cw(&a->ccoef[1][cbx4ss], 0x40);
+            memset_ch(&t->l.ccoef[0][cby4ss], 0x40);
+            memset_ch(&t->l.ccoef[1][cby4ss], 0x40);
         }
-        return;
+        return 0;
     }
+
+    const uint8_t csplit[3][3] = {
+        [BS_128x128 - BS_128x128] = {  BS_64x64, BS_128x64, BS_128x128 },
+        [BS_128x64  - BS_128x128] = {  BS_64x64, BS_128x64, BS_128x64  },
+        [BS_64x128  - BS_128x128] = {  BS_64x64, BS_64x64,  BS_64x128  },
+    };
+    if (imax(bw4, bh4) > 16) {
+        const int ss_ver = f->ss_ver, ss_hor = f->ss_hor;
+        assert(bw4 * 2 >= bh4 && bh4 * 2 >= bw4); // 1:2, 1:1 or 2:1 ratios only
+        assert(t->cbx == t->bx && t->cby == t->by);
+        const int y_start = t->by, y_end = imin(y_start + bh4, f->bh);
+        const int x_start = t->bx, x_end = imin(x_start + bw4, f->bw);
+        int step;
+        enum BlockSize lbs2, cbs2i;
+        if (imax(bw4, bh4) == 64) {
+            step = 32;
+            lbs2 = lbs == BS_INVALID ? BS_INVALID : BS_128x128;
+            cbs2i = cbs == BS_INVALID ? BS_INVALID : BS_128x128;
+        } else {
+            step = 16;
+            lbs2 = lbs == BS_INVALID ? BS_INVALID : BS_64x64;
+            cbs2i = cbs == BS_INVALID ? BS_INVALID :
+                    csplit[cbs - BS_128x128][ss_hor + ss_ver];
+        }
+        for (int y = 0; t->by < y_end; t->by += step, y++) {
+            for (int x = 0; t->bx < x_end; t->bx += step, x++) {
+                enum BlockSize cbs2;
+                if (step == 32) {
+                    cbs2 = cbs2i;
+                } else {
+                    // coef reading is done with the first luma 64x64
+                    cbs2 = !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
+                }
+                const int res = bytefn(dav2d_read_coef_blocks)(t, DB_ONLY(depth) lbs2, cbs2, b);
+                if (step == 32) {
+                    t->cbx += step;
+                } else if ((x & ss_hor) == ss_hor) {
+                    t->cbx += step << ss_hor;
+                }
+                if (res < 0) {
+                    t->cbx = t->bx = x_start;
+                    t->cby = t->by = y_start;
+                    return res;
+                }
+            }
+            t->cbx = t->bx = x_start;
+            if (step == 32) {
+                t->cby += step;
+            } else if ((y & ss_ver) == ss_ver) {
+                t->cby += step << ss_ver;
+            }
+        }
+        t->cby = t->by = y_start;
+        return 0;
+    }
+
+    if (lbs == BS_INVALID) goto chroma;
+
+    const int8_t *const tp = dav2d_tx_part_tbl[bs];
+    if (tp[b->tx_part] == -1) return -1;
+
+    // luma
+    enum RectTxfmSize tx = tp[b->tx_part];
+    t->pb.col_start = t->bx;
+    t->pb.row_start = t->by;
+    if (f->frame_hdr->segmentation.lossless[b->seg_id]) {
+        int res = 0, y, x;
+        tx = b->tx_size_ll ? dav2d_max_txfm_size_for_bs[bs][3] : (int) TX_4X4;
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w, th4 = t_dim->h;
+        for (y = 0; y < h4 && !res; y += th4, t->by += th4) {
+            for (x = 0; x < w4 && !res; x += tw4, t->bx += tw4) {
+                res = read_luma_tx_cf(t, DB_ONLY(depth) (int) tx, b);
+            }
+            t->bx -= x;
+        }
+        t->by -= y;
+        if (res < 0) return res;
+    } else switch (b->tx_part) {
+    case TX_PARTITION_NONE: {
+        const int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_SPLIT: {
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w, th4 = t_dim->h;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        const int have_v_split = t->bx + tw4 < f->bw;
+        if (have_v_split) {
+            t->bx += tw4;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            t->bx -= tw4;
+            if (res < 0) return res;
+        }
+        if (t->by + th4 >= f->bh) break;
+        t->by += th4;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (!res && have_v_split) {
+            t->bx += tw4;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            t->bx -= tw4;
+        }
+        t->by -= th4;
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_H: {
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int th4 = t_dim->h;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        if (t->by + th4 >= f->bh) break;
+        t->by += th4;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        t->by -= th4;
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_V: {
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        if (t->bx + tw4 >= f->bw) break;
+        t->bx += tw4;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        t->bx -= tw4;
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_H4: {
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int th4 = t_dim->h;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        if (t->by + th4 >= f->bh) break;
+        t->by += th4;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0 || t->by + th4 >= f->bh) {
+            t->by -= th4;
+        } else {
+            t->by += th4;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            if (res < 0 || t->by + th4 >= f->bh) {
+                t->by -= 2 * th4;
+            } else {
+                t->by += th4;
+                res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+                t->by -= 3 * th4;
+            }
+        }
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_V4: {
+        const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
+        const int tw4 = t_dim->w;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        if (t->bx + tw4 >= f->bw) break;
+        t->bx += tw4;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0 || t->bx + tw4 >= f->bw) {
+            t->bx -= tw4;
+        } else {
+            t->bx += tw4;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            if (res < 0 || t->bx + tw4 >= f->bw) {
+                t->bx -= 2 * tw4;
+            } else {
+                t->bx += tw4;
+                res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+                t->bx -= 3 * tw4;
+            }
+        }
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_H5: {
+        const enum RectTxfmSize tx_big = tp[TX_PARTITION_H];
+        const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
+                       *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
+        const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
+        const int th4_big = t_dim_big->h;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        const int have_v_split = t->bx + tw4_small < f->bw;
+        if (have_v_split) {
+            t->bx += tw4_small;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            t->bx -= tw4_small;
+            if (res < 0) return res;
+        }
+        if (t->by + th4_small >= f->bh) break;
+        t->by += th4_small;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx_big, b);
+        if (res < 0 || t->by + th4_big >= f->bh) {
+            t->by -= th4_small;
+        } else {
+            t->by += th4_big;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            if (!res && have_v_split) {
+                t->bx += tw4_small;
+                res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+                t->bx -= tw4_small;
+            }
+            t->by -= th4_small + th4_big;
+        }
+        if (res < 0) return res;
+        break;
+    }
+    case TX_PARTITION_V5: {
+        const enum RectTxfmSize tx_big = tp[TX_PARTITION_V];
+        const TxfmInfo *const t_dim_small = &dav2d_txfm_dimensions[tx],
+                       *const t_dim_big = &dav2d_txfm_dimensions[tx_big];
+        const int tw4_small = t_dim_small->w, th4_small = t_dim_small->h;
+        const int tw4_big = t_dim_big->w;
+        int res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+        if (res < 0) return res;
+        const int have_h_split = t->by + th4_small < f->bh;
+        if (have_h_split) {
+            t->by += th4_small;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            t->by -= th4_small;
+            if (res < 0) return res;
+        }
+        if (t->bx + tw4_small >= f->bw) break;
+        t->bx += tw4_small;
+        res = read_luma_tx_cf(t, DB_ONLY(depth) tx_big, b);
+        if (res < 0 || t->bx + tw4_big >= f->bw) {
+            t->bx -= tw4_small;
+        } else {
+            t->bx += tw4_big;
+            res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+            if (!res && have_h_split) {
+                t->by += th4_small;
+                res = read_luma_tx_cf(t, DB_ONLY(depth) tx, b);
+                t->by -= th4_small;
+            }
+            t->bx -= tw4_small + tw4_big;
+        }
+        if (res < 0) return res;
+        break;
+    }
+    default: assert(0);
+    }
+
+    if (cbs == BS_INVALID) return 0;
+
+    // chroma
+chroma: {}
+    const int ss_ver = f->ss_ver, ss_hor = f->ss_hor;
+    const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
+    const int cbw4 = cb_dim[0], cw4 = imin(f->bw - t->cbx, cbw4);
+    const int cbh4 = cb_dim[1], ch4 = imin(f->bh - t->cby, cbh4);
+    const int cbw4ss = (cbw4 + ss_hor) >> ss_hor, cbh4ss = (cbh4 + ss_ver) >> ss_ver;
+    const int cw4ss = (cw4 + ss_hor) >> ss_hor, ch4ss = (ch4 + ss_ver) >> ss_ver;
+    const enum RectTxfmSize uvtx =
+        f->frame_hdr->segmentation.lossless[b->seg_id] ? (int) TX_4X4 :
+        dav2d_max_txfm_size_for_bs[cbs][DAV2D_PIXEL_LAYOUT_I444 - f->cur.p.p.layout];
+    const TxfmInfo *const uv_t_dim = &dav2d_txfm_dimensions[uvtx];
+    const int sdp_active = lbs == BS_INVALID;
+    const int intra = b->intra && (sdp_active || !b->intrabc);
+    const int cbx4 = t->cbx & 63, cby4 = t->cby & 63;
+    const int cbx4ss = cbx4 >> ss_hor, cby4ss = cby4 >> ss_ver;
+    const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
+    const int cth4 = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
+    const enum IntraPredMode orig_uv_mode = b->uv_mode;
+    int angle = b->uv_angle;
+    if (intra)
+        b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
 
     Dav2dTileState *const ts = t->ts;
-    const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
-    const int cw4 = (w4 + ss_hor) >> ss_hor, ch4 = (h4 + ss_ver) >> ss_ver;
-    assert(t->frame_thread.pass == 1);
-    assert(!b->skip_txfm);
-    const TxfmInfo *const uv_t_dim = &dav2d_txfm_dimensions[b->uvtx];
-    const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[b->intra ? b->tx : b->max_ytx];
-    const uint16_t tx_split[2] = { b->tx_split0, b->tx_split1 };
-
-    for (int init_y = 0; init_y < h4; init_y += 16) {
-        const int sub_h4 = imin(h4, 16 + init_y);
-        for (int init_x = 0; init_x < w4; init_x += 16) {
-            const int sub_w4 = imin(w4, init_x + 16);
-            int y_off = !!init_y, y, x;
-            for (y = init_y, t->by += init_y; y < sub_h4;
-                 y += t_dim->h, t->by += t_dim->h, y_off++)
-            {
-                int x_off = !!init_x;
-                for (x = init_x, t->bx += init_x; x < sub_w4;
-                     x += t_dim->w, t->bx += t_dim->w, x_off++)
-                {
-                    if (!b->intra) {
-                        read_coef_tree(t, bs, b, b->max_ytx, 0, tx_split,
-                                       x_off, y_off, NULL);
-                    } else {
-                        uint8_t cf_ctx = 0x40;
-                        enum TxfmType txtp;
-                        const int eob =
-                            decode_coefs(t, &t->a->lcoef[bx4 + x],
-                                         &t->l.lcoef[by4 + y], b->tx, bs, b,
-                                         0, ts->frame_thread[1].cf, &txtp, &cf_ctx);
-                        DEBUG_BLOCK_printf("Post-y_cf_blk[tx=%dx%d,txtp=%d,eob=%d]: r=%d\n",
-                                           t_dim->w * 4, t_dim->h * 4, txtp, eob,
-                                           ts->msac.rng);
-                        txtp &= 0xf; // FIXME
-                        *ts->frame_thread[1].cbi++ = eob * (1 << 5) + txtp;
-                        ts->frame_thread[1].cf += imin(t_dim->w, 8) * imin(t_dim->h, 8) * 16;
-                        dav2d_memset_likely_pow2(&t->a->lcoef[bx4 + x], cf_ctx, imin(t_dim->w, f->bw - t->bx));
-                        dav2d_memset_likely_pow2(&t->l.lcoef[by4 + y], cf_ctx, imin(t_dim->h, f->bh - t->by));
-                    }
-                }
-                t->bx -= x;
+    enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+    coef *cf[2] = { ts->frame_thread[0].cf };
+    ts->frame_thread[0].cf += cbw4ss * cbh4ss * 16 * 2;
+    cf[1] = &cf[0][cbw4ss * cbh4ss * 16];
+    // decode coefficients
+    for (int pl = 0; pl < 2; pl++) {
+        int y;
+        for (y = 0; y < ch4ss; y += uv_t_dim->h) {
+            int x;
+            for (x = 0; x < cw4ss; x += uv_t_dim->w) {
+                const ptrdiff_t i = y * cbw4ss + x;
+                if (b->bs == b->cbs)
+                    y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+                enum TxfmType uv_txtp = y_txtp;
+                uint8_t cf_ctx;
+                const int eob =
+                    decode_coefs(t, DB_ONLY(depth + 1)
+                                 &t->a->ccoef[pl][cbx4ss + x],
+                                 &t->l.ccoef[pl][cby4ss + y],
+                                 uvtx, b->cbs, sdp_active, b, pl + 1,
+                                 &cf[pl][i * 16], &uv_txtp, &cf_ctx);
+                if (!pl) t->u_has_cf = eob >= 0;
+                struct CodedBlockInfo *const cbi =
+                    &f->frame_thread.cbi[(t->cby + (y << ss_ver)) * f->b4_stride +
+                                         (t->cbx + (x << ss_hor))];
+                cbi->txtp[pl + 1] = uv_txtp;
+                if (eob == INT_MIN) return -1;
+                DEBUG_BLOCK_printf("%*sPost-%c_cf_blk[tx=%dx%d,txtp=%s/%s,"
+                                   "eob=%d]: r=%d\n",
+                                   depth + 1, "", "uv"[pl],
+                                   uv_t_dim->w * 4, uv_t_dim->h * 4,
+                                   dav2d_tx1d_names[uv_txtp & 7],
+                                   dav2d_tx1d_names[(uv_txtp >> 5) & 7],
+                                   eob, t->ts->msac.rng);
+                cbi->eob[pl + 1] = eob;
+                dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4ss + x],
+                                         cf_ctx, ctw4);
+                dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4ss + y],
+                                         cf_ctx, cth4);
+                t->bx += uv_t_dim->w << ss_hor;
             }
-            t->by -= y;
-
-            if (!has_chroma) continue;
-
-            const int sub_ch4 = imin(ch4, (init_y + 16) >> ss_ver);
-            const int sub_cw4 = imin(cw4, (init_x + 16) >> ss_hor);
-            for (int pl = 0; pl < 2; pl++) {
-                for (y = init_y >> ss_ver, t->by += init_y; y < sub_ch4;
-                     y += uv_t_dim->h, t->by += uv_t_dim->h << ss_ver)
-                {
-                    for (x = init_x >> ss_hor, t->bx += init_x; x < sub_cw4;
-                         x += uv_t_dim->w, t->bx += uv_t_dim->w << ss_hor)
-                    {
-                        uint8_t cf_ctx = 0x40;
-                        enum TxfmType txtp;
-                        if (!b->intra)
-                            txtp = t->txtp_map[((t->by + (y << ss_ver)) & 15) * 16 +
-                                               ((t->bx + (x << ss_hor)) & 15)];
-                        const int eob =
-                            decode_coefs(t, &t->a->ccoef[pl][cbx4 + x],
-                                         &t->l.ccoef[pl][cby4 + y], b->uvtx, bs,
-                                         b, 1 + pl, ts->frame_thread[1].cf,
-                                         &txtp, &cf_ctx);
-                        if (DEBUG_BLOCK_INFO)
-                            printf("Post-uv-cf-blk[pl=%d,tx=%d,"
-                                   "txtp=%d,eob=%d]: r=%d\n",
-                                   pl, b->uvtx, txtp, eob, ts->msac.rng);
-                        *ts->frame_thread[1].cbi++ = eob * (1 << 5) + txtp;
-                        ts->frame_thread[1].cf += uv_t_dim->w * uv_t_dim->h * 16;
-                        int ctw = imin(uv_t_dim->w, (f->bw - t->bx + ss_hor) >> ss_hor);
-                        int cth = imin(uv_t_dim->h, (f->bh - t->by + ss_ver) >> ss_ver);
-                        dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4 + x], cf_ctx, ctw);
-                        dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4 + y], cf_ctx, cth);
-                    }
-                    t->bx -= x << ss_hor;
-                }
-                t->by -= y << ss_ver;
-            }
+            t->bx -= x << ss_hor;
+            t->by += uv_t_dim->h << ss_ver;
         }
+        t->by -= y << ss_ver;
     }
-#endif
+
+    b->uv_mode = orig_uv_mode;
+
+    return 0;
 }
 
 static void mc(Dav2dTaskContext *const t,
@@ -2102,37 +2428,6 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     return bacp && have_bacp;
 }
 
-static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
-                                           enum IntraPredMode mode,
-                                           int *const angle,
-                                           const int mrl_idx)
-{
-    if ((unsigned) mode - 1 > VERT_LEFT_PRED - 1) return mode;
-
-    // map directional modes
-    const int mrl_adj = (mrl_idx == 1) - (mrl_idx == 2);
-    *angle = dav2d_mode_to_angle_map[mode - 1] + *angle * 3 + mrl_adj;
-    static const uint8_t thresh[] = { 61, 73, 82, 86 };
-    const int rect = t_dim->lw - t_dim->lh;
-    // FIXME below, we should return 180 +/- angle after mode remapping,
-    // otherwise the actual intra prediction won't work correctly
-    if (rect > 0) {
-        assert(rect <= 4);
-        if (*angle > 270 - thresh[rect - 1]){
-            *angle -= 180;
-            return DIAG_DOWN_LEFT_PRED;
-        }
-    } else if (rect < 0) {
-        assert(rect >= -4);
-        if (*angle < thresh[-1 - rect]) {
-            *angle += 180;
-            return HOR_UP_PRED;
-        }
-    }
-
-    return mode;
-}
-
 static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                            const enum RectTxfmSize tx, Av2Block *const b)
 {
@@ -2159,11 +2454,24 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         txtp = DCT_DCT;
         eob = -1;
         stx = 0;
+        if (t->frame_thread.pass != 2) {
+            dav2d_memset_pow2[t_dim->lw](&t->a->lcoef[bx4], cf_ctx);
+            dav2d_memset_pow2[t_dim->lh](&t->l.lcoef[by4], cf_ctx);
+        }
+    } else if (t->frame_thread.pass == 2) {
+        cf = ts->frame_thread[1].cf;
+        ts->frame_thread[1].cf += imin(tw, 32) * imin(th, 32);
+        const struct CodedBlockInfo *const cbi =
+            &f->frame_thread.cbi[t->by * f->b4_stride + t->bx];
+        txtp = cbi->txtp[0];
+        stx = txtp >> 8;
+        txtp &= 0xff;
+        eob = cbi->eob[0];
     } else {
         cf = bitfn(t->cf_y);
         eob = decode_coefs(t, DB_ONLY(depth + 1)
                            &t->a->lcoef[bx4], &t->l.lcoef[by4],
-                           tx, b->bs, b, 0, cf, &txtp, &cf_ctx);
+                           tx, b->bs, 0, b, 0, cf, &txtp, &cf_ctx);
         if (eob == INT_MIN) return -1;
         stx = txtp >> 8;
         txtp = txtp & 0xff;
@@ -2172,19 +2480,19 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                            dav2d_tx1d_names[txtp & 7],
                            dav2d_tx1d_names[txtp >> 5],
                            eob, ts->msac.rng);
-    }
-    dav2d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
-                             imin(t_dim->w, f->bw - t->bx));
-    dav2d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
-                             imin(t_dim->h, f->bh - t->by));
-    uint8_t *txtp_map = &t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+        dav2d_memset_likely_pow2(&t->a->lcoef[bx4], cf_ctx,
+                                 imin(t_dim->w, f->bw - t->bx));
+        dav2d_memset_likely_pow2(&t->l.lcoef[by4], cf_ctx,
+                                 imin(t_dim->h, f->bh - t->by));
+        uint8_t *txtp_map = &t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
 #define set_ctx(rep_macro) \
-    for (int y = 0; y < t_dim->h; y++) { \
-        rep_macro(txtp_map, 0, txtp); \
-        txtp_map += 16; \
-    }
-    case_set(t_dim->lw);
+        for (int y = 0; y < t_dim->h; y++) { \
+            rep_macro(txtp_map, 0, txtp); \
+            txtp_map += 16; \
+        }
+        case_set(t_dim->lw);
 #undef set_ctx
+    }
 
     pixel *dst = ((pixel *) f->cur.p.data[0]) +
         4 * (t->by * PXSTRIDE(f->cur.p.stride[0]) + t->bx);
@@ -2250,8 +2558,8 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 &&
                         !mrl_idx;
         const int dip = b->dip - 1;
-        const int sm_top = t->pb.is_sm[0].a;
-        const int sm_left = t->pb.is_sm[0].l;
+        const int sm_top = b->is_sm[0].a;
+        const int sm_left = b->is_sm[0].l;
         const int is_sm_flag = apply_ibp ?
             (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
             (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
@@ -2910,8 +3218,6 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         t->cby = t->by = y_start;
         return 0;
     }
-    // FIXME lossless handling (i.e. where one prediction block contains
-    // multiple transform blocks
 
     if (lbs == BS_INVALID) goto chroma;
 
@@ -3043,18 +3349,17 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             hex_dump(dst, f->cur.p.stride[0], bw4 * 4, bh4 * 4, "y-pred");
     } else if (b->pal_sz) {
         const uint8_t *pal_idx;
+        const pixel *pal;
         if (t->frame_thread.pass) {
             const int p = t->frame_thread.pass & 1;
             assert(ts->frame_thread[p].pal_idx);
             pal_idx = ts->frame_thread[p].pal_idx;
             ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
+            pal = *ts->frame_thread[0].pal++;
         } else {
             pal_idx = t->scratch.pal_idx_y;
+            pal = bytefn(t->scratch.pal);
         }
-        const pixel *const pal = t->frame_thread.pass ?
-            f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                                ((t->bx >> 1) + (t->by & 1))] :
-            bytefn(t->scratch.pal);
         f->dsp->ipred.pal_pred(dst, f->cur.p.stride[0], pal,
                                pal_idx, bw4 * 4, bh4 * 4);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
@@ -3256,7 +3561,7 @@ chroma: {}
     const uint8_t *const cb_dim = dav2d_block_dimensions[cbs];
     const int cbw4 = cb_dim[0], cw4 = imin(f->bw - t->cbx, cbw4);
     const int cbh4 = cb_dim[1], ch4 = imin(f->bh - t->cby, cbh4);
-    const int cbw4ss = (cbw4 + ss_hor) >> ss_hor;
+    const int cbw4ss = (cbw4 + ss_hor) >> ss_hor, cbh4ss = (cbh4 + ss_ver) >> ss_ver;
     const int cw4ss = (cw4 + ss_hor) >> ss_hor, ch4ss = (ch4 + ss_ver) >> ss_ver;
     const enum RectTxfmSize uvtx =
         f->frame_hdr->segmentation.lossless[b->seg_id] ? (int) TX_4X4 :
@@ -3271,7 +3576,9 @@ chroma: {}
     const ptrdiff_t stride = f->cur.p.stride[1];
     const ptrdiff_t uvdstoff = 4 * (ssby * PXSTRIDE(stride) + ssbx);
     const int sbsz = f->sb_step;
-    const int intra = b->intra && !b->intrabc;
+    const int sdp_active = lbs == BS_INVALID;
+    const int intra = b->intra && (sdp_active || !b->intrabc);
+    const int skip_txfm = !sdp_active && b->skip_txfm;
 
     const enum IntraPredMode orig_uv_mode = b->uv_mode;
     int angle = b->uv_angle;
@@ -3279,7 +3586,26 @@ chroma: {}
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
 
     if (cbs_stage[0] != BS_INVALID) {
-        if (b->skip_txfm) {
+        if (t->frame_thread.pass == 2) {
+            if (!skip_txfm) {
+                uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
+                int16_t (*const uv_eob)[2] = t->chroma_eob;
+                for (int y = 0; y < ch4ss; y += uv_t_dim->h) {
+                    for (int x = 0; x < cw4ss; x += uv_t_dim->w) {
+                        const ptrdiff_t i = y * cbw4ss + x;
+                        const struct CodedBlockInfo *const cbi =
+                            &f->frame_thread.cbi[(t->cby + (y << ss_ver)) * f->b4_stride +
+                                                 (t->cbx + (x << ss_hor))];
+                        for (int pl = 0; pl < 2; pl++) {
+                            txtp[i][pl] = cbi->txtp[1 + pl];
+                            uv_eob[i][pl] = cbi->eob[1 + pl];
+                        }
+                    }
+                }
+                t->cf_uv = ts->frame_thread[1].cf;
+                ts->frame_thread[1].cf += cbw4ss * cbh4ss * 16 * 2;
+            }
+        } else if (skip_txfm) {
             for (int pl = 0; pl < 2; pl++) {
                 dav2d_memset_likely_pow2(&t->a->ccoef[pl][cbx4], 0x40, cw4ss);
                 dav2d_memset_likely_pow2(&t->l.ccoef[pl][cby4], 0x40, ch4ss);
@@ -3297,14 +3623,15 @@ chroma: {}
                     int x;
                     for (x = 0; x < cw4ss; x += uv_t_dim->w) {
                         const ptrdiff_t i = y * cbw4ss + x;
-                        if (b->lbs == b->cbs)
+                        if (b->bs == b->cbs)
                             y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
                         enum TxfmType uv_txtp = y_txtp;
                         const int eob =
                             decode_coefs(t, DB_ONLY(depth + 1)
                                          &t->a->ccoef[pl][cbx4 + x],
                                          &t->l.ccoef[pl][cby4 + y],
-                                         uvtx, b->cbs, b, pl + 1,
+                                         uvtx, b->cbs,
+                                         sdp_active, b, pl + 1,
                                          &cf[pl][i * 16],
                                          &uv_txtp, &cf_ctx[pl]);
                         if (!pl) t->u_has_cf = eob >= 0;
@@ -3341,7 +3668,7 @@ chroma: {}
     if (intra) {
         if (can_cfl)
             cfl(t, b, cbs, uv_t_dim, can_cfl);
-    } else if (b->intrabc) {
+    } else if (!sdp_active && b->intrabc) {
         for (int pl = 0; pl < 2; pl++) {
             mc(t, ((pixel *)f->cur.p.data[1 + pl]) + uvdstoff, NULL,
                stride, cbw4, cbh4, t->cbx, t->cby, 1 + pl,
@@ -3565,8 +3892,8 @@ chroma: {}
                     }
 
                     int apply_ibp = f->seq_hdr->ibp && uvtx != (enum RectTxfmSize) TX_4X4;
-                    const int sm_top = t->pb.is_sm[1].a;
-                    const int sm_left = t->pb.is_sm[1].l;
+                    const int sm_top = b->is_sm[1].a;
+                    const int sm_left = b->is_sm[1].l;
                     const int is_sm_flag = apply_ibp ?
                         (sm_top * ANGLE_SMOOTH_TOP_EDGE_FLAG) |
                         (sm_left * ANGLE_SMOOTH_LEFT_EDGE_FLAG) :
@@ -3600,12 +3927,22 @@ chroma: {}
                 }
             }
 
-            if (!b->skip_txfm) {
+            if (!skip_txfm) {
                 const int cctx = f->seq_hdr->cctx &&
                     (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
                 uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
                 int16_t (*const eob)[2] = t->chroma_eob;
-                coef (*const cf)[64 * 64] = bitfn(t->cf_uv);
+                coef *cf[2];
+                if (t->frame_thread.pass == 2) {
+                    cf[0] = t->cf_uv;
+                    cf[1] = &t->cf_uv[cbw4ss * cbh4ss * 16];
+                } else {
+                    cf[0] = bitfn(t->cf_uv)[0];
+                    cf[1] = bitfn(t->cf_uv)[1];
+                }
+                // FIXME I'm not convinced the above is correct for pass==2 if we
+                // do block coding vs. reconstruction in different orders for
+                // e.g. 128x128 chroma blocks.
                 int cctx_type = cctx && eob[i][0] >= intra ? (txtp[i][0] >> 8) : 0;
                 if (cctx_type) {
                     dsp->itx.cctx(&cf[0][i * 16], &cf[1][i * 16],
@@ -3626,7 +3963,7 @@ chroma: {}
                         pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) +
                             4 * ((ssby + y) * PXSTRIDE(stride) + ssbx + x);
                         if (f->frame_hdr->segmentation.lossless[b->seg_id] &&
-                            b->intra && !b->intrabc && b->dpcm[1])
+                            b->intra && (sdp_active || !b->intrabc) && b->dpcm[1])
                         {
                             txtp[i][pl] += (1 + (b->uv_mode == VERT_PRED)) << 8;
                         } else if (f->seq_hdr->inter_ddt && !b->intra) // (flip)adst -> (f)ddt
@@ -3778,10 +4115,8 @@ void bytefn(dav2d_copy_pal_block_y)(Dav2dTaskContext *const t,
                                     const int bw4, const int bh4)
 
 {
-    const Dav2dFrameContext *const f = t->f;
     pixel *const pal = t->frame_thread.pass ?
-        f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                            ((t->bx >> 1) + (t->by & 1))] : bytefn(t->scratch.pal);
+        *t->ts->frame_thread[1].pal++ : bytefn(t->scratch.pal);
     for (int x = 0; x < bw4; x++)
         memcpy(bytefn(t->al_pal)[0][bx4 + x], pal, 8 * sizeof(pixel));
     for (int y = 0; y < bh4; y++)
@@ -3893,8 +4228,7 @@ void bytefn(dav2d_read_pal_plane)(DB_ONLY(const int depth)
 
     // parse new entries
     pixel *const pal = t->frame_thread.pass ?
-        f->frame_thread.pal[((t->by >> 1) + (t->bx & 1)) * (f->b4_stride >> 1) +
-                            ((t->bx >> 1) + (t->by & 1))] : bytefn(t->scratch.pal);
+        *ts->frame_thread[1].pal : bytefn(t->scratch.pal);
     if (n_used_cache < pal_sz) {
         int i = n_used_cache;
         const int bpc = BITDEPTH == 8 ? 8 : f->cur.p.p.bpc;
