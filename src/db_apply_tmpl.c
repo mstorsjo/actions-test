@@ -203,16 +203,17 @@ static void setup_thr_cols_sb64(pixel *const q_thr_dst,
                                 pixel *const left_q_thr,
                                 pixel *const left_side_thr,
                                 const int y64,
-                                const int ss_hor, const int ss_ver)
+                                const int ss_hor, const int ss_ver,
+                                const int w4, const int h4)
 {
     const int mask_idx = y64 >> ss_ver;
     const int mask_shift = y64 & ss_ver ? 8 : 0;
 
-    for (int y4 = 0; y4 < 16 >> ss_ver; y4++) {
+    for (int y4 = 0; y4 < h4; y4++) {
         int prev_q_thr = left_q_thr[y4];
         int prev_side_thr = left_side_thr[y4];
 
-        for (int x4 = 0; x4 < 16 >> ss_hor; x4++) {
+        for (int x4 = 0; x4 < w4; x4++) {
             const int seg_id = segmap[x4 + y4 * seg_stride];
             const int cur_q_thr = thr_lut[0][seg_id];
             const int cur_side_thr = thr_lut[1][seg_id];
@@ -253,7 +254,8 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
                                 const pixel thr_lut[2][16],
                                 const pixel above_thr_lut[2][16],
                                 const int sb64x,
-                                const int ss_hor, const int ss_ver)
+                                const int ss_hor, const int ss_ver,
+                                const int w4, const int h4)
 {
     const int mask_idx = sb64x >> ss_hor;
     const int mask_shift = sb64x & ss_hor ? 8 : 0;
@@ -261,18 +263,18 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
     pixel above_q_thr[16] = { 0 };
     pixel above_side_thr[16] = { 0 };
     if (above_thr_lut) {
-        for (int x4 = 0; x4 < 16 >> ss_hor; x4++) {
+        for (int x4 = 0; x4 < w4; x4++) {
             const int seg_id = segmap[x4 - seg_stride];
             above_q_thr[x4] = above_thr_lut[0][seg_id];
             above_side_thr[x4] = above_thr_lut[1][seg_id];
         }
     }
 
-    for (int x4 = 0; x4 < 16 >> ss_ver; x4++) {
+    for (int x4 = 0; x4 < w4; x4++) {
         int prev_q_thr = above_q_thr[x4];
         int prev_side_thr = above_side_thr[x4];
 
-        for (int y4 = 0; y4 < 16 >> ss_hor; y4++) {
+        for (int y4 = 0; y4 < h4; y4++) {
             const int seg_id = segmap[x4 + y4 * seg_stride];
             const int cur_q_thr = thr_lut[0][seg_id];
             const int cur_side_thr = thr_lut[1][seg_id];
@@ -593,7 +595,8 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
             setup_thr_cols_sb64(edge_q_thr, edge_side_thr, 16,
                                 col_seg, seg_stride,
                                 &col_lflvl->filter_y[0][(x64 & 3) * 16], lut,
-                                left_q_thr, left_side_thr, y64 & 3, 0, 0);
+                                left_q_thr, left_side_thr, y64 & 3, 0, 0,
+                                imin(f->bw - x64 * 16, 16), h4);
             transpose_lossless_mask(ll_mask,
                                     &col_lflvl->lossless_mask_y[starty4],
                                     x64 & 3, 0, 0);
@@ -638,16 +641,17 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
 
         const uint8_t *const col_seg =
             uv_segmap ? &uv_segmap[x64 * (16 >> ss_hor)] : placeholder_segmap;
+        const int uv_w4 = imin(f->bw - x64 * 16, 16) >> ss_hor;
         setup_thr_cols_sb64(edge_q_thr[0], edge_side_thr[0], 16,
                             col_seg, uv_seg_stride,
                             &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
                             lut[0], left_q_thr[0], left_side_thr[0],
-                            y64 & 3, ss_hor, ss_ver);
+                            y64 & 3, ss_hor, ss_ver, uv_w4, uv_h4);
         setup_thr_cols_sb64(edge_q_thr[1], edge_side_thr[1], 16,
                             col_seg, uv_seg_stride,
                             &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
                             lut[1], left_q_thr[1], left_side_thr[1],
-                            y64 & 3, ss_hor, ss_ver);
+                            y64 & 3, ss_hor, ss_ver, uv_w4, uv_h4);
         transpose_lossless_mask(ll_mask,
                                 &col_lflvl->lossless_mask_uv[starty4 >> ss_ver],
                                 x64 & 3, ss_hor, ss_ver);
@@ -720,7 +724,8 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
             setup_thr_rows_sb64(edge_q_thr, edge_side_thr, 16,
                                 col_seg, seg_stride,
                                 &col_lflvl->filter_y[1][starty4],
-                                lut, a_lut_ptr, x64 & 3, 0, 0);
+                                lut, a_lut_ptr, x64 & 3, 0, 0,
+                                imin(f->bw - x64 * 16, 16), h4);
             filter_plane_rows_y(f, have_top,
                                 &col_lflvl->filter_y[1][starty4], ll_mask,
                                 edge_q_thr, edge_side_thr, ptr, f->cur.p.stride[0],
@@ -764,16 +769,17 @@ static void deblock_sbrow64_rows(const Dav2dFrameContext *const f,
 
         const uint8_t *const col_seg =
             uv_segmap ? &uv_segmap[x64 * (16 >> ss_hor)] : placeholder_segmap;
+        const int uv_w4 = imin(f->bw - x64 * 16, 16) >> ss_hor;
         setup_thr_rows_sb64(edge_q_thr[0], edge_side_thr[0], 16,
                             col_seg, uv_seg_stride,
                             &col_lflvl->filter_uv[1][starty4 >> ss_ver],
                             lut[0], a_lut_ptr ? a_lut_ptr[0] : NULL,
-                            x64 & 3, ss_hor, ss_ver);
+                            x64 & 3, ss_hor, ss_ver, uv_w4, uv_h4);
         setup_thr_rows_sb64(edge_q_thr[1], edge_side_thr[1], 16,
                             col_seg, uv_seg_stride,
                             &col_lflvl->filter_uv[1][starty4 >> ss_ver],
                             lut[1], a_lut_ptr ? a_lut_ptr[1] : NULL,
-                            x64 & 3, ss_hor, ss_ver);
+                            x64 & 3, ss_hor, ss_ver, uv_w4, uv_h4);
         filter_plane_rows_uv(f, have_top,
                              &col_lflvl->filter_uv[1][starty4 >> ss_ver], ll_mask,
                              edge_q_thr[0], edge_side_thr[0],
