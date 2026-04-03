@@ -42,6 +42,6 @@ enum LrRestorePlanes {
 };
 
 void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
-                            int sby, int tile_row);
+                            int sby);
 
 #endif /* DAV2D_SRC_LR_APPLY_H */

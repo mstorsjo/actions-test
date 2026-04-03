@@ -280,11 +280,11 @@ struct Dav2dFrameContext {
     const Dav2dDSPContext *dsp;
     struct {
         recon_b_fn recon_b;
-        filter_sbrow_w_tile_fn filter_sbrow;
+        filter_sbrow_fn filter_sbrow;
         filter_sbrow_fn filter_sbrow_deblock_cols;
         filter_sbrow_fn filter_sbrow_deblock_rows;
         void (*filter_sbrow_cdef)(Dav2dTaskContext *tc, int sby);
-        filter_sbrow_w_tile_fn filter_sbrow_lr;
+        filter_sbrow_fn filter_sbrow_lr;
         backup_ipred_edge_fn backup_ipred_edge;
         read_coef_blocks_fn read_coef_blocks;
         copy_pal_block_fn copy_pal_block_y;

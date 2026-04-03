@@ -3667,7 +3667,9 @@ void bytefn(dav2d_filter_sbrow_deblock_cols)(Dav2dFrameContext *const f, const i
         f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
     Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    bytefn(dav2d_deblock_sbrow_cols)(f, p, mask, sby, f->lf.start_of_tile_row[sby]);
+    const int start_of_tile_row = f->lf.start_of_tile_row[sby];
+    bytefn(dav2d_deblock_sbrow_cols)(f, p, mask, sby,
+                                     start_of_tile_row & 1 ? start_of_tile_row >> 1 : 0);
 }
 
 void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const int sby) {
@@ -3722,9 +3724,7 @@ void bytefn(dav2d_filter_sbrow_cdef)(Dav2dTaskContext *const tc, const int sby) 
     bytefn(dav2d_cdef_brow)(tc, p, mask, start, end, 0, sby);
 }
 
-void bytefn(dav2d_filter_sbrow_lr)(Dav2dFrameContext *const f, const int sby,
-                                   const int tile_row)
-{
+void bytefn(dav2d_filter_sbrow_lr)(Dav2dFrameContext *const f, const int sby) {
     if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_WIENER | DAV2D_INLOOPFILTER_GDF)))
         return;
     const int y = sby * f->sb_step * 4;
@@ -3734,18 +3734,16 @@ void bytefn(dav2d_filter_sbrow_lr)(Dav2dFrameContext *const f, const int sby,
         f->lf.sr_p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
         f->lf.sr_p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
-    bytefn(dav2d_lr_sbrow)(f, sr_p, sby, tile_row);
+    bytefn(dav2d_lr_sbrow)(f, sr_p, sby);
 }
 
-void bytefn(dav2d_filter_sbrow)(Dav2dFrameContext *const f, const int sby,
-                                const int tile_row)
-{
+void bytefn(dav2d_filter_sbrow)(Dav2dFrameContext *const f, const int sby) {
     bytefn(dav2d_filter_sbrow_deblock_cols)(f, sby);
     bytefn(dav2d_filter_sbrow_deblock_rows)(f, sby);
     if (f->seq_hdr->cdef)
         bytefn(dav2d_filter_sbrow_cdef)(f->c->tc, sby);
     if (f->lf.restore_planes)
-        bytefn(dav2d_filter_sbrow_lr)(f, sby, tile_row);
+        bytefn(dav2d_filter_sbrow_lr)(f, sby);
 }
 
 void bytefn(dav2d_backup_ipred_edge)(Dav2dTaskContext *const t) {

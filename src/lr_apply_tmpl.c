@@ -258,15 +258,15 @@ static inline void copyNlines(pixel *dst, const pixel *src, const ptrdiff_t stri
 }
 
 void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
-                            const int sby, const int tile_row)
+                            const int sby)
 {
     // TODO: strips starting at each tile row need to be shorted, not just the first row.
-    const Dav2dFrameHeader *const hdr = f->frame_hdr;
     const ptrdiff_t *const dst_stride = f->cur.p.stride;
     const int restore_planes = f->lf.restore_planes;
     const int not_last = sby + 1 < f->sbh;
-    const int first_sby_in_tile_row =
-        sby == hdr->tiling.t.row_start_sb[tile_row];
+    int first_sby_in_tile_row = f->lf.start_of_tile_row[sby];
+    const int tile_row = first_sby_in_tile_row >> 1;
+    first_sby_in_tile_row &= 1;
 
     if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
         const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;

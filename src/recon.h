@@ -41,10 +41,6 @@ typedef decl_recon_b_fn(*recon_b_fn);
 void (name)(Dav2dFrameContext *f, int sby)
 typedef decl_filter_sbrow_fn(*filter_sbrow_fn);
 
-#define decl_filter_sbrow_w_tile_fn(name) \
-void (name)(Dav2dFrameContext *f, int sby, int tile_row)
-typedef decl_filter_sbrow_w_tile_fn(*filter_sbrow_w_tile_fn);
-
 #define decl_backup_ipred_edge_fn(name) \
 void (name)(Dav2dTaskContext *t)
 typedef decl_backup_ipred_edge_fn(*backup_ipred_edge_fn);
@@ -65,16 +61,16 @@ typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 decl_recon_b_fn(dav2d_recon_b_8bpc);
 decl_recon_b_fn(dav2d_recon_b_16bpc);
 
-decl_filter_sbrow_w_tile_fn(dav2d_filter_sbrow_8bpc);
-decl_filter_sbrow_w_tile_fn(dav2d_filter_sbrow_16bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_8bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_16bpc);
 decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_cols_8bpc);
 decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_cols_16bpc);
 decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_rows_8bpc);
 decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_rows_16bpc);
 void dav2d_filter_sbrow_cdef_8bpc(Dav2dTaskContext *tc, int sby);
 void dav2d_filter_sbrow_cdef_16bpc(Dav2dTaskContext *tc, int sby);
-decl_filter_sbrow_w_tile_fn(dav2d_filter_sbrow_lr_8bpc);
-decl_filter_sbrow_w_tile_fn(dav2d_filter_sbrow_lr_16bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_8bpc);
+decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_16bpc);
 
 decl_backup_ipred_edge_fn(dav2d_backup_ipred_edge_8bpc);
 decl_backup_ipred_edge_fn(dav2d_backup_ipred_edge_16bpc);

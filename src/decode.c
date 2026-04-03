@@ -4535,11 +4535,10 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         }
         f->lf.start_of_tile_row_sz = f->sbh;
     }
-    int sby = 0;
-    for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
-        f->lf.start_of_tile_row[sby++] = tile_row;
+    for (int tile_row = 0, sby = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
+        f->lf.start_of_tile_row[sby++] = (tile_row << 1) | 1;
         while (sby < f->frame_hdr->tiling.t.row_start_sb[tile_row + 1])
-            f->lf.start_of_tile_row[sby++] = 0;
+            f->lf.start_of_tile_row[sby++] = tile_row << 1;
     }
 
     const int n_ts = f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows;
@@ -4981,7 +4980,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         // post filters (deblock + cdef + ccso + ...)
         // do this after completing full tiles, so that intra bc works correctly
         for (int sby = sby_start; sby < sbh_end; sby++) {
-            f->bd_fn.filter_sbrow(f, sby, tile_row);
+            f->bd_fn.filter_sbrow(f, sby);
         }
     }
 
