@@ -55,7 +55,7 @@ typedef decl_copy_pal_block_fn(*copy_pal_block_fn);
 
 #define decl_read_pal_plane_fn(name) \
 void (name)(DB_ONLY(const int depth) Dav2dTaskContext *t, \
-                    Av2Block *b, int bx4, int by4)
+            Av2Block *b, int bx4, int by4)
 typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 
 decl_recon_b_fn(dav2d_recon_b_8bpc);
