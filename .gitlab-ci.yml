@@ -148,6 +148,7 @@ build-debian:
                   diff <(echo "$a_md5") <(echo "$d_md5")
               fi
           done
+
 build-debian-avx512:
     extends: .debian-amd64-common
     tags:
@@ -160,6 +161,18 @@ build-debian-avx512:
         - ninja -C build
         - cd build
         - time meson test -v --suite checkasm
+
+test-win64:
+    extends: .debian-amd64-common
+    image: registry.videolan.org/dav1d-debian-unstable:20260103195850
+    script:
+        - wineserver -p && wine wineboot
+        - meson setup build --buildtype release
+                            -Dlogging=false
+                            -Dtrim_dsp=false
+                            --cross-file package/crossfiles/x86_64-w64-mingw32.meson
+        - ninja -C build
+        - cd build && time meson test -v
 
 build-debian-aarch64:
     extends: .debian-aarch64-common
