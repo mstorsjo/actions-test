@@ -208,6 +208,19 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                                                   sb_edges HIGHBD_CALL_SUFFIX);
                 }
             }
+
+            const uint16_t (*y_ll_mask)[4], (*uv_ll_mask)[4];
+            if (f->frame_hdr->any_lossless /* segmentation + at least 1 lossless */) {
+                y_ll_mask = (const uint16_t(*)[4])
+                    &lflvl[sb256x].lossless_mask_y[2 * by_idx][sb64x_idx];
+                uv_ll_mask = (const uint16_t(*)[4])
+                    &lflvl[sb256x].lossless_mask_uv[2 * by_idx >> ss_ver][sb64x_idx];
+            } else {
+                static const uint16_t zero_ll_mask[2][4] = { { 0 } };
+                assert(!f->frame_hdr->all_lossless);
+                y_ll_mask = uv_ll_mask = zero_ll_mask;
+            }
+
             if (cdef_idx == -1 ||
                 (!f->frame_hdr->cdef.y_strength[cdef_idx] &&
                  !f->frame_hdr->cdef.uv_strength[cdef_idx]) ||
@@ -233,18 +246,6 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
             int uv_sec_lvl = uv_lvl & 3;
             uv_sec_lvl += uv_sec_lvl == 3;
             uv_sec_lvl <<= bitdepth_min_8;
-
-            const uint16_t (*y_ll_mask)[4], (*uv_ll_mask)[4];
-            if (f->frame_hdr->any_lossless /* segmentation + at least 1 lossless */) {
-                y_ll_mask = (const uint16_t(*)[4])
-                    &lflvl[sb256x].lossless_mask_y[2 * by_idx][sb64x_idx];
-                uv_ll_mask = (const uint16_t(*)[4])
-                    &lflvl[sb256x].lossless_mask_uv[2 * by_idx >> ss_ver][sb64x_idx];
-            } else {
-                static const uint16_t zero_ll_mask[2][4] = { { 0 } };
-                assert(!f->frame_hdr->all_lossless);
-                y_ll_mask = uv_ll_mask = zero_ll_mask;
-            }
 
             pixel *bptrs[3] = { iptrs[0], iptrs[1], iptrs[2] };
             for (int bx = sbx * sbsz; bx < imin((sbx + 1) * sbsz, f->bw);
@@ -370,8 +371,8 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                                       ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),
                                       f->frame_hdr->ccso.p[pl].filter_off,
                                       dav2d_ccso_offset[f->frame_hdr->ccso.p[pl].scale_idx],
-                                      w >> (!!pl * ss_hor), 8 >> (!!pl * ss_ver)
-                                      HIGHBD_CALL_SUFFIX);
+                                      w >> (!!pl * ss_hor), 8 >> (!!pl * ss_ver),
+                                      pl ? uv_ll_mask : y_ll_mask HIGHBD_CALL_SUFFIX);
                     }
             }
             iptrs[0] += sbsz * 4;
