@@ -146,7 +146,8 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
         for (int sbx = 0, bit = 0; sbx < sb64w; sbx++, edges |= CDEF_HAVE_LEFT) {
             ALIGN_STK_64(uint8_t, ccso_lut_idx, 3, [64*8]);
             const int sb256x = sbx >> 2;
-            const int sb64_idx = ((by & 0x30) >> 2) + (sbx & 3);
+            const int sb64x_idx = sbx & 3;
+            const int sb64_idx = ((by & 0x30) >> 2) + sb64x_idx;
             const int cdef_idx = lflvl[sb256x].cdef_idx[sb64_idx];
 
             if (f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) {
@@ -216,15 +217,8 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 goto next_sb;
             }
 
-            // Load the entire 64-bit mask for the largest sb row size
-            uint64_t noskip_mask = ~0ULL;
-            if (!on_skip_tx) {
-                const uint16_t (*noskip_row)[4] = &lflvl[sb256x].noskip_mask[by_idx];
-                noskip_mask = (uint64_t) noskip_row[0][3] << 48 |
-                              (uint64_t) noskip_row[0][2] << 32 |
-                              (uint64_t) noskip_row[0][1] << 16 |
-                              noskip_row[0][0];
-            }
+            const unsigned noskip_mask = on_skip_tx ? ~0U :
+                lflvl[sb256x].noskip_mask[by_idx][sb64x_idx];
 
             const int y_lvl = f->frame_hdr->cdef.y_strength[cdef_idx];
             const int uv_lvl = f->frame_hdr->cdef.uv_strength[cdef_idx];
@@ -240,6 +234,18 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
             uv_sec_lvl += uv_sec_lvl == 3;
             uv_sec_lvl <<= bitdepth_min_8;
 
+            const uint16_t (*y_ll_mask)[4], (*uv_ll_mask)[4];
+            if (f->frame_hdr->any_lossless /* segmentation + at least 1 lossless */) {
+                y_ll_mask = (const uint16_t(*)[4])
+                    &lflvl[sb256x].lossless_mask_y[2 * by_idx][sb64x_idx];
+                uv_ll_mask = (const uint16_t(*)[4])
+                    &lflvl[sb256x].lossless_mask_uv[2 * by_idx >> ss_ver][sb64x_idx];
+            } else {
+                static const uint16_t zero_ll_mask[2][4] = { { 0 } };
+                assert(!f->frame_hdr->all_lossless);
+                y_ll_mask = uv_ll_mask = zero_ll_mask;
+            }
+
             pixel *bptrs[3] = { iptrs[0], iptrs[1], iptrs[2] };
             for (int bx = sbx * sbsz; bx < imin((sbx + 1) * sbsz, f->bw);
                  bx += 2, edges |= CDEF_HAVE_LEFT)
@@ -248,8 +254,12 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
 
                 // check if this 8x8 block had any coded coefficients; if not,
                 // go to the next block
-                const uint32_t bx_mask = 3U << (bx & 0x3e);
-                if (!(noskip_mask & bx_mask)) {
+                const unsigned bx_mask = 3 << (bx & 14);
+                const int y_lossless = (y_ll_mask[0][0] | y_ll_mask[1][0]) & bx_mask;
+                const unsigned uvbx_mask = (3 >> ss_hor) << ((bx & 14) >> ss_hor);
+                const int uv_lossless =
+                    (uv_ll_mask[0][0] | uv_ll_mask[!ss_ver][0]) & uvbx_mask;
+                if (!(noskip_mask & bx_mask) || (y_lossless && uv_lossless)) {
                     prev_flag = 0;
                     goto next_b;
                 }
@@ -292,16 +302,16 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 }
                 if (y_pri_lvl) {
                     const int adj_y_pri_lvl = adjust_strength(y_pri_lvl, variance);
-                    if (adj_y_pri_lvl || y_sec_lvl)
+                    if ((adj_y_pri_lvl || y_sec_lvl) && !y_lossless)
                         dsp->cdef.fb[0](bptrs[0], f->cur.p.stride[0], lr_bak[bit][0],
                                         top, bot, adj_y_pri_lvl, y_sec_lvl,
                                         dir, damping, edges HIGHBD_CALL_SUFFIX);
-                } else if (y_sec_lvl)
+                } else if (y_sec_lvl && !y_lossless)
                     dsp->cdef.fb[0](bptrs[0], f->cur.p.stride[0], lr_bak[bit][0],
                                     top, bot, 0, y_sec_lvl, 0, damping,
                                     edges HIGHBD_CALL_SUFFIX);
 
-                if (!uv_lvl) goto skip_uv;
+                if (!uv_lvl || uv_lossless) goto skip_uv;
                 assert(layout != DAV2D_PIXEL_LAYOUT_I400);
 
                 const int uvdir = uv_pri_lvl ? uv_dir[dir] : 0;
