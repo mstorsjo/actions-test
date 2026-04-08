@@ -668,12 +668,10 @@ cglobal ipred_dc_8bpc, 3, 8, 6, dst, stride, tl, w, h, stride3
     neg                  r6
 .s4x16i_loop:
     ; top filter
-    movd                xm4, [r3+r6*2+0]
-    movd                xm6, [r3+r6*2+4]
+    movq                xm4, [r3+r6*2]
     punpcklwd           xm4, xm4
-    punpcklwd           xm6, xm6
+    punpckhdq           xm6, xm4, xm4
     punpckldq           xm4, xm4
-    punpckldq           xm6, xm6
     REPX {pmaddubsw x, xm1, x}, xm4, xm6
     REPX {pmulhrsw  x, xm5}, xm4, xm6
     packuswb            xm4, xm6
