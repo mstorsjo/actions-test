@@ -96,8 +96,8 @@ typedef decl_gdf_prep_fn(*gdf_prep_fn);
 #define decl_gdf_add_fn(name) \
 void (name)(pixel *p, ptrdiff_t dst_stride, \
             const int8_t *err, const ptrdiff_t err_stride, \
-            const int w, const int h, const int scale \
-            HIGHBD_DECL_SUFFIX)
+            const int w, const int h, const int scale, \
+            const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 typedef decl_gdf_add_fn(*gdf_add_fn);
 
 typedef struct Dav2dLoopRestorationDSPContext {

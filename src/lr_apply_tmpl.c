@@ -175,8 +175,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                 wiener_params.multi.noskip_mask += stripe_h >> 2;
         }
         if (gdf) {
-            dsp->lr.gdf_add(p, stride, gdf_err, 64, w, stripe_h, gdf_scale
-                            HIGHBD_CALL_SUFFIX);
+            dsp->lr.gdf_add(p, stride, gdf_err, 64, w, stripe_h, gdf_scale,
+                            ll_mask HIGHBD_CALL_SUFFIX);
         }
         edges &= ~(LR_HAVE_BOTTOM_INTEGRATED | LR_HAVE_TOP_INTEGRATED);
         left += stripe_h;

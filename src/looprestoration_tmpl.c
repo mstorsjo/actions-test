@@ -806,20 +806,29 @@ static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
     }
 }
 
-static void gdf_add_c(pixel *p, const ptrdiff_t stride,
-                      const int8_t *err, const ptrdiff_t err_stride,
-                      const int w, const int h, const int scale
-                      HIGHBD_DECL_SUFFIX)
+static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
+                      const int8_t *err_line, const ptrdiff_t err_stride,
+                      const int w, const int h, const int scale,
+                      const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     const int shift = 12 - bitdepth_from_max(bitdepth_max);
     const int rnd = 1 << shift >> 1;
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-            int diff = err[x] * scale;
-            p[x] = iclip_pixel(p[x] + apply_sign((abs(diff) + rnd) >> shift, diff));
+    for (int by = 0; by < h >> 2; by++) {
+        for (int bx = 0; bx < w >> 2; bx++) {
+            if (ll_mask[by][0] & (1 << bx)) continue;
+            pixel *p = p_line;
+            const int8_t *err = err_line;
+            for (int y = by * 4; y < by * 4 + 4; y++) {
+                for (int x = bx * 4; x < bx * 4 + 4; x++) {
+                    int diff = err[x] * scale;
+                    p[x] = iclip_pixel(p[x] + apply_sign((abs(diff) + rnd) >> shift, diff));
+                }
+                p += PXSTRIDE(stride);
+                err += err_stride;
+            }
         }
-        p += PXSTRIDE(stride);
-        err += err_stride;
+        p_line += PXSTRIDE(stride) * 4;
+        err_line += err_stride * 4;
     }
 }
 
