@@ -57,8 +57,14 @@ decl_check_bitfns(void checkasm_check_mc);
     #define checkasm_check_pixel(...) checkasm_check(PIXEL_TYPE, __VA_ARGS__)
     #define checkasm_check_coef(...)  checkasm_check(COEF_TYPE, __VA_ARGS__)
 
-    #define PIXEL_RECT(name, w, h)            BUF_RECT(pixel, name, w, h)
-    #define CLEAR_PIXEL_RECT                  CLEAR_BUF_RECT
+    #define PIXEL_RECT(name, w, h)   BUF_RECT(pixel, name, w, h)
+    #define CLEAR_PIXEL_RECT         CLEAR_BUF_RECT
+#if BITDEPTH == 8
+    #define INIT_PIXEL_RECT(buf) checkasm_init_mask8(buf, sizeof(buf), bitdepth_max)
+#else
+    #define INIT_PIXEL_RECT(buf) checkasm_init_mask16(buf, sizeof(buf) >> 1, bitdepth_max)
+#endif
+
     #define checkasm_check_pixel_padded       checkasm_check_rect_padded
     #define checkasm_check_pixel_padded_align checkasm_check_rect_padded_align
 #endif
