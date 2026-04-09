@@ -60,8 +60,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
                   (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ?
         f->lf.lr_cdef_line[plane] + tile_row_m1 * (6 - 4 * chroma) * PXSTRIDE(stride) + x : NULL;
-    const int sb256x = x >> 8;
-    const int sb64x_idx = (x >> 6) & 3;
+    const int sb256x = (x << ss_hor) >> 8;
+    const int sb64x_idx = ((x << ss_hor) >> 6) & 3;
 
     // The first stripe of the frame is shorter by 8 luma pixel rows.
     int stripe_h = imin((64 - 8 * !!first_sby_in_tile_row) >> ss_ver, row_h - y);
@@ -141,7 +141,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             (edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED |
                       LR_HAVE_BOTTOM_INTEGRATED)) == LR_HAVE_TOP &&
             y + 8 < (f->bh * 4 >> ss_ver) ? 8 : 0;
-        int sb256_idx = f->sb256w * ((y + inc) >> 8) + sb256x;
+        int sb256_idx = f->sb256w * (((y << ss_ver) + inc) >> 8) + sb256x;
         int gdf = !plane && (f->c->inloop_filters & DAV2D_INLOOPFILTER_GDF) &&
                   f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
@@ -150,10 +150,27 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                              lpf + 6 * PXSTRIDE(stride),
                              w, stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
         }
+        const int y4 = ((y << ss_ver) & 255) >> 2;
+        const uint16_t (*ll_mask)[4];
+        uint16_t ll_uv_mask_mem[16][4];
+        if (!plane || !ss_hor) {
+            ll_mask = plane ?
+                (const uint16_t(*)[4])
+                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4][sb64x_idx] :
+                (const uint16_t(*)[4])
+                    &f->lf.mask[sb256_idx].lossless_mask_y[y4][sb64x_idx];
+        } else {
+            ll_mask = (const uint16_t(*)[4])
+                &f->lf.mask[sb256_idx].lossless_mask_uv[y4 >> ss_ver][sb64x_idx];
+            const int init_y = y >> 2;
+            for (int yy = init_y; yy < (y + stripe_h) >> 2; yy++, ll_mask++)
+                ll_uv_mask_mem[yy - init_y][0] = ll_mask[0][0] | (ll_mask[0][1] << 8);
+            ll_mask = ll_uv_mask_mem;
+        }
         if (wiener_fn) {
             wiener_fn(p, stride, left, top ? top + (2 * !chroma) * PXSTRIDE(stride) : lpf,
                       lpf + 6 * PXSTRIDE(stride), w, stripe_h, &wiener_params,
-                      edges HIGHBD_CALL_SUFFIX);
+                      edges, ll_mask HIGHBD_CALL_SUFFIX);
             if (multi_wiener)
                 wiener_params.multi.noskip_mask += stripe_h >> 2;
         }

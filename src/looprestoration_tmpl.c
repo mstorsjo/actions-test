@@ -211,9 +211,9 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
 static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
                                  const pixel (*left)[6],
                                  const pixel *lpf, const pixel *lpf_bottom,
-                                 const int w, int h,
-                                 const WienerParams *params,
-                                 const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+                                 const int w, int h, const WienerParams *params,
+                                 const enum LrEdgeFlags edges,
+                                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     const int8_t *filter = params->single.filter;
     pixel row_buffers[9][REST_UNIT_STRIDE];
@@ -269,18 +269,21 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
         }
         if (++bak_idx == 9) bak_idx = 0;
 
-        for (int x = 0; x < w; x++) {
-            const int m = ptrs[4][x];
-            int s = m << 7;
-            for (int i = 0; i < 32; i++) {
-                const int dy = wiener_ns_config_y[i][0];
-                const int dx = wiener_ns_config_y[i][1];
-                const int diff = ptrs[4 + dy][x + dx] - m;
-                s += diff * filter[i >> 1];
+        for (int bx = 0; bx < (w >> 2); bx++) {
+            if (ll_mask[y >> 2][0] & (1 << bx)) continue;
+            for (int x = bx * 4; x < bx * 4 + 4; x++) {
+                const int m = ptrs[4][x];
+                int s = m << 7;
+                for (int i = 0; i < 32; i++) {
+                    const int dy = wiener_ns_config_y[i][0];
+                    const int dx = wiener_ns_config_y[i][1];
+                    const int diff = ptrs[4 + dy][x + dx] - m;
+                    s += diff * filter[i >> 1];
+                }
+                // TODO: chroma: if (plane > 0) {...}
+                const int v = (s + 64) >> 7;
+                p[x] = iclip_pixel(v);
             }
-            // TODO: chroma: if (plane > 0) {...}
-            const int v = (s + 64) >> 7;
-            p[x] = iclip_pixel(v);
         }
 
         for (int r = 0; r < 8; r++) ptrs[r] = ptrs[r+1];
@@ -291,9 +294,9 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
 static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
                                   const pixel (*left)[6], // FIXME this can be 2
                                   const pixel *lpf, const pixel *lpf_bottom,
-                                  const int w, int h,
-                                  const WienerParams *params,
-                                  const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+                                  const int w, int h, const WienerParams *params,
+                                  const enum LrEdgeFlags edges,
+                                  const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     const int8_t *filter = params->single.filter;
     pixel row_buffers_c[5][REST_UNIT_STRIDE];
@@ -386,24 +389,27 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
         }
         if (++lbak_idx == 5) lbak_idx = 0;
 
-        for (int x = 0; x < w; x++) {
-            const int m = ptrs[0][2][x];
-            int s = m << 7;
-            for (int i = 0; i < 6; i++) {
-                const int dy = wiener_ns_config_uv[i][0];
-                const int dx = wiener_ns_config_uv[i][1];
-                const int diff = ptrs[0][2 + dy][x + dx] + ptrs[0][2 - dy][x - dx] - 2 * m;
-                s += diff * filter[i];
+        for (int bx = 0; bx < (w >> 2); bx++) {
+            if (ll_mask[y >> 2][0] & (1 << bx)) continue;
+            for (int x = bx * 4; x < bx * 4 + 4; x++) {
+                const int m = ptrs[0][2][x];
+                int s = m << 7;
+                for (int i = 0; i < 6; i++) {
+                    const int dy = wiener_ns_config_uv[i][0];
+                    const int dx = wiener_ns_config_uv[i][1];
+                    const int diff = ptrs[0][2 + dy][x + dx] + ptrs[0][2 - dy][x - dx] - 2 * m;
+                    s += diff * filter[i];
+                }
+                const int l = ptrs[1][2][x << ss_hor];
+                for (int i = 0; i < 12; i++) {
+                    const int dy = wiener_ns_config_uv_from_y[i][0];
+                    const int dx = wiener_ns_config_uv_from_y[i][1];
+                    const int diff = ptrs[1][2 + dy][(x + dx) << ss_hor] - l;
+                    s += diff * filter[6 + i];
+                }
+                const int v = (s + 64) >> 7;
+                p[x] = iclip_pixel(v);
             }
-            const int l = ptrs[1][2][x << ss_hor];
-            for (int i = 0; i < 12; i++) {
-                const int dy = wiener_ns_config_uv_from_y[i][0];
-                const int dx = wiener_ns_config_uv_from_y[i][1];
-                const int diff = ptrs[1][2 + dy][(x + dx) << ss_hor] - l;
-                s += diff * filter[6 + i];
-            }
-            const int v = (s + 64) >> 7;
-            p[x] = iclip_pixel(v);
         }
 
         for (int r = 0; r < 4; r++) ptrs[0][r] = ptrs[0][r + 1];
@@ -487,8 +493,8 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const int16_t (*filters_pretrained)[13],
                          const uint8_t *subclass_lut,
                          const uint16_t *noskip_mask,
-                         const int base_q,
-                         const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+                         const int base_q, const enum LrEdgeFlags edges,
+                         const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
 
@@ -577,6 +583,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
             if (++bak_idx == 9) bak_idx = 0;
 
             for (int bx = 0; bx < bw; bx++) {
+                if (ll_mask[y >> 2][0] & (1 << bx)) continue;
                 if (filters_user) {
                     const int8_t *filter = filters_user[classes[bx]];
                     for (int x = bx << 2; x < (bx << 2) + 4; x++) {
@@ -616,24 +623,26 @@ static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
                               const pixel (*left)[6],
                               const pixel *lpf, const pixel *lpf_bottom,
                               const int w, int h, const WienerParams *params,
-                              const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+                              const enum LrEdgeFlags edges,
+                              const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  params->multi.filters.user, NULL,
                  params->multi.subclass_lut, params->multi.noskip_mask,
-                 params->multi.base_q, edges HIGHBD_TAIL_SUFFIX);
+                 params->multi.base_q, edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
 static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
                         const pixel (*left)[6],
                         const pixel *lpf, const pixel *lpf_bottom,
                         const int w, int h, const WienerParams *params,
-                        const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+                        const enum LrEdgeFlags edges,
+                        const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  NULL, params->multi.filters.pretrained,
                  params->multi.subclass_lut, params->multi.noskip_mask,
-                 params->multi.base_q, edges HIGHBD_TAIL_SUFFIX);
+                 params->multi.base_q, edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
 // Sum 2x2 rows of gradients and store in dst
