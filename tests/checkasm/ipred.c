@@ -48,14 +48,6 @@ static const char *const intra_pred_mode_names[N_IMPL_INTRA_PRED_MODES] = {
     [DIP_PRED]      = "dip"
 };
 
-static const char *const cfl_ac_names[3] = { "420", "422", "444" };
-
-static const char *const cfl_pred_mode_names[DC_128_PRED + 1] = {
-    [DC_PRED]       = "cfl",
-    [DC_128_PRED]   = "cfl_128",
-    [TOP_DC_PRED]   = "cfl_top",
-    [LEFT_DC_PRED]  = "cfl_left",
-};
 
 static const uint8_t z_angles[27] = {
      3,  6,  9,
@@ -162,112 +154,6 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
     report("intra_pred");
 }
 
-static void check_cfl_ac(Dav2dIntraPredDSPContext *const c) {
-    ALIGN_STK_64(int16_t, c_dst, 32 * 32,);
-    ALIGN_STK_64(int16_t, a_dst, 32 * 32,);
-    ALIGN_STK_64(pixel, luma, 32 * 32,);
-
-    declare_func(void, int16_t *ac, int dc, const pixel *y, ptrdiff_t stride,
-                 int w_pad, int h_pad, int cw, int ch, int filter_type);
-
-    for (int layout = 1; layout <= DAV2D_PIXEL_LAYOUT_I444; layout++) {
-        const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
-        const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
-        const int h_step = 2 >> ss_hor, v_step = 2 >> ss_ver;
-        for (int w = 4; w <= (32 >> ss_hor); w <<= 1)
-            if (check_func(c->cfl_ac[layout - 1], "cfl_ac_%s_w%d_%dbpc",
-                cfl_ac_names[layout - 1], w, BITDEPTH))
-            {
-                for (int h = imax(w / 4, 4);
-                     h <= imin(w * 4, (32 >> ss_ver)); h <<= 1)
-                {
-                    const ptrdiff_t stride = 32 * sizeof(pixel);
-                    for (int w_pad = imax((w >> 2) - h_step, 0);
-                         w_pad >= 0; w_pad -= h_step)
-                    {
-                        for (int h_pad = imax((h >> 2) - v_step, 0);
-                             h_pad >= 0; h_pad -= v_step)
-                        {
-#if BITDEPTH == 16
-                            const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-#else
-                            const int bitdepth_max = 0xff;
-#endif
-                            for (int y = 0; y < (h << ss_ver); y++)
-                                for (int x = 0; x < (w << ss_hor); x++)
-                                    luma[y * 32 + x] = rnd() & bitdepth_max;
-
-                            const int dc = rnd() & bitdepth_max;
-                            const int filter_type = rnd() & 7;
-
-                            call_ref(c_dst, dc, luma, stride, w_pad, h_pad, w, h, filter_type);
-                            call_new(a_dst, dc, luma, stride, w_pad, h_pad, w, h, filter_type);
-                            checkasm_check(int16_t, c_dst, w * sizeof(*c_dst),
-                                                    a_dst, w * sizeof(*a_dst),
-                                                    w, h, "dst");
-                        }
-                    }
-
-                    bench_new(a_dst, 128, luma, stride, 0, 0, w, h, 0);
-                }
-            }
-    }
-    report("cfl_ac");
-}
-
-static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
-    PIXEL_RECT(c_dst, 32, 32);
-    PIXEL_RECT(a_dst, 32, 32);
-    ALIGN_STK_64(int16_t, ac, 32 * 32,);
-    ALIGN_STK_64(pixel, topleft_buf, 257,);
-    pixel *const topleft = topleft_buf + 128;
-
-    declare_func(void, pixel *dst, ptrdiff_t stride, const pixel *topleft,
-                 int width, int height, const int16_t *ac, int alpha
-                 HIGHBD_DECL_SUFFIX);
-
-    for (int mode = 0; mode <= DC_128_PRED; mode += 1 + 2 * !mode)
-        for (int w = 4; w <= 32; w <<= 1)
-            if (check_func(c->cfl_pred[mode], "cfl_pred_%s_w%d_%dbpc",
-                cfl_pred_mode_names[mode], w, BITDEPTH))
-            {
-                for (int h = imax(w / 4, 4); h <= imin(w * 4, 32); h <<= 1)
-                {
-#if BITDEPTH == 16
-                    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-#else
-                    const int bitdepth_max = 0xff;
-#endif
-
-                    int alpha = ((rnd() & 15) + 1) * (1 - (rnd() & 2));
-
-                    for (int i = -h * 2; i <= w * 2; i++)
-                        topleft[i] = rnd() & bitdepth_max;
-
-                    int luma_avg = w * h >> 1;
-                    for (int i = 0; i < w * h; i++)
-                        luma_avg += ac[i] = rnd() & (bitdepth_max << 3);
-                    luma_avg /= w * h;
-                    for (int i = 0; i < w * h; i++)
-                        ac[i] -= luma_avg;
-
-                    CLEAR_PIXEL_RECT(c_dst);
-                    CLEAR_PIXEL_RECT(a_dst);
-
-                    call_ref(c_dst, c_dst_stride, topleft, w, h, ac, alpha
-                             HIGHBD_TAIL_SUFFIX);
-                    call_new(a_dst, a_dst_stride, topleft, w, h, ac, alpha
-                             HIGHBD_TAIL_SUFFIX);
-                    checkasm_check_pixel_padded(c_dst, c_dst_stride, a_dst, a_dst_stride,
-                                                w, h, "dst");
-
-                    bench_new(a_dst, a_dst_stride, topleft, w, h, ac, alpha
-                              HIGHBD_TAIL_SUFFIX);
-                }
-            }
-    report("cfl_pred");
-}
-
 static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
@@ -312,7 +198,5 @@ void bitfn(checkasm_check_ipred)(void) {
     bitfn(dav2d_intra_pred_dsp_init)(&c);
 
     check_intra_pred(&c);
-    check_cfl_ac(&c);
-    check_cfl_pred(&c);
     check_pal_pred(&c);
 }

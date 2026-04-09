@@ -54,16 +54,24 @@
 #define ANGLE_HAS_TOP_FLAG          (1 << 17)
 #define ANGLE_HAS_LEFT_FLAG         (1 << 16)
 #define ANGLE_MULTI_MRL_FLAG        (1 << 15)
-#define ANGLE_MRL_IDX_SHIFT (13)
+#define ANGLE_MRL_IDX_SHIFT         (13)
 #define ANGLE_MRL_IDX_MASK          (3 << ANGLE_MRL_IDX_SHIFT)
 #define ANGLE_IBP_FLAG              (1 << 12)
 #define ANGLE_USE_EDGE_FILTER_FLAG  (1 << 11)
 #define ANGLE_SMOOTH_TOP_EDGE_FLAG  (1 << 10)
 #define ANGLE_SMOOTH_LEFT_EDGE_FLAG (1 << 9)
 
+#define CFL_FLT_TYPE_RECT  (1)
+#define CFL_FLT_TYPE_CROSS (2)
+#define CFL_FLT_TYPE       (0x3)
 #define CFL_HAS_TOP        (1 << 2)
 #define CFL_HAS_LEFT       (1 << 3)
 #define CFL_IS_TOP_SB_EDGE (1 << 4)
+#define CFL_ALPHA_LOG2     (5)
+#define CFL_ALPHA_U_SHIFT  (16 - CFL_ALPHA_LOG2)
+#define CFL_ALPHA_V_SHIFT  (32 - CFL_ALPHA_LOG2)
+#define CFL_ALPHA_U_MASK   (((1 << CFL_ALPHA_LOG2) - 1) << CFL_ALPHA_U_SHIFT)
+#define CFL_ALPHA_V_MASK   (((1 << CFL_ALPHA_LOG2) - 1) << CFL_ALPHA_V_SHIFT)
 
 /*
  * Intra prediction.
@@ -78,36 +86,20 @@ void (name)(pixel *dst, ptrdiff_t stride, const pixel *topleft, \
             HIGHBD_DECL_SUFFIX)
 typedef decl_angular_ipred_fn(*angular_ipred_fn);
 
-/*
- * Create a subsampled Y edge and calculate its DC.
- */
-#define decl_cfl_dc_fn(name) \
-int (name)(uint16_t *edge, const pixel *top, const pixel *left, \
-           ptrdiff_t stride, int wpad, int hpad, int w, int h, int filter_type)
-typedef decl_cfl_dc_fn(*cfl_dc_fn);
+/* CFL - explicit and implicit alpha */
 
 /*
- * Create a subsampled Y plane with the edge DC subtracted.
- * - w/h_pad is the edge of the width/height that extends outside the visible
+ * Does chroma-from-luma prediction for both chroma planes.
+ * - w/hpad is the edge of the width/height that extends outside the visible
  *   portion of the frame in 4px units;
- * - ac has a stride of 16.
- */
-#define decl_cfl_ac_fn(name) \
-void (name)(int16_t *ac, int dc, const pixel *y, ptrdiff_t stride, \
-            int w_pad, int h_pad, int cw, int ch, int filter_type)
-typedef decl_cfl_ac_fn(*cfl_ac_fn);
-
-/*
- * dst[x,y] += alpha * ac[x,y]
- * - alpha contains a q3 scalar in [-16,16] range;
+ * dst[x,y] = alpha * ac[x,y] + dc
  */
 #define decl_cfl_pred_fn(name) \
-void (name)(pixel *dst, ptrdiff_t stride, const pixel *topleft, \
-            int width, int height, const int16_t *ac, int alpha \
-            HIGHBD_DECL_SUFFIX)
+void (name)(pixel *const *ptrs, const ptrdiff_t *stride, \
+            int wpad, int hpad, int w, int h, int flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
-/* CFL MHCCP */
+/* CFL - multi-hypothesis cross component prediction (MHCCP) */
 
 /*
  * max luma size
@@ -172,11 +164,8 @@ typedef decl_pal_pred_fn(*pal_pred_fn);
 typedef struct Dav2dIntraPredDSPContext {
     angular_ipred_fn intra_pred[N_IMPL_INTRA_PRED_MODES];
 
-    // chroma-from-luma (implicit and explicit alpha)
-    cfl_dc_fn cfl_dc[3 /* 420, 422, 444 */];
-    cfl_ac_fn cfl_ac[3 /* 420, 422, 444 */];
-    cfl_pred_fn cfl_pred[DC_128_PRED + 1];
-
+    // cfl explicit / implicit
+    cfl_pred_fn cfl_pred[2 /* explicit, implicit */][3 /* 420, 422, 444 */];
     // cfl mhccp
     cfl_gen_y_fn        cfl_gen_y[3 /* 420, 422, 444 */][3 /* cfl_ds_filter_type */];
     cfl_gen_mat_fn      cfl_gen_mat[3 /* CflMhDir */];

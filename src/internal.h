@@ -477,7 +477,6 @@ struct Dav2dTaskContext {
             };
         };
         struct {
-            int16_t ac[64 * 64]; // intra-only
             uint8_t pal_idx_y[64 * 64];
             union {
                 struct {

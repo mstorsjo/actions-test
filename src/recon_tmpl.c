@@ -42,6 +42,7 @@
 #include "src/ctx.h"
 #include "src/ipred_prepare.h"
 #include "src/itx_1d.h"
+#include "src/derivation.h"
 #include "src/db_apply.h"
 #include "src/lr_apply.h"
 #include "src/recon.h"
@@ -2664,37 +2665,6 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     return 0;
 }
 
-static inline int derive_alpha(const int num, const int den, int alpha) {
-    const int max = (2 << 8) - 1;
-    if (num && den) {
-        const int num_abs = abs(num);
-        const int shift_n = ulog2(num_abs);
-        assert(den >= 0);
-        const int shift_d = ulog2(den);
-        const int e_d = den - (1U << shift_d);
-        int f_d, f_n;
-        if (shift_d > 7)
-            f_d = (e_d + (1 << (shift_d - 8))) >> (shift_d - 7);
-        else
-            f_d = e_d << (7 - shift_d);
-
-        if (shift_n > 7)
-            f_n = (num_abs + (1 << (shift_n - 8))) >> (shift_n - 7);
-        else
-            f_n = num_abs << (7 - shift_n);
-
-        const int shift_add = shift_d - shift_n - 8;
-        if (shift_add <= 1) {
-            const int shift0 = 9 + 7 + shift_add;
-            const int tmp_alpha = shift0 < 0 ? max :
-                imin((dav2d_div_recip[f_d] * f_n) >> shift0, max);
-            if (tmp_alpha)
-                alpha = apply_sign(tmp_alpha, num);
-        }
-    }
-    return alpha;
-}
-
 static void bawp(Dav2dTaskContext *const t,
                  const int bawp_idx, const union mv mv,
                  pixel *const dst, const ptrdiff_t stride,
@@ -2926,9 +2896,8 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
     dsp->mc.blend(dst, stride, tmp, ssbw4 * 4, ssbh4 * 4, mask);
 }
 
-static inline void
-cfl(Dav2dTaskContext *const t, const Av2Block *const b,
-    const enum BlockSize bs, const TxfmInfo *const uv_t_dim, const int can_cfl)
+static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
+                       const enum BlockSize bs, const TxfmInfo *const t_dim)
 {
     const Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
@@ -2936,120 +2905,60 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     const enum Dav2dPixelLayout layout = f->cur.p.p.layout - 1;
     const ptrdiff_t ystride = f->cur.p.stride[0];
     const ptrdiff_t cstride = f->cur.p.stride[1];
-    const pixel *const y_src = ((pixel *) f->cur.p.data[0]) +
-        (t->cby * PXSTRIDE(ystride) + t->cbx) * 4;
     const int sby = t->cby >> f->sb_shift;
     const int sbsz = f->sb_step;
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
-    const int is_top_sb_edge = !(t->cby & (sbsz - 1));
     const int has_top = t->cby > ts->tiling.row_start;
     const int has_left = t->cbx > ts->tiling.col_start;
-    const int ctw4 = imin(uv_t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
-    const int cth4 = imin(uv_t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
-    const int ctw = uv_t_dim->w * 4, cth = uv_t_dim->h * 4;
+    const int is_top_sb_edge = !(t->cby & (sbsz - 1));
+    const int ctw4 = imin(t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
+    const int cth4 = imin(t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
+    const int ctw = t_dim->w * 4, cth = t_dim->h * 4;
     const int filter_type = f->c->seq_hdr->cfl_ds_filter_index;
-    const pixel *const ytop_sb_edge = !is_top_sb_edge ? NULL :
+    pixel *const ysrc = ((pixel *) f->cur.p.data[0]) +
+        (t->cby * PXSTRIDE(ystride) + t->cbx) * 4;
+    pixel *const ytop_sb_edge = !is_top_sb_edge ? NULL :
         f->ipred_edge[0] + f->sb256w * 256 * (sby - 1) + t->cbx * 4;
 
     if (b->cfl_type < CFL_MHCCP) { // CFL EXPLICIT / IMPLICIT
-        // calc AC / gen Y edge
-        uint16_t y_edge_mem[256], *const y_edge = &y_edge_mem[128];
-        int16_t *const ac = t->scratch.ac;
-        const pixel *const top = has_top ? is_top_sb_edge ? ytop_sb_edge :
-            y_src - (1 + ss_ver) * PXSTRIDE(ystride) : NULL;
-        const pixel *const left = has_left ? y_src - (1 + ss_hor) : NULL;
-        const int filter_type = f->c->seq_hdr->cfl_ds_filter_index |
-            (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
+        const ptrdiff_t off = (ssby * PXSTRIDE(cstride) + ssbx) * 4;
+        pixel *const usrc = ((pixel *) f->cur.p.data[1]) + off;
+        pixel *const vsrc = ((pixel *) f->cur.p.data[2]) + off;
+
+        const ptrdiff_t sboff = (sby - 1) * f->sb256w * 256 >> ss_hor;
+        pixel *const u_top_sb_edge = f->ipred_edge[1] + sboff + ssbx * 4;
+        pixel *const v_top_sb_edge = f->ipred_edge[2] + sboff + ssbx * 4;
+
+        pixel *const ytop = is_top_sb_edge ?
+            ytop_sb_edge : ysrc - (1 + ss_ver) * PXSTRIDE(ystride);
+        pixel *const utop = is_top_sb_edge ?
+            u_top_sb_edge : usrc - PXSTRIDE(cstride);
+        pixel *const vtop = is_top_sb_edge ?
+            v_top_sb_edge : vsrc - PXSTRIDE(cstride);
+
+        pixel *const ptrs[6] = { ytop, utop, vtop, ysrc, usrc, vsrc };
 
         const int cbw4 = (dav2d_block_dimensions[bs][0] + ss_hor) >> ss_hor;
         const int cbh4 = (dav2d_block_dimensions[bs][1] + ss_ver) >> ss_ver;
         const int wpad = cbw4 - ctw4;
         const int hpad = cbh4 - cth4;
-        const int dc = (!has_top && !left) ? 4 << f->cur.p.p.bpc :
-            dsp->ipred.cfl_dc[layout](y_edge, top, left, ystride,
-                                      top ? wpad : 0, left ? hpad : 0,
-                                      top ? ctw << ss_hor : 0,
-                                      left ? cth << ss_ver : 0, filter_type);
-        dsp->ipred.cfl_ac[layout](ac, dc, y_src, ystride, wpad, hpad, ctw, cth,
-                                  filter_type);
-        for (int pl = 1; pl <= 2; pl++) {
-            if (!(can_cfl & pl)) continue;
 
-            pixel *dst = ((pixel *) f->cur.p.data[pl]) +
-                4 * (ssby * PXSTRIDE(cstride) + ssbx);
-            pixel *const edge = bitfn(t->scratch.edge) + 128;
-            const pixel *const ctop_sb_edge = !is_top_sb_edge ? NULL :
-                f->ipred_edge[pl] + ((sby - 1) * f->sb256w * 256 >> ss_hor);
-            const pixel *const src = ((pixel *) f->cur.p.data[pl]) +
-                4 * (ssby * PXSTRIDE(cstride) + ssbx);
+        const int flags = filter_type |
+            (t->cby > ts->tiling.row_start ? CFL_HAS_TOP : 0) |
+            (t->cbx > ts->tiling.col_start ? CFL_HAS_LEFT : 0) |
+            (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0) |
+            ((b->cfl_alpha[0] << CFL_ALPHA_U_SHIFT) & CFL_ALPHA_U_MASK) |
+            ((b->cfl_alpha[1] << CFL_ALPHA_V_SHIFT) & CFL_ALPHA_V_MASK);
 
-            int alpha = 0;
-            if (b->cfl_type == CFL_EXPLICIT) {
-                alpha = b->cfl_alpha[pl - 1] * 32;
-            } else if (has_top || has_left) {
-                int n_top = 0, n_left = 0;
-                if (has_top && has_left) {
-                    if (ctw > 2 * cth) {
-                        n_top = 8;
-                        n_left = 0;
-                    } else if (cth > 2 * ctw) {
-                        n_top = 0;
-                        n_left = 8;
-                    } else {
-                        n_top = 4;
-                        n_left = 4;
-                    }
-                } else {
-                    n_top = has_top ? imin(8, ctw) : 0;
-                    n_left = has_left ? imin(8, cth) : 0;
-                }
-
-                const int w = (f->bw - t->cbx) * 4 >> ss_hor;
-                const int h = (f->bh - t->cby) * 4 >> ss_ver;
-                int sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
-                if (n_top) {
-                    const pixel *const top = is_top_sb_edge ?
-                        &ctop_sb_edge[ssbx * 4] : src - PXSTRIDE(cstride);
-                    const int step = ctw >> ctz(n_top);
-                    const int start = step >> 1;
-                    for (int i = start; i < ctw; i += step) {
-                        const int l = y_edge[i] >> 3, c = top[imin(i, w - 1)];
-                        sum_x += l;
-                        sum_y += c;
-                        sum_xx += l * l;
-                        sum_xy += l * c;
-                    }
-                }
-                if (n_left) {
-                    const int step = cth >> ctz(n_left);
-                    const int start = step >> 1;
-                    for (int i = start; i < cth; i += step) {
-                        const int l = y_edge[-1 - i] >> 3;
-                        const int c = src[imin(i, h - 1) * PXSTRIDE(cstride) - 1];
-                        sum_x += l;
-                        sum_y += c;
-                        sum_xx += l * l;
-                        sum_xy += l * c;
-                    }
-                }
-                const int count_l2 = ctz(n_top + n_left);
-                const int num = sum_xy - (int)(((int64_t)sum_x * sum_y) >> count_l2);
-                const int den = sum_xx - (int)(((int64_t)sum_x * sum_x) >> count_l2);
-                alpha = derive_alpha(num, den, 0);
-            }
-            const int intra_flags = (has_left ? ANGLE_HAS_LEFT_FLAG : 0) |
-                                    (has_top ? ANGLE_HAS_TOP_FLAG  : 0);
-            const enum IntraPredMode m = bytefn(dav2d_prepare_intra_edges)(
-                DB_ONLY(0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) ssbx, ssby,
-                ts->tiling.col_end >> ss_hor, ts->tiling.row_end >> ss_ver,
-                0, 0, src, cstride, ctop_sb_edge, DC_PRED,
-                uv_t_dim->w, uv_t_dim->h, intra_flags, edge HIGHBD_CALL_SUFFIX);
-            dsp->ipred.cfl_pred[m](dst, cstride, edge, ctw, cth, ac, alpha HIGHBD_CALL_SUFFIX);
-            if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                hex_dump(dst, cstride, ctw, cth, pl == 1 ? "u-intra-pred" : "v-intra-pred");
-            }
+        dsp->ipred.cfl_pred[b->cfl_type][layout](ptrs, f->cur.p.stride,
+                                                 wpad, hpad, ctw, cth, flags
+                                                 HIGHBD_CALL_SUFFIX);
+        if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
+            hex_dump(ptrs[1], cstride, ctw, cth, "u-intra-pred");
+            hex_dump(ptrs[2], cstride, ctw, cth, "v-intra-pred");
         }
+
     } else { // CFL MHCCP
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
         ALIGN(pixel luma[CFL_MHCCP_MAX_LUMA_SIZE], 64);
@@ -3105,9 +3014,8 @@ cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                                (has_left ? CFL_HAS_LEFT : 0) |
                                (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
         dsp->ipred.cfl_gen_y[layout][filter_type](luma, luma_top_stride,
-                                                  y_src, ytop_sb_edge, ystride,
-                                                  refw - subleft,
-                                                  refh, ctw, cth,
+                                                  ysrc, ytop_sb_edge, ystride,
+                                                  refw - subleft, refh, ctw, cth,
                                                   edge_flags | b->cfl_mh_dir);
         refh += has_top;
         if (has_top || has_left)
@@ -3662,12 +3570,9 @@ chroma: {}
         }
     }
 
-    const int can_cfl = b->uv_mode == CFL_PRED ?
-        (b->cfl_type > CFL_EXPLICIT || imax(ctw, cth) == 64) ?
-        0x3 : (!!b->cfl_alpha[0]) | (!!b->cfl_alpha[1] << 1) : 0x0;
     if (intra) {
-        if (can_cfl)
-            cfl(t, b, cbs, uv_t_dim, can_cfl);
+        if (b->uv_mode == CFL_PRED)
+            cfl(t, b, cbs, uv_t_dim);
     } else if (!sdp_active && b->intrabc) {
         for (int pl = 0; pl < 2; pl++) {
             mc(t, ((pixel *)f->cur.p.data[1 + pl]) + uvdstoff, NULL,
@@ -3845,11 +3750,13 @@ chroma: {}
             for (int pl = 0; pl < 2; pl++) {
                 pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) +
                     4 * ((ssby + y) * PXSTRIDE(stride) + ssbx + x);
-                if (intra && !(can_cfl & (pl + 1))) {
+                if (intra && b->uv_mode != CFL_PRED) {
                     // intra prediction
                     pixel *const edge = bitfn(t->scratch.edge) + 128;
                     const pixel *top_sb_edge = NULL;
-                    if (!((t->cby + (y << ss_ver)) & (sbsz - 1))) {
+                    // We're skipping upsampling y here as this condition is
+                    // only true when y is 0.
+                    if (!((t->cby + y) & (sbsz - 1))) {
                         top_sb_edge = f->ipred_edge[1 + pl];
                         const int sby = t->cby >> f->sb_shift;
                         top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
