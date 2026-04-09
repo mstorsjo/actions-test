@@ -868,20 +868,20 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
             if (!(ss_hor | ss_ver)) {
                 l = yleft[0] << 3;
             } else if (!ss_ver) {
-                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_CROSS)
+                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_GAUSS)
                     l = yleft[0] << 3;
-                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_RECT)
+                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_VSTRIP)
                     l = (yleft[-1] + 2 * yleft[0] + yleft[1]) << 1;
-                else
+                else // CFL_FLT_TYPE_UNIFORM
                     l = (yleft[0] + yleft[1]) << 2;
             } else {
-                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_CROSS)
+                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_GAUSS)
                     l = yleft[-1] + 4 * yleft[0] + yleft[1] +
                         yleft[y ? -ystride : 0] + yleft[ystride];
-                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_RECT)
+                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_VSTRIP)
                     l = yleft[-1] + 2 * yleft[0] + yleft[1] +
                         yleft[-1 + ystride] + 2 * yleft[ystride] + yleft[1 + ystride];
-                else
+                else // CFL_FLT_TYPE_UNIFORM
                     l = (yleft[0] + yleft[1] +
                          yleft[ystride] + yleft[1 + ystride]) << 1;
             }
@@ -923,23 +923,23 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
             if (!(ss_hor | ss_ver)) {
                 l = ytop[xl] << 3;
             } else if (!ss_ver) {
-                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_CROSS)
+                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_GAUSS)
                     l = ytop[xl] << 3;
-                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_RECT)
+                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_VSTRIP)
                     l = (ytop[imax(0, xl - 1)] + 2 * ytop[xl] + ytop[xl + 1]) << 1;
-                else
+                else // CFL_FLT_TYPE_UNIFORM
                     l = (ytop[xl] + ytop[xl + 1]) << 2;
             } else {
                 const int is_top_sb_edge = flags & CFL_IS_TOP_SB_EDGE;
                 const ptrdiff_t bottom = is_top_sb_edge ? 0 : ystride;
-                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_CROSS) {
+                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_GAUSS) {
                     l = ytop[imax(0, xl - 1)] + 4 * ytop[xl] + ytop[xl + 1] +
                         ytop[xl - bottom] + ytop[xl + bottom];
-                } else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_RECT) {
+                } else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_VSTRIP) {
                     l = ytop[imax(0, xl - 1)] + 2 * ytop[xl] + ytop[xl + 1] +
                         ytop[imax(0, xl - 1) + bottom] +
                         2 * ytop[xl + bottom] + ytop[xl + 1 + bottom];
-                } else {
+                } else { // CFL_FLT_TYPE_UNIFORM
                     l = (ytop[xl] + ytop[xl + 1] +
                          ytop[xl + bottom] + ytop[xl + 1 + bottom]) << 1;
                 }
@@ -1025,22 +1025,22 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
             if (!(ss_hor | ss_ver)) {
                 ac = ypx[x] << 3;
             } else if (!ss_ver) {
-                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_CROSS)
+                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_GAUSS)
                     ac = ypx[xl] << 3;
-                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_RECT)
+                else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_VSTRIP)
                     ac = (ypx[left] + 2 * ypx[xl] + ypx[xl + 1]) << 1;
-                else
+                else // CFL_FLT_TYPE_UNIFORM
                     ac = (ypx[xl] + ypx[xl + 1]) << 2;
             } else {
                 const ptrdiff_t bot = xl + ystride;
-                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_CROSS) {
+                if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_GAUSS) {
                     const ptrdiff_t top = (y & 31) == 0 ? xl : (xl - ystride);
                     ac = ypx[left] + 4 * ypx[xl] + ypx[xl + 1] +
                          ypx[top] + ypx[bot];
-                } else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_RECT) {
+                } else if ((flags & CFL_FLT_TYPE) == CFL_FLT_TYPE_VSTRIP) {
                     ac = ypx[left] + 2 * ypx[xl] + ypx[xl + 1] +
                          ypx[left + ystride] + 2 * ypx[bot] + ypx[bot + 1];
-                } else {
+                } else { // CFL_FLT_TYPE_UNIFORM
                     ac = (ypx[xl] + ypx[xl + 1] + ypx[bot] + ypx[bot + 1]) << 1;
                 }
             }
@@ -1114,14 +1114,14 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
     src -= n_left << 1;
 
 // ::
-#define FILTER_CENTER(src) \
+#define FILTER_UNIFORM(src) \
     (src[c] + src[r] + src[b + c] + src[b + r]) >> 2
 // :::
-#define FILTER_RECT(src) \
+#define FILTER_VSTRIP(src) \
     (src[l] + 2 * src[c] + src[r] + src[b + l] + 2 * src[b + c] + src[b + r]) >> 3
 // -|-
-#define FILTER_CROSS(src, top) \
-    (src[l] + 4 * src[c] + src[r] + top[c] + src[b + c]) >> 3
+#define FILTER_GAUSS(src, top) \
+    (src[l] + 4 * src[c] + src[r] + (top)[c] + src[b + c]) >> 3
 
     // tl+t+tr
     if (has_t) {
@@ -1134,16 +1134,32 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
             for (; x < n_left; x++) {
                 const int c = x * 2, r = c + 1;
                 const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
-                dst_left[x] = filter_type & 2 ? FILTER_CROSS(top, (&top[t])) :
-                              filter_type & 1 ? FILTER_RECT(top) :
-                              FILTER_CENTER(top);
+                switch (filter_type) {
+                case CFL_FLT_TYPE_UNIFORM:
+                    dst_left[x] = FILTER_UNIFORM(top);
+                    break;
+                case CFL_FLT_TYPE_VSTRIP:
+                    dst_left[x] = FILTER_VSTRIP(top);
+                    break;
+                case CFL_FLT_TYPE_GAUSS:
+                    dst_left[x] = FILTER_GAUSS(top, &top[t]);
+                    break;
+                }
             }
             for (; x < refw; x++) {
                 const int c = x * 2, r = c + 1;
                 const int l = n_left ? c - 1 : imax(c - 1, 0);
-                dst[x - n_left] = filter_type & 2 ? FILTER_CROSS(top, (&top[t])) :
-                                  filter_type & 1 ? FILTER_RECT(top) :
-                                  FILTER_CENTER(top);
+                switch (filter_type) {
+                case CFL_FLT_TYPE_UNIFORM:
+                    dst[x - n_left] = FILTER_UNIFORM(top);
+                    break;
+                case CFL_FLT_TYPE_VSTRIP:
+                    dst[x - n_left] = FILTER_VSTRIP(top);
+                    break;
+                case CFL_FLT_TYPE_GAUSS:
+                    dst[x - n_left] = FILTER_GAUSS(top, &top[t]);
+                    break;
+                }
             }
             if (!top_sb_edge) {
                 top += 2 * src_stride;
@@ -1163,16 +1179,32 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
         for (; x < n_left; x++) {
             const int c = x * 2, r = c + 1;
             const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
-            dst_left[x] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
-                          filter_type & 1 ? FILTER_RECT(src) :
-                          FILTER_CENTER(src);
+            switch (filter_type) {
+            case CFL_FLT_TYPE_UNIFORM:
+                dst_left[x] = FILTER_UNIFORM(src);
+                break;
+            case CFL_FLT_TYPE_VSTRIP:
+                dst_left[x] = FILTER_VSTRIP(src);
+                break;
+            case CFL_FLT_TYPE_GAUSS:
+                dst_left[x] = FILTER_GAUSS(src, top);
+                break;
+            }
         }
         for (; x < n_left + tw; x++) {
             const int c = x * 2, r = c + 1;
             const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
-            dst[x - n_left] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
-                              filter_type & 1 ? FILTER_RECT(src) :
-                              FILTER_CENTER(src);
+            switch (filter_type) {
+            case CFL_FLT_TYPE_UNIFORM:
+                dst[x - n_left] = FILTER_UNIFORM(src);
+                break;
+            case CFL_FLT_TYPE_VSTRIP:
+                dst[x - n_left] = FILTER_VSTRIP(src);
+                break;
+            case CFL_FLT_TYPE_GAUSS:
+                dst[x - n_left] = FILTER_GAUSS(src, top);
+                break;
+            }
         }
         src += src_stride << 1;
         top = src - src_stride;
@@ -1186,9 +1218,17 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
         for (int x = 0; x < n_left; x++) {
             const int c = x * 2, r = c + 1;
             const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
-            dst_left[x] = filter_type & 2 ? FILTER_CROSS(src, (top)) :
-                          filter_type & 1 ? FILTER_RECT(src) :
-                          FILTER_CENTER(src);
+            switch (filter_type) {
+            case CFL_FLT_TYPE_UNIFORM:
+                dst_left[x] = FILTER_UNIFORM(src);
+                break;
+            case CFL_FLT_TYPE_VSTRIP:
+                dst_left[x] = FILTER_VSTRIP(src);
+                break;
+            case CFL_FLT_TYPE_GAUSS:
+                dst_left[x] = FILTER_GAUSS(src, top);
+                break;
+            }
         }
         src += src_stride << 1;
         top = src - src_stride;
@@ -1196,21 +1236,22 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
     }
 }
 
-#define cfl_gen_y_420_fn(filter_type, name) \
+#define cfl_gen_y_420_fn(ucflt, lcflt) \
 static void \
-cfl_gen_y_420_##name##_c(pixel *const dst, const ptrdiff_t dst_top_stride, \
-                         const pixel *const src, const pixel *const top_sb_edge, \
-                         ptrdiff_t const src_stride, const int refw, const int refh, \
-                         int const tw, int const th, int flags) \
+cfl_gen_y_420_##lcflt##_c(pixel *const dst, const ptrdiff_t dst_top_stride, \
+                          const pixel *const src, const pixel *const top_sb_edge, \
+                          ptrdiff_t const src_stride, const int refw, const int refh, \
+                          int const tw, int const th, int flags) \
 { \
     cfl_gen_y_420_c(dst, PXSTRIDE(dst_top_stride), src, top_sb_edge, \
-                    PXSTRIDE(src_stride), refw, refh, tw, th, flags, filter_type); \
+                    PXSTRIDE(src_stride), refw, refh, tw, th, flags, \
+                    CFL_FLT_TYPE_##ucflt); \
 }
 
 #define cfl_gen_y_fn(fmt) \
-cfl_gen_y_##fmt##_fn(0, center) \
-cfl_gen_y_##fmt##_fn(1, rect) \
-cfl_gen_y_##fmt##_fn(2, cross)
+cfl_gen_y_##fmt##_fn(UNIFORM, uniform) \
+cfl_gen_y_##fmt##_fn(VSTRIP, vstrip) \
+cfl_gen_y_##fmt##_fn(GAUSS, gauss)
 
 cfl_gen_y_fn(420)
 
@@ -1667,9 +1708,9 @@ COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
     c->cfl_gen_mat[dir] = cfl_gen_mat_##name##_c; \
     c->cfl_mhccp_pred[dir] = cfl_mhccp_pred_##name##_c;
 
-    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_gen_y_420_center_c;
-    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_gen_y_420_rect_c;
-    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_gen_y_420_cross_c;
+    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_gen_y_420_uniform_c;
+    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_gen_y_420_vstrip_c;
+    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_gen_y_420_gauss_c;
     c->cfl_calc_alphas = cfl_calc_alphas_c;
     assign_cfl_mhccp(CFL_DIR_CENTER, c);
     assign_cfl_mhccp(CFL_DIR_TOP   , t);
