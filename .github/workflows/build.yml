@@ -6,11 +6,16 @@ on:
 
 jobs:
   inspect:
-    runs-on: windows-11-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - windows-latest
+          - windows-11-arm
+    runs-on: ${{matrix.runner}}
     steps:
-      - name: Inspect cpu features
+      - name: Inspect 7zip
+        shell: cmd
         run: |
-          curl -LO https://martin.st/temp/winpf2.exe
-          curl -LO https://martin.st/temp/cpuname-aarch64.exe
-          ./winpf2.exe
-          ./cpuname-aarch64.exe
+          where 7z
+          7z i
