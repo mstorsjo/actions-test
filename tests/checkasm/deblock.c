@@ -28,171 +28,239 @@
 #include "tests/checkasm/internal.h"
 
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 
-#include "src/levels.h"
 #include "src/deblock.h"
+#include "src/tables.h"
+#include "src/quantizer.h"
 
-#if 0
-static void init_lpf_border(pixel *const dst, const ptrdiff_t stride,
-                            int E, int I, const int bitdepth_max)
+static unsigned deblock_quant_thr(const int hbd, const int qidx) {
+    const int qmax = 255 + 48 * hbd;
+    return (dav2d_dq_lookup(iclip(qidx, 0, qmax)) + 4) >> (3 + 6);
+}
+
+static unsigned deblock_side_thr(const int hbd, const int qidx) {
+    const int bitdepth_min_8 = 2 * hbd;
+    const int q_ind = iclip(qidx - 24 * bitdepth_min_8, 0, 296 - 1);
+    const int side_thr = dav2d_deblock_side_thresholds[q_ind];
+    return imax(side_thr + (1 << 4 >> bitdepth_min_8), 0) >> (5 - bitdepth_min_8);
+}
+
+// Given a target width and pixel data, check if the deblock filter is
+// triggered for at least that width. If not, find the amount you can scale all
+// pixels to make that width trigger or almost trigger.
+static int check_width(const pixel *const s, const pixel *const t,
+                       unsigned q_thr, unsigned side_thr, int target_width,
+                       int edge, int is_chroma, double *scale)
 {
-    const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
-    const int F = 1 << bitdepth_min_8;
-    E <<= bitdepth_min_8;
-    I <<= bitdepth_min_8;
+    unsigned deriv_s, deriv_t;
+    unsigned second_derivs_buf[4];
+    unsigned *second_deriv = &second_derivs_buf[2];
 
-    const int filter_type = rnd() % 4;
-    const int edge_diff = rnd() % ((E + 2) * 4) - 2 * (E + 2);
-    switch (filter_type) {
-    case 0: // random, unfiltered
+    int pass = 1;
+    *scale = 1.0;
+
+    if (target_width == 0) return pass;
+
+    for (int dist = -2; dist < 2; dist++) {
+        deriv_s = abs(s[(dist - 1)] - (s[dist] << 1) + s[(dist + 1)]);
+        deriv_t = abs(t[(dist - 1)] - (t[dist] << 1) + t[(dist + 1)]);
+        second_deriv[dist] = (deriv_s + deriv_t + 1) >> 1;
+    }
+
+#define TEST(val, thr) do { \
+        if ((val) > (thr)) { \
+            *scale = fmin((double)(thr)/(val), *scale); \
+            pass = 0; \
+        } \
+    } while (0);
+    TEST(second_deriv[-2], side_thr);
+    TEST(second_deriv[1], side_thr);
+    if (target_width == 1) return pass;
+
+    const unsigned side_thr2 = side_thr >> 2;
+    TEST(second_deriv[-2], side_thr2);
+    TEST(second_deriv[1], side_thr2);
+    TEST(second_deriv[-1] + second_deriv[0], q_thr * 4);
+    if (target_width == 2) return pass;
+
+    const unsigned side_thr3 = side_thr >> 3;
+    TEST(second_deriv[-2], side_thr3);
+    TEST(second_deriv[1], side_thr3);
+    TEST(second_deriv[-1] + second_deriv[0], q_thr * 3);
+
+    const unsigned end_thr = (side_thr * 3) >> 4;
+    // if chroma && !edge
+    if (!(is_chroma && edge)) {
+        deriv_s = abs(s[-1] - s[-4] - 3 * (s[-1] - s[-2]));
+        deriv_t = abs(t[-1] - t[-4] - 3 * (t[-1] - t[-2]));
+
+        TEST(((deriv_s + deriv_t + 1) >> 1), end_thr);
+    }
+    deriv_s = abs(s[0] - s[3] - 3 * (s[0] - s[1]));
+    deriv_t = abs(t[0] - t[3] - 3 * (t[0] - t[1]));
+
+    TEST((deriv_s + deriv_t + 1) >> 1, end_thr);
+    if (target_width == 3) return pass;
+
+    const unsigned transition = (second_deriv[-1] + second_deriv[0]) << 4;
+    for (int dist = 4; dist <= target_width; dist += 2) {
+        const int8_t q_first[5] = { 45, 40, 32 };
+        const unsigned q_thr4 = q_thr * q_first[(dist - 4) >> 1];
+        const unsigned end_thr4 = (side_thr * dist) >> 4;
+        TEST(transition, q_thr4);
+        const int dist2 = imin(7, dist);
+
+        // if !(luma && edge && dist2 == 8)
+        if (!(!is_chroma && edge && dist2 == 8)) {
+            deriv_s = abs(s[-1] - s[-dist2 - 1] - dist2 * (s[-1] - s[-2]));
+            deriv_t = abs(t[-1] - t[-dist2 - 1] - dist2 * (t[-1] - t[-2]));
+            TEST((deriv_s + deriv_t + 1) >> 1, end_thr4);
+        }
+        deriv_s = abs(s[0] - s[dist2] - dist2 * (s[0] - s[1]));
+        deriv_t = abs(t[0] - t[dist2] - dist2 * (t[0] - t[1]));
+        TEST((deriv_s + deriv_t + 1) >> 1, end_thr4);
+    }
+
+    return pass;
+}
+
+static void init_deblock_border(pixel *const dst, const ptrdiff_t stridea,
+                                const ptrdiff_t strideb,
+                                int q_thr, int side_thr, int edge,
+                                int is_chroma, const int bitdepth_max)
+{
+    // pixels tested when choosing a filter
+    const int tested_pixels[7] = { 0, 1, 2, 3, 4, 6, 7 };
+    const int filter_widths[7] = { 0, 1, 2, 3, 4, 6, 8 };
+    // number of pixels that are tested on a side of the deblocked edge
+    const int max_tested_pixels[7] = { 0, 3, 3, 4, 5, 6, 7 };
+
+    const int filter_width_idx = rnd() % 7;
+    pixel s[16], t[16];
+
+    for (int i = 0; i < 16; i++) {
+        s[i] = rnd() & bitdepth_max;
+        t[i] = rnd() & bitdepth_max;
+    }
+
+    double scale;
+    if (!check_width(s + 8, t + 8, q_thr, side_thr,
+                     filter_widths[filter_width_idx],
+                     edge, is_chroma, &scale))
+    {
+        const int mid = s[8];
+        scale *= checkasm_randf();
+        int n_tested = max_tested_pixels[filter_width_idx];
+        for (int i = 0; i < n_tested; i++) {
+            const int off = tested_pixels[i];
+            s[off + 8] = iclip_pixel(mid + (int)((s[off + 8] - mid) * scale));
+            t[off + 8] = iclip_pixel(mid + (int)((t[off + 8] - mid) * scale));
+            if (!edge || off < (is_chroma ? 3 : 7)) {
+                s[7 - off] = iclip_pixel(mid +
+                                         (int)((s[7 - off] - mid) * scale));
+                t[7 - off] = iclip_pixel(mid +
+                                         (int)((t[7 - off] - mid) * scale));
+            }
+        }
+    }
+
+    for (int j = 1; j <= 2; j++)
         for (int i = -8; i < 8; i++)
-            dst[i * stride] = rnd() & bitdepth_max;
-        break;
-    case 1: // long flat
-        dst[-8 * stride] = rnd() & bitdepth_max;
-        dst[+7 * stride] = rnd() & bitdepth_max;
-        dst[+0 * stride] = rnd() & bitdepth_max;
-        dst[-1 * stride] = iclip_pixel(dst[+0 * stride] + edge_diff);
-        for (int i = 1; i < 7; i++) {
-            dst[-(1 + i) * stride] = iclip_pixel(dst[-1 * stride] +
-                                                 rnd() % (2 * (F + 1)) - (F + 1));
-            dst[+(0 + i) * stride] = iclip_pixel(dst[+0 * stride] +
-                                                 rnd() % (2 * (F + 1)) - (F + 1));
-        }
-        break;
-    case 2: // short flat
-        for (int i = 4; i < 8; i++) {
-            dst[-(1 + i) * stride] = rnd() & bitdepth_max;
-            dst[+(0 + i) * stride] = rnd() & bitdepth_max;
-        }
-        dst[+0 * stride] = rnd() & bitdepth_max;
-        dst[-1 * stride] = iclip_pixel(dst[+0 * stride] + edge_diff);
-        for (int i = 1; i < 4; i++) {
-            dst[-(1 + i) * stride] = iclip_pixel(dst[-1 * stride] +
-                                                 rnd() % (2 * (F + 1)) - (F + 1));
-            dst[+(0 + i) * stride] = iclip_pixel(dst[+0 * stride] +
-                                                 rnd() % (2 * (F + 1)) - (F + 1));
-        }
-        break;
-    case 3: // normal or hev
-        for (int i = 4; i < 8; i++) {
-            dst[-(1 + i) * stride] = rnd() & bitdepth_max;
-            dst[+(0 + i) * stride] = rnd() & bitdepth_max;
-        }
-        dst[+0 * stride] = rnd() & bitdepth_max;
-        dst[-1 * stride] = iclip_pixel(dst[+0 * stride] + edge_diff);
-        for (int i = 1; i < 4; i++) {
-            dst[-(1 + i) * stride] = iclip_pixel(dst[-(0 + i) * stride] +
-                                                 rnd() % (2 * (I + 1)) - (I + 1));
-            dst[+(0 + i) * stride] = iclip_pixel(dst[+(i - 1) * stride] +
-                                                 rnd() % (2 * (I + 1)) - (I + 1));
-        }
-        break;
+            dst[i * strideb + j * stridea] = rnd() & bitdepth_max;
+    for (int i = -8; i < 8; i++) {
+        dst[i * strideb + 0 * stridea] = s[i + 8];
+        dst[i * strideb + 3 * stridea] = t[i + 8];
     }
 }
-#endif
 
-static void check_lpf_sb(deblock_sb_fn fn, const char *const name,
-                         const int n_blks, const int lf_idx,
-                         const int is_chroma, const int dir)
+static void check_deblock_sb(deblock_sb_fn fn, const char *const name,
+                             const int n_blks,
+                             const int is_chroma, const int dir)
 {
-#if 0
-    ALIGN_STK_64(pixel, c_dst_mem, 128 * 16,);
-    ALIGN_STK_64(pixel, a_dst_mem, 128 * 16,);
+    ALIGN_STK_64(pixel, c_dst_mem, 64 * 16,);
+    ALIGN_STK_64(pixel, a_dst_mem, 64 * 16,);
+    ALIGN_STK_16(pixel, q_thr, 16,);
+    ALIGN_STK_16(pixel, side_thr, 16,);
 
-    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const uint32_t *mask,
-                 const uint8_t (*l)[4], ptrdiff_t b4_stride,
-                 const Av2FilterLUT *lut, int w HIGHBD_DECL_SUFFIX);
+    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const uint16_t *mask,
+                 const uint16_t *ll_mask,
+                 const pixel *q_thr, const pixel *side_thr, int edge,
+                 int w HIGHBD_DECL_SUFFIX);
 
     pixel *a_dst, *c_dst;
-    ptrdiff_t stride, b4_stride;
+    ptrdiff_t stride;
     int w, h;
     if (dir) {
         a_dst = a_dst_mem + n_blks * 4 * 8;
         c_dst = c_dst_mem + n_blks * 4 * 8;
         w = n_blks * 4;
         h = 16;
-        b4_stride = 32;
     } else {
         a_dst = a_dst_mem + 8;
         c_dst = c_dst_mem + 8;
         w = 16;
         h = n_blks * 4;
-        b4_stride = 2;
     }
     stride = w * sizeof(pixel);
 
-    Av2FilterLUT lut;
-    const int sharp = rnd() & 7;
-    for (int level = 0; level < 64; level++) {
-        int limit = level;
-
-        if (sharp > 0) {
-            limit >>= (sharp + 3) >> 2;
-            limit = imin(limit, 9 - sharp);
-        }
-        limit = imax(limit, 1);
-
-        lut.i[level] = limit;
-        lut.e[level] = 2 * (level + 2) + limit;
-    }
-    lut.sharp[0] = (sharp + 3) >> 2;
-    lut.sharp[1] = sharp ? 9 - sharp : 0xff;
-
-    const int n_strengths = is_chroma ? 2 : 3;
+    const int n_strengths = is_chroma ? 3 : 4;
+    const int widths[] = { 1, 3, 6, 8 };
+    const int chroma_widths[] = { 1, 3, 4 };
     for (int i = 0; i < n_strengths; i++) {
         if (check_func(fn, "%s_w%d_%dbpc", name,
-                       is_chroma ? 4 + 2 * i : 4 << i, BITDEPTH))
+                       is_chroma ? chroma_widths[i] : widths[i], BITDEPTH))
         {
-            uint32_t vmask[4] = { 0 };
-            uint8_t l[32 * 2][4];
-
-            for (int j = 0; j < n_blks; j++) {
-                const int idx = rnd() % (i + 2);
-                if (idx) vmask[idx - 1] |= 1U << j;
-                if (dir) {
-                    l[j][lf_idx] = rnd() & 63;
-                    l[j + 32][lf_idx] = rnd() & 63;
-                } else {
-                    l[j * 2][lf_idx] = rnd() & 63;
-                    l[j * 2 + 1][lf_idx] = rnd() & 63;
-                }
-            }
+            for (int edge = 0; edge <= 1; edge++) {
 #if BITDEPTH == 16
-            const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+                const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
-            const int bitdepth_max = 0xff;
+                const int bitdepth_max = 0xff;
 #endif
+                uint16_t ll_mask[2] = { 0 };
+                uint16_t vmask[4] = { 0 };
+                int hbd = (bitdepth_from_max(bitdepth_max) - 8) >> 1;
+                const int qidx_max = 255 + 48 * hbd;
 
-            for (int i = 0; i < 4 * n_blks; i++) {
-                const int x = i >> 2;
-                int L;
-                if (dir) {
-                    L = l[32 + x][lf_idx] ? l[32 + x][lf_idx] : l[x][lf_idx];
-                } else {
-                    L = l[2 * x + 1][lf_idx] ? l[2 * x + 1][lf_idx] : l[2 * x][lf_idx];
+                for (int j = 0; j < n_blks; j++) {
+                    const int idx = rnd() % (i + 2);
+                    if (idx) vmask[idx - 1] |= 1U << j;
+                    int qidx = rnd() % (qidx_max + 1);
+                    q_thr[j] = deblock_quant_thr(hbd, qidx);
+                    side_thr[j] = deblock_side_thr(hbd, qidx);
                 }
-                init_lpf_border(c_dst + i * (dir ? 1 : 16), dir ? n_blks * 4 : 1,
-                                lut.e[L], lut.i[L], bitdepth_max);
+                ll_mask[0] = rnd() & 0xffff;
+                ll_mask[1] = rnd() & 0xffff;
+
+                for (int x = 0; x < n_blks; x++) {
+                    const ptrdiff_t stridea = dir ? 1 : 16;
+                    const ptrdiff_t strideb = dir ? n_blks * 4 : 1;
+                    init_deblock_border(c_dst + 4 * x * stridea,
+                                        stridea, strideb,
+                                        q_thr[x], side_thr[x],
+                                        edge, is_chroma, bitdepth_max);
+                }
+                memcpy(a_dst_mem, c_dst_mem, 64 * sizeof(pixel) * 16);
+
+                call_ref(c_dst, stride, vmask, ll_mask, q_thr, side_thr, edge,
+                         n_blks HIGHBD_TAIL_SUFFIX);
+                call_new(a_dst, stride, vmask, ll_mask, q_thr, side_thr, edge,
+                         n_blks HIGHBD_TAIL_SUFFIX);
+
+                if (checkasm_check_pixel(c_dst_mem, stride,
+                                         a_dst_mem, stride,
+                                         w, h, "dst"))
+                {
+                    fprintf(stderr, "edge = %d\n", edge);
+                }
+                bench_new(alternate(c_dst, a_dst), stride, vmask, ll_mask,
+                          q_thr, side_thr, edge, n_blks HIGHBD_TAIL_SUFFIX);
             }
-            memcpy(a_dst_mem, c_dst_mem, 128 * sizeof(pixel) * 16);
-
-            call_ref(c_dst, stride, vmask,
-                     (const uint8_t(*)[4]) &l[dir ? 32 : 1][lf_idx],
-                     b4_stride, &lut, n_blks HIGHBD_TAIL_SUFFIX);
-            call_new(a_dst, stride, vmask,
-                     (const uint8_t(*)[4]) &l[dir ? 32 : 1][lf_idx],
-                     b4_stride, &lut, n_blks HIGHBD_TAIL_SUFFIX);
-
-            checkasm_check_pixel(c_dst_mem, stride, a_dst_mem, stride,
-                                 w, h, "dst");
-            bench_new(alternate(c_dst, a_dst), stride, vmask,
-                      (const uint8_t(*)[4]) &l[dir ? 32 : 1][lf_idx],
-                      b4_stride, &lut, n_blks HIGHBD_TAIL_SUFFIX);
         }
     }
     report(name);
-#endif
 }
 
 void bitfn(checkasm_check_deblock)(void) {
@@ -200,8 +268,8 @@ void bitfn(checkasm_check_deblock)(void) {
 
     bitfn(dav2d_deblock_dsp_init)(&c);
 
-    check_lpf_sb(c.deblock_sb[0][0], "lpf_h_sb_y", 32, 0, 0, 0);
-    check_lpf_sb(c.deblock_sb[0][1], "lpf_v_sb_y", 32, 1, 0, 1);
-    check_lpf_sb(c.deblock_sb[1][0], "lpf_h_sb_uv", 16, 2, 1, 0);
-    check_lpf_sb(c.deblock_sb[1][1], "lpf_v_sb_uv", 16, 2, 1, 1);
+    check_deblock_sb(c.deblock_sb[0][0], "deblock_h_sb_y", 16, 0, 0);
+    check_deblock_sb(c.deblock_sb[0][1], "deblock_v_sb_y", 16, 0, 1);
+    check_deblock_sb(c.deblock_sb[1][0], "deblock_h_sb_uv", 8, 1, 0);
+    check_deblock_sb(c.deblock_sb[1][1], "deblock_v_sb_uv", 8, 1, 1);
 }
