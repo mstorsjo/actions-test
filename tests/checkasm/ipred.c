@@ -48,6 +48,9 @@ static const char *const intra_pred_mode_names[N_IMPL_INTRA_PRED_MODES] = {
     [DIP_PRED]      = "dip"
 };
 
+static const char *const cfl_pred_type_names[3] = { "cfl_explicit", "cfl_implicit" };
+static const char *const cfl_luma_filter_names[3] = { "uniform", "vstrip", "gauss" };
+static const char *const layout_names[3] = { "420", "422", "444" };
 
 static const uint8_t z_angles[27] = {
      3,  6,  9,
@@ -154,6 +157,110 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
     report("intra_pred");
 }
 
+static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
+    PIXEL_RECT(c_y, 128, 128);
+    PIXEL_RECT(c_u, 128, 128);
+    PIXEL_RECT(c_v, 128, 128);
+    PIXEL_RECT(a_y, 128, 128);
+    PIXEL_RECT(a_u, 128, 128);
+    PIXEL_RECT(a_v, 128, 128);
+    pixel c_top_sb[3 * 128], a_top_sb[3 * 128];
+
+    declare_func(void, pixel *const *ptrs, const ptrdiff_t *stride,
+                 int wpad, int hpad, int w, int h, int flags HIGHBD_DECL_SUFFIX);
+
+    for (enum CflType type = CFL_EXPLICIT; type <= CFL_IMPLICIT; type++) {
+        for (int layout = 1; layout <= DAV2D_PIXEL_LAYOUT_I444; layout++) {
+            const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
+            const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+            const ptrdiff_t strides[2] = { c_y_stride, c_u_stride >> ss_hor };
+            for (int w = 4; w <= 64; w <<= 1)
+                for (int padding = 0; padding <= 1; padding++)
+                    for (int rng0 = 1; rng0 >= 0; rng0--)
+                        for (int flt_type = CFL_FLT_TYPE_UNIFORM;
+                             flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
+                        {
+                            if (check_func(c->cfl_pred[type][layout - 1],
+                                "%s_%s_w%d_pad%d_%s_%s_%dbpc",
+                                cfl_pred_type_names[type], layout_names[layout - 1],
+                                w, padding, rng0 ? "uv" : "u|v",
+                                cfl_luma_filter_names[flt_type], BITDEPTH))
+                            {
+                                const int h0 = padding && w < 16 ? 16 : 4;
+                                for (int h = h0; h <= 64; h <<= 1) {
+#if BITDEPTH == 16
+                                    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+                                    const int bitdepth_max = 0xff;
+#endif
+                                    int wpad = 0, hpad = 0;
+                                    if (padding) {
+                                        wpad = imax(w > 8, rnd() & imax(w / 8 - 1, 0));
+                                        hpad = imax(h > 8, rnd() & imax(h / 8 - 1, 0));
+                                    }
+
+                                    int flags = flt_type |
+                                        (rnd() & (CFL_HAS_TOP | CFL_HAS_LEFT |
+                                                  CFL_IS_TOP_SB_EDGE));
+                                    if (type == CFL_EXPLICIT) {
+                                        const int sign_u = 1 - (rnd() & 2);
+                                        const int sign_v = 1 - (rnd() & 2);
+                                        int alpha_u = rng0 + (rnd() % (9 - rng0));
+                                        rng0 |= !alpha_u;
+                                        int alpha_v = rng0 + (rnd() % (9 - rng0));
+                                        if (rng0 == 0 && alpha_u)
+                                            alpha_v = 0;
+                                        alpha_u *= sign_u;
+                                        alpha_v *= sign_v;
+                                        flags |= (alpha_u << CFL_ALPHA_U_SHIFT) & CFL_ALPHA_U_MASK;
+                                        flags |= (alpha_v << CFL_ALPHA_V_SHIFT) & CFL_ALPHA_V_MASK;
+                                    }
+
+                                    const int itse = flags & CFL_IS_TOP_SB_EDGE;
+                                    pixel *c_ytop = itse ? c_top_sb : c_y - (1 + ss_ver) * strides[0];
+                                    pixel *c_utop = itse ? c_top_sb + 128 : c_u - strides[1];
+                                    pixel *c_vtop = itse ? c_top_sb + 256 : c_v - strides[1];
+                                    pixel *a_ytop = itse ? a_top_sb : a_y - (1 + ss_ver) * strides[0];
+                                    pixel *a_utop = itse ? a_top_sb + 128 : a_u - strides[1];
+                                    pixel *a_vtop = itse ? a_top_sb + 256 : a_v - strides[1];
+                                    pixel *const c_ptrs[6] = { c_ytop, c_utop, c_vtop, c_y, c_u, c_v };
+                                    pixel *const a_ptrs[6] = { a_ytop, a_utop, a_vtop, a_y, a_u, a_v };
+
+                                    INIT_PIXEL_RECT(c_y_buf);
+                                    INIT_PIXEL_RECT(c_u_buf);
+                                    INIT_PIXEL_RECT(c_v_buf);
+                                    memcpy(a_y_buf, c_y_buf, c_y_buf_h * c_y_stride);
+                                    memcpy(a_u_buf, c_u_buf, c_u_buf_h * c_u_stride);
+                                    memcpy(a_v_buf, c_v_buf, c_v_buf_h * c_v_stride);
+                                    if (itse) {
+                                        INIT_PIXEL_RECT(c_top_sb);
+                                        memcpy(a_top_sb, c_top_sb, 3 * 128 * sizeof(pixel));
+                                    }
+
+                                    call_ref(c_ptrs, strides, wpad, hpad, w, h, flags HIGHBD_TAIL_SUFFIX);
+                                    call_new(a_ptrs, strides, wpad, hpad, w, h, flags HIGHBD_TAIL_SUFFIX);
+                                    checkasm_check_pixel_padded(c_u, strides[1],
+                                                                a_u, strides[1],
+                                                                w, h, "u_dst");
+                                    checkasm_check_pixel_padded(c_v, strides[1],
+                                                                a_v, strides[1],
+                                                                w, h, "v_dst");
+
+                                    if (padding) {
+                                        wpad = imax(w / 8 - 1, 0);
+                                        hpad = imax(h / 8 - 1, 0);
+                                    }
+                                    bench_new(a_ptrs, strides, wpad, hpad, w, h,
+                                              flags | (CFL_HAS_TOP | CFL_HAS_LEFT)
+                                              HIGHBD_TAIL_SUFFIX);
+                                }
+                            }
+                        }
+        }
+        report("%s", cfl_pred_type_names[type]);
+    }
+}
+
 static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
@@ -198,5 +305,6 @@ void bitfn(checkasm_check_ipred)(void) {
     bitfn(dav2d_intra_pred_dsp_init)(&c);
 
     check_intra_pred(&c);
+    check_cfl_pred(&c);
     check_pal_pred(&c);
 }
