@@ -39,15 +39,6 @@ decl_angular_ipred_fn(BF(dav2d_ipred_smooth_v, neon));
 decl_angular_ipred_fn(BF(dav2d_ipred_smooth_h, neon));
 decl_angular_ipred_fn(BF(dav2d_ipred_filter, neon));
 
-decl_cfl_pred_fn(BF(dav2d_ipred_cfl, neon));
-decl_cfl_pred_fn(BF(dav2d_ipred_cfl_128, neon));
-decl_cfl_pred_fn(BF(dav2d_ipred_cfl_top, neon));
-decl_cfl_pred_fn(BF(dav2d_ipred_cfl_left, neon));
-
-decl_cfl_ac_fn(BF(dav2d_ipred_cfl_ac_420, neon));
-decl_cfl_ac_fn(BF(dav2d_ipred_cfl_ac_422, neon));
-decl_cfl_ac_fn(BF(dav2d_ipred_cfl_ac_444, neon));
-
 decl_pal_pred_fn(BF(dav2d_pal_pred, neon));
 
 #if ARCH_AARCH64 && 0
