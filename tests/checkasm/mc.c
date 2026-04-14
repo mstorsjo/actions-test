@@ -25,9 +25,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
-
 #include "tests/checkasm/internal.h"
+
+#include <stdio.h>
 
 #include "src/levels.h"
 #include "src/mc.h"
