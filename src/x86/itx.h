@@ -39,5 +39,6 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav2dInvTxfmDSPContext *const c)
     assign_itx_fn( ,  4,  4, avx2);
     assign_itx_fn(R,  4,  8, avx2);
     assign_itx_fn(R,  8,  4, avx2);
+    assign_itx_fn( ,  8,  8, avx2);
 #endif
 }
