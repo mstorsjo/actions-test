@@ -276,16 +276,8 @@ inv_txfm_fn(R, 64, 16)
 inv_txfm_fn(R, 64, 32)
 inv_txfm_fn( , 64, 64)
 
-#if HAVE_ASM && 0
-#if ARCH_AARCH64 || ARCH_ARM
-#include "src/arm/itx.h"
-#elif ARCH_LOONGARCH64
-#include "src/loongarch/itx.h"
-#elif ARCH_PPC64LE
-#include "src/ppc/itx.h"
-#elif ARCH_RISCV
-#include "src/riscv/itx.h"
-#elif ARCH_X86
+#if HAVE_ASM
+#if ARCH_X86
 #include "src/x86/itx.h"
 #endif
 #endif
@@ -321,23 +313,9 @@ COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c) {
     assign_itx(64, 32, R);
     assign_itx(64, 64, );
 
-#if 0
 #if HAVE_ASM
-#if ARCH_AARCH64 || ARCH_ARM
-    itx_dsp_init_arm(c);
-#endif
-#if ARCH_LOONGARCH64
-    itx_dsp_init_loongarch(c);
-#endif
-#if ARCH_PPC64LE
-    itx_dsp_init_ppc(c);
-#endif
-#if ARCH_RISCV
-    itx_dsp_init_riscv(c);
-#endif
 #if ARCH_X86
     itx_dsp_init_x86(c);
-#endif
 #endif
 #endif
 }
