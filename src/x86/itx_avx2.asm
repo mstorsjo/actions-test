@@ -144,6 +144,7 @@ pw_181x32:      times 2 dw 181*32
 pw_181x128:     times 2 dw 181*128
 pd_32:          dd 32
 pd_64:          dd 64
+pd_128:         dd 128
 pd_512:         dd 512
 pd_1024:        dd 1024
 pd_2048:        dd 2048
@@ -209,6 +210,39 @@ ITX_JMP_TABLE 16,  8
 ITX_JMP_TABLE 16, 16
 
 SECTION .text
+
+%macro CCTX_ROUND 1
+    pcmpgtd              m4, m7, %1
+    paddd                %1, m7
+    paddd                %1, m4
+%endmacro
+
+INIT_YMM avx2
+cglobal cctx_8bpc, 4, 4, 8, u, v, angle, sz
+    vpbroadcastd         m5, [angleq+2] ; cos, -sin
+    lea                  uq, [uq+szq*2]
+    vpbroadcastd         m6, [angleq+0] ; sin,  cos
+    lea                  vq, [vq+szq*2]
+    vpbroadcastd         m7, [pd_128]
+    neg                 szq
+.loop:
+    mova                 m3, [uq+szq*2]
+    mova                 m2, [vq+szq*2]
+    punpcklwd            m1, m3, m2
+    punpckhwd            m3, m2
+    pmaddwd              m0, m5, m1 ; a
+    pmaddwd              m2, m5, m3
+    pmaddwd              m1, m6     ; b
+    pmaddwd              m3, m6
+    REPX     {CCTX_ROUND x}, m0, m2, m1, m3
+    REPX       {psrad x, 8}, m0, m2, m1, m3
+    packssdw             m0, m2
+    packssdw             m1, m3
+    mova         [uq+szq*2], m0
+    mova         [vq+szq*2], m1
+    add                 szq, 16
+    jl .loop
+    RET
 
 %macro INV_TXFM_FN 2 ; w, h
 cglobal inv_txfm_add_%1x%2_8bpc, 4, 7, 0, dst, ds, cf, tx1, eob, tx2

@@ -27,6 +27,7 @@
 
 #include "src/cpu.h"
 
+decl_cctx_fn(BF(dav2d_cctx, avx2));
 decl_itx_fns(avx2);
 
 static ALWAYS_INLINE void itx_dsp_init_x86(Dav2dInvTxfmDSPContext *const c)
@@ -36,6 +37,7 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav2dInvTxfmDSPContext *const c)
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
 #if BITDEPTH == 8
+    c->cctx = BF(dav2d_cctx, avx2);
     assign_itx_fn( ,  4,  4, avx2);
     assign_itx_fn(R,  4,  8, avx2);
     assign_itx_fn(R,  4, 16, avx2);
