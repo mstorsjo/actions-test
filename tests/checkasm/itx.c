@@ -46,7 +46,7 @@ static const char *const itx_1d_names[] = {
 };
 
 static const char *const dpcm_names[] = {
-    "", "_vdpcm", "_hdpcm"
+    "", "_hdpcm", "_vdpcm"
 };
 
 static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
