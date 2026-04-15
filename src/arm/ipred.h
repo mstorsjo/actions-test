@@ -287,7 +287,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
 
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
-#if 0
+#if ARCH_AARCH64 && 0
     c->intra_pred[DC_PRED]       = BF(dav2d_ipred_dc, neon);
     c->intra_pred[DC_128_PRED]   = BF(dav2d_ipred_dc_128, neon);
     c->intra_pred[TOP_DC_PRED]   = BF(dav2d_ipred_dc_top, neon);
@@ -297,12 +297,14 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
     c->intra_pred[PAETH_PRED]    = BF(dav2d_ipred_paeth, neon);
     c->intra_pred[SMOOTH_PRED]   = BF(dav2d_ipred_smooth, neon);
     c->intra_pred[SMOOTH_V_PRED] = BF(dav2d_ipred_smooth_v, neon);
+#endif
+#if ARCH_AARCH64 && BITDEPTH == 8
     c->intra_pred[SMOOTH_H_PRED] = BF(dav2d_ipred_smooth_h, neon);
+#endif
 #if ARCH_AARCH64 && 0
     c->intra_pred[Z1_PRED]       = ipred_z1_neon;
     c->intra_pred[Z2_PRED]       = ipred_z2_neon;
     c->intra_pred[Z3_PRED]       = ipred_z3_neon;
-#endif
     //c->intra_pred[DIP_PRED]   = BF(dav2d_ipred_dip, neon);
 
     c->cfl_pred[DC_PRED]         = BF(dav2d_ipred_cfl, neon);

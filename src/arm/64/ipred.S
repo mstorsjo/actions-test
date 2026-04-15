@@ -1,6 +1,7 @@
 /*
  * Copyright © 2018, VideoLAN and dav2d authors
  * Copyright © 2019, Martin Storsjo
+ * Copyright © 2026, Arm Limited
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -925,6 +926,278 @@ jumptable ipred_paeth_tbl
         .word 40b  - ipred_paeth_tbl
 endjumptable
 
+// void ipred_smooth_h_8bpc_neon(pixel *dst, const ptrdiff_t stride,
+//                               const pixel *const topleft,
+//                               const int width, const int height, const int a,
+//                               const int max_width, const int max_height);
+function ipred_smooth_h_8bpc_neon, export=1
+        mul             w13, w3,  w4            // n_pel = width * height
+        clz             w6,  w3
+        mov             x11, #0x0201            // ramp = bytes 01 02
+        add             w12, w3,  #1
+        movi            v28.8h,  #128           // rounding constant for addhn
+        movrel          x14, X(sm_weights)
+        sub             w6,  w6,  #24           // to128 = clz(width) - 24, turns 1,2,3,... into 128 / width-scaled coefficients
+        movk            x11, #0x0403, lsl #16   // ramp = bytes 01 02 03 04
+        mov             w10, #16
+        cmp             w13, #512
+        cset            w9,  gt
+        movk            x11, #0x0605, lsl #32   // ramp = bytes 01 02 03 04 05 06
+        add             x12, x12, x2
+        cmp             w13, #63
+        movk            x11, #0x0807, lsl #48   // ramp = bytes 01 02 03 04 05 06 07 08
+        cinc            w9,  w9,  gt            // scale = (n_pel >= 64) + (n_pel > 512)
+        ld1r            {v2.16b},  [x12]        // broadcast right = topleft[width + 1]
+        add             x14, x14, x9, lsl #6    // weights = sm_weights[scale]
+        lsl             x11, x11, x6            // scale ramp bytes into 128 / width units
+        lsl             w10, w10, w6            // 16 << to128, for advancing 16 pixels, width >= 16 only
+        cmp             w3,  #8
+        b.gt            160f
+        b.eq            80f
+
+40:     // width = 4
+        dup             v18.2s,  w11
+        movi            v29.8b,  #1
+        movi            v27.16b, #2
+        ld1r            {v31.2s},  [x14]            // broadcast 4 horizontal weights
+        add             x6,  x0,  x1                // x6 = dst + stride (row 1 when storing 2 rows interleaved)
+        lsl             x1,  x1,  #1                // x1 = 2 * stride, store rows 0,2 via x0 and 1,3 via x6
+        add             v27.16b, v27.16b, v29.16b
+        usubw           v0.8h,   v28.8h,  v18.8b    // coeff = 128 - [1..4] * 128 / width
+        uzp1            v29.4s,  v27.4s,  v29.4s    // table indices to pack 4 scalar left values
+        add             v0.8h,   v0.8h,   v0.8h     // coeff scaled up for addhn rounding
+        ushll           v31.8h,  v31.8b,  #2        // weights[x] * 4, so addhn(..., 128) gives ((x * weight + 32) >> 6)
+
+4:      // process 4 rows
+        ldr             s4,  [x2, #-4]!             // load left samples topleft[-1,-2,-3,-4] backwards
+
+        tbl             v4.16b,  {v4.16b},  v29.16b // expand 4 left bytes into 4 packed rows
+
+        usubl           v5.8h,   v4.8b,   v2.8b
+        usubl2          v6.8h,   v4.16b,  v2.16b    // diff = left - right for 4 rows
+
+        mul             v16.8h,  v0.8h,   v5.8h
+        mul             v18.8h,  v0.8h,   v6.8h     // mul = diff * coeff
+        addhn           v16.8b,  v16.8h,  v28.8h
+        addhn2          v16.16b, v18.8h,  v28.8h    // ((diff * coeff + 128) >> 8)
+
+        add             v16.16b, v16.16b, v2.16b    // pred = right + ((diff * coeff + 128) >> 8)
+
+        usubl           v24.8h,  v4.8b,   v16.8b
+        usubl2          v25.8h,  v4.16b,  v16.16b   // left - pred
+
+        subs            w4,  w4,  #4
+        mul             v24.8h,  v24.8h,  v31.8h
+        mul             v25.8h,  v25.8h,  v31.8h
+        addhn           v24.8b,  v24.8h,  v28.8h
+        addhn2          v24.16b, v25.8h,  v28.8h    // ((left - pred) * weight + 32) >> 6
+
+        add             v24.16b, v24.16b, v16.16b   // dst = pred + ((left - pred) * weight + 32) >> 6
+
+        st1             {v24.s}[0],  [x0],  x1
+        st1             {v24.s}[1],  [x6],  x1
+        st1             {v24.s}[2],  [x0],  x1
+        st1             {v24.s}[3],  [x6],  x1
+        b.gt            4b
+        ret
+
+80:     // width = 8
+        fmov            d18, x11
+        ldr             d31, [x14]                  // load 8 horizontal weights
+        add             x6,  x0,  x1
+        lsl             x1,  x1,  #1
+        usubw           v0.8h,   v28.8h,  v18.8b    // coeff = 128 - [1..8] * 128 / width
+        movi            v29.8b,  #1
+        movi            v27.16b, #2
+        add             v0.8h,   v0.8h,   v0.8h
+        add             v27.16b, v27.16b, v29.16b
+        ushll           v31.8h,  v31.8b,  #2        // weights[x] * 4 for rounded >> 6 via addhn
+
+8:      // process 4 rows
+        ldr             s4,  [x2, #-4]!
+
+        usubl           v3.8h,   v4.8b,   v2.8b     // diff = left - right for 4 rows
+
+        mul             v16.8h,  v0.8h,   v3.h[3]
+        mul             v18.8h,  v0.8h,   v3.h[1]
+        mul             v17.8h,  v0.8h,   v3.h[2]
+        mul             v19.8h,  v0.8h,   v3.h[0]   // mul = diff * coeff
+        addhn           v16.8b,  v16.8h,  v28.8h
+        addhn           v18.8b,  v18.8h,  v28.8h
+        addhn2          v16.16b, v17.8h,  v28.8h
+        addhn2          v18.16b, v19.8h,  v28.8h    // preds for rows 3,2 and 1,0
+
+        tbl             v7.16b,  {v4.16b},  v27.16b
+        tbl             v6.16b,  {v4.16b},  v29.16b // duplicate left for two rows
+
+        add             v16.16b, v16.16b, v2.16b    // pred rows 3,2
+        add             v18.16b, v18.16b, v2.16b    // pred rows 1,0
+
+        usubl           v20.8h,  v7.8b,   v16.8b
+        usubl2          v21.8h,  v7.16b,  v16.16b
+        usubl           v22.8h,  v6.8b,   v18.8b
+        usubl2          v23.8h,  v6.16b,  v18.16b   // left - pred for each row
+
+        subs            w4,  w4,  #4
+        mul             v20.8h,  v20.8h,  v31.8h
+        mul             v22.8h,  v22.8h,  v31.8h
+        mul             v21.8h,  v21.8h,  v31.8h
+        mul             v23.8h,  v23.8h,  v31.8h
+        addhn           v20.8b,  v20.8h,  v28.8h
+        addhn           v22.8b,  v22.8h,  v28.8h
+        addhn2          v20.16b, v21.8h,  v28.8h
+        addhn2          v22.16b, v23.8h,  v28.8h    // weighted correction toward left
+
+        add             v20.16b, v20.16b, v16.16b   // final rows 3,2
+        add             v22.16b, v22.16b, v18.16b   // final rows 1,0
+
+        st1             {v20.8b},   [x0],  x1
+        st1             {v20.d}[1], [x6],  x1
+        st1             {v22.8b},   [x0],  x1
+        st1             {v22.d}[1], [x6],  x1
+        b.gt            8b
+        ret
+
+160:    // width >= 16
+        fmov            d18, x11
+        ldr             q31, [x14], #16             // load 16 horizontal weights for this 16-pixel block
+        dup             v29.8h,  w10                // step corresponding to 16 pixels in the horizontal ramp
+        mov             x12, x2                     // reset left-pointer for this strip
+        usubw           v0.8h,   v28.8h,  v18.8b    // coeffs for x = 0..7   : 128 - [1..8] * 128 / width
+        mov             w7,  w4                     // remaining rows
+        add             v0.8h,   v0.8h,   v0.8h
+        lsl             x11, x1,  #1                // 2 * stride for paired-row stores
+        sub             v1.8h,   v0.8h,   v29.8h    // coeffs for x = 8..15 : (v0 - 16) * (128 / width)
+        ushll           v30.8h,  v31.8b,  #2        // weights[0..7]  * 4
+        mov             x5,  x0                     // row 0,2 store pointer
+        ushll2          v31.8h,  v31.16b, #2        // weights[8..15] * 4, last 2 weights are zeros!
+        add             x6,  x0,  x1                // row 1,3 store pointer
+
+16:     // process 4 rows for the 1st 16-pixel stripe
+        ldr             s4,  [x12, #-4]!
+
+        usubl           v3.8h,   v4.8b,   v2.8b     // diff = left - right for 4 rows
+        ld4r            {v4.16b, v5.16b, v6.16b, v7.16b}, [x12] // broadcast left samples with load
+
+        // Build pred for columns 0..15 of row 3,2.
+        mul             v16.8h,  v0.8h,   v3.h[3]
+        mul             v17.8h,  v0.8h,   v3.h[2]
+        mul             v20.8h,  v1.8h,   v3.h[3]
+        mul             v21.8h,  v1.8h,   v3.h[2]
+        addhn           v16.8b,  v16.8h,  v28.8h
+        addhn           v17.8b,  v17.8h,  v28.8h
+        addhn2          v16.16b, v20.8h,  v28.8h
+        addhn2          v17.16b, v21.8h,  v28.8h
+
+        // Same for row 1,0.
+        mul             v18.8h,  v0.8h,   v3.h[1]
+        mul             v19.8h,  v0.8h,   v3.h[0]
+        mul             v22.8h,  v1.8h,   v3.h[1]
+        mul             v23.8h,  v1.8h,   v3.h[0]
+        addhn           v18.8b,  v18.8h,  v28.8h
+        addhn           v19.8b,  v19.8h,  v28.8h
+        addhn2          v18.16b, v22.8h,  v28.8h
+        addhn2          v19.16b, v23.8h,  v28.8h
+
+        add             v16.16b, v16.16b, v2.16b    // pred row 3
+        add             v17.16b, v17.16b, v2.16b    // pred row 2
+        add             v18.16b, v18.16b, v2.16b    // pred row 1
+        add             v19.16b, v19.16b, v2.16b    // pred row 0
+
+        usubl           v20.8h,  v7.8b,   v16.8b
+        usubl           v21.8h,  v6.8b,   v17.8b
+        usubl           v22.8h,  v5.8b,   v18.8b
+        usubl           v23.8h,  v4.8b,   v19.8b
+        usubl2          v24.8h,  v7.16b,  v16.16b
+        usubl2          v25.8h,  v6.16b,  v17.16b
+        usubl2          v26.8h,  v5.16b,  v18.16b
+        usubl2          v27.8h,  v4.16b,  v19.16b   // left - pred for rows 3,2,1,0
+
+        subs            w7,  w7,  #4
+        mul             v20.8h,  v20.8h,  v30.8h
+        mul             v21.8h,  v21.8h,  v30.8h
+        mul             v24.8h,  v24.8h,  v31.8h
+        mul             v25.8h,  v25.8h,  v31.8h
+        addhn           v20.8b,  v20.8h,  v28.8h
+        addhn           v21.8b,  v21.8h,  v28.8h
+        addhn2          v20.16b, v24.8h,  v28.8h
+        addhn2          v21.16b, v25.8h,  v28.8h
+
+        mul             v22.8h,  v22.8h,  v30.8h
+        mul             v23.8h,  v23.8h,  v30.8h
+        mul             v26.8h,  v26.8h,  v31.8h
+        mul             v27.8h,  v27.8h,  v31.8h
+        addhn           v22.8b,  v22.8h,  v28.8h
+        addhn           v23.8b,  v23.8h,  v28.8h
+        addhn2          v22.16b, v26.8h,  v28.8h
+        addhn2          v23.16b, v27.8h,  v28.8h    // weighted correction over 16 columns
+
+        add             v20.16b, v20.16b, v16.16b   // final row 3
+        add             v21.16b, v21.16b, v17.16b   // final row 2
+        st1             {v20.16b}, [x5],  x11
+        add             v22.16b, v22.16b, v18.16b   // final row 1
+        st1             {v21.16b}, [x6],  x11
+        add             v23.16b, v23.16b, v19.16b   // final row 0
+        st1             {v22.16b}, [x5],  x11
+        st1             {v23.16b}, [x6],  x11
+        b.gt            16b
+
+        subs            w3,  w3,  #16               // check for additional stripes
+        b.le            1f
+
+        // At this point the horizontal weights are zero, continue with a simpler loop.
+        add             v29.8h,  v29.8h,  v29.8h    // advance amount for next 16-pixel block (32 * (128 / width))
+161:
+        mov             x12, x2                     // reset left-pointer for this block
+        add             x0,  x0,  #16               // advance dst by 16 pixels
+        sub             v0.8h,   v0.8h,   v29.8h    // advance horizontal ramp by 16 pixels
+        mov             w7,  w4                     // remaining rows
+        sub             v1.8h,   v1.8h,   v29.8h    // advance horizontal ramp by 16 pixels
+        mov             x5,  x0                     // row 0,2 store pointer
+        add             x6,  x0,  x1                // row 1,3 store pointer
+32:     // process 4 rows for current 16-pixel stripe
+        ldr             s4,  [x12, #-4]!
+
+        usubl           v3.8h,   v4.8b,   v2.8b     // diff = left - right for 4 rows
+
+        // Build pred for columns 0..15 of row 3,2.
+        mul             v16.8h,  v0.8h,   v3.h[3]
+        mul             v17.8h,  v0.8h,   v3.h[2]
+        mul             v20.8h,  v1.8h,   v3.h[3]
+        mul             v21.8h,  v1.8h,   v3.h[2]
+        addhn           v16.8b,  v16.8h,  v28.8h
+        addhn           v17.8b,  v17.8h,  v28.8h
+        addhn2          v16.16b, v20.8h,  v28.8h
+        addhn2          v17.16b, v21.8h,  v28.8h
+
+        // Same for row 1,0.
+        mul             v18.8h,  v0.8h,   v3.h[1]
+        mul             v19.8h,  v0.8h,   v3.h[0]
+        mul             v22.8h,  v1.8h,   v3.h[1]
+        mul             v23.8h,  v1.8h,   v3.h[0]
+        subs            w7,  w7,  #4
+        addhn           v18.8b,  v18.8h,  v28.8h
+        addhn           v19.8b,  v19.8h,  v28.8h
+        addhn2          v18.16b, v22.8h,  v28.8h
+        addhn2          v19.16b, v23.8h,  v28.8h
+
+        add             v16.16b, v16.16b, v2.16b    // pred row 3
+        add             v17.16b, v17.16b, v2.16b    // pred row 2
+        add             v18.16b, v18.16b, v2.16b    // pred row 1
+        add             v19.16b, v19.16b, v2.16b    // pred row 0
+
+        st1             {v16.16b}, [x5],  x11
+        st1             {v17.16b}, [x6],  x11
+        st1             {v18.16b}, [x5],  x11
+        st1             {v19.16b}, [x6],  x11
+        b.gt            32b
+
+        sub             w3,  w3,  #16               // next 16-column stripe
+        cbnz            w3,  161b
+1:
+        ret
+endfunc
+
 #if 0
 // void ipred_smooth_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                             const pixel *const topleft,
@@ -1248,153 +1521,6 @@ jumptable ipred_smooth_v_tbl
         .word 160b - ipred_smooth_v_tbl
         .word 80b  - ipred_smooth_v_tbl
         .word 40b  - ipred_smooth_v_tbl
-endjumptable
-
-// void ipred_smooth_h_8bpc_neon(pixel *dst, const ptrdiff_t stride,
-//                               const pixel *const topleft,
-//                               const int width, const int height, const int a,
-//                               const int max_width, const int max_height);
-function ipred_smooth_h_8bpc_neon, export=1
-        movrel          x8,  X(sm_weights)
-        add             x8,  x8,  w3, uxtw
-        clz             w9,  w3
-        movrel          x5,  ipred_smooth_h_tbl
-        add             x12, x2,  w3, uxtw
-        sub             w9,  w9,  #25
-        ldrsw           x9,  [x5, w9, uxtw #2]
-        ld1r            {v5.16b},  [x12] // right
-        add             x5,  x5,  x9
-        add             x6,  x0,  x1
-        lsl             x1,  x1,  #1
-        br              x5
-40:
-        AARCH64_VALID_JUMP_TARGET
-        ld1r            {v7.2s}, [x8]             // weights_hor
-        sub             x2,  x2,  #4
-        mov             x7,  #-4
-        uxtl            v7.8h,   v7.8b            // weights_hor
-4:
-        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},  [x2], x7 // left
-        shll            v20.8h,  v5.8b,   #8      // right*256
-        shll            v21.8h,  v5.8b,   #8
-        zip1            v1.2s,   v1.2s,   v0.2s   // left, flipped
-        zip1            v0.2s,   v3.2s,   v2.2s
-        usubl           v0.8h,   v0.8b,   v5.8b   // left-right
-        usubl           v1.8h,   v1.8b,   v5.8b
-        mla             v20.8h,  v0.8h,   v7.8h   // right*256  + (left-right)*weights_hor
-        mla             v21.8h,  v1.8h,   v7.8h
-        rshrn           v20.8b,  v20.8h,  #8
-        rshrn           v21.8b,  v21.8h,  #8
-        st1             {v20.s}[0], [x0], x1
-        st1             {v20.s}[1], [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v21.s}[0], [x0], x1
-        st1             {v21.s}[1], [x6], x1
-        b.gt            4b
-        ret
-80:
-        AARCH64_VALID_JUMP_TARGET
-        ld1             {v7.8b}, [x8]             // weights_hor
-        sub             x2,  x2,  #4
-        mov             x7,  #-4
-        uxtl            v7.8h,   v7.8b            // weights_hor
-8:
-        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},  [x2], x7 // left
-        shll            v20.8h,  v5.8b,   #8      // right*256
-        shll            v21.8h,  v5.8b,   #8
-        shll            v22.8h,  v5.8b,   #8
-        shll            v23.8h,  v5.8b,   #8
-        usubl           v3.8h,   v3.8b,   v5.8b   // left-right
-        usubl           v2.8h,   v2.8b,   v5.8b
-        usubl           v1.8h,   v1.8b,   v5.8b
-        usubl           v0.8h,   v0.8b,   v5.8b
-        mla             v20.8h,  v3.8h,   v7.8h   // right*256  + (left-right)*weights_hor
-        mla             v21.8h,  v2.8h,   v7.8h   // (left flipped)
-        mla             v22.8h,  v1.8h,   v7.8h
-        mla             v23.8h,  v0.8h,   v7.8h
-        rshrn           v20.8b,  v20.8h,  #8
-        rshrn           v21.8b,  v21.8h,  #8
-        rshrn           v22.8b,  v22.8h,  #8
-        rshrn           v23.8b,  v23.8h,  #8
-        st1             {v20.8b}, [x0], x1
-        st1             {v21.8b}, [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v22.8b}, [x0], x1
-        st1             {v23.8b}, [x6], x1
-        b.gt            8b
-        ret
-160:
-320:
-640:
-        AARCH64_VALID_JUMP_TARGET
-        sub             x2,  x2,  #4
-        mov             x7,  #-4
-        // Set up pointers for four rows in parallel; x0, x6, x5, x10
-        add             x5,  x0,  x1
-        add             x10, x6,  x1
-        lsl             x1,  x1,  #1
-        sub             x1,  x1,  w3, uxtw
-        mov             w9,  w3
-
-1:
-        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},   [x2],  x7 // left
-        usubl           v0.8h,   v0.8b,   v5.8b   // left-right
-        usubl           v1.8h,   v1.8b,   v5.8b
-        usubl           v2.8h,   v2.8b,   v5.8b
-        usubl           v3.8h,   v3.8b,   v5.8b
-2:
-        ld1             {v7.16b}, [x8],   #16     // weights_hor
-        shll            v20.8h,  v5.8b,   #8      // right*256
-        shll            v21.8h,  v5.8b,   #8
-        shll            v22.8h,  v5.8b,   #8
-        shll            v23.8h,  v5.8b,   #8
-        shll            v24.8h,  v5.8b,   #8
-        shll            v25.8h,  v5.8b,   #8
-        shll            v26.8h,  v5.8b,   #8
-        shll            v27.8h,  v5.8b,   #8
-        uxtl            v6.8h,   v7.8b            // weights_hor
-        uxtl2           v7.8h,   v7.16b
-        mla             v20.8h,  v3.8h,   v6.8h   // right*256  + (left-right)*weights_hor
-        mla             v21.8h,  v3.8h,   v7.8h   // (left flipped)
-        mla             v22.8h,  v2.8h,   v6.8h
-        mla             v23.8h,  v2.8h,   v7.8h
-        mla             v24.8h,  v1.8h,   v6.8h
-        mla             v25.8h,  v1.8h,   v7.8h
-        mla             v26.8h,  v0.8h,   v6.8h
-        mla             v27.8h,  v0.8h,   v7.8h
-        rshrn           v20.8b,  v20.8h,  #8
-        rshrn2          v20.16b, v21.8h,  #8
-        rshrn           v22.8b,  v22.8h,  #8
-        rshrn2          v22.16b, v23.8h,  #8
-        rshrn           v24.8b,  v24.8h,  #8
-        rshrn2          v24.16b, v25.8h,  #8
-        rshrn           v26.8b,  v26.8h,  #8
-        rshrn2          v26.16b, v27.8h,  #8
-        subs            w3,  w3,  #16
-        st1             {v20.16b}, [x0],  #16
-        st1             {v22.16b}, [x6],  #16
-        st1             {v24.16b}, [x5],  #16
-        st1             {v26.16b}, [x10], #16
-        b.gt            2b
-        subs            w4,  w4,  #4
-        b.le            9f
-        sub             x8,  x8,  w9, uxtw
-        add             x0,  x0,  x1
-        add             x6,  x6,  x1
-        add             x5,  x5,  x1
-        add             x10, x10, x1
-        mov             w3,  w9
-        b               1b
-9:
-        ret
-endfunc
-
-jumptable ipred_smooth_h_tbl
-        .word 640b - ipred_smooth_h_tbl
-        .word 320b - ipred_smooth_h_tbl
-        .word 160b - ipred_smooth_h_tbl
-        .word 80b  - ipred_smooth_h_tbl
-        .word 40b  - ipred_smooth_h_tbl
 endjumptable
 #endif
 
