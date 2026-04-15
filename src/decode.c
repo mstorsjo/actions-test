@@ -1456,8 +1456,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
             }
 
-            DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
-                               depth, "", b->seg_id, ts->msac.rng);
+            if (!has_luma)
+                DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
+                                   depth, "", b->seg_id, ts->msac.rng);
         }
     } else {
         b->seg_id = 0;
@@ -1625,8 +1626,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
         }
 
-        DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
-                           depth, "", b->seg_id, ts->msac.rng);
+        if (has_luma)
+            DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
+                               depth, "", b->seg_id, ts->msac.rng);
     }
 
     if (has_luma) {
@@ -5218,6 +5220,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         f = c->fc;
     }
 
+    struct OutputQueue *q = NULL;
     f->seq_hdr = c->seq_hdr;
     f->seq_hdr_ref = c->seq_hdr_ref;
     dav2d_ref_inc(f->seq_hdr_ref);
@@ -5383,8 +5386,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     }
 
     // move f->cur into output queue
-    struct OutputQueue *q = NULL;
-    if (f->frame_hdr->show_frame || c->output_invisible_frames) {
+    if (f->frame_hdr->show_immediate || c->output_invisible_frames) {
         q = dav2d_queue_output(c, &f->cur);
 #if 0
         c->event_flags |= dav2d_picture_get_event_flags(&f->cur);

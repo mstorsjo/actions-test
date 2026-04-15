@@ -348,7 +348,7 @@ static void queue_flush(Dav2dContext *const c) {
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
-            if (hdr->show_frame || !hdr->showable_frame) continue;
+            if (!hdr->show_implicit) continue;
             const int ipoc = hdr->frame_offset;
             if (get_poc_diff(nb, ipoc, c->dpb_poc) > 0 &&
                 (cand_n == -1 || get_poc_diff(nb, ipoc, cand_poc) < 0))
@@ -382,7 +382,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
-            if (hdr->show_frame || !hdr->showable_frame) continue;
+            if (!hdr->show_implicit) continue;
             const int ipoc = hdr->frame_offset;
             if (get_poc_diff(nb, ipoc, c->dpb_poc) > 0 &&
                 get_poc_diff(nb, ipoc, cand_poc) < 0)
@@ -406,7 +406,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
-            if (hdr->show_frame || !hdr->showable_frame) continue;
+            if (!hdr->show_implicit) continue;
             const int ipoc = hdr->frame_offset;
             if (get_poc_diff(nb, ipoc, c->dpb_poc) == 1) break;
         }

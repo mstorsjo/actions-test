@@ -1,4 +1,4 @@
-From e68024b8f2e1c5841c4ebca58a7dc07472462087 Mon Sep 17 00:00:00 2001
+From 988244622223504aaf3d863db3e47503119a5355 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -6,14 +6,15 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
 ---
  av2/common/idct.c         |  19 +++-
  av2/common/idct.h         |   7 +-
- av2/common/reconintra.c   | 187 ++++++++++++++++++++++++++++++++++++--
- av2/common/tip.c          |  14 +++
- av2/decoder/decodeframe.c |  39 +++++++-
+ av2/common/reconintra.c   | 189 ++++++++++++++++++++++++++++++++++++--
+ av2/common/reconintra.h   |   3 +-
+ av2/common/tip.c          |  15 +++
+ av2/decoder/decodeframe.c |  41 ++++++++-
  av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 9 files changed, 313 insertions(+), 22 deletions(-)
+ 10 files changed, 319 insertions(+), 24 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af6944168..699c7c3b2f 100644
@@ -73,7 +74,7 @@ index 9af6944168..699c7c3b2f 100644
    }
  }
 diff --git a/av2/common/idct.h b/av2/common/idct.h
-index c5c7647c4f..37a23f92a5 100644
+index 7e4c02b15c..1cf9317670 100644
 --- a/av2/common/idct.h
 +++ b/av2/common/idct.h
 @@ -21,6 +21,8 @@
@@ -85,7 +86,7 @@ index c5c7647c4f..37a23f92a5 100644
  #ifdef __cplusplus
  extern "C" {
  #endif
-@@ -37,7 +39,8 @@ void av2_inv_cross_chroma_tx_block(tran_low_t *dqcoeff_c1,
+@@ -35,7 +37,8 @@ void av2_inv_cross_chroma_tx_block(tran_low_t *dqcoeff_c1,
                                     tran_low_t *dqcoeff_c2, TX_SIZE tx_size,
                                     CctxType cctx_type, const int bd);
  
@@ -95,7 +96,7 @@ index c5c7647c4f..37a23f92a5 100644
                                   const tran_low_t *dqcoeff, int plane,
                                   TX_TYPE tx_type, TX_SIZE tx_size,
                                   uint16_t *dst, int stride, int eob,
-@@ -51,7 +54,7 @@ void av2_highbd_iwht4x4_horz_add(const tran_low_t *input, uint16_t *dest,
+@@ -49,7 +52,7 @@ void av2_highbd_iwht4x4_horz_add(const tran_low_t *input, uint16_t *dest,
  void av2_highbd_iwht4x4_vert_add(const tran_low_t *input, uint16_t *dest,
                                   int stride, int eob, int bd);
  
@@ -105,7 +106,7 @@ index c5c7647c4f..37a23f92a5 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av2/common/reconintra.c b/av2/common/reconintra.c
-index 27fbd5045e..66fb34de05 100644
+index be6528d678..b40226d390 100644
 --- a/av2/common/reconintra.c
 +++ b/av2/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -117,16 +118,16 @@ index 27fbd5045e..66fb34de05 100644
  enum {
    NEED_LEFT = 1 << 1,
    NEED_ABOVE = 1 << 2,
-@@ -1072,7 +1074,7 @@ void av2_highbd_ibp_dr_prediction_z3_c(
+@@ -1071,7 +1073,7 @@ void av2_highbd_ibp_dr_prediction_z3_c(
    }
  }
  
--static void build_intra_predictors_high(
-+static void build_intra_predictors_high(DB_ONLY(const AV2_COMMON *cm)
+-void av2_build_intra_predictors_high(
++void av2_build_intra_predictors_high(DB_ONLY(const AV2_COMMON *cm)
      const MACROBLOCKD *xd, const uint16_t *ref, int ref_stride, uint16_t *dst,
-     int dst_stride, PREDICTION_MODE mode, int angle_delta, TX_SIZE tx_size,
-     int disable_edge_filter, int n_top_px, int n_topright_px, int n_left_px,
-@@ -1091,6 +1093,15 @@ static void build_intra_predictors_high(
+     int dst_stride, PREDICTION_MODE mode, int p_angle, int angle_delta,
+     TX_SIZE tx_size, int disable_edge_filter, int n_top_px, int n_topright_px,
+@@ -1092,6 +1094,15 @@ void av2_build_intra_predictors_high(
    uint16_t *const above_row_2nd = above_data_2nd + 32;
    uint16_t *const left_col_2nd = left_data_2nd + 32;
  
@@ -142,7 +143,7 @@ index 27fbd5045e..66fb34de05 100644
    uint16_t *const second_pred = second_pred_data + 16;
    uint16_t *dst_mrl_line_0 = mrl_line_0_data + 16;
    const int txwpx = tx_size_wide[tx_size];
-@@ -1174,20 +1185,38 @@ static void build_intra_predictors_high(
+@@ -1156,20 +1167,38 @@ void av2_build_intra_predictors_high(
        val = (n_left_px > 0) ? left_ref_1st[0] : base - 1;
      }
      for (i = 0; i < txhpx; ++i) {
@@ -156,12 +157,12 @@ index 27fbd5045e..66fb34de05 100644
 +        if (need_left) {
 +          printf("l\n");
 +          for (int x = 0; x < txhpx; x++)
-+            printf(" %02x", val);
++            printf(" %0*x", 2 + hbd, val);
 +          printf("\n");
 +        } else {
 +          printf("t\n");
 +          for (int x = 0; x < txwpx; x++)
-+            printf(" %02x", val);
++            printf(" %0*x", 2 + hbd, val);
 +          printf("\n");
 +        }
 +        hex_dump(dst, dst_stride, txwpx, txhpx, pred_names[plane], hbd);
@@ -184,7 +185,7 @@ index 27fbd5045e..66fb34de05 100644
          txhpx + (need_bottom ? txwpx : 3) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires left edge + 1/4 tx height for overhang feature.
-@@ -1219,12 +1248,13 @@ static void build_intra_predictors_high(
+@@ -1201,12 +1230,13 @@ void av2_build_intra_predictors_high(
    }
  
    // NEED_ABOVE
@@ -199,7 +200,7 @@ index 27fbd5045e..66fb34de05 100644
          txwpx + (need_right ? txhpx : 0) + (mrl_index << 1);
      if (use_intra_dip) {
        // DIP mode requires above line + 1/4 tx width for overhang feature.
-@@ -1279,6 +1309,123 @@ static void build_intra_predictors_high(
+@@ -1261,6 +1291,123 @@ void av2_build_intra_predictors_high(
      }
    }
  
@@ -323,7 +324,7 @@ index 27fbd5045e..66fb34de05 100644
    if (use_intra_dip) {
      av2_highbd_intra_dip_predictor(mbmi->intra_dip_mode, dst, dst_stride,
                                     above_row_1st, left_col_1st, tx_size, xd->bd
-@@ -1287,6 +1434,13 @@ static void build_intra_predictors_high(
+@@ -1269,6 +1416,13 @@ void av2_build_intra_predictors_high(
                                     mbmi->intra_dip_features
  #endif  // CONFIG_DIP_EXT_PRUNING
      );
@@ -337,7 +338,7 @@ index 27fbd5045e..66fb34de05 100644
      return;
    }
  
-@@ -1406,6 +1560,14 @@ static void build_intra_predictors_high(
+@@ -1388,6 +1542,14 @@ void av2_build_intra_predictors_high(
        }
      }
  
@@ -352,7 +353,7 @@ index 27fbd5045e..66fb34de05 100644
      return;
    }
    // predict
-@@ -1427,6 +1589,13 @@ static void build_intra_predictors_high(
+@@ -1409,6 +1571,13 @@ void av2_build_intra_predictors_high(
      pred_high[mode][tx_size](dst, dst_stride, above_row_1st, left_col_1st,
                               xd->bd);
    }
@@ -365,8 +366,8 @@ index 27fbd5045e..66fb34de05 100644
 +#endif
  }
  
- #define ARITHMETIC_LEFT_SHIFT(x, shift) \
-@@ -1455,6 +1624,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+ // This function avoided the below operations in the original
+@@ -1707,6 +1876,12 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
          dst[r * dst_stride + c] = palette[map[(r + y) * wpx + c + x]];
        }
      }
@@ -379,17 +380,42 @@ index 27fbd5045e..66fb34de05 100644
      return;
    }
  
-@@ -1509,7 +1684,7 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
+@@ -1803,10 +1978,10 @@ void av2_predict_intra_block(const AV2_COMMON *cm, const MACROBLOCKD *xd,
    const int is_sb_boundary =
        (mi_row % cm->mib_size == 0 && row_off == 0) ? 1 : 0;
  
--  build_intra_predictors_high(
-+  build_intra_predictors_high(DB_ONLY(cm)
-       xd, ref, ref_stride, dst, dst_stride, mode, angle_delta, tx_size,
-       disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
-       have_top_right ? px_top_right : 0,
+-  if (mrl_index) {
++  if (mrl_index || DEBUG_BLOCK_INFO) {
+     const int n_topright_px = have_top_right ? px_top_right : 0;
+     const int n_bottomleft_px = have_bottom_left ? px_bottom_left : 0;
+-    av2_build_intra_predictors_high(
++    av2_build_intra_predictors_high(DB_ONLY(cm)
+         xd, ref, ref_stride, dst, dst_stride, mode, p_angle, angle_delta,
+         tx_size, disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
+         n_topright_px, have_left ? AVMMIN(txhpx, yd + txhpx) : 0,
+diff --git a/av2/common/reconintra.h b/av2/common/reconintra.h
+index 4c03af11df..8593e253e0 100644
+--- a/av2/common/reconintra.h
++++ b/av2/common/reconintra.h
+@@ -16,6 +16,7 @@
+ #include <stdlib.h>
+ #include <math.h>
+ 
++#include "avm/debug.h"
+ #include "avm/avm_integer.h"
+ #include "av2/common/av2_common_int.h"
+ #include "av2/common/blockd.h"
+@@ -289,7 +290,7 @@ DECLARE_ALIGNED(16, static const int16_t, av2_dr_interp_filter[32][4]) = {
+ };
+ 
+ // Build Intra Predictors for mrl_index > 0 or = 0
+-void av2_build_intra_predictors_high(
++void av2_build_intra_predictors_high(DB_ONLY(const AV2_COMMON *cm)
+     const MACROBLOCKD *xd, const uint16_t *ref, int ref_stride, uint16_t *dst,
+     int dst_stride, PREDICTION_MODE mode, int p_angle, int angle_delta,
+     TX_SIZE tx_size, int disable_edge_filter, int n_top_px, int n_topright_px,
 diff --git a/av2/common/tip.c b/av2/common/tip.c
-index 46c81ff65f..5bbe30101e 100644
+index caaaf46d9f..8a062d7909 100644
 --- a/av2/common/tip.c
 +++ b/av2/common/tip.c
 @@ -15,6 +15,8 @@
@@ -401,28 +427,29 @@ index 46c81ff65f..5bbe30101e 100644
  // Percentage threshold of number of blocks with available motion
  // projection in a frame to allow TIP mode
  #define TIP_ENABLE_COUNT_THRESHOLD 60
-@@ -947,4 +949,16 @@ void av2_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd, uint16_t **mc_buf,
+@@ -959,4 +961,17 @@ void av2_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd, uint16_t **mc_buf,
    tip_setup_tip_frame_planes(cm, xd, 0, 0, mvs_rows, mvs_cols, mvs_cols, mc_buf,
                               tmp_conv_dst, calc_subpel_params_func,
                               copy_refined_mvs);
 +#if DEBUG_B_PIXELS
++  const int sbsz = cm->seq_params.mib_size * 4;
 +  const YV12_BUFFER_CONFIG *src = &cm->tip_ref.tip_frame->buf;
 +  const ptrdiff_t stride = src->strides[0];
 +  const int h = mvs_rows * 8, w = mvs_cols * 8;
-+  for (int y = 0; y < h; y += 256)
-+    for (int x = 0; x < w; x += 256)
-+      for (int yy = y; yy < AVMMIN(h, y + 256); yy += 64)
-+        for (int xx = x; xx < AVMMIN(w, x + 256); xx += 64)
++  for (int y = 0; y < h; y += sbsz)
++    for (int x = 0; x < w; x += sbsz)
++      for (int yy = y; yy < AVMMIN(h, y + sbsz); yy += 64)
++        for (int xx = x; xx < AVMMIN(w, x + sbsz); xx += 64)
 +          hex_dump(&src->buffers[0][yy * stride + xx], stride,
-+                   AVMMIN(h - yy, 64), AVMMIN(w - xx, 64),
++                   AVMMIN(w - xx, 64), AVMMIN(h - yy, 64),
 +                   "y-pred", !!(xd->bd - 8));
 +#endif
  }
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 84fcd9fedd..c43bbc07dc 100644
+index e0e108ee5b..5dda218692 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
-@@ -207,11 +207,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
+@@ -209,11 +209,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
      scan_line = AVMMAX(eob_data_c1->max_scan_line, eob_data_c2->max_scan_line);
      eob = AVMMAX(eob_data_c1->eob, eob_data_c2->eob);
    }
@@ -449,7 +476,7 @@ index 84fcd9fedd..c43bbc07dc 100644
    const int width = tx_size_wide[tx_size] <= 32 ? tx_size_wide[tx_size] : 32;
    const int height = tx_size_high[tx_size] <= 32 ? tx_size_high[tx_size] : 32;
    const int sbSize = (width >= 8 && height >= 8) ? 8 : 4;
-@@ -371,6 +385,15 @@ static AVM_INLINE void predict_and_reconstruct_intra_block(DB_ONLY(const int dep
+@@ -366,6 +380,15 @@ static AVM_INLINE void predict_and_reconstruct_intra_block(DB_ONLY(const int dep
                                pd->dst.stride, reduced_tx_set_used);
      }
    }
@@ -465,7 +492,7 @@ index 84fcd9fedd..c43bbc07dc 100644
  
  #if CONFIG_MISMATCH_DEBUG
    {
-@@ -919,6 +942,20 @@ static AVM_INLINE void predict_inter_block(AV2_COMMON *const cm,
+@@ -938,6 +961,22 @@ static AVM_INLINE void predict_inter_block(AV2_COMMON *const cm,
      }
    }
  #endif  // CONFIG_INSPECTION
@@ -475,19 +502,21 @@ index 84fcd9fedd..c43bbc07dc 100644
 +    struct macroblockd_plane *const pd = &xd->plane[0];
 +    const int plane_block_size =
 +      get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
-+    const int w = mi_size_wide[plane_block_size] * MI_SIZE;
-+    const int h = mi_size_high[plane_block_size] * MI_SIZE;
++    const int w = AVMMIN(cm->mi_params.mi_cols - mi_col,
++                         mi_size_wide[plane_block_size]) * MI_SIZE;
++    const int h = AVMMIN(cm->mi_params.mi_rows - mi_row,
++                         mi_size_high[plane_block_size]) * MI_SIZE;
 +    for (int y = 0; y < h; y += 64)
 +      for (int x = 0; x < w; x += 64)
 +        hex_dump(&pd->dst.buf[y * pd->dst.stride + x], pd->dst.stride,
-+                 AVMMIN(w, 64), AVMMIN(h, 64), "y-pred", !!(xd->bd - 8));
++                 AVMMIN(w - x, 64), AVMMIN(h - y, 64), "y-pred", !!(xd->bd - 8));
 +  }
 +#endif
  }
  
  static AVM_INLINE void copy_frame_mvs_inter_block(AV2_COMMON *const cm,
 diff --git a/av2/encoder/encodemb.c b/av2/encoder/encodemb.c
-index 8f2ac73b14..ca74829a3a 100644
+index 4e81ebf1d4..7535d9d7fa 100644
 --- a/av2/encoder/encodemb.c
 +++ b/av2/encoder/encodemb.c
 @@ -1029,7 +1029,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
@@ -508,7 +537,7 @@ index 8f2ac73b14..ca74829a3a 100644
          xd, dqcoeff, plane, tx_type, tx_size, dst, pd->dst.stride,
          (plane == 0 || !is_cctx_allowed(cm, xd) || !recon_with_cctx)
              ? p->eobs[block]
-@@ -1536,7 +1536,7 @@ void av2_encode_block_intra(int plane, int block, int blk_row, int blk_col,
+@@ -1530,7 +1530,7 @@ void av2_encode_block_intra(int plane, int block, int blk_row, int blk_col,
    }
  
    if (*eob) {
@@ -517,7 +546,7 @@ index 8f2ac73b14..ca74829a3a 100644
          xd, dqcoeff, plane, tx_type, tx_size, dst, dst_stride, *eob,
          replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
                              cm->features.allow_screen_content_tools, xd),
-@@ -1854,13 +1854,13 @@ void av2_encode_block_intra_joint_uv(int block, int blk_row, int blk_col,
+@@ -1847,13 +1847,13 @@ void av2_encode_block_intra_joint_uv(int block, int blk_row, int blk_col,
    if (*eob_c1 || *eob_c2) {
      av2_inv_cross_chroma_tx_block(dqcoeff_c1, dqcoeff_c2, tx_size, cctx_type,
                                    xd->bd);
@@ -534,7 +563,7 @@ index 8f2ac73b14..ca74829a3a 100644
          AVMMAX(*eob_c1, *eob_c2),
          replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
 diff --git a/av2/encoder/tpl_model.c b/av2/encoder/tpl_model.c
-index 96ac4e8c42..62e4e3eba6 100644
+index ab118c5e01..e3c60f9950 100644
 --- a/av2/encoder/tpl_model.c
 +++ b/av2/encoder/tpl_model.c
 @@ -187,7 +187,7 @@ static AVM_INLINE void txfm_quant_rdcost(
@@ -547,10 +576,10 @@ index 96ac4e8c42..62e4e3eba6 100644
  }
  
 diff --git a/av2/encoder/tx_search.c b/av2/encoder/tx_search.c
-index 284f66b7e3..15f12f4840 100644
+index b6f5ed3ebb..9ff8b3b67b 100644
 --- a/av2/encoder/tx_search.c
 +++ b/av2/encoder/tx_search.c
-@@ -910,7 +910,7 @@ static AVM_INLINE void inverse_transform_block_facade(
+@@ -884,7 +884,7 @@ static AVM_INLINE void inverse_transform_block_facade(
    const int dst_stride = pd->dst.stride;
    uint16_t *dst =
        &pd->dst.buf[(blk_row * dst_stride + blk_col) << MI_SIZE_LOG2];
@@ -559,7 +588,7 @@ index 284f66b7e3..15f12f4840 100644
                                dst_stride, eob, use_ddt, reduced_tx_set);
  }
  
-@@ -1090,7 +1090,7 @@ static INLINE int64_t dist_block_px_domain(const AV2_COMP *cpi, MACROBLOCK *x,
+@@ -1057,7 +1057,7 @@ static INLINE int64_t dist_block_px_domain(const AV2_COMP *cpi, MACROBLOCK *x,
    TX_TYPE tx_type =
        av2_get_tx_type(xd, plane_type, blk_row, blk_col, tx_size,
                        is_reduced_tx_set_used(&cpi->common, plane_type));
@@ -568,7 +597,7 @@ index 284f66b7e3..15f12f4840 100644
        xd, dqcoeff, plane, tx_type, tx_size, recon, MAX_TX_SIZE, eob,
        replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
                            cpi->common.features.allow_screen_content_tools, xd),
-@@ -1156,13 +1156,13 @@ static INLINE int64_t joint_uv_dist_block_px_domain(const AV2_COMP *cpi,
+@@ -1122,13 +1122,13 @@ static INLINE int64_t joint_uv_dist_block_px_domain(const AV2_COMP *cpi,
                        is_reduced_tx_set_used(&cpi->common, PLANE_TYPE_UV));
    av2_inv_cross_chroma_tx_block(tmp_dqcoeff_c1, tmp_dqcoeff_c2, tx_size,
                                  cctx_type, xd->bd);
@@ -585,7 +614,7 @@ index 284f66b7e3..15f12f4840 100644
        max_chroma_eob,
        replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
 diff --git a/avm/debug.h b/avm/debug.h
-index d3242f183b..5b486f485d 100644
+index ae277ab7a6..99ef4c1f95 100644
 --- a/avm/debug.h
 +++ b/avm/debug.h
 @@ -28,10 +28,15 @@

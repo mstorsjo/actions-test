@@ -47,7 +47,7 @@ build-debian:
         - amd64
     script:
         - set -eo pipefail
-        - git clone -b research-v13.0.0 --depth 1 --shallow-submodules
+        - git clone -b research-v14.0.0 --depth 1 --shallow-submodules
               https://gitlab.com/AOMediaCodec/avm.git avm
         - |
           cd avm
@@ -87,12 +87,12 @@ build-debian:
         - ninja -C build
         - |
           files=(
-              "./media/avm-v13.0.0-bus.64x64.l1.sdp0.obu"
-              "./media/avm-v13.0.0-bus.64x64.l1.sdp1.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.lossless.obu"
-              "./media/avm-v13.0.0-hm.64x64.l5.filmgrain.obu"
+              "./media/avm-v14.0.0-bus.64x64.l1.sdp0.obu"
+              "./media/avm-v14.0.0-bus.64x64.l1.sdp1.obu"
+              "./media/avm-v14.0.0-bus.64x64.l5.obu"
+              "./media/avm-v14.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
+              "./media/avm-v14.0.0-bus.64x64.l5.lossless.obu"
+              "./media/avm-v14.0.0-hm.64x64.l5.filmgrain.obu"
           )
           for file in "${files[@]}"; do
               avm/x86-64/avmdec $file -o /dev/null > avm.log
@@ -110,15 +110,15 @@ build-debian:
         - |
           echo "[CI] Running AVM vs DAV2D MD5 regression test"
           files=(
-              "./media/avm-v13.0.0-bus.64x64.l1.sdp0.obu"
-              "./media/avm-v13.0.0-bus.64x64.l1.sdp1.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
-              "./media/avm-v13.0.0-bus.64x64.l5.lossless.obu"
-              "./media/avm-v13.0.0-bus.352x288.l5.seg1.obu"
-              "./media/avm-v13.0.0-bus.352x288.l10.deltaq1.obu"
-              "./media/avm-v13.0.0-hm.64x64.l5.filmgrain.obu"
-              "./media/avm-v13.0.0-bus.352x288.l1.partial_lossless.obu"
+              "./media/avm-v14.0.0-bus.64x64.l1.sdp0.obu"
+              "./media/avm-v14.0.0-bus.64x64.l1.sdp1.obu"
+              "./media/avm-v14.0.0-bus.64x64.l5.obu"
+              "./media/avm-v14.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
+              "./media/avm-v14.0.0-bus.64x64.l5.lossless.obu"
+              "./media/avm-v14.0.0-bus.352x288.l5.seg1.obu"
+              "./media/avm-v14.0.0-bus.352x288.l10.deltaq1.obu"
+              "./media/avm-v14.0.0-hm.64x64.l5.filmgrain.obu"
+              "./media/avm-v14.0.0-bus.352x288.l1.partial_lossless.obu"
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"

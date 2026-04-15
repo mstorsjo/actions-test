@@ -156,7 +156,7 @@ typedef struct CdfModeContext {
 } CdfModeContext;
 
 typedef struct CdfCoefContext {
-    ALIGN(uint16_t skip[2][5][20][2], 4);
+    ALIGN(uint16_t skip[2][5][10][2], 4);
     ALIGN(uint16_t eob_bin_16[3][5+3], 16);
     ALIGN(uint16_t eob_bin_32[3][6+2], 16);
     ALIGN(uint16_t eob_bin_64[3][7+1], 16);

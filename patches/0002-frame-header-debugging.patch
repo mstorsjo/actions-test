@@ -1,20 +1,20 @@
-From 11e5420272508f032c41de8895c2f73310f71231 Mon Sep 17 00:00:00 2001
+From ebe522b272887c0637771fad3838c64efdb7f402 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 09:07:44 -0500
 Subject: [PATCH 2/5] Frame header debugging.
 
 ---
  av2/decoder/decodeframe.c | 212 +++++++++++++++++++++++++++++++++++++-
- av2/decoder/obu_ci.c      |  41 +++++++-
+ av2/decoder/obu_ci.c      |  43 +++++++-
  av2/decoder/obu_fgm.c     |  44 +++++++-
  avm/debug.h               |   1 +
- 4 files changed, 292 insertions(+), 6 deletions(-)
+ 4 files changed, 294 insertions(+), 6 deletions(-)
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 9ed482186c..c3728850e5 100644
+index f4285df592..ca14f0494b 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
-@@ -3608,6 +3608,11 @@ static AVM_INLINE void setup_qm_params(AV2Decoder *pbi,
+@@ -3609,6 +3609,11 @@ static AVM_INLINE void setup_qm_params(AV2Decoder *pbi,
        quant_params->qm_v[i] = 0;
      }
    }
@@ -26,7 +26,7 @@ index 9ed482186c..c3728850e5 100644
  }
  // Build y/uv dequant values based on segmentation.
  static AVM_INLINE void setup_segmentation_dequant(AV2Decoder *const pbi,
-@@ -4031,6 +4036,10 @@ static AVM_INLINE void setup_frame_size(AV2_COMMON *cm,
+@@ -4021,6 +4026,10 @@ static AVM_INLINE void setup_frame_size(AV2_COMMON *cm,
    realloc_bru_info(cm);
    av2_validate_frame_level_conformance(&cm->seq_params, width, height,
                                         &cm->error);
@@ -37,7 +37,7 @@ index 9ed482186c..c3728850e5 100644
  }
  
  static AVM_INLINE void setup_seq_sb_size(SequenceHeader *seq_params,
-@@ -4132,6 +4141,10 @@ static AVM_INLINE void setup_frame_size_with_refs(
+@@ -4122,6 +4131,10 @@ static AVM_INLINE void setup_frame_size_with_refs(
    realloc_bru_info(cm);
    av2_validate_frame_level_conformance(&cm->seq_params, width, height,
                                         &cm->error);
@@ -48,7 +48,7 @@ index 9ed482186c..c3728850e5 100644
  }
  
  // Reconstructs the tile information
-@@ -4272,6 +4285,7 @@ static AVM_INLINE void read_tile_info(AV2Decoder *const pbi,
+@@ -4264,6 +4277,7 @@ static AVM_INLINE void read_tile_info(AV2Decoder *const pbi,
      }
    }
    pbi->context_update_tile_id = 0;
@@ -56,7 +56,7 @@ index 9ed482186c..c3728850e5 100644
    if (cm->tiles.rows * cm->tiles.cols > 1 &&
        cm->features.tip_frame_mode != TIP_FRAME_AS_OUTPUT) {
      if (!cm->seq_params.enable_avg_cdf || !cm->seq_params.avg_cdf_type) {
-@@ -4286,6 +4300,11 @@ static AVM_INLINE void read_tile_info(AV2Decoder *const pbi,
+@@ -4278,6 +4292,11 @@ static AVM_INLINE void read_tile_info(AV2Decoder *const pbi,
      // tile size magnitude
      pbi->tile_size_bytes = avm_rb_read_literal(rb, 2) + 1;
    }
@@ -68,7 +68,7 @@ index 9ed482186c..c3728850e5 100644
  }
  
  static size_t mem_get_varsize(const uint8_t *src, int sz) {
-@@ -5867,6 +5886,11 @@ static void setup_film_grain(AV2Decoder *pbi, struct avm_read_bit_buffer *rb) {
+@@ -5859,6 +5878,11 @@ static void setup_film_grain(AV2Decoder *pbi, struct avm_read_bit_buffer *rb) {
        }
        copy_fgm_from_list(cm, pars, &pbi->fgm_list[cm->fgm_id]);
      }
@@ -80,12 +80,12 @@ index 9ed482186c..c3728850e5 100644
    }
    cm->cur_frame->film_grain_params = cm->film_grain_params;
  }
-@@ -6788,7 +6812,11 @@ static int read_global_motion_params(WarpedMotionParams *params,
+@@ -6633,7 +6657,11 @@ static void read_global_motion_params(WarpedMotionParams *params,
  
-                                      const struct scale_factors *sf,
+                                       const struct scale_factors *sf,
  
--                                     MvSubpelPrecision precision) {
-+                                     MvSubpelPrecision precision
+-                                      MvSubpelPrecision precision) {
++                                      MvSubpelPrecision precision
 +#if DEBUG_FRAME_HDR
 +                                     , const int idx
 +#endif
@@ -93,7 +93,7 @@ index 9ed482186c..c3728850e5 100644
    const int precision_loss = get_gm_precision_loss(precision);
    (void)precision_loss;
    TransformationType type = avm_rb_read_bit(rb);
-@@ -6847,6 +6875,14 @@ static int read_global_motion_params(WarpedMotionParams *params,
+@@ -6692,6 +6720,14 @@ static void read_global_motion_params(WarpedMotionParams *params,
                         trans_dec_factor;
    }
  
@@ -107,21 +107,21 @@ index 9ed482186c..c3728850e5 100644
 +    }
    if (params->wmtype <= AFFINE) {
      av2_reduce_warp_model(params);
-     int good_shear_params = av2_get_shear_params(params
-@@ -6950,7 +6986,11 @@ static AVM_INLINE void read_global_motion(AV2_COMMON *cm,
+     av2_get_shear_params(params
+@@ -6781,7 +6817,11 @@ static AVM_INLINE void read_global_motion(AV2_COMMON *cm,
  
-                                   get_ref_scale_factors_const(cm, frame),
+                               get_ref_scale_factors_const(cm, frame),
  
--                                  cm->features.fr_mv_precision);
-+                                  cm->features.fr_mv_precision
+-                              cm->features.fr_mv_precision);
++                              cm->features.fr_mv_precision
 +#if DEBUG_FRAME_HDR
-+                                  , frame
++                              , frame
 +#endif
-+                                  );
-     if (!good_params) {
- #if WARPED_MOTION_DEBUG
-       printf("Warning: unexpected global motion shear params from avmenc\n");
-@@ -7185,6 +7225,14 @@ static INLINE void read_intrabc_params(AV2_COMMON *const cm,
++                              );
+ 
+     // TODO(sarahparker, debargha): The logic in the commented out code below
+     // does not work currently and causes mismatches when resize is on. Fix it
+@@ -7043,6 +7083,14 @@ static INLINE void read_intrabc_params(AV2_COMMON *const cm,
      }
      read_frame_max_bvp_drl_bits(cm, rb);
    }
@@ -136,7 +136,7 @@ index 9ed482186c..c3728850e5 100644
  }
  static INLINE void read_screen_content_params(AV2_COMMON *const cm,
                                                struct avm_read_bit_buffer *rb) {
-@@ -7207,6 +7255,12 @@ static INLINE void read_screen_content_params(AV2_COMMON *const cm,
+@@ -7065,6 +7113,12 @@ static INLINE void read_screen_content_params(AV2_COMMON *const cm,
    } else {
      features->cur_frame_force_integer_mv = 0;
    }
@@ -149,10 +149,10 @@ index 9ed482186c..c3728850e5 100644
  }
  
  static void set_primary_ref_frame_and_ctx(AV2Decoder *pbi) {
-@@ -7453,6 +7507,10 @@ static int read_show_existing_frame(AV2Decoder *pbi,
-   // already been allocated, it will not be released by
+@@ -7424,6 +7478,10 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
    // assign_frame_buffer_p()!
-   assert(!cm->cur_frame->raw_frame_buffer.data);
+   assert(IMPLIES(cm->derive_sef_order_hint,
+                  !cm->cur_frame->raw_frame_buffer.data));
 +#if DEBUG_FRAME_HDR
 +  printf("HDR: post-existing_frame_idx[%d,poc=%d]: off=%u\n",
 +         existing_frame_idx, current_frame->order_hint, rb->bit_offset);
@@ -160,7 +160,7 @@ index 9ed482186c..c3728850e5 100644
  
    FrameHash raw_frame_hash = cm->cur_frame->raw_frame_hash;
    FrameHash grain_frame_hash = cm->cur_frame->grain_frame_hash;
-@@ -7893,6 +7951,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8140,6 +8198,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
  
    int seq_header_id_for_frame_header = setup_sequence_header_id(cm, rb);
    assert(seq_header_id_for_frame_header >= 0);
@@ -170,21 +170,21 @@ index 9ed482186c..c3728850e5 100644
 +         rb->bit_offset);
 +#endif
  
-   handle_sequence_header(pbi,
- #if CONFIG_F024_KEYOBU
-@@ -8099,6 +8162,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
- #endif  // !CONFIG_F024_KEYOBU
-     cm->cur_frame->showable_frame = cm->showable_frame;
+   handle_sequence_header(pbi, obu_type, obu_xlayer_id,
+                          seq_header_id_for_frame_header);
+@@ -8327,6 +8390,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+     cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;
+     cm->cur_frame->implicit_output_picture = cm->implicit_output_picture;
      cm->cur_frame->frame_output_done = 0;
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-frametype_bits[type:%d,ltrid:%d,show:%d|%d]: off=%u\n",
 +           current_frame->frame_type, current_frame->long_term_id,
-+           cm->show_frame, cm->showable_frame, rb->bit_offset);
++           cm->immediate_output_picture, cm->implicit_output_picture, rb->bit_offset);
 +#endif
    }
    av2_set_frame_sb_size(cm, cm->seq_params.sb_size);
  
-@@ -8188,6 +8256,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8446,6 +8514,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
          }
        }
      }
@@ -196,8 +196,8 @@ index 9ed482186c..c3728850e5 100644
 +#endif
    }
  
- #if CONFIG_F024_KEYOBU
-@@ -8331,6 +8405,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+   if (obu_type == OBU_CLOSED_LOOP_KEY || obu_type == OBU_OPEN_LOOP_KEY) {
+@@ -8570,6 +8644,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        }
      }
    }
@@ -206,9 +206,9 @@ index 9ed482186c..c3728850e5 100644
 +         current_frame->refresh_frame_flags, rb->bit_offset);
 +#endif
  
-   if (cm->is_leading_picture == 1) {
-     // other obu_types cannot overwrite the slots OBU_OLK is stored
-@@ -8487,6 +8565,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+   if (cm->immediate_output_picture == 0 &&
+       current_frame->refresh_frame_flags == 0) {
+@@ -8749,6 +8827,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
            cm->remapped_ref_idx[i] = ref;
          }
        }
@@ -223,7 +223,7 @@ index 9ed482186c..c3728850e5 100644
        if (!frame_is_sframe(cm) && frame_size_override_flag &&
            !cm->bridge_frame_info.is_bridge_frame) {
          setup_frame_size_with_refs(cm, explicit_ref_frame_map, rb);
-@@ -8498,6 +8584,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8760,6 +8846,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        if (!explicit_ref_frame_map) {
          av2_get_ref_frames(cm, current_frame->display_order_hint, 1, 0,
                             cm->ref_frame_map_pairs);
@@ -237,7 +237,7 @@ index 9ed482186c..c3728850e5 100644
  
          // Note: The following if block implements bitstream constraint checks
          // for consistent reference frame mapping when (embedded or temporal)
-@@ -8722,6 +8815,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9012,6 +9105,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
          cm->tmvp_sample_step = 1;
          cm->tmvp_sample_stepl2 = 0;
        }
@@ -249,7 +249,7 @@ index 9ed482186c..c3728850e5 100644
  
        cm->tip_global_motion.as_int = 0;
        cm->tip_interp_filter = MULTITAP_SHARP;
-@@ -8790,6 +8888,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9075,6 +9173,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
              !cm->bridge_frame_info.is_bridge_frame)
            read_frame_opfl_refine_type(cm, rb);
        }
@@ -266,7 +266,7 @@ index 9ed482186c..c3728850e5 100644
  
        if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT &&
            !cm->bridge_frame_info.is_bridge_frame &&
-@@ -8837,6 +8945,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9120,6 +9228,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
            features->enabled_motion_modes =
                cm->seq_params.seq_enabled_motion_modes;
          }
@@ -279,7 +279,7 @@ index 9ed482186c..c3728850e5 100644
        }
      }
  
-@@ -9031,6 +9145,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9297,6 +9411,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
      } else {
        features->disable_cdf_update = 1;
      }
@@ -290,10 +290,10 @@ index 9ed482186c..c3728850e5 100644
  
      read_tile_info(pbi, rb);
      if (!av2_is_min_tile_width_satisfied(cm)) {
-@@ -9044,6 +9162,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9309,6 +9427,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+     cm->cur_frame->base_qindex = quant_params->base_qindex;
      cm->cur_frame->u_ac_delta_q = quant_params->u_ac_delta_q;
      cm->cur_frame->v_ac_delta_q = quant_params->v_ac_delta_q;
-     xd->bd = (int)seq_params->bit_depth;
 +#if DEBUG_FRAME_HDR
 +    printf("HDR: post-quant[yac:%d,deltas=ydc:%d,uac:%d/dc:%d,vac:%d/dc:%d]: off=%u\n",
 +           quant_params->base_qindex,
@@ -307,7 +307,7 @@ index 9ed482186c..c3728850e5 100644
  
      set_primary_ref_frame_and_ctx(pbi);
  
-@@ -9061,6 +9189,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9326,6 +9454,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
      }
  
      setup_segmentation(cm, rb);
@@ -319,7 +319,7 @@ index 9ed482186c..c3728850e5 100644
  
      setup_qm_params(pbi, quant_params, cm->seg.enabled, av2_num_planes(cm), rb);
      cm->delta_q_info.delta_q_res = 1;
-@@ -9070,6 +9203,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9335,6 +9468,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        xd->current_base_qindex = quant_params->base_qindex;
        cm->delta_q_info.delta_q_res = 1 << avm_rb_read_literal(rb, 2);
      }
@@ -331,7 +331,7 @@ index 9ed482186c..c3728850e5 100644
  
      xd->cur_frame_force_integer_mv = features->cur_frame_force_integer_mv;
      features->has_lossless_segment = 0;
-@@ -9130,6 +9268,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9395,6 +9533,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        features->allow_parity_hiding = false;
      else
        features->allow_parity_hiding = avm_rb_read_bit(rb);
@@ -343,7 +343,7 @@ index 9ed482186c..c3728850e5 100644
  
      setup_segmentation_dequant(pbi, xd);
  
-@@ -9170,29 +9313,76 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9435,29 +9578,76 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        cm->cur_frame->base_qindex = cm->quant_params.base_qindex;
        cm->cur_frame->u_ac_delta_q = cm->quant_params.u_ac_delta_q;
        cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q;
@@ -420,7 +420,7 @@ index 9ed482186c..c3728850e5 100644
    }
    if (features->tip_frame_mode == TIP_FRAME_AS_OUTPUT) {
      if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu &&
-@@ -9228,6 +9418,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9494,6 +9684,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
    features->enable_imp_msk_bld = seq_params->enable_imp_msk_bld;
  
    features->reduced_tx_set_used = avm_rb_read_literal(rb, 2);
@@ -437,7 +437,7 @@ index 9ed482186c..c3728850e5 100644
  
    if (features->allow_ref_frame_mvs && !frame_might_allow_ref_frame_mvs(cm)) {
      avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
-@@ -9239,7 +9439,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9505,7 +9705,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                         "Frame wrongly requests TIP mode");
    }
  
@@ -453,22 +453,22 @@ index 9ed482186c..c3728850e5 100644
    features->enable_ext_seg = seq_params->enable_ext_seg;
    return 0;
 diff --git a/av2/decoder/obu_ci.c b/av2/decoder/obu_ci.c
-index f4a60e03bd..f6adb3de4b 100644
+index 95918b9ae2..b8184b1d33 100644
 --- a/av2/decoder/obu_ci.c
 +++ b/av2/decoder/obu_ci.c
-@@ -26,6 +26,8 @@
+@@ -25,6 +25,8 @@
+ #include "av2/decoder/obu.h"
  #include "av2/common/av2_common_int.h"
- #if CONFIG_CWG_F270_CI_OBU
  
 +#define DEBUG_CI_HDR 0
 +
- static void av2_set_color_info(ContentInterpretation *ci_params) {
-   assert(ci_params->color_info.color_description_idc !=
-          AVM_COLOR_DESC_IDC_EXPLICIT);
-@@ -198,11 +200,28 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
+ static int av2_set_sar_info(ContentInterpretation *ci_params) {
+   int supported_sample_aspect_ratio = 1;
+   switch (ci_params->sar_info.sar_aspect_ratio_idc) {
+@@ -159,8 +161,27 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
    ci_temp.ci_timing_info_present_flag = avm_rb_read_bit(rb);
-   ci_temp.ci_extension_present_flag = avm_rb_read_bit(rb);
-   (void)avm_rb_read_bit(rb);  // ci_reserved_1bit
+   (void)avm_rb_read_literal(rb, 2);  // ci_reserved_2bit
+ 
 +#if DEBUG_CI_HDR
 +  printf("CI: post-flags[scan=%d,colordesc=%d,chrsamplepos=%d,"
 +         "aspectratio=%d,timinginfo=%d,extension=%d]: off=%u\n",
@@ -478,11 +478,10 @@ index f4a60e03bd..f6adb3de4b 100644
 +         ci_temp.ci_timing_info_present_flag, ci_temp.ci_extension_present_flag,
 +         rb->bit_offset);
 +#endif
- 
++
    if (ci_temp.ci_color_description_present_flag) {
-     av2_read_color_info(&ci_temp, rb);
-     if (ci_temp.color_info.color_description_idc != AVM_COLOR_DESC_IDC_EXPLICIT)
-       av2_set_color_info(&ci_temp);
+     read_ci_color_info(&ci_temp, rb);
++
 +#if DEBUG_CI_HDR
 +    printf("CI: post-colordesc[id=%d,pri=%d,trc=%d,mtrx=%d,rng=%d]: off=%u\n",
 +           ci_temp.color_info.color_description_idc,
@@ -492,9 +491,9 @@ index f4a60e03bd..f6adb3de4b 100644
 +           ci_temp.color_info.full_range_flag, rb->bit_offset);
 +#endif
    } else {
+     ci_temp.color_info.color_description_idc = AVM_COLOR_DESC_IDC_EXPLICIT;
      ci_temp.color_info.color_primaries = AVM_CICP_CP_UNSPECIFIED;
-     ci_temp.color_info.matrix_coefficients = AVM_CICP_MC_UNSPECIFIED;
-@@ -217,6 +236,11 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
+@@ -176,6 +197,11 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
      else
        ci_temp.ci_chroma_sample_position[1] =
            ci_temp.ci_chroma_sample_position[0];
@@ -506,7 +505,7 @@ index f4a60e03bd..f6adb3de4b 100644
    } else {
      ci_temp.ci_chroma_sample_position[0] = AVM_CSP_UNSPECIFIED;
      ci_temp.ci_chroma_sample_position[1] = AVM_CSP_UNSPECIFIED;
-@@ -228,10 +252,25 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
+@@ -187,10 +213,25 @@ uint32_t av2_read_content_interpretation_obu(struct AV2Decoder *pbi,
        avm_internal_error(&cm->error, AVM_CODEC_UNSUP_BITSTREAM,
                           "Incorrect SAR values");
      }
@@ -531,10 +530,10 @@ index f4a60e03bd..f6adb3de4b 100644
 +#endif
 +  }
  
-   if (ci_temp.ci_extension_present_flag) {
-     // TODO: issue #1111 - Add the extension mechanism
+   size_t bits_before_ext = rb->bit_offset - saved_bit_offset;
+   ci_temp.ci_extension_present_flag = avm_rb_read_bit(rb);
 diff --git a/av2/decoder/obu_fgm.c b/av2/decoder/obu_fgm.c
-index fe02659a55..0debefa5fa 100644
+index 309d09dfeb..8ebf851f71 100644
 --- a/av2/decoder/obu_fgm.c
 +++ b/av2/decoder/obu_fgm.c
 @@ -26,6 +26,8 @@
@@ -546,7 +545,7 @@ index fe02659a55..0debefa5fa 100644
  void copy_fgm_from_list(AV2_COMMON *cm, avm_film_grain_t *pars,
                          const struct film_grain_model *fgm) {
    const SequenceHeader *const seq_params = &cm->seq_params;
-@@ -69,7 +71,11 @@ void copy_fgm_from_list(AV2_COMMON *cm, avm_film_grain_t *pars,
+@@ -68,7 +70,11 @@ void copy_fgm_from_list(AV2_COMMON *cm, avm_film_grain_t *pars,
  
  static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
                                    struct avm_read_bit_buffer *rb,
@@ -559,7 +558,7 @@ index fe02659a55..0debefa5fa 100644
    int monochrome = chroma_idc == CHROMA_FORMAT_400;
    int subsampling_x = chroma_idc == CHROMA_FORMAT_444 ? 0 : 1;
    int subsampling_y =
-@@ -121,6 +127,11 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+@@ -120,6 +126,11 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
          }
          fgm->fgm_scaling_points[c][i][1] = avm_rb_read_literal(rb, bitsScal);
        }
@@ -569,12 +568,12 @@ index fe02659a55..0debefa5fa 100644
 +             rb->bit_offset);
 +#endif
      }
-   }  // c < fgmNumScalingChannels
+   }
  
 @@ -151,6 +162,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
-     int BitsArY = bits_per_ar_coeff_y_minus5 + 5;
+     int midPointY = 1 << (BitsArY - 1);
      for (int i = 0; i < num_pos_luma; i++)
-       fgm->ar_coeffs_y[i] = avm_rb_read_literal(rb, BitsArY) - 128;
+       fgm->ar_coeffs_y[i] = avm_rb_read_literal(rb, BitsArY) - midPointY;
 +#if DEBUG_FGM_HDR
 +    printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%u\n",
 +           idx, 0, fgm->ar_coeff_lag, num_pos_luma, BitsArY, rb->bit_offset);
@@ -582,10 +581,10 @@ index fe02659a55..0debefa5fa 100644
    }
  
    if (fgm->fgm_points[1] || fgm->fgm_scale_from_channel0_flag) {
-@@ -158,6 +173,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
-     int BitsArCb = bits_per_ar_coeff_cb_minus5 + 5;
+@@ -159,6 +174,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+     int midPointCb = 1 << (BitsArCb - 1);
      for (int i = 0; i < num_pos_chroma; i++)
-       fgm->ar_coeffs_cb[i] = avm_rb_read_literal(rb, BitsArCb) - 128;
+       fgm->ar_coeffs_cb[i] = avm_rb_read_literal(rb, BitsArCb) - midPointCb;
 +#if DEBUG_FGM_HDR
 +    printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%u\n",
 +           idx, 1, fgm->ar_coeff_lag, num_pos_chroma, BitsArCb, rb->bit_offset);
@@ -593,10 +592,10 @@ index fe02659a55..0debefa5fa 100644
    }
  
    if (fgm->fgm_points[2] || fgm->fgm_scale_from_channel0_flag) {
-@@ -165,6 +184,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
-     int BitsArCr = bits_per_ar_coeff_cr_minus5 + 5;
+@@ -167,6 +186,10 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+     int midPointCr = 1 << (BitsArCr - 1);
      for (int i = 0; i < num_pos_chroma; i++)
-       fgm->ar_coeffs_cr[i] = avm_rb_read_literal(rb, BitsArCr) - 128;
+       fgm->ar_coeffs_cr[i] = avm_rb_read_literal(rb, BitsArCr) - midPointCr;
 +#if DEBUG_FGM_HDR
 +    printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%u\n",
 +           idx, 2, fgm->ar_coeff_lag, num_pos_chroma, BitsArCr, rb->bit_offset);
@@ -604,7 +603,7 @@ index fe02659a55..0debefa5fa 100644
    }
  
    fgm->ar_coeff_shift = avm_rb_read_literal(rb, 2) + 6;  // 6 + value
-@@ -191,6 +214,15 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
+@@ -193,6 +216,15 @@ static void read_film_grain_model(struct film_grain_model *fgm, int chroma_idc,
      fgm->mc_identity = 0;
  
    fgm->block_size = avm_rb_read_bit(rb);
@@ -620,7 +619,7 @@ index fe02659a55..0debefa5fa 100644
  }
  
  // acc_fgm_id_bitmap is an in/out parameter. The caller should set
-@@ -215,6 +247,10 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
+@@ -217,6 +249,10 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
      avm_internal_error(&pbi->common.error, AVM_CODEC_UNSUP_BITSTREAM,
                         "Invalid fgm_chroma_idc [%d].", fgm_chroma_idc);
    }
@@ -631,7 +630,7 @@ index fe02659a55..0debefa5fa 100644
    for (int j = 0; j < MAX_FGM_NUM; j++) {
      // This process overwrites the position(pbi->fg_list[fgm_id]) if the fgm_id
      // is the same.
-@@ -226,7 +262,11 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
+@@ -228,7 +264,11 @@ uint32_t read_fgm_obu(AV2Decoder *pbi, const int obu_tlayer_id,
        pbi->fgm_list[fgm_id].fgm_tlayer_id = obu_tlayer_id;
        pbi->fgm_list[fgm_id].fgm_chroma_idc = fgm_chroma_idc;
        read_film_grain_model(&pbi->fgm_list[fgm_id], fgm_chroma_idc, rb,
@@ -641,8 +640,8 @@ index fe02659a55..0debefa5fa 100644
 +                            , j
 +#endif
 +                            );
-     }  // if
-   }  // j
+     }
+   }
    if (av2_check_trailing_bits(pbi, rb) != 0) {
 diff --git a/avm/debug.h b/avm/debug.h
 index 36030e147d..b605a9125c 100644

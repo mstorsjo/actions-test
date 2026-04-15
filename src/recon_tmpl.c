@@ -113,7 +113,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         }
 #undef MERGE_CTX
 
-        const int offset = plane == 1 ? 7 : 6 * u_has_cf + not_one_blk * 3;
+        const int offset = plane == 1 ? 6 : 6 * u_has_cf + not_one_blk * 3;
         return offset + ca + cl;
     } else if (b_dim[2] == t_dim->lw && b_dim[3] == t_dim->lh) {
         return 0;
@@ -355,7 +355,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     ts->msac.rng);
 
     // does this block have any non-zero coefficients
-    const int sctx = (b->fsc && !chroma && f->seq_hdr->fsc) ? 13 :
+    const int sctx = (b->fsc && !chroma && f->seq_hdr->fsc) ? 9 :
                      get_skip_ctx(t_dim, bs, a, l, plane, t->u_has_cf, f->cur.p.p.layout);
     const int all_skip =
         dav2d_msac_decode_bool_adapt(&ts->msac,
@@ -3142,7 +3142,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             bawp(t, 1, b->mv[0], dst, f->cur.p.stride[0],
                  &f->cur, 0 /* unused */, bw4, bh4, w4, h4, 0, b->bs);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-            hex_dump(dst, f->cur.p.stride[0], bw4 * 4, bh4 * 4, "y-pred");
+            hex_dump(dst, f->cur.p.stride[0], imin(f->bw - t->bx, bw4) * 4,
+                     imin(f->bh - t->by, bh4) * 4, "y-pred");
         }
     } else if (!b->intra) {
         if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
@@ -3254,7 +3255,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }}
         }
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-            hex_dump(dst, f->cur.p.stride[0], bw4 * 4, bh4 * 4, "y-pred");
+            hex_dump(dst, f->cur.p.stride[0], imin(f->bw - t->bx, bw4) * 4,
+                     imin(f->bh - t->by, bh4) * 4, "y-pred");
     } else if (b->pal_sz) {
         const uint8_t *pal_idx;
         const pixel *pal;
@@ -3271,7 +3273,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         f->dsp->ipred.pal_pred(dst, f->cur.p.stride[0], pal,
                                pal_idx, bw4 * 4, bh4 * 4);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
-            hex_dump(dst, f->cur.p.stride[0], bw4 * 4, bh4 * 4, "y-pal-pred");
+            hex_dump(dst, f->cur.p.stride[0], imin(f->bw - t->bx, bw4) * 4,
+                     imin(f->bh - t->by, bh4) * 4, "y-pal-pred");
     }
 
     // luma

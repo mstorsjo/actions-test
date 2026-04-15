@@ -195,7 +195,7 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
 
     // Don't clear these flags from c->frame_flags if the frame is not going to be output.
     // This way they will be added to the next visible frame too.
-    const int flags_mask = ((f->frame_hdr->show_frame || c->output_invisible_frames) /*&&
+    const int flags_mask = ((f->frame_hdr->show_immediate || c->output_invisible_frames) /*&&
                             c->max_spatial_id == f->frame_hdr->spatial_id*/)
                            ? 0 : (PICTURE_FLAG_NEW_SEQUENCE | PICTURE_FLAG_NEW_OP_PARAMS_INFO);
 #if 0
@@ -203,8 +203,8 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     c->frame_flags &= flags_mask;
 #endif
 
-    p->visible = f->frame_hdr->show_frame;
-    p->showable = f->frame_hdr->showable_frame;
+    p->visible = f->frame_hdr->show_immediate;
+    p->showable = f->frame_hdr->show_immediate || f->frame_hdr->show_implicit;
 
     if (p->visible) {
         // Only add HDR10+ and T35 metadata when show frame flag is enabled

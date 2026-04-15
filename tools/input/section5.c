@@ -51,6 +51,11 @@ static int section5_probe(const uint8_t *data) {
     enum Dav2dObuType type;
     ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
                            &obu_size, &type);
+    if (ret < 0 || type != DAV2D_OBU_TD)
+        return 0;
+    cnt += ret;
+    ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
+                           &obu_size, &type);
     if (ret < 0 || type != DAV2D_OBU_SEQ_HDR)
         return 0;
     cnt += ret;
@@ -104,17 +109,7 @@ static int section5_open(Section5InputContext *const c, const char *const file,
             return -1;
         const enum Dav2dObuType obu_type = (byte[0] >> 2) & 0x1f;
         switch (obu_type) {
-        case DAV2D_OBU_OPEN_LOOP_KF:
-        case DAV2D_OBU_CLOSED_LOOP_KF:
-        case DAV2D_OBU_LEADING_TILE_GRP:
-        case DAV2D_OBU_TILE_GRP:
-        case DAV2D_OBU_SWITCH:
-        case DAV2D_OBU_LEADING_SEF:
-        case DAV2D_OBU_SEF:
-        case DAV2D_OBU_LEADING_TIP:
-        case DAV2D_OBU_TIP:
-        case DAV2D_OBU_BRIDGE:
-        case DAV2D_OBU_RAS:
+        case DAV2D_OBU_TD:
             (*num_frames)++;
             break;
         default: break;
@@ -147,8 +142,16 @@ static int section5_read(Section5InputContext *const c, Dav2dData *const data) {
         if (fread(&byte[0], 1, 1, c->f) < 1)
             return -1;
         const enum Dav2dObuType obu_type = (byte[0] >> 2) & 0x1f;
-        if (first && obu_type == DAV2D_OBU_TD)
-            return -1;
+        if (first) {
+            if (obu_type != DAV2D_OBU_TD)
+                return -1;
+        } else {
+            if (obu_type == DAV2D_OBU_TD) {
+                // include TD in next packet
+                fseeko(c->f, -(1 + res), SEEK_CUR);
+                break;
+            }
+        }
         const int has_extension = byte[0] >> 7;
         if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
             return -1;
@@ -157,7 +160,6 @@ static int section5_read(Section5InputContext *const c, Dav2dData *const data) {
         len -= 1 + has_extension;
         total_bytes += 1U + has_extension + res + len;
         fseeko(c->f, len, SEEK_CUR); // skip packet, we'll read it below
-        if (obu_type == DAV2D_OBU_TD) break;
     }
 
     fseeko(c->f, -(off_t)total_bytes, SEEK_CUR);

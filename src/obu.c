@@ -80,7 +80,8 @@ static inline int tile_log2(const int sz, const int tgt) {
 static NOINLINE void parse_tile_info(struct Dav2dTileInfo *const thdr,
                                      GetBits *const gb, const int sbmul,
                                      const int sb128, const int seq_sb128,
-                                     const int w, const int h)
+                                     const int w, const int h,
+                                     const int level, const int tier)
 {
     thdr->uniform = dav2d_get_bit(gb);
 
@@ -90,8 +91,10 @@ static NOINLINE void parse_tile_info(struct Dav2dTileInfo *const thdr,
     const int sbsz_log2 = 6 + sb128;
     const int sbw = (w + sbsz_min1) >> sbsz_log2;
     const int sbh = (h + sbsz_min1) >> sbsz_log2;
-    const int max_tile_width_sb = 4096 >> sbsz_log2;
-    const int max_tile_area_sb = 4096 * 2304 >> (2 * sbsz_log2);
+    const int w_adj = (level >= 18) + (level >= 14 && tier);
+    const int max_tile_width_sb = 4096 >> (sbsz_log2 - w_adj);
+    const int sz_adj = (level >= 14) + (level >= 18) + (level >= 14 && tier);
+    const int max_tile_area_sb = 4096 * 2304 >> (2 * sbsz_log2 - sz_adj);
     thdr->min_log2_cols = tile_log2(max_tile_width_sb, sbw);
     thdr->max_log2_cols = tile_log2(1, imin(sbw, DAV2D_MAX_TILE_COLS));
     thdr->max_log2_rows = tile_log2(1, imin(sbh, DAV2D_MAX_TILE_ROWS));
@@ -184,49 +187,17 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
 
     memset(hdr, 0, sizeof(*hdr));
     hdr->id = dav2d_get_vlc(gb);
-    hdr->profile = dav2d_get_bits(gb, 3);
+    hdr->profile = dav2d_get_bits(gb, 5);
     if (hdr->profile > 2) goto error;
     hdr->reduced_still_picture_header = dav2d_get_bit(gb);
-    if (hdr->reduced_still_picture_header) {
-        hdr->still_picture = 1;
-    } else {
-        hdr->lcr_id = dav2d_get_bits(gb, 3);
-        hdr->still_picture = dav2d_get_bit(gb);
-    }
     hdr->level = dav2d_get_bits(gb, 5);
-    if (hdr->level >= 8 && !hdr->reduced_still_picture_header)
+    if (hdr->level >= 4 && !hdr->reduced_still_picture_header)
         hdr->tier = dav2d_get_bit(gb);
 #if DEBUG_SEQ_HDR
     printf("SEQHDR: post-profile_stillpic_level_tier[profile:%d,reducedhdr:%d,"
-           "stillpic:%d,lcrid:%d,level:%d,tier:%d]: off=%u\n",
+           "level:%d,tier:%d]: off=%u\n",
            hdr->profile, hdr->reduced_still_picture_header,
-           hdr->still_picture, hdr->lcr_id, hdr->level, hdr->tier,
-           dav2d_get_bits_pos(gb) - init_bit_pos);
-#endif
-
-    hdr->width_n_bits = dav2d_get_bits(gb, 4) + 1;
-    hdr->height_n_bits = dav2d_get_bits(gb, 4) + 1;
-    hdr->max_width = dav2d_get_bits(gb, hdr->width_n_bits) + 1;
-    hdr->max_height = dav2d_get_bits(gb, hdr->height_n_bits) + 1;
-#if DEBUG_SEQ_HDR
-    printf("SEQHDR: post-size[bits:%dx%d,max:%dx%d]: off=%u\n",
-           hdr->width_n_bits, hdr->height_n_bits,
-           hdr->max_width, hdr->max_height,
-           dav2d_get_bits_pos(gb) - init_bit_pos);
-#endif
-
-    hdr->crop.enabled = dav2d_get_bit(gb);
-    if (hdr->crop.enabled) {
-        hdr->crop.left = dav2d_get_vlc(gb);
-        hdr->crop.right = dav2d_get_vlc(gb);
-        hdr->crop.top = dav2d_get_vlc(gb);
-        hdr->crop.bottom = dav2d_get_vlc(gb);
-    }
-#if DEBUG_SEQ_HDR
-    printf("SEQHDR: post-cropwindow[%d,l:%d,r:%d,t:%d,b:%d]: off=%u\n",
-           hdr->crop.enabled,
-           hdr->crop.left, hdr->crop.right,
-           hdr->crop.top, hdr->crop.bottom,
+           hdr->level, hdr->tier,
            dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
 
@@ -257,6 +228,50 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
            dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
 
+    if (hdr->reduced_still_picture_header) {
+        hdr->still_picture = 1;
+        hdr->monotonic = 1;
+    } else {
+        hdr->lcr_id = dav2d_get_bits(gb, 3);
+        hdr->still_picture = dav2d_get_bit(gb);
+        hdr->max_tlayer_id = dav2d_get_bits(gb, 2);
+        hdr->max_mlayer_id = dav2d_get_bits(gb, 3);
+        hdr->monotonic = dav2d_get_bit(gb);
+    }
+#if DEBUG_SEQ_HDR
+    printf("SEQHDR: post-seqlcrid_stillpic_maxtmlayerid[lcrid:%d,stillpic:%d,"
+           "maxtlayerid:%d,maxmlayerid:%d,monotonic:%d]: off=%u\n",
+           hdr->lcr_id, hdr->still_picture,
+           hdr->max_tlayer_id, hdr->max_mlayer_id, hdr->monotonic,
+           dav2d_get_bits_pos(gb) - init_bit_pos);
+#endif
+
+    hdr->width_n_bits = dav2d_get_bits(gb, 4) + 1;
+    hdr->height_n_bits = dav2d_get_bits(gb, 4) + 1;
+    hdr->max_width = dav2d_get_bits(gb, hdr->width_n_bits) + 1;
+    hdr->max_height = dav2d_get_bits(gb, hdr->height_n_bits) + 1;
+#if DEBUG_SEQ_HDR
+    printf("SEQHDR: post-size[bits:%dx%d,max:%dx%d]: off=%u\n",
+           hdr->width_n_bits, hdr->height_n_bits,
+           hdr->max_width, hdr->max_height,
+           dav2d_get_bits_pos(gb) - init_bit_pos);
+#endif
+
+    hdr->crop.enabled = dav2d_get_bit(gb);
+    if (hdr->crop.enabled) {
+        hdr->crop.left = dav2d_get_vlc(gb);
+        hdr->crop.right = dav2d_get_vlc(gb);
+        hdr->crop.top = dav2d_get_vlc(gb);
+        hdr->crop.bottom = dav2d_get_vlc(gb);
+    }
+#if DEBUG_SEQ_HDR
+    printf("SEQHDR: post-cropwindow[%d,l:%d,r:%d,t:%d,b:%d]: off=%u\n",
+           hdr->crop.enabled,
+           hdr->crop.left, hdr->crop.right,
+           hdr->crop.top, hdr->crop.bottom,
+           dav2d_get_bits_pos(gb) - init_bit_pos);
+#endif
+
     if (!hdr->reduced_still_picture_header) {
         hdr->max_display_model_info_present = dav2d_get_bit(gb);
         if (hdr->max_display_model_info_present)
@@ -274,17 +289,6 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
         printf("SEQHDR: post-decodermodel[maxdisplaymodel:%d,decodermodel:%d]: off=%u\n",
                hdr->max_display_model_info_present,
                hdr->decoder_model_info_present,
-               dav2d_get_bits_pos(gb) - init_bit_pos);
-#endif
-    }
-
-    // here goes multi-layer HLS info
-    if (!hdr->reduced_still_picture_header) {
-        hdr->max_tlayer_id = dav2d_get_bits(gb, 2);
-        hdr->max_mlayer_id = dav2d_get_bits(gb, 3);
-#if DEBUG_SEQ_HDR
-        printf("SEQHDR: post-maxlayerid[t:%d,m:%d]: off=%u\n",
-               hdr->max_tlayer_id, hdr->max_mlayer_id,
                dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
     }
@@ -593,6 +597,8 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     hdr->disable_loopfilters_across_tiles = dav2d_get_bit(gb);
     hdr->cdef = dav2d_get_bit(gb);
     hdr->gdf = dav2d_get_bit(gb);
+    if (hdr->gdf && !hdr->sb128)
+        hdr->gdf_unit_matches_sbsz = dav2d_get_bit(gb);
     hdr->restoration = dav2d_get_bit(gb);
 
     if (hdr->restoration) {
@@ -606,7 +612,9 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
         }
     }
     hdr->ccso = dav2d_get_bit(gb);
-    hdr->cdef_on_skiptx = hdr->reduced_still_picture_header ? 2 :
+    if (hdr->ccso)
+        hdr->ccso_unit_matches_sbsz = dav2d_get_bit(gb);
+    hdr->cdef_on_skiptx = hdr->reduced_still_picture_header ? DAV2D_ADAPTIVE :
                           dav2d_get_bit(gb) ? 1 :
                           dav2d_get_bit(gb) ? 0 : DAV2D_ADAPTIVE;
     hdr->df_par_bits = 2 + dav2d_get_bits(gb, 2);
@@ -629,7 +637,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     if (hdr->tiling.present) {
         hdr->tiling.present += dav2d_get_bit(gb);
         parse_tile_info(&hdr->tiling.t, gb, 1, hdr->sb128, hdr->sb128,
-                        hdr->max_width, hdr->max_height);
+                        hdr->max_width, hdr->max_height, hdr->level, hdr->tier);
     }
 #if DEBUG_SEQ_HDR
     printf("SEQHDR: post-tileinfo[%d,%dx%d]: off=%u\n",
@@ -646,9 +654,40 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
            dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
 
-    // We needn't bother flushing the OBU here: we'll check we didn't
-    // overrun in the caller and will then discard gb, so there's no
-    // point in setting its position properly.
+    // extension is all bits until the trailing one, so
+    // since we don't care about the contents anyway, we
+    // can skip & ignore it if we don't care about strict
+    // conformance
+    if (!gb->error && !strict_std_compliance && !DEBUG_SEQ_HDR) return 0;
+
+    const int has_extension = dav2d_get_bit(gb);
+#if DEBUG_SEQ_HDR
+    ptrdiff_t extension_bits = 0;
+#endif
+    if (has_extension) {
+        // extension is all following bits except trailing one & any following zeroes
+        const uint8_t *ptr = &gb->ptr_end[-1], *cur = &gb->ptr[-(1 + (gb->bits_left >> 3))];
+        while (ptr >= cur && !*ptr) ptr--;
+        if (ptr < cur) goto error;
+        int n = 8, m = 0x80, byte = *ptr;
+        for (; n >= 0; n++, m >>= 1) {
+            if (byte & m) break;
+        }
+        assert(n >= 0);
+#if DEBUG_SEQ_HDR
+        extension_bits = (&ptr[1] - gb->ptr) * 8 + gb->bits_left - n;
+#endif
+        // set up bitreader to skip all extension bits, but not the trailing one
+        // and any following zeroes
+        gb->ptr = &ptr[1];
+        gb->state = (uint64_t) byte << (64 - n);
+        gb->bits_left = n;
+    }
+#if DEBUG_SEQ_HDR
+    printf("SEQHDR: post-extension[%d,nbits=%td]: off=%u\n",
+           has_extension, extension_bits,
+           dav2d_get_bits_pos(gb) - init_bit_pos);
+#endif
 
     return check_trailing_bits(gb, strict_std_compliance);
 
@@ -916,9 +955,30 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
 {
     // tile data
     hdr->sb128 = IS_INTER_OR_SWITCH(hdr) ? seqhdr->sb128 : !!seqhdr->sb128;
-    int sbmul;
-    if (seqhdr->tiling.present == 1 ||
-        (seqhdr->tiling.present == DAV2D_ADAPTIVE && dav2d_get_bit(gb)))
+    int sbmul, reuse_allowed = 0;
+    if (seqhdr->tiling.present) {
+        const int sbsz_min1 = (64 << hdr->sb128) - 1;
+        const int sbsz_log2 = 6 + hdr->sb128;
+        const int sbw = (hdr->width + sbsz_min1) >> sbsz_log2;
+        const int sbh = (hdr->height + sbsz_min1) >> sbsz_log2;
+        if (!seqhdr->tiling.t.uniform) {
+            const int seq_sbsz_min1 = (64 << seqhdr->sb128) - 1;
+            const int seq_sbsz_log2 = 6 + seqhdr->sb128;
+            const int seq_sbw = (seqhdr->max_width + seq_sbsz_min1) >> seq_sbsz_log2;
+            const int seq_sbh = (seqhdr->max_height + seq_sbsz_min1) >> seq_sbsz_log2;
+            reuse_allowed = seq_sbw == sbw && seq_sbh == sbh;
+        } else {
+            const int tile_w =
+                (sbw + seqhdr->tiling.t.cols - 1) >> seqhdr->tiling.t.log2_cols;
+            const int tile_h =
+                (sbh + seqhdr->tiling.t.rows - 1) >> seqhdr->tiling.t.log2_rows;
+            reuse_allowed = tile_w * (seqhdr->tiling.t.cols - 1) < sbw &&
+                            tile_h * (seqhdr->tiling.t.rows - 1) < sbh;
+        }
+    }
+    if (reuse_allowed && (seqhdr->tiling.present == 1 ||
+                          (seqhdr->tiling.present == DAV2D_ADAPTIVE &&
+                           dav2d_get_bit(gb))))
     {
         hdr->tiling.t = seqhdr->tiling.t;
         if (hdr->sb128 != seqhdr->sb128) {
@@ -933,7 +993,7 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
     } else {
         sbmul = seqhdr->sb128 == 2 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
         parse_tile_info(&hdr->tiling.t, gb, sbmul, hdr->sb128, seqhdr->sb128,
-                        hdr->width, hdr->height);
+                        hdr->width, hdr->height, seqhdr->level, seqhdr->tier);
     }
     if (sbmul == 2) {
         hdr->tiling.t.row_start_sb[hdr->tiling.t.rows] = (hdr->height + 127) >> 7;
@@ -1005,7 +1065,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     if (seqhdr->reduced_still_picture_header) {
         hdr->frame_type = DAV2D_FRAME_TYPE_KEY;
-        hdr->show_frame = 1;
+        hdr->show_immediate = 1;
     } else {
         switch (obu_type) {
         case DAV2D_OBU_CLOSED_LOOP_KF:
@@ -1028,26 +1088,29 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             hdr->frame_type = DAV2D_FRAME_TYPE_INTER;
             break;
         }
+        hdr->ltr_id = -1;
         if (hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {
-            hdr->ltr_id = dav2d_get_bits(gb, seqhdr->number_of_bits_for_lt_frame_id);
-        } else if (obu_type == DAV2D_OBU_RAS) {
-            hdr->n_ref_frames = dav2d_get_bits(gb, 3);
-            for (int n = 0; n < hdr->n_ref_frames; n++)
-                hdr->refidx[n] =
-                    dav2d_get_bits(gb, seqhdr->number_of_bits_for_lt_frame_id);
+            if (seqhdr->number_of_bits_for_lt_frame_id)
+                hdr->ltr_id =
+                    dav2d_get_bits(gb, seqhdr->number_of_bits_for_lt_frame_id) - 1;
+        } else if (obu_type == DAV2D_OBU_RAS || obu_type == DAV2D_OBU_OPEN_LOOP_KF) {
+            if (seqhdr->number_of_bits_for_lt_frame_id) {
+                hdr->n_ref_frames = dav2d_get_bits(gb, 3);
+                for (int n = 0; n < hdr->n_ref_frames; n++)
+                    hdr->refidx[n] =
+                        dav2d_get_bits(gb, seqhdr->number_of_bits_for_lt_frame_id);
+            }
         }
         if (obu_type != DAV2D_OBU_BRIDGE) {
             if (obu_type != DAV2D_OBU_OPEN_LOOP_KF)
-                hdr->show_frame = dav2d_get_bit(gb);
-            hdr->showable_frame = hdr->show_frame ?
-                hdr->frame_type != DAV2D_FRAME_TYPE_KEY :
-                dav2d_get_bit(gb);
+                hdr->show_immediate = dav2d_get_bit(gb);
+            if (!hdr->show_immediate && !seqhdr->monotonic)
+                hdr->show_implicit = dav2d_get_bit(gb);
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-frametype_bits[type:%d,ltrid:%d,show:%d|%d]: off=%td\n",
-               hdr->frame_type,
-               hdr->frame_type == DAV2D_FRAME_TYPE_KEY ? hdr->ltr_id : -1,
-               hdr->show_frame, hdr->showable_frame,
+               hdr->frame_type, hdr->ltr_id,
+               hdr->show_immediate, hdr->show_implicit,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
@@ -1386,7 +1449,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (!hdr->primary_ref_signaled)
             hdr->primary_ref_frame = refs[0];
         if (hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE)
-            hdr->secondary_ref_frame = refs[refs[0] == hdr->primary_ref_frame];
+            hdr->secondary_ref_frame = refs[refs[1] != hdr->primary_ref_frame];
     }
 
 #if DEBUG_FRAME_HDR
@@ -1946,7 +2009,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     }
 
 grain:
-    if (seqhdr->film_grain_present && (hdr->show_frame || hdr->showable_frame)) {
+    if (seqhdr->film_grain_present && (hdr->show_immediate || hdr->show_implicit)) {
         hdr->film_grain.present = seqhdr->reduced_still_picture_header ||
                                   dav2d_get_bit(gb);
         if (hdr->film_grain.present) {

@@ -305,21 +305,9 @@ typedef struct Dav2dSequenceHeader {
      */
     uint8_t profile;
     uint8_t reduced_still_picture_header;
-    uint8_t lcr_id;
-    uint8_t still_picture;
     uint8_t level;
     uint8_t tier;
-    /**
-     * Maximum dimensions for this stream. In non-scalable streams, these
-     * are often the actual dimensions of the stream, although that is not
-     * a normative requirement.
-     */
-    int max_width, max_height;
-    uint8_t width_n_bits, height_n_bits;
-    struct {
-        uint8_t enabled;
-        unsigned left, right, top, bottom;
-    } crop;
+
     uint8_t /*enum Dav2dPixelLayout*/ layout; ///< format of the picture
     uint8_t ss_hor, ss_ver;
 
@@ -332,6 +320,21 @@ typedef struct Dav2dSequenceHeader {
      */
     uint8_t hbd;
 
+    uint8_t lcr_id;
+    uint8_t still_picture;
+    uint8_t max_tlayer_id, max_mlayer_id, monotonic;
+    /**
+     * Maximum dimensions for this stream. In non-scalable streams, these
+     * are often the actual dimensions of the stream, although that is not
+     * a normative requirement.
+     */
+    int max_width, max_height;
+    uint8_t width_n_bits, height_n_bits;
+    struct {
+        uint8_t enabled;
+        unsigned left, right, top, bottom;
+    } crop;
+
     uint8_t max_display_model_info_present;
     uint8_t max_initial_display_delay;
     uint8_t decoder_model_info_present;
@@ -341,7 +344,6 @@ typedef struct Dav2dSequenceHeader {
     uint32_t max_encoder_buffer_delay;
     uint8_t max_low_delay_mode;
 
-    uint8_t max_tlayer_id, max_mlayer_id;
     uint8_t tlayer_dependency_present, mlayer_dependency_present;
     uint8_t tlayer_dependencies[8], mlayer_dependencies[8];
 
@@ -405,10 +407,10 @@ typedef struct Dav2dSequenceHeader {
     // filtering flags
     uint8_t disable_loopfilters_across_tiles;
     uint8_t cdef;
-    uint8_t gdf;
+    uint8_t gdf, gdf_unit_matches_sbsz;
     uint8_t restoration;
     uint8_t rst_disable_mask[2];
-    uint8_t ccso;
+    uint8_t ccso, ccso_unit_matches_sbsz;
     uint8_t /*enum Dav2dAdaptiveBoolean*/ cdef_on_skiptx;
     uint8_t df_par_bits;
 
@@ -460,10 +462,10 @@ typedef struct Dav2dFrameHeader {
 
     uint8_t show_existing_frame;
     int8_t existing_frame_idx;
-    uint8_t ltr_id;
+    int8_t ltr_id;
     uint32_t frame_presentation_delay;
-    uint8_t show_frame;
-    uint8_t showable_frame;
+    uint8_t show_immediate;
+    uint8_t show_implicit;
     uint8_t cross_frame_context;
     uint8_t disable_cdf_update;
     uint8_t allow_screen_content_tools;
