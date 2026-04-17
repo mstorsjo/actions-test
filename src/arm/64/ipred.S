@@ -1198,6 +1198,315 @@ function ipred_smooth_h_8bpc_neon, export=1
         ret
 endfunc
 
+// void ipred_smooth_v_8bpc_neon(pixel *dst, const ptrdiff_t stride,
+//                               const pixel *const topleft,
+//                               const int width, const int height, const int a,
+//                               const int max_width, const int max_height);
+function ipred_smooth_v_8bpc_neon, export=1
+        clz             w6,  w4
+        mov             w11, #0x0201            // ramp = bytes 01 02
+        mul             w13, w3,  w4            // n_pel = width * height
+        add             w12, w4,  #1
+        movi            v7.8h,   #128           // rounding constant for addhn
+        sub             w6,  w6,  #24           // to128 = clz(height) - 24 = converts row 1,2,3,... into 128 / height units
+        mov             w10, #8
+        movk            w11, #0x0403, lsl #16   // ramp = bytes 01 02 03 04
+        sub             x12, x2,  x12           // &topleft[-(height + 1)]
+        lsl             w11, w11, w6            // [1..4] scaled into 128 / height units
+        movrel          x14, X(sm_weights)
+        fmov            s1,  w11
+        ld1r            {v2.16b},  [x12]        // broadcast bottom = topleft[-(height + 1)]
+        cmp             w13, #512
+        cset            w9,  gt
+        lsl             w10, w10, w6            // 8 << to128 = for advancing 4 rows
+        cmp             w13, #63
+        usubw           v0.8h,   v7.8h,   v1.8b // coeff = 128 - [1..4] * 128 / height, vertical coeffs for the first 4 rows
+        cinc            w9,  w9,  gt            // scale = (n_pel >= 64) + (n_pel > 512)
+        dup             v5.8h,   w10            // decrement amount for moving to the next 4 rows
+        add             v0.8h,   v0.8h,   v0.8h // coeff scaled up for addhn rounding
+        add             x2,  x2,  #1
+        add             x14, x14, x9,  lsl #6   // weights = sm_weights[scale]
+        cmp             w3,  #8
+        b.gt            160f
+        b.eq            80f
+
+40:     // width = 4
+        ld1r            {v3.4s},  [x2]              // load and replicate top 4 samples topleft[1..4] ("above" values)
+        zip1            v22.8h,  v0.8h,   v0.8h     // duplicate row coeffs: [r0,r0,r1,r1,r2,r2,r3,r3]
+        mov             v18.16b, v7.16b
+        mov             v19.16b, v7.16b
+        usubl           v4.8h,   v3.8b,   v2.8b     // above - bottom (same for all rows)
+        zip1            v6.4s,   v22.4s,  v22.4s    // row coeffs for rows 0,1 packed as 32-bit chunks
+        zip2            v22.4s,  v22.4s,  v22.4s    // row coeffs for rows 2,3 packed as 32-bit chunks
+        add             x6,  x0,  x1                // x6 = dst + stride (row 1 when storing 2 rows interleaved)
+        lsl             x1,  x1,  #1                // x1 = 2 * stride, store rows 0,2 via x0 and 1,3 via x6
+        mla             v18.8h,  v4.8h,   v6.8h
+        mla             v19.8h,  v4.8h,   v22.8h    // 1st pred-bottom term = ((above - bottom) * off + rnd
+        mul             v5.8h,   v4.8h,   v5.8h     // decrement to compute next pred-bottom term
+        b               42f                         // skip the pred-bottom term update for 1st iteration
+
+41:     // process 4 rows - only 1 or 2 iterations: scale(w9) can only be 0 or 1!
+        sub             v18.8h,  v18.8h,  v5.8h
+        sub             v19.8h,  v19.8h,  v5.8h     // next pred-bottom term, only from 2nd iteration
+42:
+        ldr             s1,  [x14], #4              // load weights[y..y+3], one byte per row
+
+        uzp2            v16.16b, v18.16b, v19.16b   // packed pred-bottom term for 4 rows, ((above - bottom) * off + rnd) >> log2(height)
+        ushll           v1.8h,   v1.8b,   #2        // weights[y..y+3] * 4 for rounded >> 6 via addhn
+        add             v16.16b, v16.16b, v2.16b    // pred = bottom + interpolated(above - bottom)
+        zip1            v23.8h,  v1.8h,   v1.8h     // duplicate each row weight to match packed lanes
+
+        zip1            v1.4s,   v23.4s,  v23.4s    // row weights for rows 0,1 packed as 32-bit chunks
+        zip2            v23.4s,  v23.4s,  v23.4s    // row weights for rows 2,3 packed as 32-bit chunks
+
+        usubl           v20.8h,  v3.8b,   v16.8b
+        usubl2          v21.8h,  v3.16b,  v16.16b   // above - pred
+
+        subs            w9,  w9,  #1                // limited iterations when vertical weights are non-zero
+        mul             v20.8h,  v20.8h,  v1.8h
+        mul             v21.8h,  v21.8h,  v23.8h
+        addhn           v20.8b,  v20.8h,  v7.8h
+        addhn2          v20.16b, v21.8h,  v7.8h     // ((above - pred) * w_ver + 32) >> 6
+
+        sub             w4,  w4,  #4
+        add             v20.16b, v20.16b, v16.16b   // dst = pred + correction toward above
+
+        st1             {v20.s}[0], [x0],  x1
+        st1             {v20.s}[1], [x6],  x1
+        st1             {v20.s}[2], [x0],  x1
+        st1             {v20.s}[3], [x6],  x1
+        b.ge            41b
+        cbz             w4,  43f
+
+44:     // process last rows, 4 per iteration where the vertical weights are zero
+        sub             v18.8h,  v18.8h,  v5.8h
+        sub             v19.8h,  v19.8h,  v5.8h     // next pred-bottom term
+        uzp2            v20.16b, v18.16b, v19.16b   // packed pred-bottom term for 4 rows, ((above - bottom) * off + rnd) >> log2(height)
+        add             v20.16b, v20.16b, v2.16b    // pred = bottom + interpolated(above - bottom)
+
+        subs            w4,  w4,  #4
+        st1             {v20.s}[0], [x0],  x1
+        st1             {v20.s}[1], [x6],  x1
+        st1             {v20.s}[2], [x0],  x1
+        st1             {v20.s}[3], [x6],  x1
+        b.gt            44b
+43:
+        ret
+
+80:     // width = 8
+        ld1r            {v3.2d},  [x2]              // load and replicate the top 8 samples topleft[1..8]
+        add             x6,  x0,  x1
+        lsl             x1,  x1,  #1
+        usubl           v4.8h,   v3.8b,   v2.8b     // above - bottom, 8 columns
+
+        mov             v16.16b, v7.16b
+        mov             v17.16b, v7.16b
+        mov             v18.16b, v7.16b
+        mov             v19.16b, v7.16b
+        mla             v16.8h,  v4.8h,   v0.h[0]
+        mla             v17.8h,  v4.8h,   v0.h[1]
+        mla             v18.8h,  v4.8h,   v0.h[2]
+        mla             v19.8h,  v4.8h,   v0.h[3]   // 1st pred-bottom term = ((above - bottom) * off + rnd
+        mul             v5.8h,   v4.8h,   v5.8h     // decrement to compute next pred-bottom term
+        b               82f
+
+81:     // process 4 rows - only 1 or 2 iterations: scale(w9) can only be 0 or 1!
+        sub             v16.8h,  v16.8h,  v5.8h
+        sub             v17.8h,  v17.8h,  v5.8h
+        sub             v18.8h,  v18.8h,  v5.8h
+        sub             v19.8h,  v19.8h,  v5.8h     // next pred-bottom term, only from 2nd iteration
+82:
+        ldr             s1,  [x14], #4              // weights for these 4 rows
+
+        uzp2            v25.16b, v16.16b, v17.16b   // packed pred-bottom term for rows 0,1
+        uzp2            v26.16b, v18.16b, v19.16b   // packed pred-bottom term for rows 2,3
+        ushll           v1.8h,   v1.8b,   #2        // weights * 4 for rounded >> 6 via addhn
+
+        add             v25.16b, v25.16b, v2.16b    // pred rows 0,1
+        add             v26.16b, v26.16b, v2.16b    // pred rows 2,3
+
+        usubl           v20.8h,  v3.8b,   v25.8b
+        usubl2          v21.8h,  v3.16b,  v25.16b
+        usubl           v22.8h,  v3.8b,   v26.8b
+        usubl2          v23.8h,  v3.16b,  v26.16b   // above - pred for each row pair
+
+        mul             v20.8h,  v20.8h,  v1.h[0]
+        mul             v22.8h,  v22.8h,  v1.h[2]
+        mul             v21.8h,  v21.8h,  v1.h[1]
+        mul             v23.8h,  v23.8h,  v1.h[3]   // (above - pred) * w_ver
+        subs            w9,  w9,  #1                // limited iterations when vertical weights are non-zero
+        addhn           v20.8b,  v20.8h,  v7.8h
+        addhn           v22.8b,  v22.8h,  v7.8h
+        addhn2          v20.16b, v21.8h,  v7.8h
+        addhn2          v22.16b, v23.8h,  v7.8h     // ((above - pred) * w_ver + 32) >> 6
+
+        sub             w4,  w4,  #4
+        add             v20.16b, v20.16b, v25.16b   // final rows 0,1
+        add             v22.16b, v22.16b, v26.16b   // final rows 2,3
+
+        st1             {v20.8b},   [x0],  x1
+        st1             {v20.d}[1], [x6],  x1
+        st1             {v22.8b},   [x0],  x1
+        st1             {v22.d}[1], [x6],  x1
+        b.ge            81b
+        cbz             w4,  83f
+
+84:     // process last rows, 4 per iteration where the vertical weights are zero
+        sub             v16.8h,  v16.8h,  v5.8h
+        sub             v17.8h,  v17.8h,  v5.8h
+        sub             v18.8h,  v18.8h,  v5.8h
+        sub             v19.8h,  v19.8h,  v5.8h     // next pred-bottom term
+
+        uzp2            v20.16b, v16.16b, v17.16b   // packed pred-bottom term for rows 0,1
+        uzp2            v22.16b, v18.16b, v19.16b   // packed pred-bottom term for rows 2,3
+
+        add             v20.16b, v20.16b, v2.16b    // pred rows 0,1
+        add             v22.16b, v22.16b, v2.16b    // pred rows 2,3
+
+        subs            w4,  w4,  #4
+        st1             {v20.8b},   [x0],  x1
+        st1             {v20.d}[1], [x6],  x1
+        st1             {v22.8b},   [x0],  x1
+        st1             {v22.d}[1], [x6],  x1
+        b.gt            84b
+83:
+        ret
+
+160:    // width >= 16
+        stp             d8,  d9,  [sp, #-0x20]!
+        stp             d10, d11, [sp, #0x10]
+        lsl             x11, x1,  #1                // 2 * stride for paired-row stores
+165:
+        ldr             q3,  [x2],  #16             // load 16 top samples for this 16-pixel stripe
+        mov             x7,  x14                    // restart row-weight pointer for this stripe
+        lsl             w10, w9,  #1                // maximum 1st loop iterations: scale(w9) * 2
+        mov             w8,  w4                     // row counter for this stripe
+        mov             x5,  x0
+        add             x6,  x0,  x1
+        cmp             w4,  #4
+        csel            w10, w10, w9, ne            // limit 1st loop iterations to 1 for Nx4 case
+        usubl           v4.8h,   v3.8b,   v2.8b     // above[0..7]  - bottom
+        usubl2          v6.8h,   v3.16b,  v2.16b    // above[8..15] - bottom
+
+        mov             v8.16b,  v7.16b
+        mov             v9.16b,  v7.16b
+        mla             v8.8h,   v4.8h,   v0.h[0]
+        mla             v9.8h,   v6.8h,   v0.h[0]   // 1st pred-bottom for row 0 = ((above - bottom) * off + rnd
+        mov             v10.16b, v7.16b
+        mov             v11.16b, v7.16b
+        mla             v10.8h,  v4.8h,   v0.h[1]
+        mla             v11.8h,  v6.8h,   v0.h[1]   // 1st pred-bottom for row 1
+        mov             v28.16b, v7.16b
+        mov             v29.16b, v7.16b
+        mla             v28.8h,  v4.8h,   v0.h[2]
+        mla             v29.8h,  v6.8h,   v0.h[2]   // 1st pred-bottom for row 2
+        mov             v30.16b, v7.16b
+        mov             v31.16b, v7.16b
+        mla             v30.8h,  v4.8h,   v0.h[3]
+        mla             v31.8h,  v6.8h,   v0.h[3]   // 1st pred-bottom for row 3
+        mul             v4.8h,   v4.8h,   v5.8h
+        mul             v6.8h,   v6.8h,   v5.8h     // decrement to compute next pred-bottom term
+        b               162f
+
+161:    // process 4 rows for the current 16-pixel stripe
+        sub             v8.8h,   v8.8h,   v4.8h
+        sub             v9.8h,   v9.8h,   v6.8h
+        sub             v10.8h,  v10.8h,  v4.8h
+        sub             v11.8h,  v11.8h,  v6.8h
+        sub             v28.8h,  v28.8h,  v4.8h
+        sub             v29.8h,  v29.8h,  v6.8h
+        sub             v30.8h,  v30.8h,  v4.8h
+        sub             v31.8h,  v31.8h,  v6.8h     // next pred-bottom term, only from 2nd iteration
+162:
+        ldr             s1,  [x7],  #4              // weights[y..y+3]
+
+        uzp2            v16.16b, v8.16b,  v9.16b    // pred-bottom for rows 0
+        uzp2            v17.16b, v10.16b, v11.16b   // pred-bottom for rows 1
+        uzp2            v18.16b, v28.16b, v29.16b   // pred-bottom for rows 2
+        uzp2            v19.16b, v30.16b, v31.16b   // pred-bottom for rows 3
+        ushll           v1.8h,   v1.8b,   #2        // weights * 4
+
+        add             v16.16b, v16.16b, v2.16b    // pred row 0
+        add             v17.16b, v17.16b, v2.16b    // pred row 1
+        add             v18.16b, v18.16b, v2.16b    // pred row 2
+        add             v19.16b, v19.16b, v2.16b    // pred row 3
+
+        // Second stage: move each pred toward the top-row sample using weights[y].
+        usubl           v20.8h,  v3.8b,   v16.8b
+        usubl           v21.8h,  v3.8b,   v17.8b
+        usubl           v22.8h,  v3.8b,   v18.8b
+        usubl           v23.8h,  v3.8b,   v19.8b
+        usubl2          v24.8h,  v3.16b,  v16.16b
+        usubl2          v25.8h,  v3.16b,  v17.16b
+        usubl2          v26.8h,  v3.16b,  v18.16b
+        usubl2          v27.8h,  v3.16b,  v19.16b   // above - pred for rows 0..3
+
+        mul             v20.8h,  v20.8h,  v1.h[0]
+        mul             v21.8h,  v21.8h,  v1.h[1]
+        mul             v24.8h,  v24.8h,  v1.h[0]
+        mul             v25.8h,  v25.8h,  v1.h[1]
+        subs            w10, w10, #1                // limited iterations when vertical weights are non-zero
+        addhn           v20.8b,  v20.8h,  v7.8h
+        addhn           v21.8b,  v21.8h,  v7.8h
+        addhn2          v20.16b, v24.8h,  v7.8h
+        addhn2          v21.16b, v25.8h,  v7.8h     // correction for rows 0,1
+
+        mul             v22.8h,  v22.8h,  v1.h[2]
+        mul             v23.8h,  v23.8h,  v1.h[3]
+        mul             v26.8h,  v26.8h,  v1.h[2]
+        mul             v27.8h,  v27.8h,  v1.h[3]
+        addhn           v22.8b,  v22.8h,  v7.8h
+        addhn           v23.8b,  v23.8h,  v7.8h
+        addhn2          v22.16b, v26.8h,  v7.8h
+        addhn2          v23.16b, v27.8h,  v7.8h     // correction for rows 2,3
+
+        sub             w8,  w8,  #4
+        add             v20.16b, v20.16b, v16.16b   // final row 0
+        add             v21.16b, v21.16b, v17.16b   // final row 1
+        st1             {v20.16b}, [x5],  x11
+        add             v22.16b, v22.16b, v18.16b   // final row 2
+        st1             {v21.16b}, [x6],  x11
+        add             v23.16b, v23.16b, v19.16b   // final row 3
+        st1             {v22.16b}, [x5],  x11
+        st1             {v23.16b}, [x6],  x11
+        b.gt            161b
+        cbz             w8,  163f
+
+164:    // process last rows, 4 per iteration for the current 16-pixel stripe
+        sub             v8.8h,   v8.8h,   v4.8h
+        sub             v9.8h,   v9.8h,   v6.8h
+        sub             v10.8h,  v10.8h,  v4.8h
+        sub             v11.8h,  v11.8h,  v6.8h
+        sub             v28.8h,  v28.8h,  v4.8h
+        sub             v29.8h,  v29.8h,  v6.8h
+        sub             v30.8h,  v30.8h,  v4.8h
+        sub             v31.8h,  v31.8h,  v6.8h     // next pred-bottom term
+
+        uzp2            v16.16b, v8.16b,  v9.16b    // pred-bottom for rows 0
+        uzp2            v17.16b, v10.16b, v11.16b   // pred-bottom for rows 1
+        uzp2            v18.16b, v28.16b, v29.16b   // pred-bottom for rows 2
+        uzp2            v19.16b, v30.16b, v31.16b   // pred-bottom for rows 3
+
+        subs            w8,  w8,  #4
+        add             v16.16b, v16.16b, v2.16b    // pred row 0
+        add             v17.16b, v17.16b, v2.16b    // pred row 1
+        add             v18.16b, v18.16b, v2.16b    // pred row 2
+        add             v19.16b, v19.16b, v2.16b    // pred row 3
+
+        st1             {v16.16b}, [x5],  x11
+        st1             {v17.16b}, [x6],  x11
+        st1             {v18.16b}, [x5],  x11
+        st1             {v19.16b}, [x6],  x11
+        b.gt            164b
+163:
+        sub             w3,  w3,  #16               // next 16-pixel stripe
+        add             x0,  x0,  #16               // advance dst base by 16 columns
+        cbnz            w3,  165b
+        ldp             d10, d11, [sp, #0x10]
+        ldp             d8,  d9,  [sp], #0x20
+        ret
+endfunc
+
 #if 0
 // void ipred_smooth_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                             const pixel *const topleft,
@@ -1379,148 +1688,6 @@ jumptable ipred_smooth_tbl
         .word 160b - ipred_smooth_tbl
         .word 80b  - ipred_smooth_tbl
         .word 40b  - ipred_smooth_tbl
-endjumptable
-
-// void ipred_smooth_v_8bpc_neon(pixel *dst, const ptrdiff_t stride,
-//                               const pixel *const topleft,
-//                               const int width, const int height, const int a,
-//                               const int max_width, const int max_height);
-function ipred_smooth_v_8bpc_neon, export=1
-        movrel          x7,  X(sm_weights)
-        add             x7,  x7,  w4, uxtw
-        clz             w9,  w3
-        movrel          x5,  ipred_smooth_v_tbl
-        sub             x8,  x2,  w4, uxtw
-        sub             w9,  w9,  #25
-        ldrsw           x9,  [x5, w9, uxtw #2]
-        ld1r            {v4.16b},  [x8] // bottom
-        add             x2,  x2,  #1
-        add             x5,  x5,  x9
-        add             x6,  x0,  x1
-        lsl             x1,  x1,  #1
-        br              x5
-40:
-        AARCH64_VALID_JUMP_TARGET
-        ld1r            {v6.2s}, [x2]             // top
-        usubl           v6.8h,   v6.8b,   v4.8b   // top-bottom
-4:
-        ld4r            {v16.8b, v17.8b, v18.8b, v19.8b},  [x7], #4 // weights_ver
-        shll            v22.8h,  v4.8b,   #8      // bottom*256
-        shll            v23.8h,  v4.8b,   #8
-        zip1            v16.2s,  v16.2s,  v17.2s  // weights_ver
-        zip1            v18.2s,  v18.2s,  v19.2s
-        uxtl            v16.8h,  v16.8b           // weights_ver
-        uxtl            v18.8h,  v18.8b
-        mla             v22.8h,  v6.8h,   v16.8h  // bottom*256 + (top-bottom)*weights_ver
-        mla             v23.8h,  v6.8h,   v18.8h
-        rshrn           v22.8b,  v22.8h,  #8
-        rshrn           v23.8b,  v23.8h,  #8
-        st1             {v22.s}[0], [x0], x1
-        st1             {v22.s}[1], [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v23.s}[0], [x0], x1
-        st1             {v23.s}[1], [x6], x1
-        b.gt            4b
-        ret
-80:
-        AARCH64_VALID_JUMP_TARGET
-        ld1             {v6.8b}, [x2]             // top
-        usubl           v6.8h,   v6.8b,   v4.8b   // top-bottom
-8:
-        ld4r            {v16.8b, v17.8b, v18.8b, v19.8b},  [x7], #4 // weights_ver
-        shll            v24.8h,  v4.8b,   #8      // bottom*256
-        shll            v25.8h,  v4.8b,   #8
-        shll            v26.8h,  v4.8b,   #8
-        shll            v27.8h,  v4.8b,   #8
-        uxtl            v16.8h,  v16.8b           // weights_ver
-        uxtl            v17.8h,  v17.8b
-        uxtl            v18.8h,  v18.8b
-        uxtl            v19.8h,  v19.8b
-        mla             v24.8h,  v6.8h,   v16.8h  // bottom*256 + (top-bottom)*weights_ver
-        mla             v25.8h,  v6.8h,   v17.8h
-        mla             v26.8h,  v6.8h,   v18.8h
-        mla             v27.8h,  v6.8h,   v19.8h
-        rshrn           v24.8b,  v24.8h,  #8
-        rshrn           v25.8b,  v25.8h,  #8
-        rshrn           v26.8b,  v26.8h,  #8
-        rshrn           v27.8b,  v27.8h,  #8
-        st1             {v24.8b}, [x0], x1
-        st1             {v25.8b}, [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v26.8b}, [x0], x1
-        st1             {v27.8b}, [x6], x1
-        b.gt            8b
-        ret
-160:
-320:
-640:
-        AARCH64_VALID_JUMP_TARGET
-        // Set up pointers for four rows in parallel; x0, x6, x5, x8
-        add             x5,  x0,  x1
-        add             x8,  x6,  x1
-        lsl             x1,  x1,  #1
-        sub             x1,  x1,  w3, uxtw
-        mov             w9,  w3
-
-1:
-        ld4r            {v16.8b, v17.8b, v18.8b, v19.8b}, [x7], #4 // weights_ver
-        uxtl            v16.8h,  v16.8b           // weights_ver
-        uxtl            v17.8h,  v17.8b
-        uxtl            v18.8h,  v18.8b
-        uxtl            v19.8h,  v19.8b
-2:
-        ld1             {v3.16b}, [x2],   #16     // top
-        shll            v20.8h,  v4.8b,   #8      // bottom*256
-        shll            v21.8h,  v4.8b,   #8
-        shll            v22.8h,  v4.8b,   #8
-        shll            v23.8h,  v4.8b,   #8
-        shll            v24.8h,  v4.8b,   #8
-        shll            v25.8h,  v4.8b,   #8
-        shll            v26.8h,  v4.8b,   #8
-        shll            v27.8h,  v4.8b,   #8
-        usubl           v2.8h,   v3.8b,   v4.8b   // top-bottom
-        usubl2          v3.8h,   v3.16b,  v4.16b
-        mla             v20.8h,  v2.8h,   v16.8h  // bottom*256 + (top-bottom)*weights_ver
-        mla             v21.8h,  v3.8h,   v16.8h
-        mla             v22.8h,  v2.8h,   v17.8h
-        mla             v23.8h,  v3.8h,   v17.8h
-        mla             v24.8h,  v2.8h,   v18.8h
-        mla             v25.8h,  v3.8h,   v18.8h
-        mla             v26.8h,  v2.8h,   v19.8h
-        mla             v27.8h,  v3.8h,   v19.8h
-        rshrn           v20.8b,  v20.8h,  #8
-        rshrn2          v20.16b, v21.8h,  #8
-        rshrn           v22.8b,  v22.8h,  #8
-        rshrn2          v22.16b, v23.8h,  #8
-        rshrn           v24.8b,  v24.8h,  #8
-        rshrn2          v24.16b, v25.8h,  #8
-        rshrn           v26.8b,  v26.8h,  #8
-        rshrn2          v26.16b, v27.8h,  #8
-        subs            w3,  w3,  #16
-        st1             {v20.16b}, [x0],  #16
-        st1             {v22.16b}, [x6],  #16
-        st1             {v24.16b}, [x5],  #16
-        st1             {v26.16b}, [x8],  #16
-        b.gt            2b
-        subs            w4,  w4,  #4
-        b.le            9f
-        sub             x2,  x2,  w9, uxtw
-        add             x0,  x0,  x1
-        add             x6,  x6,  x1
-        add             x5,  x5,  x1
-        add             x8,  x8,  x1
-        mov             w3,  w9
-        b               1b
-9:
-        ret
-endfunc
-
-jumptable ipred_smooth_v_tbl
-        .word 640b - ipred_smooth_v_tbl
-        .word 320b - ipred_smooth_v_tbl
-        .word 160b - ipred_smooth_v_tbl
-        .word 80b  - ipred_smooth_v_tbl
-        .word 40b  - ipred_smooth_v_tbl
 endjumptable
 #endif
 
