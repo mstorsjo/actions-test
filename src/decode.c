@@ -552,7 +552,8 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src;
     const ptrdiff_t t_stride = f->rf.rp_stride;
-    refmvs_temporal_block *const t_dst = f->seq_hdr->ref_frame_mvs ?
+    refmvs_temporal_block *const t_dst =
+        f->seq_hdr->ref_frame_mvs && b->ref.ref[0] != TIP_FRAME ?
         &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
     refmvs_temporal_block t_src;
     t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref.ref[0];
@@ -634,7 +635,10 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     refmvs_block s_src;
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref.ref[0] * 8 + b->ref.ref[1])));
     const ptrdiff_t t_stride = f->rf.rp_stride;
-    refmvs_temporal_block *t_dst = f->seq_hdr->ref_frame_mvs ?
+    const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
+    const int refinemv = b->refine_mv && b->comp_type == COMP_INTER_AVG;
+    refmvs_temporal_block *t_dst =
+        f->seq_hdr->ref_frame_mvs && (!opfl || !refinemv) ?
         &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
     refmvs_temporal_block t_src;
     s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref.ref[0];
