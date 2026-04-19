@@ -2324,10 +2324,11 @@ static void splat_mv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 }
                 s_src->oy4--;
             }
-            t_dst[x >> 1] = *t_src;
+            if (t_dst)
+                t_dst[x >> 1] = *t_src;
         }
         s_dst += 128 * 2;
-        t_dst += t_stride;
+        if (t_dst) t_dst += t_stride;
         s_src->oy4 += 2;
         bh4 -= 2;
     } while (bh4 > 0);
@@ -2376,16 +2377,18 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             s_src->ox4--;
             s_dst[x + 128] = *s_src;
             s_src->oy4--;
-            t_dst[x >> 1].mv.n = t_src->mv.n;
-            t_dst[x >> 1].ref.pair = t_src->mv.n == INVALID_TRAJ * 0x10001U ?
-                                      -1 : t_src->ref.pair;
+            if (t_dst) {
+                t_dst[x >> 1].mv.n = t_src->mv.n;
+                t_dst[x >> 1].ref.pair = t_src->mv.n == INVALID_TRAJ * 0x10001U ?
+                                          -1 : t_src->ref.pair;
+            }
             mvxi += (mat->matrix[2] - 0x10000) * 8;
             mvyi += mat->matrix[4] * 8;
         }
         mvx += mat->matrix[3] * 8;
         mvy += (mat->matrix[5] - 0x10000) * 8;
         s_dst += 2 * 128;
-        t_dst += t_stride;
+        if (t_dst) t_dst += t_stride;
         s_src->oy4 += 2;
         bh4 -= 2;
     } while (bh4);
@@ -2452,19 +2455,21 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             s_src->ox4--;
             s_dst[x + 128] = *s_src;
             s_src->oy4--;
-            if (t_src->mv.mv[0].n == INVALID_TRAJ) {
-                if (t_src->mv.mv[1].n == INVALID_TRAJ) {
-                    t_dst[x >> 1].ref.pair = -1;
+            if (t_dst) {
+                if (t_src->mv.mv[0].n == INVALID_TRAJ) {
+                    if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                        t_dst[x >> 1].ref.pair = -1;
+                    } else {
+                        t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
+                        t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101U;
+                    }
                 } else {
-                    t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101U;
-                }
-            } else {
-                if (t_src->mv.mv[1].n == INVALID_TRAJ) {
-                    t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101U;
-                } else {
-                    t_dst[x >> 1] = *t_src;
+                    if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                        t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
+                        t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101U;
+                    } else {
+                        t_dst[x >> 1] = *t_src;
+                    }
                 }
             }
             mvxi1 += (wm1->matrix[2] - 0x10000) * 8;
@@ -2478,7 +2483,7 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
         mvy2 += (wm2->matrix[5] - 0x10000) * 8;
         if (mask) mask += bw4 >> 1;
         s_dst += 2 * 128;
-        t_dst += t_stride;
+        if (t_dst) t_dst += t_stride;
         s_src->oy4 += 2;
         bh4 -= 2;
     } while (bh4);
@@ -2504,29 +2509,31 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
             s_src->oy4--;
             const int d = mask[x >> 1];
-            if (d != 2) {
-                const int idx = !(d ^ w_swap);
-                const int m = t_src->mv.mv[idx].n;
-                t_dst[x >> 1].mv.n = m * 0x10001U;
-                t_dst[x >> 1].ref.pair =
-                    (m == INVALID_TRAJ) ? -1 : (uint8_t) t_src->ref.ref[idx] * 0x101;
-            } else if (t_src->mv.mv[0].n == INVALID_TRAJ) {
-                if (t_src->mv.mv[1].n == INVALID_TRAJ) {
-                    t_dst[x >> 1].mv.n = INVALID_TRAJ * 0x10001U;
-                    t_dst[x >> 1].ref.pair = -1;
+            if (t_dst) {
+                if (d != 2) {
+                    const int idx = !(d ^ w_swap);
+                    const int m = t_src->mv.mv[idx].n;
+                    t_dst[x >> 1].mv.n = m * 0x10001U;
+                    t_dst[x >> 1].ref.pair =
+                        (m == INVALID_TRAJ) ? -1 : (uint8_t) t_src->ref.ref[idx] * 0x101;
+                } else if (t_src->mv.mv[0].n == INVALID_TRAJ) {
+                    if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                        t_dst[x >> 1].mv.n = INVALID_TRAJ * 0x10001U;
+                        t_dst[x >> 1].ref.pair = -1;
+                    } else {
+                        t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
+                        t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101;
+                    }
+                } else if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                    t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
+                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101;
                 } else {
-                    t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;
-                    t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[1] * 0x101;
+                    t_dst[x >> 1] = *t_src;
                 }
-            } else if (t_src->mv.mv[1].n == INVALID_TRAJ) {
-                t_dst[x >> 1].mv.n = t_src->mv.mv[0].n * 0x10001U;
-                t_dst[x >> 1].ref.pair = (uint8_t) t_src->ref.ref[0] * 0x101;
-            } else {
-                t_dst[x >> 1] = *t_src;
             }
         }
         s_dst += 128 * 2;
-        t_dst += t_stride;
+        if (t_dst) t_dst += t_stride;
         mask += bw4 >> 1;
         s_src->oy4 += 2;
         bh4 -= 2;
