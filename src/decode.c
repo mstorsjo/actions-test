@@ -4333,9 +4333,7 @@ static int tip_frame_recon_sb(Dav2dTaskContext *const t,
         .filter = f->frame_hdr->tip.subpel_filter,
         .cwp_idx = dav2d_tip_wts[f->frame_hdr->tip.global_wtd_idx],
     };
-    const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int by4 = t->by & 63, bx4 = t->bx & 63;
-    splat_oneref_mv(DB_ONLY(0) f, t, bs, &b, by4, b_dim[0], b_dim[1]);
     t->cbx = t->bx;
     t->cby = t->by;
     if (f->frame_hdr->tip.apply_filter) {
