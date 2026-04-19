@@ -2342,33 +2342,20 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            const int bw4, int bh4)
 {
     assert(bw4 > 1 && bh4 > 1);
-    if (mat->type == DAV2D_WM_TYPE_INVALID) {
-        if (s_src->mf & 2) {
-            // FIXME this condition is probably incomplete, AVM's code suggests
-            // we should only use this behaviour for MM_WARP_{CAUSAL/EXTEND},
-            // not for MM_WARP_DELTA
-            s_src->mv[0].n = 0;
-            t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->lmv[0]);
-        } else {
-            t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(s_src->mv[0]);
-        }
-    }
     s_src->oy4 = 0;
     do {
         int64_t mvxi = mvx, mvyi = mvy;
         s_src->ox4 = 0;
         for (int x = 0; x < bw4; x += 2, s_src->ox4 += 2) {
-            if (mat->type != DAV2D_WM_TYPE_INVALID) {
-                const union mv warpmv = (union mv) {
-                    .y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
-                               -0xffff, 0xffff),
-                    .x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
-                               -0xffff, 0xffff),
-                };
-                if (s_src->mf & 2)
-                    s_src->mv[0] = warpmv;
-                t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(warpmv);
-            }
+            const union mv warpmv = (union mv) {
+                .y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
+                           -0xffff, 0xffff),
+                .x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
+                           -0xffff, 0xffff),
+            };
+            if (s_src->mf & 2)
+                s_src->mv[0] = warpmv;
+            t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(warpmv);
             s_dst[x] = *s_src;
             s_src->ox4++;
             s_dst[x + 1] = *s_src;
@@ -2404,45 +2391,29 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 const uint8_t *mask, const int w_swap)
 {
     assert(bw4 > 1 && bh4 > 1);
-    if (wm1->type == DAV2D_WM_TYPE_INVALID && s_src->mf & 2) {
-        s_src->mv[0].n = 0;
-    }
-    if (wm2->type == DAV2D_WM_TYPE_INVALID && s_src->mf & 2) {
-        s_src->mv[1].n = 0;
-    }
     s_src->oy4 = 0;
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         s_src->ox4 = 0;
         for (int x = 0; x < bw4; x += 2, s_src->ox4 += 2) {
-            if (wm1->type != DAV2D_WM_TYPE_INVALID) {
-                const union mv warpmv = (union mv) {
-                    .y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
-                               -0xffff, 0xffff),
-                    .x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
-                               -0xffff, 0xffff),
-                };
-                if (s_src->mf & 2)
-                    s_src->mv[0] = warpmv;
-                t_src->mv.mv[t_swap] = quantize_mv(warpmv);
-            } else {
-                t_src->mv.mv[t_swap] =
-                    quantize_mv(s_src->mf & 2 ? s_src->lmv[0] : s_src->mv[0]);
-            }
-            if (wm2->type != DAV2D_WM_TYPE_INVALID) {
-                const union mv warpmv = (union mv) {
-                    .y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
-                               -0xffff, 0xffff),
-                    .x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
-                               -0xffff, 0xffff),
-                };
-                if (s_src->mf & 2)
-                    s_src->mv[1] = warpmv;
-                t_src->mv.mv[!t_swap] = quantize_mv(warpmv);
-            } else {
-                t_src->mv.mv[!t_swap] =
-                    quantize_mv(s_src->mf & 2 ? s_src->lmv[1] : s_src->mv[1]);
-            }
+            const union mv warpmv1 = (union mv) {
+                .y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
+                           -0xffff, 0xffff),
+                .x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
+                           -0xffff, 0xffff),
+            };
+            if (s_src->mf & 2)
+                s_src->mv[0] = warpmv1;
+            t_src->mv.mv[t_swap] = quantize_mv(warpmv1);
+            const union mv warpmv2 = (union mv) {
+                .y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
+                           -0xffff, 0xffff),
+                .x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
+                           -0xffff, 0xffff),
+            };
+            if (s_src->mf & 2)
+                s_src->mv[1] = warpmv2;
+            t_src->mv.mv[!t_swap] = quantize_mv(warpmv2);
             if (mask) {
                 const int d = mask[x >> 1];
                 if (d != 2) t_src->mv.mv[d ^ w_swap].n = INVALID_TRAJ;
