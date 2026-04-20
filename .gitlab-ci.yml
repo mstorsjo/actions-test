@@ -101,10 +101,6 @@ build-debian:
               wc -l avm.log
           done
         - |
-          cd avm
-          git reset --hard
-        - cd x86-64 && make -j$(nproc) avmdec && cd ../..
-        - |
           git reset --hard
         - ninja -C build
         - |
@@ -122,7 +118,7 @@ build-debian:
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"
-              a_md5=$(./avm/x86-64/avmdec "$file" --rawvideo --md5 | cut -d' ' -f1)
+              a_md5=$(cat "$file.md5")
               d_md5=$(./build/tools/dav2d -i "$file" -o - --threads=1 --quiet --muxer=md5 --filmgrain=1)
               if [[ "$a_md5" == "$d_md5" ]]; then
                   echo $base "[OK] md5:$a_md5"
