@@ -782,8 +782,8 @@ static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
                     const int dx = gdf_coords[k][1];
                     const int a = ptrs[6 - dy][x - dx] >> down_shift;
                     const int b = ptrs[6 + dy][x + dx] >> down_shift;
-                    const int above = iclip((a - m) << up_shift, -alpha, alpha);
-                    const int below = iclip((b - m) << up_shift, -alpha, alpha);
+                    const int above = iclip((a - m) * (1 << up_shift), -alpha, alpha);
+                    const int below = iclip((b - m) * (1 << up_shift), -alpha, alpha);
                     const int v = iclip(above + below, -512, 511);
                     for (int idx = 0; idx < 3; idx++)
                         idx_vals[idx] += v * dav2d_gdf_weight[ref_dst_idx][qp_idx][idx][k][cls];
