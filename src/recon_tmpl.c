@@ -2947,12 +2947,12 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         const int wpad = cbw4 - ctw4;
         const int hpad = cbh4 - cth4;
 
-        const int flags = filter_type |
+        const unsigned flags = filter_type |
             (t->cby > ts->tiling.row_start ? CFL_HAS_TOP : 0) |
             (t->cbx > ts->tiling.col_start ? CFL_HAS_LEFT : 0) |
             (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0) |
-            ((b->cfl_alpha[0] << CFL_ALPHA_U_SHIFT) & CFL_ALPHA_U_MASK) |
-            ((b->cfl_alpha[1] << CFL_ALPHA_V_SHIFT) & CFL_ALPHA_V_MASK);
+            (((unsigned)b->cfl_alpha[0] << CFL_ALPHA_U_SHIFT) & CFL_ALPHA_U_MASK) |
+            (((unsigned)b->cfl_alpha[1] << CFL_ALPHA_V_SHIFT) & CFL_ALPHA_V_MASK);
 
         dsp->ipred.cfl_pred[b->cfl_type][layout](ptrs, f->cur.p.stride,
                                                  wpad, hpad, ctw, cth, flags

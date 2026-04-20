@@ -71,8 +71,8 @@
 #define CFL_ALPHA_LOG2       (5)
 #define CFL_ALPHA_U_SHIFT    (16 - CFL_ALPHA_LOG2)
 #define CFL_ALPHA_V_SHIFT    (32 - CFL_ALPHA_LOG2)
-#define CFL_ALPHA_U_MASK     (((1 << CFL_ALPHA_LOG2) - 1) << CFL_ALPHA_U_SHIFT)
-#define CFL_ALPHA_V_MASK     (((1 << CFL_ALPHA_LOG2) - 1) << CFL_ALPHA_V_SHIFT)
+#define CFL_ALPHA_U_MASK     (((1U << CFL_ALPHA_LOG2) - 1U) << CFL_ALPHA_U_SHIFT)
+#define CFL_ALPHA_V_MASK     (((1U << CFL_ALPHA_LOG2) - 1U) << CFL_ALPHA_V_SHIFT)
 
 /*
  * Intra prediction.
@@ -96,8 +96,8 @@ typedef decl_angular_ipred_fn(*angular_ipred_fn);
  * dst[x,y] = alpha * ac[x,y] + dc
  */
 #define decl_cfl_pred_fn(name) \
-void (name)(pixel *const *ptrs, const ptrdiff_t *stride, \
-            int wpad, int hpad, int w, int h, int flags HIGHBD_DECL_SUFFIX)
+void (name)(pixel *const *ptrs, const ptrdiff_t *stride, int wpad, \
+            int hpad, int w, int h, unsigned flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
 /* CFL - multi-hypothesis cross component prediction (MHCCP) */

@@ -824,8 +824,8 @@ static void ipred_z3_c(pixel *dst, const ptrdiff_t stride,
 static NOINLINE void
 cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
          const int wpad, const int hpad, const int w, const int h,
-         const int flags, const int implicit, const int ss_hor, const int ss_ver
-         HIGHBD_DECL_SUFFIX)
+         const unsigned flags, const int implicit, const int ss_hor,
+         const int ss_ver HIGHBD_DECL_SUFFIX)
 {
     assert(wpad >= 0 && wpad * 4 < w / 2);
     assert(hpad >= 0 && hpad * 4 < h / 2);
@@ -1009,7 +1009,7 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
         const int shu = CFL_ALPHA_U_SHIFT - 5;
         const int shv = CFL_ALPHA_V_SHIFT - 5;
         alpha[0] = ((int16_t) (flags & CFL_ALPHA_U_MASK)) >> shu;
-        alpha[1] = (flags & CFL_ALPHA_V_MASK) >> shv;
+        alpha[1] = ((int32_t) (flags & CFL_ALPHA_V_MASK)) >> shv;
     }
 
     pixel *dst[2] = { ptrs[4], ptrs[5] };
@@ -1074,7 +1074,7 @@ static void cfl_explicit_##fmt##_c(pixel *const *ptrs, \
                                    const ptrdiff_t *const stride, \
                                    const int wpad, const int hpad, \
                                    const int w, const int h, \
-                                   const int flags HIGHBD_DECL_SUFFIX) \
+                                   const unsigned flags HIGHBD_DECL_SUFFIX) \
 { \
     cfl_pred(ptrs, stride, wpad, hpad, w, h, flags, 0, ss_hor, ss_ver HIGHBD_TAIL_SUFFIX); \
 }
@@ -1088,7 +1088,7 @@ static void cfl_implicit_##fmt##_c(pixel *const *ptrs, \
                                    const ptrdiff_t *const stride, \
                                    const int wpad, const int hpad, \
                                    const int w, const int h, \
-                                   const int flags HIGHBD_DECL_SUFFIX) \
+                                   const unsigned flags HIGHBD_DECL_SUFFIX) \
 { \
     cfl_pred(ptrs, stride, wpad, hpad, w, h, flags, 1, ss_hor, ss_ver HIGHBD_TAIL_SUFFIX); \
 }
