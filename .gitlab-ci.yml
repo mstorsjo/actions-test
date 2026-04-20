@@ -139,6 +139,7 @@ build-debian-aarch64:
                             -Dtrim_dsp=false
         - ninja -C build
         - meson test -v -C build
+        - time tests/check-md5.sh build/tools/dav2d
 
 build-debian-armv7:
     extends: .debian-armv7-common
@@ -147,3 +148,4 @@ build-debian-armv7:
                             -Dtrim_dsp=false
         - ninja -C build
         - meson test -v -C build
+        - time tests/check-md5.sh build/tools/dav2d
