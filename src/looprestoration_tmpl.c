@@ -404,7 +404,7 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
                 for (int i = 0; i < 12; i++) {
                     const int dy = wiener_ns_config_uv_from_y[i][0];
                     const int dx = wiener_ns_config_uv_from_y[i][1];
-                    const int diff = ptrs[1][2 + dy][(x + dx) << ss_hor] - l;
+                    const int diff = ptrs[1][2 + dy][(x + dx) * (1 << ss_hor)] - l;
                     s += diff * filter[6 + i];
                 }
                 const int v = (s + 64) >> 7;
