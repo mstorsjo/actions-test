@@ -862,7 +862,9 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
 
     if (has_l) {
         const pixel *yleft = ypx - (1 + ss_hor);
-        const int step = h >> ctz(n_left);
+        int step;
+        if (n_left)
+            step = h >> ctz(n_left);
         int l;
         for (y = 0; y < ylim; y++) {
             if (!(ss_hor | ss_ver)) {
@@ -916,7 +918,9 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
     }
 
     if (has_t) {
-        const int step = w >> ctz(n_top);
+        int step;
+        if (n_top)
+            step = w >> ctz(n_top);
         int l;
         for (x = 0; x < xlim; x++) {
             const int xl = x << ss_hor;
