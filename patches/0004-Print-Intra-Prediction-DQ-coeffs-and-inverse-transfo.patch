@@ -1,4 +1,4 @@
-From 988244622223504aaf3d863db3e47503119a5355 Mon Sep 17 00:00:00 2001
+From c1dc48906ac7fadc2fd1f2af9b6ffe446af4d565 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -446,7 +446,7 @@ index caaaf46d9f..8a062d7909 100644
 +#endif
  }
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index e0e108ee5b..5dda218692 100644
+index 6f586538d3..a143d28d75 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -209,11 +209,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,

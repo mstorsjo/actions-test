@@ -394,7 +394,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
         hdr->ref_frame_mvs = dav2d_get_bit(gb);
         if (hdr->ref_frame_mvs)
             hdr->reduced_ref_frame_mvs_mode = dav2d_get_bit(gb);
-        hdr->order_hint_n_bits = dav2d_get_bits(gb, 3) + 1;
+        hdr->order_hint_n_bits = dav2d_get_bits(gb, 4) + 1;
 #if DEBUG_SEQ_HDR
         printf("SEQHDR: post-interframetools[mm:%x,fmm:%d,6pwarp:%d,"
                "maskcomp:%d,refmvs:%d,redrefmvs:%d,pocbits:%d]: off=%u\n",

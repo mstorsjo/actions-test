@@ -1,4 +1,4 @@
-From 93d3f560ddcb9c7b9b5a5834dc3af0d95d8cad64 Mon Sep 17 00:00:00 2001
+From 503ba7d986412fc962bb1f76ec450d2299dbb828 Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Fri, 28 Nov 2025 09:52:45 -0500
 Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
@@ -14,7 +14,7 @@ Subject: [PATCH 5/5] Add --loopfilters to enable/disable loopfilters
  7 files changed, 102 insertions(+), 9 deletions(-)
 
 diff --git a/apps/avmdec.c b/apps/avmdec.c
-index 1e77641bed..6e4a0ca95f 100644
+index 5c867d04ad..184ce63121 100644
 --- a/apps/avmdec.c
 +++ b/apps/avmdec.c
 @@ -62,6 +62,28 @@ struct AvxDecInputContext {
@@ -63,7 +63,7 @@ index 1e77641bed..6e4a0ca95f 100644
                                         &randomaccess,
                                         &bruoptmodearg,
                                         &icc_file,
-@@ -680,6 +705,7 @@ static int main_loop(int argc, const char **argv_) {
+@@ -679,6 +704,7 @@ static int main_loop(int argc, const char **argv_) {
    int num_local_ops_selections = 0;
    int output_all_layers = 0;
    int skip_film_grain = 0;
@@ -71,7 +71,7 @@ index 1e77641bed..6e4a0ca95f 100644
    int random_access_point_index = -1;
    int bru_opt_mode = 0;
    avm_image_t *scaled_img = NULL;
-@@ -848,6 +874,8 @@ static int main_loop(int argc, const char **argv_) {
+@@ -870,6 +896,8 @@ static int main_loop(int argc, const char **argv_) {
        output_all_layers = 1;
      } else if (arg_match(&arg, &skipfilmgrain, argi)) {
        skip_film_grain = 1;
@@ -80,7 +80,7 @@ index 1e77641bed..6e4a0ca95f 100644
      } else if (arg_match(&arg, &randomaccess, argi)) {
        random_access_point_index = arg_parse_uint(&arg);
      } else if (arg_match(&arg, &bruoptmodearg, argi)) {
-@@ -1020,6 +1048,13 @@ static int main_loop(int argc, const char **argv_) {
+@@ -1041,6 +1069,13 @@ static int main_loop(int argc, const char **argv_) {
      goto fail;
    }
  
@@ -95,7 +95,7 @@ index 1e77641bed..6e4a0ca95f 100644
                                      random_access_point_index)) {
      fprintf(stderr, "Failed to set random_access_point_index: %s\n",
 diff --git a/av2/av2_dx_iface.c b/av2/av2_dx_iface.c
-index 54108a54c5..90fa105589 100644
+index a7aec49a49..95b2b02959 100644
 --- a/av2/av2_dx_iface.c
 +++ b/av2/av2_dx_iface.c
 @@ -51,6 +51,7 @@ struct avm_codec_alg_priv {
@@ -114,7 +114,7 @@ index 54108a54c5..90fa105589 100644
    pbi->random_access_point_index = ctx->random_access_point_index;
    pbi->bru_opt_mode = ctx->bru_opt_mode;
  
-@@ -1709,6 +1711,19 @@ static avm_codec_err_t ctrl_set_skip_film_grain(avm_codec_alg_priv_t *ctx,
+@@ -1712,6 +1714,19 @@ static avm_codec_err_t ctrl_set_skip_film_grain(avm_codec_alg_priv_t *ctx,
    return AVM_CODEC_OK;
  }
  
@@ -134,7 +134,7 @@ index 54108a54c5..90fa105589 100644
  static avm_codec_err_t ctrl_set_random_access(avm_codec_alg_priv_t *ctx,
                                                va_list args) {
    ctx->random_access_point_index = va_arg(args, int);
-@@ -1835,6 +1850,7 @@ static avm_codec_ctrl_fn_map_t decoder_ctrl_maps[] = {
+@@ -1838,6 +1853,7 @@ static avm_codec_ctrl_fn_map_t decoder_ctrl_maps[] = {
    { AV2_SET_INSPECTION_CALLBACK, ctrl_set_inspection_callback },
    { AV2D_SET_ROW_MT, ctrl_set_row_mt },
    { AV2D_SET_SKIP_FILM_GRAIN, ctrl_set_skip_film_grain },
@@ -167,7 +167,7 @@ index 12207fb329..66cb54b4d3 100644
    } else {
      uint16_t *recon_buf = xd->plane[plane].dst.buf;
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 5dda218692..8a17bbb22c 100644
+index a143d28d75..3596b55719 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -721,7 +721,8 @@ static void av2_dec_setup_tip_frame(AV2Decoder *pbi, AV2_COMMON *cm,
@@ -180,7 +180,7 @@ index 5dda218692..8a17bbb22c 100644
      init_tip_lf_parameter(cm, 0, av2_num_planes(cm));
      loop_filter_tip_frame(cm, xd, 0, av2_num_planes(cm));
    }
-@@ -10407,9 +10408,16 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
+@@ -10421,9 +10422,16 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
      }
    }
  
@@ -199,7 +199,7 @@ index 5dda218692..8a17bbb22c 100644
        if (pbi->num_workers > 1) {
          av2_loop_filter_frame_mt(&cm->cur_frame->buf, cm, &pbi->dcb.xd, 0,
                                   num_planes, 0, pbi->tile_workers,
-@@ -10420,7 +10428,7 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
+@@ -10434,7 +10442,7 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
        }
      }
  
@@ -208,7 +208,7 @@ index 5dda218692..8a17bbb22c 100644
          !pbi->skip_loop_filter && !cm->features.coded_lossless &&
          (cm->ccso_info.ccso_enable[0] || cm->ccso_info.ccso_enable[1] ||
           cm->ccso_info.ccso_enable[2]);
-@@ -10443,16 +10451,17 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
+@@ -10457,16 +10465,17 @@ void av2_decode_tg_tiles_and_wrapup(AV2Decoder *pbi, const uint8_t *data,
        extend_ccso_border(&cm->cur_frame->buf, ext_rec_y, CCSO_PADDING_SIZE);
      }
  
@@ -232,7 +232,7 @@ index 5dda218692..8a17bbb22c 100644
          !cm->seq_params.disable_loopfilters_across_tiles && !do_gdf &&
          !use_ccso && !do_cdef;
 diff --git a/av2/decoder/decoder.h b/av2/decoder/decoder.h
-index 32d42034d4..301c977500 100644
+index 1100c3b161..e784ed5248 100644
 --- a/av2/decoder/decoder.h
 +++ b/av2/decoder/decoder.h
 @@ -385,6 +385,8 @@ typedef struct AV2Decoder {
@@ -245,7 +245,7 @@ index 32d42034d4..301c977500 100644
    int inv_tile_order;
    int need_resync;  // wait for key/intra-only frame.
 diff --git a/avm/avm_codec.h b/avm/avm_codec.h
-index 5c6fcd6b70..5c78fa96f1 100644
+index dfae4e9e1b..93a884e02b 100644
 --- a/avm/avm_codec.h
 +++ b/avm/avm_codec.h
 @@ -602,6 +602,16 @@ typedef enum {

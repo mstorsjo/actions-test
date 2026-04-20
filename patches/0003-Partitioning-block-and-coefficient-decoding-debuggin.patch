@@ -1,4 +1,4 @@
-From a74b1c175fcb084166ee6f733d83863685c2b557 Mon Sep 17 00:00:00 2001
+From 3a9edf281e4c5f8b160802abb6e18cee3031a545 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -1658,7 +1658,7 @@ index a46176bf84..caaaf46d9f 100644
        cm, xd, plane, tip_plane, mv, bw, bh, mi_x, mi_y, mc_buf, tmp_conv_dst,
        calc_subpel_params_func);
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index ca14f0494b..e0e108ee5b 100644
+index 7cd0394751..6f586538d3 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -222,7 +222,7 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -4161,7 +4161,7 @@ index ca6a4a65fb..9869e5d737 100644
 +              AV2_COMMON *cm, avm_reader *r, MACROBLOCKD *const xd);
  #endif  // AVM_AV2_DECODER_DECODEMV_H_
 diff --git a/av2/decoder/decoder.c b/av2/decoder/decoder.c
-index 0f8210622a..230a36de39 100644
+index 634230f3f9..383910149e 100644
 --- a/av2/decoder/decoder.c
 +++ b/av2/decoder/decoder.c
 @@ -471,7 +471,8 @@ void av2_decoder_remove(AV2Decoder *pbi) {
@@ -4184,7 +4184,7 @@ index 0f8210622a..230a36de39 100644
          assert(xd->mi[0]->palette_mode_info.palette_size[plane] == 0);
        }
 diff --git a/av2/decoder/decoder.h b/av2/decoder/decoder.h
-index 7a71f83e3f..32d42034d4 100644
+index bdcdbbe880..1100c3b161 100644
 --- a/av2/decoder/decoder.h
 +++ b/av2/decoder/decoder.h
 @@ -103,7 +103,8 @@ typedef struct DecoderCodingBlock {

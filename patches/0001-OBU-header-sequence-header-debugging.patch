@@ -1,4 +1,4 @@
-From 1834e82901d1df902309f0c15d12cf4d51034767 Mon Sep 17 00:00:00 2001
+From b7f448237df262a6822ca32332b115cf645001ac Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 07:46:22 -0500
 Subject: [PATCH 1/5] OBU header & sequence header debugging.
@@ -12,7 +12,7 @@ Subject: [PATCH 1/5] OBU header & sequence header debugging.
  create mode 100644 avm/debug.h
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 0130bba953..f4285df592 100644
+index 13db610b38..4910c427d5 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -5801,6 +5801,10 @@ static AVM_INLINE void read_bitdepth(
@@ -105,7 +105,7 @@ index 0130bba953..f4285df592 100644
 @@ -6116,6 +6161,18 @@ void read_sequence_inter_group_tool_flags(struct SequenceHeader *seq_params,
  
      seq_params->order_hint_info.order_hint_bits_minus_1 =
-         avm_rb_read_literal(rb, 3);
+         avm_rb_read_literal(rb, 4);
 +#if DEBUG_SEQ_HDR
 +    printf("SEQHDR: post-interframetools[mm:%x,fmm:%d,6pwarp:%d,"
 +           "maskcomp:%d,refmvs:%d,redrefmvs:%d,pocbits:%d]: off=%u\n",
@@ -314,7 +314,7 @@ index 0130bba953..f4285df592 100644
  
  static AVM_INLINE void read_multi_frame_header_seg_info(
 diff --git a/av2/decoder/decoder.h b/av2/decoder/decoder.h
-index 242c1cf1cb..7a71f83e3f 100644
+index f102a0ce36..bdcdbbe880 100644
 --- a/av2/decoder/decoder.h
 +++ b/av2/decoder/decoder.h
 @@ -33,6 +33,8 @@
