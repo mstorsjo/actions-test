@@ -122,7 +122,6 @@ build-debian:
           )
           for file in "${files[@]}"; do
               base="$(basename "$file")"
-              ./avm/x86-64/avmdec "$file" -o /tmp/avm.yuv --rawvideo
               a_md5=$(./avm/x86-64/avmdec "$file" --rawvideo --md5 | cut -d' ' -f1)
               d_md5=$(./build/tools/dav2d -i "$file" -o - --threads=1 --quiet --muxer=md5 --filmgrain=1)
               if [[ "$a_md5" == "$d_md5" ]]; then
