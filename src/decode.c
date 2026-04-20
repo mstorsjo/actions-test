@@ -550,7 +550,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                                    const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(s_src, 16);
+    refmvs_block s_src;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = f->seq_hdr->ref_frame_mvs ?
         &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
@@ -603,7 +603,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
                                     const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
+    refmvs_block s_src = (refmvs_block) {
         .ref.pair = -1,
         .mv[0] = b->mv[0],
         .mv[1].y = INVALID_MV,
@@ -631,7 +631,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                                    const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(s_src, 16);
+    refmvs_block s_src;
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref.ref[0] * 8 + b->ref.ref[1])));
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = f->seq_hdr->ref_frame_mvs ?
@@ -712,7 +712,7 @@ static inline void splat_intraref(const Dav2dContext *const c,
                                   const int by4, const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
-    refmvs_block ALIGN(s_src, 16) = (refmvs_block) {
+    refmvs_block s_src = (refmvs_block) {
         .ref.pair = -1,
         .mv[0].y = INVALID_MV,
         .mv[1].y = INVALID_MV,
