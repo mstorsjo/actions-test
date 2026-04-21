@@ -110,7 +110,6 @@ static COLD size_t get_stack_size_internal(const pthread_attr_t *const thread_at
 static COLD void get_num_threads(Dav2dContext *const c, const Dav2dSettings *const s,
                                  unsigned *n_tc, unsigned *n_fc)
 {
-#if 0
     /* ceil(sqrt(n)) */
     static const uint8_t fc_lut[49] = {
         1,                                     /*     1 */
@@ -121,16 +120,10 @@ static COLD void get_num_threads(Dav2dContext *const c, const Dav2dSettings *con
         6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,       /* 26-36 */
         7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, /* 37-49 */
     };
-#endif
     *n_tc = s->n_threads ? s->n_threads :
         iclip(dav2d_num_logical_processors(c), 1, DAV2D_MAX_THREADS);
-#if 0
     *n_fc = s->max_frame_delay ? umin(s->max_frame_delay, *n_tc) :
             *n_tc < 50 ? fc_lut[*n_tc - 1] : 8; // min(8, ceil(sqrt(n)))
-#else
-    // FIXME re-enable frame threading
-    *n_fc = 1;
-#endif
 }
 
 COLD int dav2d_get_frame_delay(const Dav2dSettings *const s) {
@@ -254,7 +247,7 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
         atomic_init(&c->task_thread.cond_signaled, 0);
         c->task_thread.inited = 1;
     }
-    c->task_thread.n_passes = 1 + (c->n_tc > 1);// + (c->n_fc > 1);
+    c->task_thread.n_passes = 1 + (c->n_tc > 1) + (c->n_fc > 1);
 
 #if 0
     if (c->n_fc > 1) {
@@ -432,8 +425,31 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
         c->drain = 0;
         return DAV2D_EOF;
     }
-    struct OutputQueue *const q = &c->dpb[c->dpb_out++];
+
+    // frame-threading completion condition
+    struct OutputQueue *const q = &c->dpb[c->dpb_out];
+    unsigned progress = c->n_fc == 1 ? UINT_MAX :
+        atomic_load_explicit(&q->p.progress[1], memory_order_relaxed);
+    if (c->drain && c->n_fc > 1) {
+        pthread_mutex_lock(&c->task_thread.lock);
+        while (progress != FRAME_ERROR && progress != UINT_MAX) {
+            const unsigned next = c->frame_thread.next++;
+            if (c->frame_thread.next == c->n_fc)
+                c->frame_thread.next = 0;
+            Dav2dFrameContext *const f = &c->fc[next];
+            while (f->n_tile_data != 0) {
+                pthread_cond_wait(&f->task_thread.cond,
+                                  &c->task_thread.lock);
+            }
+            progress = atomic_load_explicit(&q->p.progress[1], memory_order_relaxed);
+        }
+        pthread_mutex_unlock(&c->task_thread.lock);
+    }
+    if (progress != FRAME_ERROR && progress != UINT_MAX) return DAV2D_ERR(EAGAIN);
+    c->dpb_out++;
     if (c->dpb_out == c->dpb_sz) c->dpb_out = 0;
+
+    // FIXME if decoding had an error, report it back to the user here
 
     const int res = dav2d_apply_grain(c, out, &q->p.p);
     dav2d_thread_picture_unref(&q->p);
@@ -441,7 +457,11 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
 }
 
 static int output_picture_ready(Dav2dContext *const c) {
-    return c->dpb_out != c->dpb_in;
+    if (c->dpb_out == c->dpb_in) return 0;
+    struct OutputQueue *const q = &c->dpb[c->dpb_out];
+    const unsigned progress = c->n_fc == 1 ? UINT_MAX :
+        atomic_load_explicit(&q->p.progress[1], memory_order_relaxed);
+    return progress == FRAME_ERROR || progress == UINT_MAX;
 }
 
 static int gen_picture(Dav2dContext *const c) {
@@ -599,7 +619,6 @@ void dav2d_flush(Dav2dContext *const c) {
         pthread_mutex_unlock(&c->task_thread.lock);
     }
 
-#if 0
     if (c->n_fc > 1) {
         for (unsigned n = 0, next = c->frame_thread.next; n < c->n_fc; n++, next++) {
             if (next == c->n_fc) next = 0;
@@ -608,14 +627,16 @@ void dav2d_flush(Dav2dContext *const c) {
             f->n_tile_data = 0;
             f->task_thread.retval = 0;
             f->task_thread.error = 0;
+            f->frame_thread.scheduled = 0;
+#if 0
             Dav2dThreadPicture *out_delayed = &c->frame_thread.out_delayed[next];
             if (out_delayed->p.frame_hdr) {
                 dav2d_thread_picture_unref(out_delayed);
             }
+#endif
         }
         c->frame_thread.next = 0;
     }
-#endif
     atomic_store(c->flush, 0);
 }
 

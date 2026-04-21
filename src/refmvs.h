@@ -101,6 +101,7 @@ typedef struct refmvs_frame {
     int8_t pocdiff[7];
     uint64_t ref_flip;
     uint8_t abspocdiff[7];
+    uint8_t mfmv_mask;
     struct MfmvRef {
         uint8_t ref;
         int8_t tgt;
@@ -120,10 +121,7 @@ typedef struct refmvs_frame {
     mv *rp_traj[7]; // FIXME we may not need 7?
     refmvs_traj_map *rp_map[3][7];
     refmvs_block *ra;
-#if 0
-    int n_frame_threads;
-#endif
-    int n_tile_threads;
+    int have_threading, have_frame_threading;
 } refmvs_frame;
 
 typedef struct refmvs_tile {
@@ -202,7 +200,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *rf,
                             const uint8_t ref_ref_poc[7][7],
                             const uint8_t refcnt[7],
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
-                            int n_tile_threads, int n_frame_threads);
+                            int have_threading, int have_frame_threading);
 
 // cache the current superblock's bottom spatial values into into a "top"
 // buffer to act as "top" across superblock boundaries for the next sbrow

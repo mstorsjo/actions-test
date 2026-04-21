@@ -286,7 +286,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
             t->bx + bw4 + !is_not_sb_boundary < t->ts->tiling.col_end &&
             (!(t->by & (f->sb_step - 1)) || // top sb boundary
              ((t->bx + bw4) & (f->sb_step - 1) && // right sb boundary
-              t->is_coded[0][(t->by - 1) & 63] & (1ULL << ((t->bx + bw4) & 63))));
+              ra[(t->bx + bw4) & 127].mv[0].y != INVALID_MV));
     }
 
     if (np < 8 && have_left) {
@@ -736,13 +736,230 @@ static inline void splat_intraref(const Dav2dContext *const c,
         dav2d_refmvs_bank_update(&t->rt, bs, t->by, t->bx);
 }
 
+static void mc_lowest_px(int *const dst, const int by4, const int bh4,
+                         const int mvy, const int ss_ver,
+                         const struct ScalableMotionParams *const smp)
+{
+    const int v_mul = 4 >> ss_ver;
+    if (!smp->scale) {
+        const int my = mvy >> (3 + ss_ver), dy = mvy & (15 >> !ss_ver);
+        *dst = imax(*dst, (by4 + bh4) * v_mul + my + 4 * !!dy);
+    } else {
+        int y = (by4 * v_mul << 4) + mvy * (1 << !ss_ver);
+        const int64_t tmp = (int64_t)(y) * smp->scale + (smp->scale - 0x4000) * 8;
+        y = apply_sign64((llabs(tmp) + 128) >> 8, tmp) + 32;
+        const int bottom = ((y + (bh4 * v_mul - 1) * smp->step) >> 10) + 1 + 4;
+        *dst = imax(*dst, bottom);
+    }
+}
+
+static ALWAYS_INLINE void affine_lowest_px(int *const dst, const uint8_t *const b_dim,
+                                           const int by, const int bx,
+                                           const Dav2dWarpedMotionParams *const wmp,
+                                           const int ss_ver, const int ss_hor)
+{
+    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
+    const int32_t *const mat = wmp->matrix;
+    const int y = b_dim[1] * v_mul - 8; // lowest y
+
+    const int src_y = by * 4 + ((y + 4) << ss_ver);
+    const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
+    // check left- and right-most blocks
+    for (int x = 0; x < b_dim[0] * h_mul; x += imax(8, b_dim[0] * h_mul - 8)) {
+        // calculate transformation relative to center of 8x8 block in
+        // luma pixel units
+        const int src_x = bx * 4 + ((x + 4) << ss_hor);
+        const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
+        const int dy = (int) (mvy >> 16) - 4;
+        *dst = imax(*dst, dy + 4 + 8);
+    }
+}
+
+static inline void affine_lowest_px_luma(Dav2dTaskContext *const t, int *const dst,
+                                         const uint8_t *const b_dim,
+                                         const Dav2dWarpedMotionParams *const wmp)
+{
+    affine_lowest_px(dst, b_dim, t->by, t->bx, wmp, 0, 0);
+}
+
+static inline void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *const dst,
+                                           const uint8_t *const b_dim,
+                                           const Dav2dWarpedMotionParams *const wmp)
+{
+    const Dav2dFrameContext *const f = t->f;
+    affine_lowest_px(dst, b_dim, t->cby, t->cbx, wmp, f->ss_ver, f->ss_hor);
+}
+
+static void derive_lowest_px(Dav2dTaskContext *const t,
+                             const enum BlockSize lbs, const enum BlockSize cbs,
+                             Av2Block *const b)
+{
+    const Dav2dFrameContext *const f = t->f;
+    Dav2dTileState *const ts = t->ts;
+    const int has_chroma = cbs != BS_INVALID;
+
+    // keep track of motion vectors for each reference
+    const int sby = (t->by - ts->tiling.row_start) >> f->sb_shift;
+    int (*const lowest_px)[2] = ts->lowest_pixel[sby];
+    const uint8_t *const b_dim = dav2d_block_dimensions[lbs];
+    const int bw4 = b_dim[0], bh4 = b_dim[1];
+    const int has_sub8x8_chroma = has_chroma && cbs != lbs && imin(bw4, bh4) < 16;
+    const int has_regular_chroma = has_chroma && !has_sub8x8_chroma;
+    const int ss_ver = f->ss_ver;
+    int cbw4, cbh4;
+    const uint8_t *c_b_dim;
+    if (has_chroma) {
+        c_b_dim = dav2d_block_dimensions[cbs];
+        cbw4 = c_b_dim[0];
+        cbh4 = c_b_dim[1];
+    }
+
+    // y
+    assert(lbs != BS_INVALID);
+    if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
+        if (!f->frame_hdr->force_integer_mv &&
+            ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+              f->gmv_warp_allowed[b->ref.ref[0]]) ||
+             (b->motion_mode >= MM_WARP_CAUSAL &&
+              t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
+        {
+            affine_lowest_px_luma(t, &lowest_px[b->ref.ref[0]][0], b_dim,
+                                  b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
+                                  &f->frame_hdr->gmv.m[b->ref.ref[0]]);
+            if (has_regular_chroma)
+                affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[0]][1], c_b_dim,
+                                        b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
+                                        &f->frame_hdr->gmv.m[b->ref.ref[0]]);
+        } else {
+            mc_lowest_px(&lowest_px[b->ref.ref[0]][0], t->by, bh4, b->mv[0].y,
+                         0, &f->svc[b->ref.ref[0]][1]);
+            if (has_regular_chroma)
+                mc_lowest_px(&lowest_px[b->ref.ref[0]][1], t->cby, cbh4,
+                             b->mv[0].y, ss_ver, &f->svc[b->ref.ref[0]][1]);
+        }
+        if (b->motion_mode > MM_INTERINTRA) {
+            // backup warpmatrix
+            memcpy(b->mtxbak, t->warpmv[0].matrix, sizeof(int32_t) * 6);
+        }
+    } else if (b->ref.ref[0] == TIP_FRAME) {
+        const int h4 = imin(bh4, f->bh - t->cby);
+        const int w4 = imin(bw4, f->bw - t->cbx);
+        int opfl = f->seq_hdr->tip_refine_mv &&
+            (f->frame_hdr->tip.frame_mode == 1 ||
+             f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
+        const union refpair ref = f->rf.tip.ref;
+        const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
+                           f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
+        const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+                               ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+        opfl &= !!f->seq_hdr->opfl_refine && f->frame_hdr->has_bothside_refs;
+
+        const ptrdiff_t t_stride = f->rf.rp_stride;
+        for (int y = 0; y < h4; y += step) {
+            const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
+            for (int x = 0; x < w4; x += step) {
+                const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
+                mv tmv = t->rt.rp_proj[off_8x8].mv;
+                if (tmv.y == INVALID_MV) tmv.n = 0;
+                for (int i = 0; i < 2; i++) {
+                    const int64_t tmpy = tmv.y * (int64_t) f->rf.tip.sf[i];
+                    const int tipmvy = iclip((int)((tmpy + 0x2000 - (tmpy < 0)) >> 14),
+                                             -0xffff, 0xffff);
+                    const int mvy = iclip(tipmvy + b->mv[0].y, -0xffff, 0xffff);
+                    mc_lowest_px(&lowest_px[ref.ref[i]][0], t->by + y, step,
+                                 mvy | opfl | refine, 0, &f->svc[ref.ref[i]][1]);
+                    if (has_regular_chroma)
+                        mc_lowest_px(&lowest_px[ref.ref[i]][1], t->by + y, step,
+                                     mvy | opfl | refine, ss_ver, &f->svc[ref.ref[i]][1]);
+                }
+            }
+        }
+    } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
+               (b->refine_mv && b->comp_type == COMP_INTER_AVG))
+    {
+        // the "| 1" here is to force the mv into a subpel-position and ensure
+        // the 4px subpel filter overhang is applied in mc_lowest_px(). This
+        // matches the 4px overhang that refinemv and/or opfl can generate,
+        // regardless of the input MV.
+        for (int i = 0; i < 2; i++) {
+            mc_lowest_px(&lowest_px[b->ref.ref[i]][0], t->by, bh4,
+                         b->mv[i].y | 1, 0, &f->svc[b->ref.ref[i]][1]);
+            if (has_regular_chroma)
+                mc_lowest_px(&lowest_px[b->ref.ref[i]][1], t->cby, cbh4,
+                             b->mv[i].y | 1, ss_ver, &f->svc[b->ref.ref[i]][1]);
+        }
+    } else {
+        for (int i = 0; i < 2; i++) {
+            if ((b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1 &&
+                 f->gmv_warp_allowed[b->ref.ref[i]]) ||
+                (b->motion_mode == MM_WARP_CAUSAL &&
+                 t->warpmv[i].type > DAV2D_WM_TYPE_INVALID))
+            {
+                affine_lowest_px_luma(t, &lowest_px[b->ref.ref[i]][0], b_dim,
+                                      b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv[i] :
+                                      &f->frame_hdr->gmv.m[b->ref.ref[i]]);
+                if (has_regular_chroma)
+                    affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[i]][1], c_b_dim,
+                                            b->motion_mode == MM_WARP_CAUSAL ?
+                                                &t->warpmv[i] :
+                                                &f->frame_hdr->gmv.m[b->ref.ref[i]]);
+            } else {
+                mc_lowest_px(&lowest_px[b->ref.ref[i]][0], t->by, bh4,
+                             b->mv[i].y, 0, &f->svc[b->ref.ref[i]][1]);
+                if (has_regular_chroma)
+                    mc_lowest_px(&lowest_px[b->ref.ref[i]][1], t->cby, cbh4,
+                                 b->mv[i].y, ss_ver, &f->svc[b->ref.ref[i]][1]);
+            }
+            if (b->motion_mode > MM_INTERINTRA) {
+                // backup warpmatrix. We write one of them into our neighbour
+                // block on the right, which is OK since comp-warpmv blocks are
+                // always at least 8px wide, so that entry is unused.
+                assert(bw4 >= 2);
+                memcpy(b[i].mtxbak, t->warpmv[i].matrix, sizeof(int32_t) * 6);
+            }
+        }
+    }
+
+    if (has_sub8x8_chroma) {
+        const int ch4 = imin(cbh4, f->bh - t->cby);
+        const int cw4 = imin(cbw4, f->bw - t->cbx);
+        const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
+        for (int y = 0; y < ch4; y++, r += 128) {
+            for (int x = 0; x < cw4; x++) {
+                // grab ref/MV/filter from spatial refmvs
+                const refmvs_block *const r2 = &r[x];
+                if (r2->ox4 || r2->oy4) continue;
+                const union mv mv = r2->mf & 2 ? r2->lmv[0] : r2->mv[0];
+                const uint8_t *const sdim = dav2d_block_dimensions[r2->bs];
+                mc_lowest_px(&lowest_px[r2->ref.ref[0]][1], t->cby + y, sdim[1],
+                             mv.y, ss_ver, &f->svc[b->ref.ref[0]][1]);
+            }
+        }
+    }
+}
+
 static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                    const enum BlockSize lbs, const enum BlockSize cbs,
                    Av2Block *const b)
 {
+    const Dav2dFrameContext *const f = t->f;
+
+    if (t->task_thread.pass == PASS_RECON) {
+        if (b->motion_mode > MM_INTERINTRA) {
+            // restore warp matrices
+            const int comp =  b->ref.ref[1] != -1;
+            for (int n = 0; n <= comp; n++) {
+                memcpy(t->warpmv[n].matrix, b[n].mtxbak, sizeof(int32_t) * 6);
+                t->warpmv[n].type = dav2d_get_shear_params(&t->warpmv[n]) ?
+                    DAV2D_WM_TYPE_INVALID : warp_type(t->warpmv[n].matrix);
+            }
+        }
+        return f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
+                   (const enum BlockSize[2]){ cbs, cbs }, b);
+    }
+
     const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
     assert(bs != BS_INVALID);
-    const Dav2dFrameContext *const f = t->f;
     Dav2dTileState *const ts = t->ts;
     const int have_top = t->by > ts->tiling.row_start;
     const int have_left = t->bx > ts->tiling.col_start;
@@ -1109,70 +1326,15 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         splat_intraref(f->c, f, t, bs, by4, bw4, bh4);
     }
 
+    if (t->task_thread.pass == PASS_MVRES) {
+        if (!b->intra) derive_lowest_px(t, lbs, cbs, b);
+        return 0;
+    }
+
+    assert(t->task_thread.pass & PASS_RECON);
     return f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
                (const enum BlockSize[2]){ cbs, cbs }, b);
 }
-
-#if 0
-static void mc_lowest_px(int *const dst, const int by4, const int bh4,
-                         const int mvy, const int ss_ver,
-                         const struct ScalableMotionParams *const smp)
-{
-    const int v_mul = 4 >> ss_ver;
-    if (!smp->scale) {
-        const int my = mvy >> (3 + ss_ver), dy = mvy & (15 >> !ss_ver);
-        *dst = imax(*dst, (by4 + bh4) * v_mul + my + 4 * !!dy);
-    } else {
-        int y = (by4 * v_mul << 4) + mvy * (1 << !ss_ver);
-        const int64_t tmp = (int64_t)(y) * smp->scale + (smp->scale - 0x4000) * 8;
-        y = apply_sign64((llabs(tmp) + 128) >> 8, tmp) + 32;
-        const int bottom = ((y + (bh4 * v_mul - 1) * smp->step) >> 10) + 1 + 4;
-        *dst = imax(*dst, bottom);
-    }
-}
-
-static ALWAYS_INLINE void affine_lowest_px(Dav2dTaskContext *const t, int *const dst,
-                                           const uint8_t *const b_dim,
-                                           const Dav2dWarpedMotionParams *const wmp,
-                                           const int ss_ver, const int ss_hor)
-{
-    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
-    assert(!((b_dim[0] * h_mul) & 7) && !((b_dim[1] * v_mul) & 7));
-    const int32_t *const mat = wmp->matrix;
-    const int y = b_dim[1] * v_mul - 8; // lowest y
-
-    const int src_y = t->by * 4 + ((y + 4) << ss_ver);
-    const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
-    // check left- and right-most blocks
-    for (int x = 0; x < b_dim[0] * h_mul; x += imax(8, b_dim[0] * h_mul - 8)) {
-        // calculate transformation relative to center of 8x8 block in
-        // luma pixel units
-        const int src_x = t->bx * 4 + ((x + 4) << ss_hor);
-        const int64_t mvy = ((int64_t) mat[4] * src_x + mat5_y) >> ss_ver;
-        const int dy = (int) (mvy >> 16) - 4;
-        *dst = imax(*dst, dy + 4 + 8);
-    }
-}
-
-static NOINLINE void affine_lowest_px_luma(Dav2dTaskContext *const t, int *const dst,
-                                           const uint8_t *const b_dim,
-                                           const Dav2dWarpedMotionParams *const wmp)
-{
-    affine_lowest_px(t, dst, b_dim, wmp, 0, 0);
-}
-
-static NOINLINE void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *const dst,
-                                             const uint8_t *const b_dim,
-                                             const Dav2dWarpedMotionParams *const wmp)
-{
-    const Dav2dFrameContext *const f = t->f;
-    assert(f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400);
-    if (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I444)
-        affine_lowest_px_luma(t, dst, b_dim, wmp);
-    else
-        affine_lowest_px(t, dst, b_dim, wmp, f->cur.p.p.layout & DAV2D_PIXEL_LAYOUT_I420, 1);
-}
-#endif
 
 static const uint8_t size_group_lookup[] = {
     [BS_4x4] = 0,
@@ -3274,106 +3436,6 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 #undef set_ctx
     }
 
-#if 0
-    if (f->c->n_fc > 1 && f->c->task_thread.n_passes > 1 && !b->intra) {
-        const int sby = (t->by - ts->tiling.row_start) >> f->sb_shift;
-        int (*const lowest_px)[2] = ts->lowest_pixel[sby];
-
-        // keep track of motion vectors for each reference
-        if (b->comp_type == COMP_INTER_NONE) {
-            // y
-            if (imin(bw4, bh4) > 1 &&
-                ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
-                 (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV2D_WM_TYPE_TRANSLATION)))
-            {
-                affine_lowest_px_luma(t, &lowest_px[b->ref.ref[0]][0], b_dim,
-                                      b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
-                                      &f->frame_hdr->gmv.m[b->ref.ref[0]]);
-            } else {
-                mc_lowest_px(&lowest_px[b->ref.ref[0]][0], t->by, bh4, b->mv[0].y,
-                             0, &f->svc[b->ref.ref[0]][1]);
-            }
-
-            // uv
-            if (has_chroma) {
-                // sub8x8 derivation
-                int is_sub8x8 = bw4 == ss_hor || bh4 == ss_ver;
-                refmvs_block *const *r;
-                if (is_sub8x8) {
-                    assert(ss_hor == 1);
-                    r = &t->rt.r[(t->by & 31) + 5];
-                    if (bw4 == 1) is_sub8x8 &= r[0][t->bx - 1].ref.ref[0] > 0;
-                    if (bh4 == ss_ver) is_sub8x8 &= r[-1][t->bx].ref.ref[0] > 0;
-                    if (bw4 == 1 && bh4 == ss_ver)
-                        is_sub8x8 &= r[-1][t->bx - 1].ref.ref[0] > 0;
-                }
-
-                // chroma prediction
-                if (is_sub8x8) {
-                    assert(ss_hor == 1);
-                    if (bw4 == 1 && bh4 == ss_ver) {
-                        const refmvs_block *const rr = &r[-1][t->bx - 1];
-                        mc_lowest_px(&lowest_px[rr->ref.ref[0] - 1][1],
-                                     t->by - 1, bh4, rr->mv.mv[0].y, ss_ver,
-                                     &f->svc[rr->ref.ref[0] - 1][1]);
-                    }
-                    if (bw4 == 1) {
-                        const refmvs_block *const rr = &r[0][t->bx - 1];
-                        mc_lowest_px(&lowest_px[rr->ref.ref[0] - 1][1],
-                                     t->by, bh4, rr->mv.mv[0].y, ss_ver,
-                                     &f->svc[rr->ref.ref[0] - 1][1]);
-                    }
-                    if (bh4 == ss_ver) {
-                        const refmvs_block *const rr = &r[-1][t->bx];
-                        mc_lowest_px(&lowest_px[rr->ref.ref[0] - 1][1],
-                                     t->by - 1, bh4, rr->mv.mv[0].y, ss_ver,
-                                     &f->svc[rr->ref.ref[0] - 1][1]);
-                    }
-                    mc_lowest_px(&lowest_px[b->ref.ref[0]][1], t->by, bh4,
-                                 b->mv[0].y, ss_ver, &f->svc[b->ref.ref[0]][1]);
-                } else {
-                    if (imin(cbw4, cbh4) > 1 &&
-                        ((b->inter_mode == GLOBALMV && f->gmv_warp_allowed[b->ref.ref[0]]) ||
-                         (b->motion_mode == MM_WARP_CAUSAL && t->warpmv.type > DAV2D_WM_TYPE_TRANSLATION)))
-                    {
-                        affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[0]][1], b_dim,
-                                                b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv :
-                                                &f->frame_hdr->gmv.m[b->ref.ref[0]]);
-                    } else {
-                        mc_lowest_px(&lowest_px[b->ref.ref[0]][1],
-                                     t->by & ~ss_ver, bh4 << (bh4 == ss_ver),
-                                     b->mv[0].y, ss_ver, &f->svc[b->ref.ref[0]][1]);
-                    }
-                }
-            }
-        } else {
-            // y
-            for (int i = 0; i < 2; i++) {
-                if (b->inter_mode == GLOBALMV_GLOBALMV && f->gmv_warp_allowed[b->ref.ref[i]]) {
-                    affine_lowest_px_luma(t, &lowest_px[b->ref.ref[i]][0], b_dim,
-                                          &f->frame_hdr->gmv.m[b->ref.ref[i]]);
-                } else {
-                    mc_lowest_px(&lowest_px[b->ref.ref[i]][0], t->by, bh4,
-                                 b->mv[i].y, 0, &f->svc[b->ref.ref[i]][1]);
-                }
-            }
-
-            // uv
-            if (has_chroma) for (int i = 0; i < 2; i++) {
-                if (b->inter_mode == GLOBALMV_GLOBALMV &&
-                    imin(cbw4, cbh4) > 1 && f->gmv_warp_allowed[b->ref.ref[i]])
-                {
-                    affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[i]][1], b_dim,
-                                            &f->frame_hdr->gmv.m[b->ref.ref[i]]);
-                } else {
-                    mc_lowest_px(&lowest_px[b->ref.ref[i]][1], t->by, bh4,
-                                 b->mv[i].y, ss_ver, &f->svc[b->ref.ref[i]][1]);
-                }
-            }
-        }
-    }
-#endif
-
     return 0;
 }
 
@@ -3791,9 +3853,9 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (t->intra_region) cbs = BS_INVALID;
         }
         if (f->c->task_thread.n_passes > 1)
-            *ts->frame_thread[0].partition++ = bp | (unmix_bit << 7);
+            *ts->frame_thread[0].partition[0]++ = bp | (unmix_bit << 7);
     } else {
-        bp = *ts->frame_thread[1].partition++;
+        bp = *ts->frame_thread[1].partition[t->task_thread.pass == PASS_MVRES]++;
         if (bp & 0x80) {
             assert(!t->intra_region);
             t->intra_region = 1;
@@ -4144,7 +4206,8 @@ static void setup_tile(Dav2dTileState *const ts,
             (uint8_t*)f->frame_thread.cf +
                 (((size_t)tile_start_off * size_mul[0]) >> !f->seq_hdr->hbd) :
             NULL;
-        ts->frame_thread[p].partition = f->frame_thread.partition ?
+        ts->frame_thread[p].partition[0] =
+        ts->frame_thread[p].partition[1] = f->frame_thread.partition ?
             (uint8_t*)f->frame_thread.partition +
                 ((size_t)tile_start_off >> (4 - f->seq_hdr->sdp)) :
             NULL;
@@ -4194,7 +4257,7 @@ static void setup_tile(Dav2dTileState *const ts,
     }
 
     if (f->c->n_tc > 1) {
-        for (int p = 0; p < 2; p++)
+        for (int p = 0; p < 3; p++)
             atomic_init(&ts->progress[p], row_sb_start);
     }
 }
@@ -4340,6 +4403,11 @@ static int tip_frame_recon_sb(Dav2dTaskContext *const t,
     const int by4 = t->by & 63, bx4 = t->bx & 63;
     t->cbx = t->bx;
     t->cby = t->by;
+    if (t->task_thread.pass == PASS_MVRES) {
+        derive_lowest_px(t, bs, cbs, &b);
+        return 0;
+    }
+    assert(t->task_thread.pass & PASS_RECON);
     if (f->frame_hdr->tip.apply_filter) {
         dav2d_create_db_mask(t->lf_mask->filter_y, &b, bs,
                              t->bx, t->by, f->bw, f->bh, f->cur.p.p.layout, 0,
@@ -4379,16 +4447,20 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     if (f->frame_hdr->tip.frame_mode == 2 && t->task_thread.pass == PASS_ENTROPY)
         return 0;
 
-    if (t->task_thread.pass & PASS_MVRES &&
-        (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
-    {
-        dav2d_refmvs_tile_sbrow_init(&t->rt, &f->rf,
-                                     ts->tiling.col_start, ts->tiling.col_end,
-                                     ts->tiling.row_start, ts->tiling.row_end,
-                                     t->by >> f->sb_shift, ts->tiling.row);
+    if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
+        if (t->task_thread.pass & PASS_MVRES) {
+            dav2d_refmvs_tile_sbrow_init(&t->rt, &f->rf,
+                                         ts->tiling.col_start, ts->tiling.col_end,
+                                         ts->tiling.row_start, ts->tiling.row_end,
+                                         t->by >> f->sb_shift, ts->tiling.row);
+        } else if (t->task_thread.pass == PASS_RECON) {
+            t->rt.rp_proj = &f->rf.rp_proj[(t->by >> 1) * f->rf.rp_stride];
+        }
     }
 
-    if (IS_INTER_OR_SWITCH(f->frame_hdr) && c->n_fc > 1) {
+    if (t->task_thread.pass == PASS_MVRES &&
+        IS_INTER_OR_SWITCH(f->frame_hdr) && c->n_fc > 1)
+    {
         const int sby = (t->by - ts->tiling.row_start) >> f->sb_shift;
         int (*const lowest_px)[2] = ts->lowest_pixel[sby];
         for (int n = 0; n < 7; n++)
@@ -4410,9 +4482,11 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
         for (t->bx = ts->tiling.col_start;
              t->bx < ts->tiling.col_end; t->bx += sb_step)
         {
-            memset(t->is_coded, 0, sizeof(t->is_coded));
-            t->lf_mask = f->lf.mask + (t->bx >> 6) + sb256y * f->sb256w;
-            t->a = f->a + tile_row * f->sb256w + (t->bx >> 6);
+            if (t->task_thread.pass & PASS_RECON) {
+                memset(t->is_coded, 0, sizeof(t->is_coded));
+                t->lf_mask = f->lf.mask + (t->bx >> 6) + sb256y * f->sb256w;
+                t->a = f->a + tile_row * f->sb256w + (t->bx >> 6);
+            }
             if (t->task_thread.pass & PASS_MVRES &&
                 (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
             {
@@ -4910,7 +4984,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         const int ret =
             dav2d_refmvs_init_frame(&f->rf, f->seq_hdr, f->frame_hdr,
                                     f->refpoc, f->mvs, f->refrefpoc, f->refcnt,
-                                    f->ref_mvs, f->c->n_tc, f->c->n_fc);
+                                    f->ref_mvs, f->c->n_tc > 1, f->c->n_fc > 1);
         if (ret < 0) goto error;
     }
 
@@ -5005,6 +5079,31 @@ int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
     retval = 0;
 error:
     return retval;
+}
+
+void dav2d_decode_tip_frame_init(Dav2dFrameContext *const f) {
+    const struct Dav2dTileInfo *const ti = &f->frame_hdr->tiling.t;
+    const int sb_shift = f->sb_shift;
+    for (int tile_row = 0, tile = 0; tile_row < ti->rows; tile_row++) {
+        for (int tile_col = 0; tile_col < ti->cols; tile_col++, tile++) {
+            const int col_sb_start = ti->col_start_sb[tile_col];
+            const int col_sb_end = ti->col_start_sb[tile_col + 1];
+            const int row_sb_start = ti->row_start_sb[tile_row];
+            const int row_sb_end = ti->row_start_sb[tile_row + 1];
+            Dav2dTileState *const ts = &f->ts[tile];
+            ts->tiling.row = tile_row;
+            ts->tiling.col = tile_col;
+            ts->tiling.col_start = col_sb_start << sb_shift;
+            ts->tiling.col_end = imin(col_sb_end << sb_shift, f->bw);
+            ts->tiling.row_start = row_sb_start << sb_shift;
+            ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
+            if (f->c->n_tc > 1)
+                for (int p = 0; p < 3; p++)
+                    atomic_init(&ts->progress[p], row_sb_start);
+        }
+    }
+    atomic_store(&f->task_thread.entropy_task_counter,
+                 f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows);
 }
 
 int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
@@ -5110,26 +5209,7 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
         if (f->frame_hdr->tip.frame_mode != 2) {
             res = dav2d_decode_frame_init_cdf(f);
         } else {
-            const struct Dav2dTileInfo *const ti = &f->frame_hdr->tiling.t;
-            const int sb_shift = f->sb_shift;
-            for (int tile_row = 0, tile = 0; tile_row < ti->rows; tile_row++) {
-                for (int tile_col = 0; tile_col < ti->cols; tile_col++, tile++) {
-                    const int col_sb_start = ti->col_start_sb[tile_col];
-                    const int col_sb_end = ti->col_start_sb[tile_col + 1];
-                    const int row_sb_start = ti->row_start_sb[tile_row];
-                    const int row_sb_end = ti->row_start_sb[tile_row + 1];
-                    Dav2dTileState *const ts = &f->ts[tile];
-                    ts->tiling.row = tile_row;
-                    ts->tiling.col = tile_col;
-                    ts->tiling.col_start = col_sb_start << sb_shift;
-                    ts->tiling.col_end = imin(col_sb_end << sb_shift, f->bw);
-                    ts->tiling.row_start = row_sb_start << sb_shift;
-                    ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
-                    if (f->c->n_tc > 1)
-                        for (int p = 0; p < 2; p++)
-                            atomic_init(&ts->progress[p], row_sb_start);
-                }
-            }
+            dav2d_decode_tip_frame_init(f);
         }
     }
     // wait until all threads have completed
@@ -5185,6 +5265,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 #if 0
     // wait for c->out_delayed[next] and move into c->out if visible
     Dav2dThreadPicture *out_delayed;
+#endif
     if (c->n_fc > 1) {
         pthread_mutex_lock(&c->task_thread.lock);
         const unsigned next = c->frame_thread.next++;
@@ -5192,11 +5273,15 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             c->frame_thread.next = 0;
 
         f = &c->fc[next];
-        while (f->n_tile_data > 0)
+        while (f->n_tile_data != 0)
             pthread_cond_wait(&f->task_thread.cond,
                               &c->task_thread.lock);
+        // FIXME forward error code for frame to dpb->res
+#if 0
         out_delayed = &c->frame_thread.out_delayed[next];
         if (out_delayed->p.data[0] || atomic_load(&f->task_thread.error)) {
+#endif
+        if (f->frame_thread.scheduled) {
             unsigned first = atomic_load(&c->task_thread.first);
             if (first + 1U < c->n_fc)
                 atomic_fetch_add(&c->task_thread.first, 1U);
@@ -5207,6 +5292,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             if (c->task_thread.cur && c->task_thread.cur < c->n_fc)
                 c->task_thread.cur--;
         }
+#if 0
         const int error = f->task_thread.retval;
         if (error) {
             f->task_thread.retval = 0;
@@ -5224,9 +5310,8 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             }
             dav2d_thread_picture_unref(out_delayed);
         }
-    } else
 #endif
-    {
+    } else {
         f = c->fc;
     }
 
@@ -5376,10 +5461,15 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         }
         f->n_tile_data_alloc = c->n_tile_data;
     }
-    memcpy(f->tile, c->tile, c->n_tile_data * sizeof(*f->tile));
-    memset(c->tile, 0, c->n_tile_data * sizeof(*c->tile));
-    f->n_tile_data = c->n_tile_data;
-    c->n_tile_data = 0;
+    if (f->frame_hdr->tip.frame_mode == 2) {
+        assert(!c->n_tile_data);
+        f->n_tile_data = -1; // any non-zero value for threading
+    } else {
+        memcpy(f->tile, c->tile, c->n_tile_data * sizeof(*f->tile));
+        memset(c->tile, 0, c->n_tile_data * sizeof(*c->tile));
+        f->n_tile_data = c->n_tile_data;
+        c->n_tile_data = 0;
+    }
 
     // allocate frame
     res = dav2d_thread_picture_alloc(c, f, bpc);
@@ -5422,7 +5512,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     const int cols = f->frame_hdr->tiling.t.cols;
     const int rows = f->frame_hdr->tiling.t.rows;
     atomic_store(&f->task_thread.task_counter,
-                 (cols * rows + f->sbh) * n_passes);
+                 cols * rows * n_passes + f->sbh * imin(n_passes, 2));
 
     // ref_mvs
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
@@ -5625,11 +5715,10 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             }
             goto error;
         }
-#if 0
     } else {
         dav2d_task_frame_init(f);
+        f->frame_thread.scheduled = 1;
         pthread_mutex_unlock(&c->task_thread.lock);
-#endif
     }
 
     return 0;
@@ -5647,6 +5736,8 @@ error:
             dav2d_thread_picture_unref(&f->refp[i]);
         dav2d_ref_dec(&f->ref_mvs_ref[i]);
     }
+    // FIXME is it correct to re-report error messages during picture output
+    // if we already reported them during picture input?
     if (q) q->res = res;
     dav2d_thread_picture_unref(&f->cur);
     dav2d_ref_dec(&f->cur_segmap_ref);

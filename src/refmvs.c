@@ -1103,10 +1103,12 @@ void dav2d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
                                   const int tile_row_start4, const int tile_row_end4,
                                   const int sby, int tile_row_idx)
 {
-    if (rf->n_tile_threads == 1) tile_row_idx = 0;
+    if (!rf->have_threading) tile_row_idx = 0;
     const ptrdiff_t off1 = rf->rp_stride * tile_row_idx;
     const int sbsz8 = rf->sbsz >> 1;
-    const ptrdiff_t off2 = sbsz8 * off1, off3 = (sbsz8 + 2) * off1 + 2 * rf->rp_stride;
+    const ptrdiff_t off2 = sbsz8 * off1;
+    const ptrdiff_t off3 = rf->have_frame_threading ? (sby * sbsz8) * rf->rp_stride :
+                           (sbsz8 + 2) * off1 + 2 * rf->rp_stride;
     rt->rp_proj = &rf->rp_proj[off3];
     for (int n = 0; n < 7; n++)
         rt->rp_traj[n] = &rf->rp_traj[n][off2];
@@ -1791,7 +1793,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8)
 {
-    if (rf->n_tile_threads == 1) tile_row_idx = 0;
+    if (!rf->have_threading) tile_row_idx = 0;
     assert(row_start8 >= 0);
     const unsigned sbsz8 = rf->sbsz >> 1;
     const int mfmv_sbsz8 = rf->mfmv_sbsz8;
@@ -1805,14 +1807,17 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     const int sample_step = rf->frm_hdr->tmvp_sample_step;
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t offset = sbsz8 * stride * tile_row_idx;
-    const ptrdiff_t poffset = (sbsz8 + 2) * stride * tile_row_idx + 2 * stride;
+    const ptrdiff_t poffset = rf->have_frame_threading ? row_start8 * stride :
+                              (sbsz8 + 2) * stride * tile_row_idx + 2 * stride;
     refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[poffset];
-    memcpy(&rp_proj[col_start8 - 2 * rf->rp_stride],
-           &rp_proj[col_start8 + (sbsz8 - 2) * rf->rp_stride],
-           (col_end8 - col_start8) * sizeof(*rp_proj));
-    memcpy(&rp_proj[col_start8 - 1 * rf->rp_stride],
-           &rp_proj[col_start8 + (sbsz8 - 1) * rf->rp_stride],
-           (col_end8 - col_start8) * sizeof(*rp_proj));
+    if (!rf->have_frame_threading) {
+        memcpy(&rp_proj[col_start8 - 2 * rf->rp_stride],
+               &rp_proj[col_start8 + (sbsz8 - 2) * rf->rp_stride],
+               (col_end8 - col_start8) * sizeof(*rp_proj));
+        memcpy(&rp_proj[col_start8 - 1 * rf->rp_stride],
+               &rp_proj[col_start8 + (sbsz8 - 1) * rf->rp_stride],
+               (col_end8 - col_start8) * sizeof(*rp_proj));
+    }
     for (int y = row_start8; y < row_end8; y++) {
         for (int x = col_start8; x < col_end8; x++)
             rp_proj[x].mv.y = INVALID_MV;
@@ -2017,10 +2022,11 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                             const uint8_t ref_ref_poc[7][7],
                             const uint8_t refcnt[7],
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
-                            const int n_tile_threads, const int n_frame_threads)
+                            const int have_threading,
+                            const int have_frame_threading)
 {
     const int rp_stride = ((frm_hdr->width + 255) & ~255) >> 3;
-    const int n_tile_rows = n_tile_threads > 1 ? frm_hdr->tiling.t.rows : 1;
+    const int n_tile_rows = have_threading ? frm_hdr->tiling.t.rows : 1;
     const int n_blocks = rp_stride * n_tile_rows;
 
     rf->sbsz = 16 << frm_hdr->sb128;
@@ -2036,13 +2042,13 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     rf->ih4 = rf->ih8 << 1;
     rf->rp = rp;
     rf->rp_stride = rp_stride;
-    rf->n_tile_threads = n_tile_threads;
-#if 0
-    rf->n_frame_threads = n_frame_threads;
-#endif
+    rf->have_threading = have_threading;
+    rf->have_frame_threading = have_frame_threading;
     if (n_blocks * rf->sbsz > rf->n_blocks) {
         const int sbsz8 = rf->sbsz >> 1;
-        const size_t rp_proj_sz = sizeof(*rf->rp_proj) * (2 + sbsz8) * n_blocks;
+        const size_t rp_proj_sz = have_frame_threading ?
+            sizeof(*rf->rp_proj) * ((rf->ih8 + 31) & ~31) * rp_stride:
+            sizeof(*rf->rp_proj) * (2 + sbsz8) * n_blocks;
         const size_t rp_traj_sz = sizeof(mv) * sbsz8 * n_blocks;
         const size_t rp_map_sz = sizeof(**rf->rp_map) * sbsz8 * n_blocks;
         const size_t r_above_sz = sizeof(*rf->ra) * n_blocks;
@@ -2124,6 +2130,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     // temporal MV setup
     rf->n_mfmvs = 0;
     rf->rp_ref = rp_ref;
+    rf->mfmv_mask = 0;
     if (frm_hdr->use_ref_frame_mvs && seq_hdr->order_hint_n_bits) {
         // sort refs
         uint8_t order[7];
@@ -2263,6 +2270,9 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                 if (rf->n_mfmvs == 4) break;
             }
         }
+        for (int n = 0; n < 7; n++)
+            if (ref_done[n][0] || ref_done[n][1])
+                rf->mfmv_mask |= 1 << n;
 
         for (int n = 0; n < rf->n_mfmvs; n++) {
             const int rpoc = ref_poc[rf->mfmv[n].ref];

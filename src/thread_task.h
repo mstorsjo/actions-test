@@ -45,6 +45,7 @@ void *dav2d_worker_task(void *data);
 
 int dav2d_decode_frame_init(Dav2dFrameContext *f);
 int dav2d_decode_frame_init_cdf(Dav2dFrameContext *f);
+void dav2d_decode_tip_frame_init(Dav2dFrameContext *f);
 int dav2d_decode_frame_main(Dav2dFrameContext *f);
 void dav2d_decode_frame_exit(Dav2dFrameContext *f, int retval);
 int dav2d_decode_frame(Dav2dFrameContext *f);

@@ -83,7 +83,7 @@ enum TaskType {
     DAV2D_TASK_TYPE_INIT_CDF,
     DAV2D_TASK_TYPE_TILE_ENTROPY,
     DAV2D_TASK_TYPE_ENTROPY_PROGRESS,
-    DAV2D_TASK_TYPE_MV_RESOLUTION,
+    DAV2D_TASK_TYPE_TILE_MV_RESOLUTION,
     DAV2D_TASK_TYPE_TILE_RECONSTRUCTION,
     DAV2D_TASK_TYPE_DEBLOCK_COLS,
     DAV2D_TASK_TYPE_DEBLOCK_ROWS,
@@ -131,15 +131,12 @@ struct Dav2dContext {
     } *dpb; // output buffer management
     int dpb_in, dpb_out, dpb_sz, dpb_poc, drain;
     atomic_int flush_mem, *flush;
-#if 0
-    Dav2dThreadPicture cache;
-    // dummy is a pointer to prevent compiler errors about atomic_load()
-    // not taking const arguments
     struct {
+#if 0
         Dav2dThreadPicture *out_delayed;
+#endif
         unsigned next;
     } frame_thread;
-#endif
 
     // task threading (refer to tc[] for per_thread thingies)
     struct TaskThreadData {
@@ -175,7 +172,7 @@ struct Dav2dContext {
         // how block decoding (entropy, motion vector resolving, reconstruction)
         // is split
         // 1: all in a single pass
-        // 2: first entropy decoding as one pass, then motion vextor resolving +
+        // 2: first entropy decoding as one pass, then motion vector resolving +
         //    reconstruction in a 2nd pass
         // 3: each in a separate pass
         int n_passes;
@@ -333,6 +330,7 @@ struct Dav2dFrameContext {
         int cbi_sz, pal_sz, pal_idx_sz, cf_sz, part_sz;
         // start offsets per tile
         unsigned *tile_start_off;
+        int scheduled;
     } frame_thread;
 
     // loopfilter
@@ -370,7 +368,7 @@ struct Dav2dFrameContext {
         pthread_mutex_t lock;
         pthread_cond_t cond;
         struct TaskThreadData *ttd;
-        struct Dav2dTask *tasks, *tile_tasks[2], init_task;
+        struct Dav2dTask *tasks, *tile_tasks[3], init_task;
         int num_tasks, num_tile_tasks;
         atomic_int init_done;
         atomic_int done[2];
@@ -408,13 +406,13 @@ struct Dav2dTileState {
     } tiling;
 
     // in sby units, TILE_ERROR after a decoding error
-    atomic_int progress[2 /* 0: reconstruction, 1: entropy */];
+    atomic_int progress[3 /* pass */];
     struct {
         uint8_t *pal_idx;
         pixel (*pal)[8];
         struct CodedBlockInfo *cbi;
         coef *cf;
-        uint8_t *partition;
+        uint8_t *partition[2];
     } frame_thread[2 /* 0: reconstruction, 1: entropy */];
 
     // in fullpel units, [0] = Y, [1] = UV, used for progress requirements

@@ -341,6 +341,7 @@ typedef struct Av2Block {
             int8_t cwp_idx, mv_prec, amvd;
             uint8_t bawp[2], filter;
             uint8_t refine_mv; // 1 = enabled, 2 = implicitly enabled
+            int32_t mtxbak[6]; // for frame-mt only
         }; // inter
     };
 } Av2Block;

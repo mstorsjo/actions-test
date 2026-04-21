@@ -2714,76 +2714,19 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             {
                 goto error;
             }
-            if (c->n_fc == 1) {
-                dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
+            dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
 #if 0
-                dav2d_picture_copy_props(&c->out.p,
-                                         c->content_light, c->content_light_ref,
-                                         c->mastering_display, c->mastering_display_ref,
-                                         c->itut_t35, c->itut_t35_ref, c->n_itut_t35,
-                                         &in->m);
-                // Must be removed from the context after being attached to the frame
-                dav2d_ref_dec(&c->itut_t35_ref);
-                c->itut_t35 = NULL;
-                c->n_itut_t35 = 0;
-                c->event_flags |= dav2d_picture_get_event_flags(&c->refs[c->frame_hdr->existing_frame_idx].p);
-            } else {
-                pthread_mutex_lock(&c->task_thread.lock);
-                // need to append this to the frame output queue
-                const unsigned next = c->frame_thread.next++;
-                if (c->frame_thread.next == c->n_fc)
-                    c->frame_thread.next = 0;
-
-                Dav2dFrameContext *const f = &c->fc[next];
-                while (f->n_tile_data > 0)
-                    pthread_cond_wait(&f->task_thread.cond,
-                                      &f->task_thread.ttd->lock);
-                Dav2dThreadPicture *const out_delayed =
-                    &c->frame_thread.out_delayed[next];
-                if (out_delayed->p.data[0] || atomic_load(&f->task_thread.error)) {
-                    unsigned first = atomic_load(&c->task_thread.first);
-                    if (first + 1U < c->n_fc)
-                        atomic_fetch_add(&c->task_thread.first, 1U);
-                    else
-                        atomic_store(&c->task_thread.first, 0);
-                    atomic_compare_exchange_strong(&c->task_thread.reset_task_cur,
-                                                   &first, UINT_MAX);
-                    if (c->task_thread.cur && c->task_thread.cur < c->n_fc)
-                        c->task_thread.cur--;
-                }
-                const int error = f->task_thread.retval;
-                if (error) {
-                    c->cached_error = error;
-                    f->task_thread.retval = 0;
-                    dav2d_data_props_copy(&c->cached_error_props, &out_delayed->p.m);
-                    dav2d_thread_picture_unref(out_delayed);
-                } else if (out_delayed->p.data[0]) {
-                    const unsigned progress = atomic_load_explicit(&out_delayed->progress[1],
-                                                                   memory_order_relaxed);
-                    if ((out_delayed->visible || c->output_invisible_frames) &&
-                        progress != FRAME_ERROR)
-                    {
-                        dav2d_thread_picture_ref(&c->out, out_delayed);
-                        c->event_flags |= dav2d_picture_get_event_flags(out_delayed);
-                    }
-                    dav2d_thread_picture_unref(out_delayed);
-                }
-                dav2d_thread_picture_ref(out_delayed,
-                                         &c->refs[c->frame_hdr->existing_frame_idx].p);
-                out_delayed->visible = 1;
-                dav2d_picture_copy_props(&out_delayed->p,
-                                         c->content_light, c->content_light_ref,
-                                         c->mastering_display, c->mastering_display_ref,
-                                         c->itut_t35, c->itut_t35_ref, c->n_itut_t35,
-                                         &in->m);
-                // Must be removed from the context after being attached to the frame
-                dav2d_ref_dec(&c->itut_t35_ref);
-                c->itut_t35 = NULL;
-                c->n_itut_t35 = 0;
-
-                pthread_mutex_unlock(&c->task_thread.lock);
+            dav2d_picture_copy_props(&c->out.p,
+                                     c->content_light, c->content_light_ref,
+                                     c->mastering_display, c->mastering_display_ref,
+                                     c->itut_t35, c->itut_t35_ref, c->n_itut_t35,
+                                     &in->m);
+            // Must be removed from the context after being attached to the frame
+            dav2d_ref_dec(&c->itut_t35_ref);
+            c->itut_t35 = NULL;
+            c->n_itut_t35 = 0;
+            c->event_flags |= dav2d_picture_get_event_flags(&c->refs[c->frame_hdr->existing_frame_idx].p);
 #endif
-            }
             if (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {
                 const int r = c->frame_hdr->existing_frame_idx;
                 c->refs[r].p.showable = 0;
