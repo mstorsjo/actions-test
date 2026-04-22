@@ -1375,7 +1375,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     assert(bs != BS_INVALID);
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
-    Av2Block b_mem, *const b = t->frame_thread.pass ?
+    Av2Block b_mem, *const b = f->c->task_thread.n_passes > 1 ?
         &f->frame_thread.b[t->by * f->b4_stride + t->bx] : &b_mem;
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bx4 = t->bx & 63, by4 = t->by & 63;
@@ -1405,7 +1405,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                        !has_chroma ? "y" : !has_luma ? "uv" : "yuv",
                        ts->msac.rng);
 
-    if (t->frame_thread.pass == 2) {
+    if (!(t->task_thread.pass & PASS_ENTROPY)) {
         return recon_b(t, DB_ONLY(depth) lbs, cbs, b);
     }
 
@@ -2123,8 +2123,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             if (b->pal_sz) {
                 uint8_t *pal_idx;
-                if (t->frame_thread.pass) {
-                    const int p = t->frame_thread.pass & 1;
+                if (f->c->task_thread.n_passes > 1) {
+                    const int p = !!(t->task_thread.pass & PASS_ENTROPY);
                     assert(ts->frame_thread[p].pal_idx);
                     pal_idx = ts->frame_thread[p].pal_idx;
                     ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
@@ -2147,7 +2147,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             b->is_sm[1].a = sm_uv_flag(t->a, cbx4);
             b->is_sm[1].l = sm_uv_flag(&t->l, cby4);
         }
-        if (t->frame_thread.pass == 1) {
+        if (t->task_thread.pass == PASS_ENTROPY) {
             f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
         } else {
             const int res = recon_b(t, DB_ONLY(depth) lbs, cbs, b);
@@ -2238,7 +2238,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         read_tx_part(t, DB_ONLY(depth) b, bs);
 
         // reconstruction
-        if (t->frame_thread.pass == 1) {
+        if (t->task_thread.pass == PASS_ENTROPY) {
             f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
             b->filter = DAV2D_FILTER_BILINEAR;
         } else {
@@ -3123,7 +3123,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         read_tx_part(t, DB_ONLY(depth) b, bs);
 
         // reconstruction
-        if (t->frame_thread.pass == 1) {
+        if (t->task_thread.pass == PASS_ENTROPY) {
             f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
         } else {
             const int res = recon_b(t, DB_ONLY(depth) lbs, cbs, b);
@@ -3275,7 +3275,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
 #if 0
-    if (t->frame_thread.pass == 1 && !b->intra && IS_INTER_OR_SWITCH(f->frame_hdr)) {
+    if (f->c->n_fc > 1 && f->c->task_thread.n_passes > 1 && !b->intra) {
         const int sby = (t->by - ts->tiling.row_start) >> f->sb_shift;
         int (*const lowest_px)[2] = ts->lowest_pixel[sby];
 
@@ -3388,7 +3388,7 @@ static int checked_decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const int err = decode_b(t, DB_ONLY(depth) lbs, cbs);
     enum BlockSize bs[2] = { lbs, cbs };
 
-    if (err == 0 && !(t->frame_thread.pass & 1))
+    if (err == 0 && t->task_thread.pass & PASS_RECON)
         for (int i = 0; i < 2; i++) {
             if (bs[i] == BS_INVALID) continue;
             const uint8_t *const b_dim = dav2d_block_dimensions[bs[i]];
@@ -3603,7 +3603,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     enum BlockPartition bp = PARTITION_INVALID;
     int bx4, by4;
 
-    if (t->frame_thread.pass != 2) {
+    if (t->task_thread.pass & PASS_ENTROPY) {
         bx4 = t->bx & 63;
         by4 = t->by & 63;
         // FIXME some of the code below needs to be tested for 4:2:2 w/ SDP=1
@@ -3790,7 +3790,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                depth, "", ctx, !t->intra_region, ts->msac.rng);
             if (t->intra_region) cbs = BS_INVALID;
         }
-        if (t->frame_thread.pass)
+        if (f->c->task_thread.n_passes > 1)
             *ts->frame_thread[0].partition++ = bp | (unmix_bit << 7);
     } else {
         bp = *ts->frame_thread[1].partition++;
@@ -3824,7 +3824,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     switch (bp) {
     case PARTITION_NONE:
         if (decode_b(t, DB_ONLY(depth + 1) lbs, cbs)) return -1;
-        if (t->frame_thread.pass != 2) {
+        if (t->task_thread.pass & PASS_ENTROPY) {
             if ((cbs | lbs) != BS_INVALID) {
                 BlockContext *edge = t->a;
 #define set_ctx(rep_macro) \
@@ -4376,17 +4376,16 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     const int tile_row = ts->tiling.row, tile_col = ts->tiling.col;
 
     // FIXME turn into assert by not scheduling tip frame entropy parsing tasks
-    if (f->frame_hdr->tip.frame_mode == 2 && t->frame_thread.pass == 1)
+    if (f->frame_hdr->tip.frame_mode == 2 && t->task_thread.pass == PASS_ENTROPY)
         return 0;
 
-    if (t->frame_thread.pass != 1 &&
+    if (t->task_thread.pass & PASS_MVRES &&
         (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
     {
         dav2d_refmvs_tile_sbrow_init(&t->rt, &f->rf,
                                      ts->tiling.col_start, ts->tiling.col_end,
                                      ts->tiling.row_start, ts->tiling.row_end,
-                                     t->by >> f->sb_shift, ts->tiling.row,
-                                     t->frame_thread.pass);
+                                     t->by >> f->sb_shift, ts->tiling.row);
     }
 
     if (IS_INTER_OR_SWITCH(f->frame_hdr) && c->n_fc > 1) {
@@ -4396,7 +4395,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             for (int m = 0; m < 2; m++)
                 lowest_px[n][m] = INT_MIN;
     }
-    if (t->frame_thread.pass != 1 &&
+    if (t->task_thread.pass & PASS_MVRES &&
         f->c->n_tc > 1 && f->frame_hdr->use_ref_frame_mvs)
     {
         dav2d_refmvs_load_tmvs(&f->rf, ts->tiling.row,
@@ -4405,7 +4404,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     }
 
     const int sb256y = t->by >> 6;
-    if (t->frame_thread.pass == 2 || f->frame_hdr->tip.frame_mode == 2) {
+    if (!(t->task_thread.pass & PASS_ENTROPY) || f->frame_hdr->tip.frame_mode == 2) {
         if (f->frame_hdr->tip.frame_mode == 2)
             reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), 1);
         for (t->bx = ts->tiling.col_start;
@@ -4414,7 +4413,9 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             memset(t->is_coded, 0, sizeof(t->is_coded));
             t->lf_mask = f->lf.mask + (t->bx >> 6) + sb256y * f->sb256w;
             t->a = f->a + tile_row * f->sb256w + (t->bx >> 6);
-            if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
+            if (t->task_thread.pass & PASS_MVRES &&
+                (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
+            {
                 dav2d_refmvs_reset_sb(&t->rt, t->by, t->bx);
             }
             if (atomic_load_explicit(c->flush, memory_order_acquire))
@@ -4426,13 +4427,16 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                 if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
                     return 1;
             }
-            if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
+            if (t->task_thread.pass & PASS_MVRES &&
+                (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
+            {
                 dav2d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
                                        t->bx >> 1, (t->bx + sb_step) >> 1,
                                        t->by >> 1, (t->by + sb_step) >> 1);
             }
         }
-        f->bd_fn.backup_ipred_edge(t);
+        if (t->task_thread.pass & PASS_RECON)
+            f->bd_fn.backup_ipred_edge(t);
         return 0;
     }
     reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), 0);
@@ -4462,7 +4466,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             memset(t->lf_mask->cdef_idx, -1, 16);
             break;
         }
-        if (t->frame_thread.pass != 1 &&
+        if (t->task_thread.pass & PASS_MVRES &&
             (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
         {
             dav2d_refmvs_reset_sb(&t->rt, t->by, t->bx);
@@ -4533,7 +4537,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
         }
         if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
             return 1;
-        if (t->frame_thread.pass != 1 &&
+        if (t->task_thread.pass & PASS_MVRES &&
             (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
         {
             dav2d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
@@ -4543,7 +4547,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     }
 
     // backup pre-loopfilter pixels for intra prediction of the next sbrow
-    if (t->frame_thread.pass != 1)
+    if (t->task_thread.pass & PASS_RECON)
         f->bd_fn.backup_ipred_edge(t);
 
     // backup t->a/l.tx_lpf_y/uv at tile boundaries to use them to "fix"
@@ -4585,7 +4589,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
     const int n_ts = f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows;
     if (n_ts != f->n_ts) {
-        if (c->task_thread.uses_2pass) {
+        if (c->task_thread.n_passes > 1) {
             dav2d_free(f->frame_thread.tile_start_off);
             f->frame_thread.tile_start_off =
                 dav2d_malloc(ALLOC_TILE, sizeof(*f->frame_thread.tile_start_off) * n_ts);
@@ -4640,7 +4644,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         }
     }
 
-    if (c->task_thread.uses_2pass) {
+    if (c->task_thread.n_passes > 1) {
         const unsigned sb_step4 = f->sb_step * 4;
         int tile_idx = 0;
         for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
@@ -4825,7 +4829,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             f->lf.mask_sz = 0;
             goto error;
         }
-        if (c->task_thread.uses_2pass) {
+        if (c->task_thread.n_passes > 1) {
             dav2d_free(f->frame_thread.b);
             f->frame_thread.b = dav2d_malloc(ALLOC_BLOCK, sizeof(*f->frame_thread.b) *
                                              num_sb256 * 64 * 64);
@@ -4978,7 +4982,7 @@ int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
             }
 
             setup_tile(&f->ts[j], f, data, tile_sz, tile_row, tile_col++,
-                       c->task_thread.uses_2pass ?
+                       c->task_thread.n_passes > 1 ?
                            f->frame_thread.tile_start_off[j] : 0);
 
             if (tile_col == f->frame_hdr->tiling.t.cols) {
@@ -5011,7 +5015,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
 
     Dav2dTaskContext *const t = &c->tc[f - c->fc];
     t->f = f;
-    t->frame_thread.pass = 0;
+    t->task_thread.pass = PASS_ALL;
 
     for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)
         reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr),
@@ -5051,7 +5055,7 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
     if (f->cur.p.data[0])
         atomic_init(&f->task_thread.error, 0);
 
-    if (c->task_thread.uses_2pass > 1 && retval && f->frame_thread.cf) {
+    if (c->task_thread.n_passes > 1 && retval && f->frame_thread.cf) {
         memset(f->frame_thread.cf, 0,
                (size_t)f->frame_thread.cf_sz * 256 * 256 / 2);
     }
@@ -5131,8 +5135,8 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
     // wait until all threads have completed
     if (!res) {
         if (c->n_tc > 1) {
-            const int uses_2pass = c->task_thread.uses_2pass;
-            for (int p = uses_2pass; p <= 2 * uses_2pass && !res; p++)
+            const int n_passes = c->task_thread.n_passes;
+            for (int p = 0; p < n_passes && !res; p++)
                 res = dav2d_task_create_tile_sbrow(f, p, 1);
             pthread_mutex_lock(&f->task_thread.ttd->lock);
             pthread_cond_signal(&f->task_thread.ttd->cond);
@@ -5414,11 +5418,11 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     f->b4_stride = (f->bw + 63) & ~63;
     f->bitdepth_max = (1 << f->cur.p.p.bpc) - 1;
     atomic_init(&f->task_thread.error, 0);
-    const int uses_2pass = c->task_thread.uses_2pass;
+    const int n_passes = c->task_thread.n_passes;
     const int cols = f->frame_hdr->tiling.t.cols;
     const int rows = f->frame_hdr->tiling.t.rows;
     atomic_store(&f->task_thread.task_counter,
-                 (cols * rows + f->sbh) << uses_2pass);
+                 (cols * rows + f->sbh) * n_passes);
 
     // ref_mvs
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {

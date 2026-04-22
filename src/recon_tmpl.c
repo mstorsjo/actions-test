@@ -2466,11 +2466,11 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         txtp = DCT_DCT;
         eob = -1;
         stx = 0;
-        if (t->frame_thread.pass != 2) {
+        if (t->task_thread.pass & PASS_ENTROPY) {
             dav2d_memset_pow2[t_dim->lw](&t->a->lcoef[bx4], cf_ctx);
             dav2d_memset_pow2[t_dim->lh](&t->l.lcoef[by4], cf_ctx);
         }
-    } else if (t->frame_thread.pass == 2) {
+    } else if (!(t->task_thread.pass & PASS_ENTROPY)) {
         cf = ts->frame_thread[1].cf;
         ts->frame_thread[1].cf += imin(tw, 32) * imin(th, 32);
         const struct CodedBlockInfo *const cbi =
@@ -3271,8 +3271,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     } else if (b->pal_sz) {
         const uint8_t *pal_idx;
         const pixel *pal;
-        if (t->frame_thread.pass) {
-            const int p = t->frame_thread.pass & 1;
+        if (t->task_thread.pass != PASS_ALL) {
+            const int p = !!(t->task_thread.pass & PASS_ENTROPY);
             assert(ts->frame_thread[p].pal_idx);
             pal_idx = ts->frame_thread[p].pal_idx;
             ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
@@ -3508,7 +3508,7 @@ chroma: {}
         b->uv_mode = wide_angle_remap(uv_t_dim, b->uv_mode, &angle, 0);
 
     if (cbs_stage[0] != BS_INVALID) {
-        if (t->frame_thread.pass == 2) {
+        if (!(t->task_thread.pass & PASS_ENTROPY)) {
             if (!skip_txfm) {
                 uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
                 int16_t (*const uv_eob)[2] = t->chroma_eob;
@@ -3854,7 +3854,7 @@ chroma: {}
                 uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
                 int16_t (*const eob)[2] = t->chroma_eob;
                 coef *cf[2];
-                if (t->frame_thread.pass == 2) {
+                if (!(t->task_thread.pass & PASS_ENTROPY)) {
                     cf[0] = t->cf_uv;
                     cf[1] = &t->cf_uv[cbw4ss * cbh4ss * 16];
                 } else {
@@ -4036,7 +4036,7 @@ void bytefn(dav2d_copy_pal_block_y)(Dav2dTaskContext *const t,
                                     const int bw4, const int bh4)
 
 {
-    pixel *const pal = t->frame_thread.pass ?
+    pixel *const pal = t->task_thread.pass != PASS_ALL ?
         *t->ts->frame_thread[1].pal++ : bytefn(t->scratch.pal);
     for (int x = 0; x < bw4; x++)
         memcpy(bytefn(t->al_pal)[0][bx4 + x], pal, 8 * sizeof(pixel));
@@ -4148,7 +4148,7 @@ void bytefn(dav2d_read_pal_plane)(DB_ONLY(const int depth)
     }
 
     // parse new entries
-    pixel *const pal = t->frame_thread.pass ?
+    pixel *const pal = t->task_thread.pass != PASS_ALL ?
         *ts->frame_thread[1].pal : bytefn(t->scratch.pal);
     if (n_used_cache < pal_sz) {
         int i = n_used_cache;

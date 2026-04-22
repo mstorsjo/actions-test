@@ -83,6 +83,7 @@ enum TaskType {
     DAV2D_TASK_TYPE_INIT_CDF,
     DAV2D_TASK_TYPE_TILE_ENTROPY,
     DAV2D_TASK_TYPE_ENTROPY_PROGRESS,
+    DAV2D_TASK_TYPE_MV_RESOLUTION,
     DAV2D_TASK_TYPE_TILE_RECONSTRUCTION,
     DAV2D_TASK_TYPE_DEBLOCK_COLS,
     DAV2D_TASK_TYPE_DEBLOCK_ROWS,
@@ -171,7 +172,13 @@ struct Dav2dContext {
             };
         } delayed_fg;
         int inited;
-        int uses_2pass;
+        // how block decoding (entropy, motion vector resolving, reconstruction)
+        // is split
+        // 1: all in a single pass
+        // 2: first entropy decoding as one pass, then motion vextor resolving +
+        //    reconstruction in a 2nd pass
+        // 3: each in a separate pass
+        int n_passes;
     } task_thread;
 
     // reference/entropy state
@@ -511,9 +518,12 @@ struct Dav2dTaskContext {
     uint8_t u_has_cf;
 
     struct {
-        int pass;
-    } frame_thread;
-    struct {
+        enum {
+            PASS_ENTROPY = 1 << 0,
+            PASS_MVRES   = 1 << 1,
+            PASS_RECON   = 1 << 2,
+            PASS_ALL     = PASS_ENTROPY | PASS_MVRES | PASS_RECON,
+        } pass;
         struct thread_data td;
         struct TaskThreadData *ttd;
         struct FrameTileThreadData *fttd;

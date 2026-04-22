@@ -1101,7 +1101,7 @@ void dav2d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
                                   const refmvs_frame *const rf,
                                   const int tile_col_start4, const int tile_col_end4,
                                   const int tile_row_start4, const int tile_row_end4,
-                                  const int sby, int tile_row_idx, const int pass)
+                                  const int sby, int tile_row_idx)
 {
     if (rf->n_tile_threads == 1) tile_row_idx = 0;
     const ptrdiff_t off1 = rf->rp_stride * tile_row_idx;

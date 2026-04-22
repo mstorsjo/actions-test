@@ -253,8 +253,8 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
         atomic_init(&c->task_thread.reset_task_cur, UINT_MAX);
         atomic_init(&c->task_thread.cond_signaled, 0);
         c->task_thread.inited = 1;
-        c->task_thread.uses_2pass = 1; // FIXME maybe make this a CLI/API flag?
     }
+    c->task_thread.n_passes = 1 + (c->n_tc > 1);// + (c->n_fc > 1);
 
 #if 0
     if (c->n_fc > 1) {
@@ -659,18 +659,14 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         Dav2dFrameContext *const f = &c->fc[n];
 
         // clean-up threading stuff
-        if (c->n_fc > 1) {
-            dav2d_free(f->tile_thread.lowest_pixel_mem);
-        }
-        if (c->task_thread.uses_2pass) {
-            dav2d_free(f->frame_thread.b);
-            dav2d_free_aligned(f->frame_thread.cbi);
-            dav2d_free_aligned(f->frame_thread.pal_idx);
-            dav2d_free_aligned(f->frame_thread.cf);
-            dav2d_free(f->frame_thread.tile_start_off);
-            dav2d_free_aligned(f->frame_thread.pal);
-            dav2d_free(f->frame_thread.partition);
-        }
+        dav2d_free(f->tile_thread.lowest_pixel_mem);
+        dav2d_free(f->frame_thread.b);
+        dav2d_free_aligned(f->frame_thread.cbi);
+        dav2d_free_aligned(f->frame_thread.pal_idx);
+        dav2d_free_aligned(f->frame_thread.cf);
+        dav2d_free(f->frame_thread.tile_start_off);
+        dav2d_free_aligned(f->frame_thread.pal);
+        dav2d_free(f->frame_thread.partition);
         if (c->n_tc > 1) {
             pthread_mutex_destroy(&f->task_thread.pending_tasks.lock);
             pthread_cond_destroy(&f->task_thread.cond);

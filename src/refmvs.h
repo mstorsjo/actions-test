@@ -247,7 +247,7 @@ static ALWAYS_INLINE union qmv quantize_mv(const union mv mv) {
 void dav2d_refmvs_tile_sbrow_init(refmvs_tile *rt, const refmvs_frame *rf,
                                   int tile_col_start4, int tile_col_end4,
                                   int tile_row_start4, int tile_row_end4,
-                                  int sby, int tile_row_idx, int pass);
+                                  int sby, int tile_row_idx);
 void dav2d_refmvs_reset_sb(refmvs_tile *rt, int by, int bx);
 void dav2d_refmvs_bank_update(refmvs_tile *rt, enum BlockSize bs, int by, int bx);
 void dav2d_refmvs_bank_add(refmvs_tile *rt, enum BlockSize bs, int by, int bx,
