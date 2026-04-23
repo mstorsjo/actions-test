@@ -1,4 +1,4 @@
-From 3a9edf281e4c5f8b160802abb6e18cee3031a545 Mon Sep 17 00:00:00 2001
+From c3b4aeebed403b88c0caded2a96af558e9ff208b Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -37,7 +37,7 @@ index 4eb58dea87..01b9fc75fa 100644
        const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
        const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av2/common/mvref_common.c b/av2/common/mvref_common.c
-index b1a26c4404..9c1bd2ce35 100644
+index b1a26c4404..6e73acbc94 100644
 --- a/av2/common/mvref_common.c
 +++ b/av2/common/mvref_common.c
 @@ -12,6 +12,8 @@
@@ -213,7 +213,7 @@ index b1a26c4404..9c1bd2ce35 100644
  }
  
 -static AVM_INLINE void add_ref_mv_candidate(
-+static AVM_INLINE void add_ref_mv_candidate(DB_ONLY(const int is_dbg)
++static AVM_INLINE void add_ref_mv_candidate(DB_ARGS(const int is_dbg)
      int mi_row, int mi_col, int mi_row_cand, int mi_col_cand,
      const MB_MODE_INFO *const candidate, const SUBMB_INFO *const submi,
      const MV_REFERENCE_FRAME rf[2], uint8_t *refmv_count,
@@ -645,7 +645,7 @@ index b1a26c4404..9c1bd2ce35 100644
      if (*refmv_count >= MAX_REF_MV_STACK_SIZE) return;
  
 -    add_ref_mv_candidate(
-+    add_ref_mv_candidate(DB_ONLY(is_dbg)
++    add_ref_mv_candidate(DB_ARGS(is_dbg)
          mi_row, mi_col, cand_mi_row, cand_mi_col, candidate, submi, rf,
          refmv_count, ref_match_count, newmv_count, ref_mv_stack, ref_mv_weight,
          gm_mv_candidates, cm->global_motion, cm, add_more_mvs, single_mv,
@@ -654,7 +654,7 @@ index b1a26c4404..9c1bd2ce35 100644
  }
  
 -static int add_tpl_ref_mv(const AV2_COMMON *cm, const MACROBLOCKD *xd,
-+static int add_tpl_ref_mv(DB_ONLY(const int is_dbg)
++static int add_tpl_ref_mv(DB_ARGS(const int is_dbg)
 +                          const AV2_COMMON *cm, const MACROBLOCKD *xd,
                            int mi_row, int mi_col, MV_REFERENCE_FRAME ref_frame,
                            int blk_row, int blk_col, uint8_t *const refmv_count,
@@ -785,7 +785,7 @@ index b1a26c4404..9c1bd2ce35 100644
  }
  
 -static AVM_INLINE void add_tmvp_candidate(
-+static AVM_INLINE void add_tmvp_candidate(DB_ONLY(const int is_dbg)
++static AVM_INLINE void add_tmvp_candidate(DB_ARGS(const int is_dbg)
      const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME ref_frame,
      uint8_t *const refmv_count,
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
@@ -794,7 +794,7 @@ index b1a26c4404..9c1bd2ce35 100644
        if (added_tmvp_cnt) break;
        if (tmvp_units_status[iter].is_available) {
 -        add_tpl_ref_mv(cm, xd, mi_row, mi_col, ref_frame,
-+        add_tpl_ref_mv(DB_ONLY(is_dbg)
++        add_tpl_ref_mv(DB_ARGS(is_dbg)
 +                       cm, xd, mi_row, mi_col, ref_frame,
                         tmvp_units_status[iter].row_offset,
                         tmvp_units_status[iter].col_offset, refmv_count,
@@ -804,7 +804,7 @@ index b1a26c4404..9c1bd2ce35 100644
  }
  
 -static AVM_INLINE void add_derived_smvp_candidates(
-+static AVM_INLINE void add_derived_smvp_candidates(DB_ONLY(const int is_dbg)
++static AVM_INLINE void add_derived_smvp_candidates(DB_ARGS(const int is_dbg)
      const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME *rf,
      uint8_t *const refmv_count,
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
@@ -821,7 +821,7 @@ index b1a26c4404..9c1bd2ce35 100644
  }
  
 -static AVM_INLINE void add_ref_mv_bank_candidates(
-+static AVM_INLINE void add_ref_mv_bank_candidates(DB_ONLY(const int is_dbg)
++static AVM_INLINE void add_ref_mv_bank_candidates(DB_ARGS(const int is_dbg)
      const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME *rf,
      MV_REFERENCE_FRAME ref_frame, uint8_t *const refmv_count,
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
@@ -919,7 +919,7 @@ index b1a26c4404..9c1bd2ce35 100644
 -static AVM_INLINE void setup_ref_mv_list(
 -    const AV2_COMMON *cm, const MACROBLOCKD *xd, MV_REFERENCE_FRAME ref_frame,
 -    uint8_t *const refmv_count,
-+static AVM_INLINE void setup_ref_mv_list(DB_ONLY(const int is_dbg)
++static AVM_INLINE void setup_ref_mv_list(DB_ARGS(const int is_dbg)
 +    const AV2_COMMON *cm, const MACROBLOCKD *xd, MB_MODE_INFO *mbmi,
 +    MV_REFERENCE_FRAME ref_frame, uint8_t *const refmv_count,
      CANDIDATE_MV ref_mv_stack[MAX_REF_MV_STACK_SIZE],
@@ -984,7 +984,7 @@ index b1a26c4404..9c1bd2ce35 100644
 -    add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
 +      DEBUG_REFMV_printf("High-priority TMVP [%d|%d]\n", *refmv_count,
 +                         have_warp ? *valid_num_warp_candidates : 0);
-+    add_tmvp_candidate(DB_ONLY(is_dbg)
++    add_tmvp_candidate(DB_ARGS(is_dbg)
 +                       cm, xd, ref_frame, refmv_count, ref_mv_stack,
                         ref_mv_weight, mi_row, mi_col, &drl_pr_count);
    }
@@ -1055,7 +1055,7 @@ index b1a26c4404..9c1bd2ce35 100644
 -    add_tmvp_candidate(cm, xd, ref_frame, refmv_count, ref_mv_stack,
 +    DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *refmv_count,
 +                       have_warp ? *valid_num_warp_candidates : 0);
-+    add_tmvp_candidate(DB_ONLY(is_dbg)
++    add_tmvp_candidate(DB_ARGS(is_dbg)
 +                       cm, xd, ref_frame, refmv_count, ref_mv_stack,
                         ref_mv_weight, mi_row, mi_col, &drl_pr_count);
    }
@@ -1098,23 +1098,23 @@ index b1a26c4404..9c1bd2ce35 100644
 +                     have_warp ? *valid_num_warp_candidates : 0);
    if (is_compound) {
 -    add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
-+    add_derived_smvp_candidates(DB_ONLY(is_dbg)
++    add_derived_smvp_candidates(DB_ARGS(is_dbg)
 +                                cm, xd, rf, refmv_count, ref_mv_stack,
                                  ref_mv_weight, derived_mv_stack,
                                  derived_mv_count, &drl_pr_count);
      if (cm->seq_params.enable_refmvbank)
 -      add_ref_mv_bank_candidates(cm, xd, rf, ref_frame, refmv_count,
-+      add_ref_mv_bank_candidates(DB_ONLY(is_dbg)
++      add_ref_mv_bank_candidates(DB_ARGS(is_dbg)
 +                                 cm, xd, rf, ref_frame, refmv_count,
                                   ref_mv_stack, ref_mv_weight, &drl_pr_count);
    } else {
      if (cm->seq_params.enable_refmvbank)
 -      add_ref_mv_bank_candidates(cm, xd, rf, ref_frame, refmv_count,
-+      add_ref_mv_bank_candidates(DB_ONLY(is_dbg)
++      add_ref_mv_bank_candidates(DB_ARGS(is_dbg)
 +                                 cm, xd, rf, ref_frame, refmv_count,
                                   ref_mv_stack, ref_mv_weight, &drl_pr_count);
 -    add_derived_smvp_candidates(cm, xd, rf, refmv_count, ref_mv_stack,
-+    add_derived_smvp_candidates(DB_ONLY(is_dbg)
++    add_derived_smvp_candidates(DB_ARGS(is_dbg)
 +                                cm, xd, rf, refmv_count, ref_mv_stack,
                                  ref_mv_weight, derived_mv_stack,
                                  derived_mv_count, &drl_pr_count);
@@ -1337,7 +1337,7 @@ index b1a26c4404..9c1bd2ce35 100644
      av2_initialize_ref_mv_stack(skip_list->ref_mv_stack,
                                  USABLE_REF_MV_STACK_SIZE);
 -    setup_ref_mv_list(cm, xd, ref_frame, &(skip_list->ref_mv_count),
-+    setup_ref_mv_list(DB_ONLY(is_dbg)
++    setup_ref_mv_list(DB_ARGS(is_dbg)
 +                      cm, xd, mi, ref_frame, &(skip_list->ref_mv_count),
                        skip_list->ref_mv_stack, skip_list->weight,
                        mv_ref_list ? mv_ref_list[ref_frame] : NULL, gm_mv,
@@ -1347,7 +1347,7 @@ index b1a26c4404..9c1bd2ce35 100644
        av2_initialize_ref_mv_stack(ref_mv_stack[rf[0]], MAX_REF_MV_STACK_SIZE);
      }
 -    setup_ref_mv_list(cm, xd, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
-+    setup_ref_mv_list(DB_ONLY(is_dbg)
++    setup_ref_mv_list(DB_ARGS(is_dbg)
 +                      cm, xd, mi, rf[0], &ref_mv_count[rf[0]], ref_mv_stack[rf[0]],
                        ref_mv_weight[rf[0]],
                        mv_ref_list ? mv_ref_list[rf[0]] : NULL, gm_mv, mi_row,
@@ -1365,7 +1365,7 @@ index b1a26c4404..9c1bd2ce35 100644
  
        av2_initialize_ref_mv_stack(ref_mv_stack[rf[1]], MAX_REF_MV_STACK_SIZE);
 -      setup_ref_mv_list(cm, xd, rf[1], &ref_mv_count[rf[1]],
-+      setup_ref_mv_list(DB_ONLY(is_dbg)
++      setup_ref_mv_list(DB_ARGS(is_dbg)
 +                        cm, xd, mi, rf[1], &ref_mv_count[rf[1]],
                          ref_mv_stack[rf[1]], ref_mv_weight[rf[1]],
                          mv_ref_list ? mv_ref_list[rf[1]] : NULL, gm_mv, mi_row,
@@ -1559,7 +1559,7 @@ index b1a26c4404..9c1bd2ce35 100644
  #else
    const int can_use_second_model = is_inter_compound_mode(mbmi->mode);
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
-+#if DEBUG_BLOCK_INFO
++#if DEBUG_BLOCK_INFO && DEBUG_REFMV
 +  const int is_dbg = 1;
 +#endif
    for (int ref_idx = 0; ref_idx < 1 + can_use_second_model; ref_idx++) {
