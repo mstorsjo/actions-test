@@ -588,12 +588,20 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                           ts->cdf.m.txtp_inter_short_1d[ctx]
                                                                 [t_dim->min], 3);
                 *txtp = txtp_long_tbl[long_dct][t_dim->w < t_dim->h][short_idx];
+            } else if (f->frame_hdr->reduced_txtp_set == 1 ||
+                       f->frame_hdr->reduced_txtp_set == 2)
+            {
+                *txtp = dav2d_msac_decode_bool_adapt(&ts->msac,
+                            ts->cdf.m.txtp_inter_dct_idtx[ctx][t_dim->min]) ?
+                        DCT_DCT : IDTX;
             } else if (f->frame_hdr->reduced_txtp_set == 3) {
-                // FIXME EXT_TX_SET_DCT_IDTX_IDDCT
-                printf("FIXME\n");
-            } else if (f->frame_hdr->reduced_txtp_set) {
-                // FIXME EXT_TX_SET_DCT_IDTX
-                printf("FIXME\n");
+                const int tx_idx = dav2d_msac_decode_symbol_adapt4(
+                    &ts->msac,
+                    ts->cdf.m.txtp_inter_dct_idtx_iddct[ctx][t_dim->min], 3);
+
+                static const uint8_t txtp_dct_idtx_iddct_tbl[4] =
+                    { DCT_DCT, V_DCT, H_DCT, IDTX };
+                *txtp = txtp_dct_idtx_iddct_tbl[tx_idx];
             } else {
                 const int setidx = tx == (enum RectTxfmSize)TX_16X16;
                 const int set = dav2d_msac_decode_bool_adapt(&ts->msac,

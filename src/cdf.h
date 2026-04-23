@@ -95,6 +95,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t txtp_inter_set1[3][8], 16);
     ALIGN(uint16_t txtp_inter_set2[3][4], 8);
     ALIGN(uint16_t txtp_inter_dct_idtx[3][4][2], 4);
+    ALIGN(uint16_t txtp_inter_dct_idtx_iddct[3][4][4], 4);
     ALIGN(uint16_t stx[2][5][4], 8);
     ALIGN(uint16_t stx_set_adst[4], 8);
     ALIGN(uint16_t stx_set[7+1], 16);

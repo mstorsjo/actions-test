@@ -1382,7 +1382,24 @@ static const CdfDefaultContext default_cdf = {
                 { CDF1(16384),   0 << 8 },
                 { CDF1(16384),   0 << 8 },
             },
-        }, .stx = {
+        }, .txtp_inter_dct_idtx_iddct = {
+            {
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+            }, {
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+            }, {
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+                { CDF3(8192, 16384, 24576), 0 << 8 },
+            },
+      }, .stx = {
             {
                 { CDF3( 4486, 15589, 26440),  75 << 8 },
                 { CDF3( 2357,  9504, 16641),   5 << 8 },
@@ -6486,6 +6503,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(3, 7, m, txtp_inter_set1, op); \
     update_cdf_2d(3, 3, m, txtp_inter_set2, op); \
     update_cdf_3d(3, 4, 1, m, txtp_inter_dct_idtx, op); \
+    update_cdf_3d(3, 4, 3, m, txtp_inter_dct_idtx_iddct, op); \
     update_cdf_3d(2, 5, 3, m, stx, op); \
     update_cdf_1d(3, m, stx_set_adst, op); \
     update_cdf_1d(6, m, stx_set, op); \
