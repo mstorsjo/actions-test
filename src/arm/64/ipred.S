@@ -4259,9 +4259,9 @@ function pal_pred_8bpc_neon, export=1
         movrel          x6,  pal_pred_tbl
         sub             w9,  w9,  #25
         movi            v31.16b, #7
-        ldrsw           x9,  [x6, w9, uxtw #2]
-        add             x6,  x6,  x9
+        ldrsw           x9,  [x6, x9, lsl #2]
         add             x2,  x0,  x1
+        add             x6,  x6,  x9
         lsl             x1,  x1,  #1
         br              x6
 40:
@@ -4283,47 +4283,44 @@ function pal_pred_8bpc_neon, export=1
         AARCH64_VALID_JUMP_TARGET
 8:
         ld1             {v1.16b}, [x3], #16
-        subs            w5,  w5,  #4
         ushr            v4.16b,  v1.16b,  #4
         and             v3.16b,  v1.16b,  v31.16b
+        subs            w5,  w5,  #4
         zip1            v1.16b,  v3.16b,  v4.16b
         zip2            v2.16b,  v3.16b,  v4.16b
         tbl             v1.16b, {v0.16b}, v1.16b
-        st1             {v1.d}[0], [x0], x1
         tbl             v2.16b, {v0.16b}, v2.16b
+        st1             {v1.8b},   [x0], x1
         st1             {v1.d}[1], [x2], x1
-        st1             {v2.d}[0], [x0], x1
+        st1             {v2.8b},   [x0], x1
         st1             {v2.d}[1], [x2], x1
         b.gt            8b
         ret
 160:
         AARCH64_VALID_JUMP_TARGET
 16:
-        ld1             {v1.16b, v2.16b}, [x3], #32
+        ld1             {v16.16b, v17.16b}, [x3], #32
+        and             v20.16b, v16.16b, v31.16b
+        ushr            v21.16b, v16.16b, #4
+        and             v22.16b, v17.16b, v31.16b
+        ushr            v23.16b, v17.16b, #4
         subs            w5,  w5,  #4
-        ushr            v5.16b,  v1.16b,  #4
-        and             v4.16b,  v1.16b,  v31.16b
-        ushr            v7.16b,  v2.16b,  #4
-        and             v6.16b,  v2.16b,  v31.16b
-        zip1            v1.16b,  v4.16b,  v5.16b
-        zip2            v2.16b,  v4.16b,  v5.16b
-        zip1            v3.16b,  v6.16b,  v7.16b
-        tbl             v1.16b, {v0.16b}, v1.16b
-        zip2            v4.16b,  v6.16b,  v7.16b
-        tbl             v2.16b, {v0.16b}, v2.16b
-        st1             {v1.16b}, [x0], x1
-        tbl             v3.16b, {v0.16b}, v3.16b
-        st1             {v2.16b}, [x2], x1
-        tbl             v4.16b, {v0.16b}, v4.16b
-        st1             {v3.16b}, [x0], x1
-        st1             {v4.16b}, [x2], x1
+        tbl             v16.16b, {v0.16b}, v20.16b
+        tbl             v17.16b, {v0.16b}, v21.16b
+        tbl             v18.16b, {v0.16b}, v22.16b
+        tbl             v19.16b, {v0.16b}, v23.16b
+        zip2            v21.16b, v16.16b, v17.16b
+        st2             {v16.8b, v17.8b}, [x0], x1
+        zip2            v23.16b, v18.16b, v19.16b
+        st1             {v21.16b}, [x2], x1
+        st2             {v18.8b, v19.8b}, [x0], x1
+        st1             {v23.16b}, [x2], x1
         b.gt            16b
         ret
 320:
         AARCH64_VALID_JUMP_TARGET
 32:
         ld1             {v16.16b, v17.16b, v18.16b, v19.16b}, [x3], #64
-        subs            w5,  w5,  #4
         ushr            v21.16b, v16.16b, #4
         and             v20.16b, v16.16b, v31.16b
         ushr            v23.16b, v17.16b, #4
@@ -4332,33 +4329,27 @@ function pal_pred_8bpc_neon, export=1
         and             v24.16b, v18.16b, v31.16b
         ushr            v27.16b, v19.16b, #4
         and             v26.16b, v19.16b, v31.16b
-        zip1            v16.16b, v20.16b, v21.16b
-        zip2            v17.16b, v20.16b, v21.16b
-        zip1            v18.16b, v22.16b, v23.16b
-        zip2            v19.16b, v22.16b, v23.16b
-        zip1            v20.16b, v24.16b, v25.16b
-        zip2            v21.16b, v24.16b, v25.16b
-        tbl             v16.16b, {v0.16b}, v16.16b
-        zip1            v22.16b, v26.16b, v27.16b
-        tbl             v17.16b, {v0.16b}, v17.16b
-        zip2            v23.16b, v26.16b, v27.16b
-        tbl             v18.16b, {v0.16b}, v18.16b
-        tbl             v19.16b, {v0.16b}, v19.16b
-        tbl             v20.16b, {v0.16b}, v20.16b
-        st1             {v16.16b, v17.16b}, [x0], x1
-        tbl             v21.16b, {v0.16b}, v21.16b
-        st1             {v18.16b, v19.16b}, [x2], x1
-        tbl             v22.16b, {v0.16b}, v22.16b
-        st1             {v20.16b, v21.16b}, [x0], x1
-        tbl             v23.16b, {v0.16b}, v23.16b
-        st1             {v22.16b, v23.16b}, [x2], x1
+        subs            w5,  w5,  #4
+        tbl             v16.16b, {v0.16b}, v20.16b
+        tbl             v17.16b, {v0.16b}, v21.16b
+        tbl             v18.16b, {v0.16b}, v22.16b
+        tbl             v19.16b, {v0.16b}, v23.16b
+        tbl             v20.16b, {v0.16b}, v24.16b
+        tbl             v21.16b, {v0.16b}, v25.16b
+        st2             {v16.16b, v17.16b}, [x0], x1
+        tbl             v22.16b, {v0.16b}, v26.16b
+        st2             {v18.16b, v19.16b}, [x2], x1
+        tbl             v23.16b, {v0.16b}, v27.16b
+        st2             {v20.16b, v21.16b}, [x0], x1
+        st2             {v22.16b, v23.16b}, [x2], x1
         b.gt            32b
         ret
 640:
         AARCH64_VALID_JUMP_TARGET
+        add             x4,  x0,  #32
+        add             x6,  x2,  #32
 64:
         ld1             {v16.16b, v17.16b, v18.16b, v19.16b}, [x3], #64
-        subs            w5,  w5,  #2
         ushr            v21.16b, v16.16b, #4
         and             v20.16b, v16.16b, v31.16b
         ushr            v23.16b, v17.16b, #4
@@ -4367,24 +4358,19 @@ function pal_pred_8bpc_neon, export=1
         and             v24.16b, v18.16b, v31.16b
         ushr            v27.16b, v19.16b, #4
         and             v26.16b, v19.16b, v31.16b
-        zip1            v16.16b, v20.16b, v21.16b
-        zip2            v17.16b, v20.16b, v21.16b
-        zip1            v18.16b, v22.16b, v23.16b
-        zip2            v19.16b, v22.16b, v23.16b
-        zip1            v20.16b, v24.16b, v25.16b
-        zip2            v21.16b, v24.16b, v25.16b
-        tbl             v16.16b, {v0.16b}, v16.16b
-        zip1            v22.16b, v26.16b, v27.16b
-        tbl             v17.16b, {v0.16b}, v17.16b
-        zip2            v23.16b, v26.16b, v27.16b
-        tbl             v18.16b, {v0.16b}, v18.16b
-        tbl             v19.16b, {v0.16b}, v19.16b
-        st1             {v16.16b, v17.16b, v18.16b, v19.16b}, [x0], x1
+        subs            w5,  w5,  #2
         tbl             v20.16b, {v0.16b}, v20.16b
         tbl             v21.16b, {v0.16b}, v21.16b
         tbl             v22.16b, {v0.16b}, v22.16b
         tbl             v23.16b, {v0.16b}, v23.16b
-        st1             {v20.16b, v21.16b, v22.16b, v23.16b}, [x2], x1
+        tbl             v24.16b, {v0.16b}, v24.16b
+        tbl             v25.16b, {v0.16b}, v25.16b
+        st2             {v20.16b, v21.16b}, [x0], x1
+        tbl             v26.16b, {v0.16b}, v26.16b
+        st2             {v22.16b, v23.16b}, [x4], x1
+        tbl             v27.16b, {v0.16b}, v27.16b
+        st2             {v24.16b, v25.16b}, [x2], x1
+        st2             {v26.16b, v27.16b}, [x6], x1
         b.gt            64b
         ret
 endfunc
