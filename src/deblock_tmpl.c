@@ -53,36 +53,43 @@ static int filter_choice(const pixel *const s, const pixel *const t, const ptrdi
         deriv_t = abs(t[(dist - 1) * stride] - (t[dist * stride] << 1) + t[(dist + 1) * stride]);
         second_deriv[dist] = (deriv_s + deriv_t + 1) >> 1;
     }
+    const unsigned high_deriv = umax(second_deriv[-2], second_deriv[1]);
 
-    if (second_deriv[-2] > side_thr || second_deriv[1] > side_thr) return 0;
+    if (high_deriv > side_thr) return 0;
     if (max_width_pos == 1) return 1;
 
     const unsigned side_thr2 = side_thr >> 2;
-    if (second_deriv[-2] > side_thr2 || second_deriv[1] > side_thr2) return 1;
-    if (second_deriv[-1] + second_deriv[0] > q_thr * 4) return 1;
+    unsigned transition = second_deriv[-1] + second_deriv[0];
+    if (high_deriv > side_thr2) return 1;
+    if (transition > q_thr * 4) return 1;
 
     const unsigned side_thr3 = side_thr >> 3;
-    if (second_deriv[-2] > side_thr3 || second_deriv[1] > side_thr3) return 2;
-    if (second_deriv[-1] + second_deriv[0] > q_thr * 3) return 2;
+    if (high_deriv > side_thr3) return 2;
+    if (transition > q_thr * 3) return 2;
 
     const unsigned end_thr = (side_thr * 3) >> 4;
-    if (max_width_neg > 2) {
+    // if !(chroma && edge)
+    if (max_width_neg >= 3) {
         deriv_s = abs(s[-1 * stride] - s[-4 * stride] - 3 * (s[-1 * stride] - s[-2 * stride]));
         deriv_t = abs(t[-1 * stride] - t[-4 * stride] - 3 * (t[-1 * stride] - t[-2 * stride]));
+
         if (((deriv_s + deriv_t + 1) >> 1) > end_thr) return 2;
     }
     deriv_s = abs(s[0] - s[3 * stride] - 3 * (s[0] - s[stride]));
     deriv_t = abs(t[0] - t[3 * stride] - 3 * (t[0] - t[stride]));
+
     if (((deriv_s + deriv_t + 1) >> 1) > end_thr) return 2;
     if (max_width_pos == 3) return 3;
 
-    const unsigned transition = (second_deriv[-1] + second_deriv[0]) << 4;
+    transition <<= 4;
     int prev_dist = 3;
     for (int dist = 4; dist <= max_width_pos; dist += 2) {
         const unsigned q_thr4 = q_thr * q_first[(dist - 4) >> 1];
         const unsigned end_thr4 = (side_thr * dist) >> 4;
         if (transition > q_thr4) return prev_dist;
         const int dist2 = imin(7, dist);
+
+        // if !(luma && edge && dist2 == 8)
         if (max_width_neg >= dist2) {
             deriv_s = abs(s[-stride] - s[(-dist2 - 1) * stride] - dist2 * (s[-stride] - s[-2 * stride]));
             deriv_t = abs(t[-stride] - t[(-dist2 - 1) * stride] - dist2 * (t[-stride] - t[-2 * stride]));
@@ -150,7 +157,7 @@ static void deblock_h_sb64y_c(pixel *dst, const ptrdiff_t stride,
         if (vm & y) {
             const int idx = (vmask[3] & y) ? 3 : (vmask[2] & y) ? 2 : !!(vmask[1] & y);
             const int max_width_pos = max_width_y[idx];
-            const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
+            const int max_width_neg = edge ? imin(6, max_width_pos) : max_width_pos;
             const int pos_lossless = !!(ll_mask[1] & y);
             const int neg_lossless = !!(ll_mask[0] & y);
             deblock(dst, *q_thr, *side_thr, PXSTRIDE(stride), 1,
@@ -176,7 +183,7 @@ static void deblock_v_sb64y_c(pixel *dst, const ptrdiff_t stride,
         if (vm & x) {
             const int idx = (vmask[3] & x) ? 3 : (vmask[2] & x) ? 2 : !!(vmask[1] & x);
             const int max_width_pos = max_width_y[idx];
-            const int max_width_neg = max_width_y[edge ? imin(idx, 2) : idx];
+            const int max_width_neg = edge ? imin(6, max_width_pos) : max_width_pos;
             const int pos_lossless = !!(ll_mask[1] & x);
             const int neg_lossless = !!(ll_mask[0] & x);
             deblock(dst, *q_thr, *side_thr, 1, PXSTRIDE(stride),
