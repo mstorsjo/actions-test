@@ -29,6 +29,8 @@
 #include "src/arm/asm.S"
 #include "util.S"
 
+#define BIT_MRL (15)
+
 // void ipred_dc_128_8bpc_neon(pixel *dst, const ptrdiff_t stride,
 //                             const pixel *const topleft,
 //                             const int width, const int height, const int a,
@@ -105,6 +107,229 @@ jumptable ipred_dc_128_tbl
         .word 160b - ipred_dc_128_tbl
         .word 80b  - ipred_dc_128_tbl
         .word 40b  - ipred_dc_128_tbl
+endjumptable
+
+// void ipred_h_8bpc_neon(pixel *dst, const ptrdiff_t stride,
+//                        const pixel *const topleft,
+//                        const int width, const int height, const int a,
+//                        const int max_width, const int max_height);
+function ipred_h_8bpc_neon, export=1
+        clz             w11, w3
+        and             w5,  w5,  #(1 << BIT_MRL)   // preserve only MRL bit
+        sub             w11, w11, #25
+        movrel          x10, ipred_h_tbl
+        orr             w11, w11, w5,  lsr #(BIT_MRL - 3)
+        sub             x2,  x2,  #4
+        add             x6,  x1,  x1                // 4..16 blocks only
+        ldrsw           x11, [x10, x11, lsl #2]
+        add             x9,  x2,  w4,  uxtw #1      // MRL cases only
+        mov             x7,  #-4
+        add             x10, x10, x11
+        add             x8,  x1,  x1,  lsl #1       // 4..16 blocks only
+        br              x10
+
+L(ipred_h_w4):
+        AARCH64_VALID_JUMP_TARGET
+1:
+        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},  [x2],  x7
+        subs            w4,  w4,  #4
+        str             s3,  [x0]
+        str             s2,  [x0, x1]
+        str             s1,  [x0, x6]
+        str             s0,  [x0, x8]
+        add             x0,  x0,  x1,  lsl #2
+        b.gt            1b
+        ret
+
+L(ipred_h_w4_mrl):
+        AARCH64_VALID_JUMP_TARGET
+        add             x9,  x9,  #(1 + 2 * 4)
+1:
+        ldr             s0,  [x2],  #-4
+        ldr             s1,  [x9],  #-4
+        urhadd          v0.8b,   v0.8b,   v1.8b
+        dup             v3.8b,   v0.b[3]
+        dup             v2.8b,   v0.b[2]
+        dup             v1.8b,   v0.b[1]
+        dup             v0.8b,   v0.b[0]
+        subs            w4,  w4,  #4
+        str             s3,  [x0]
+        str             s2,  [x0, x1]
+        str             s1,  [x0, x6]
+        str             s0,  [x0, x8]
+        add             x0,  x0,  x1,  lsl #2
+        b.gt            1b
+        ret
+
+L(ipred_h_w8):
+        AARCH64_VALID_JUMP_TARGET
+1:
+        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},  [x2],  x7
+        subs            w4,  w4,  #4
+        str             d3,  [x0]
+        str             d2,  [x0, x1]
+        str             d1,  [x0, x6]
+        str             d0,  [x0, x8]
+        add             x0,  x0,  x1,  lsl #2
+        b.gt            1b
+        ret
+
+L(ipred_h_w8_mrl):
+        AARCH64_VALID_JUMP_TARGET
+        add             x9,  x9,  #(1 + 2 * 8)
+1:
+        ldr             s0,  [x2],  #-4
+        ldr             s1,  [x9],  #-4
+        urhadd          v0.8b,   v0.8b,   v1.8b
+        dup             v3.8b,   v0.b[3]
+        dup             v2.8b,   v0.b[2]
+        dup             v1.8b,   v0.b[1]
+        dup             v0.8b,   v0.b[0]
+        subs            w4,  w4,  #4
+        str             d3,  [x0]
+        str             d2,  [x0, x1]
+        str             d1,  [x0, x6]
+        str             d0,  [x0, x8]
+        add             x0,  x0,  x1,  lsl #2
+        b.gt            1b
+        ret
+
+L(ipred_h_w16):
+        AARCH64_VALID_JUMP_TARGET
+1:
+        ld4r            {v0.16b, v1.16b, v2.16b, v3.16b}, [x2],  x7
+        subs            w4,  w4,  #4
+        str             q3,  [x0]
+        str             q2,  [x0, x1]
+        str             q1,  [x0, x6]
+        str             q0,  [x0, x8]
+        add             x0,  x0,  x1,  lsl #2
+        b.gt            1b
+        ret
+
+L(ipred_h_w16_mrl):
+        AARCH64_VALID_JUMP_TARGET
+        add             x9,  x9,  #(1 + 2 * 16)
+1:
+        ldr             s0,  [x2],  #-4
+        ldr             s1,  [x9],  #-4
+        urhadd          v0.8b,   v0.8b,   v1.8b
+        dup             v3.16b,  v0.b[3]
+        dup             v2.16b,  v0.b[2]
+        dup             v1.16b,  v0.b[1]
+        dup             v0.16b,  v0.b[0]
+        subs            w4,  w4,  #4
+        str             q3,  [x0]
+        str             q2,  [x0, x1]
+        str             q1,  [x0, x6]
+        str             q0,  [x0, x8]
+        add             x0,  x0,  x1,  lsl #2
+        b.gt            1b
+        ret
+
+L(ipred_h_w32):
+        AARCH64_VALID_JUMP_TARGET
+        add             x6,  x0,  x1
+1:
+        ld4r            {v0.16b, v1.16b, v2.16b, v3.16b}, [x2],  x7
+        stp             q3,  q3,  [x0]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q2,  q2,  [x6]
+        add             x6,  x6,  x1,  lsl #1
+        subs            w4,  w4,  #4
+        stp             q1,  q1,  [x0]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q0,  q0,  [x6]
+        add             x6,  x6,  x1,  lsl #1
+        b.gt            1b
+        ret
+
+L(ipred_h_w32_mrl):
+        AARCH64_VALID_JUMP_TARGET
+        add             x9,  x9,  #(1 + 2 * 32)
+        add             x6,  x0,  x1
+1:
+        ldr             s0,  [x2],  #-4
+        ldr             s1,  [x9],  #-4
+        urhadd          v0.8b,   v0.8b,   v1.8b
+        dup             v3.16b,  v0.b[3]
+        dup             v2.16b,  v0.b[2]
+        dup             v1.16b,  v0.b[1]
+        dup             v0.16b,  v0.b[0]
+        stp             q3,  q3,  [x0]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q2,  q2,  [x6]
+        add             x6,  x6,  x1,  lsl #1
+        subs            w4,  w4,  #4
+        stp             q1,  q1,  [x0]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q0,  q0,  [x6]
+        add             x6,  x6,  x1,  lsl #1
+        b.gt            1b
+        ret
+
+L(ipred_h_w64):
+        AARCH64_VALID_JUMP_TARGET
+        add             x6,  x0,  x1
+1:
+        ld4r            {v0.16b, v1.16b, v2.16b, v3.16b}, [x2],  x7
+        stp             q3,  q3,  [x0]
+        stp             q3,  q3,  [x0, #32]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q2,  q2,  [x6]
+        stp             q2,  q2,  [x6, #32]
+        add             x6,  x6,  x1,  lsl #1
+        subs            w4,  w4,  #4
+        stp             q1,  q1,  [x0]
+        stp             q1,  q1,  [x0, #32]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q0,  q0,  [x6]
+        stp             q0,  q0,  [x6, #32]
+        add             x6,  x6,  x1,  lsl #1
+        b.gt            1b
+        ret
+
+L(ipred_h_w64_mrl):
+        AARCH64_VALID_JUMP_TARGET
+        add             x9,  x9,  #(1 + 2 * 64)
+        add             x6,  x0,  x1
+1:
+        ldr             s0,  [x2],  #-4
+        ldr             s1,  [x9],  #-4
+        urhadd          v0.8b,   v0.8b,   v1.8b
+        dup             v3.16b,  v0.b[3]
+        dup             v2.16b,  v0.b[2]
+        dup             v1.16b,  v0.b[1]
+        dup             v0.16b,  v0.b[0]
+        stp             q3,  q3,  [x0]
+        stp             q3,  q3,  [x0, #32]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q2,  q2,  [x6]
+        stp             q2,  q2,  [x6, #32]
+        add             x6,  x6,  x1,  lsl #1
+        subs            w4,  w4,  #4
+        stp             q1,  q1,  [x0]
+        stp             q1,  q1,  [x0, #32]
+        add             x0,  x0,  x1,  lsl #1
+        stp             q0,  q0,  [x6]
+        stp             q0,  q0,  [x6, #32]
+        add             x6,  x6,  x1,  lsl #1
+        b.gt            1b
+        ret
+endfunc
+
+jumptable ipred_h_tbl
+        .word L(ipred_h_w64) - ipred_h_tbl
+        .word L(ipred_h_w32) - ipred_h_tbl
+        .word L(ipred_h_w16) - ipred_h_tbl
+        .word L(ipred_h_w8)  - ipred_h_tbl
+        .word L(ipred_h_w4)  - ipred_h_tbl
+        .word 0, 0, 0
+        .word L(ipred_h_w64_mrl) - ipred_h_tbl
+        .word L(ipred_h_w32_mrl) - ipred_h_tbl
+        .word L(ipred_h_w16_mrl) - ipred_h_tbl
+        .word L(ipred_h_w8_mrl)  - ipred_h_tbl
+        .word L(ipred_h_w4_mrl)  - ipred_h_tbl
 endjumptable
 
 // void ipred_v_8bpc_neon(pixel *dst, const ptrdiff_t stride,
@@ -184,98 +409,6 @@ jumptable ipred_v_tbl
         .word 160b - ipred_v_tbl
         .word 80b  - ipred_v_tbl
         .word 40b  - ipred_v_tbl
-endjumptable
-
-// void ipred_h_8bpc_neon(pixel *dst, const ptrdiff_t stride,
-//                        const pixel *const topleft,
-//                        const int width, const int height, const int a,
-//                        const int max_width, const int max_height);
-function ipred_h_8bpc_neon, export=1
-        clz             w3,  w3
-        movrel          x5,  ipred_h_tbl
-        sub             w3,  w3,  #25
-        ldrsw           x3,  [x5, w3, uxtw #2]
-        sub             x2,  x2,  #4
-        add             x5,  x5,  x3
-        mov             x7,  #-4
-        add             x6,  x0,  x1
-        lsl             x1,  x1,  #1
-        br              x5
-40:
-        AARCH64_VALID_JUMP_TARGET
-4:
-        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},  [x2], x7
-        st1             {v3.s}[0],  [x0], x1
-        st1             {v2.s}[0],  [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v1.s}[0],  [x0], x1
-        st1             {v0.s}[0],  [x6], x1
-        b.gt            4b
-        ret
-80:
-        AARCH64_VALID_JUMP_TARGET
-8:
-        ld4r            {v0.8b, v1.8b, v2.8b, v3.8b},  [x2], x7
-        st1             {v3.8b},  [x0], x1
-        st1             {v2.8b},  [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v1.8b},  [x0], x1
-        st1             {v0.8b},  [x6], x1
-        b.gt            8b
-        ret
-160:
-        AARCH64_VALID_JUMP_TARGET
-16:
-        ld4r            {v0.16b, v1.16b, v2.16b, v3.16b},  [x2], x7
-        st1             {v3.16b}, [x0], x1
-        st1             {v2.16b}, [x6], x1
-        subs            w4,  w4,  #4
-        st1             {v1.16b}, [x0], x1
-        st1             {v0.16b}, [x6], x1
-        b.gt            16b
-        ret
-320:
-        AARCH64_VALID_JUMP_TARGET
-32:
-        ld4r            {v0.16b, v1.16b, v2.16b, v3.16b},  [x2], x7
-        str             q3,  [x0, #16]
-        str             q2,  [x6, #16]
-        st1             {v3.16b}, [x0], x1
-        st1             {v2.16b}, [x6], x1
-        subs            w4,  w4,  #4
-        str             q1,  [x0, #16]
-        str             q0,  [x6, #16]
-        st1             {v1.16b}, [x0], x1
-        st1             {v0.16b}, [x6], x1
-        b.gt            32b
-        ret
-640:
-        AARCH64_VALID_JUMP_TARGET
-64:
-        ld4r            {v0.16b, v1.16b, v2.16b, v3.16b},  [x2], x7
-        str             q3,  [x0, #16]
-        str             q2,  [x6, #16]
-        stp             q3,  q3,  [x0, #32]
-        stp             q2,  q2,  [x6, #32]
-        st1             {v3.16b}, [x0], x1
-        st1             {v2.16b}, [x6], x1
-        subs            w4,  w4,  #4
-        str             q1,  [x0, #16]
-        str             q0,  [x6, #16]
-        stp             q1,  q1,  [x0, #32]
-        stp             q0,  q0,  [x6, #32]
-        st1             {v1.16b}, [x0], x1
-        st1             {v0.16b}, [x6], x1
-        b.gt            64b
-        ret
-endfunc
-
-jumptable ipred_h_tbl
-        .word 640b - ipred_h_tbl
-        .word 320b - ipred_h_tbl
-        .word 160b - ipred_h_tbl
-        .word 80b  - ipred_h_tbl
-        .word 40b  - ipred_h_tbl
 endjumptable
 
 // void ipred_dc_top_8bpc_neon(pixel *dst, const ptrdiff_t stride,
