@@ -245,17 +245,9 @@ static void deblock_v_sb64uv_c(pixel *dst, const ptrdiff_t stride,
     }
 }
 
-#if 0
 #if HAVE_ASM
-#if ARCH_AARCH64 || ARCH_ARM
-#include "src/arm/deblock.h"
-#elif ARCH_LOONGARCH64
-#include "src/loongarch/deblock.h"
-#elif ARCH_PPC64LE
-#include "src/ppc/deblock.h"
-#elif ARCH_X86
+#if ARCH_X86
 #include "src/x86/deblock.h"
-#endif
 #endif
 #endif
 
@@ -265,17 +257,9 @@ COLD void bitfn(dav2d_deblock_dsp_init)(Dav2dDeblockDSPContext *const c) {
     c->deblock_sb[1][0] = deblock_h_sb64uv_c;
     c->deblock_sb[1][1] = deblock_v_sb64uv_c;
 
-#if 0
 #if HAVE_ASM
-#if ARCH_AARCH64 || ARCH_ARM
-    loop_filter_dsp_init_arm(c);
-#elif ARCH_LOONGARCH64
-    loop_filter_dsp_init_loongarch(c);
-#elif ARCH_PPC64LE
-    loop_filter_dsp_init_ppc(c);
-#elif ARCH_X86
-    loop_filter_dsp_init_x86(c);
-#endif
+#if ARCH_X86
+    deblock_dsp_init_x86(c);
 #endif
 #endif
 }
