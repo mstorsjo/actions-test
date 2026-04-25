@@ -5008,9 +5008,6 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     f->lf.p[0] = f->cur.p.data[0];
     f->lf.p[1] = f->cur.p.data[has_chroma ? 1 : 0];
     f->lf.p[2] = f->cur.p.data[has_chroma ? 2 : 0];
-    f->lf.sr_p[0] = f->cur.p.data[0];
-    f->lf.sr_p[1] = f->cur.p.data[has_chroma ? 1 : 0];
-    f->lf.sr_p[2] = f->cur.p.data[has_chroma ? 2 : 0];
 
     if (c->n_tc > 1) {
         for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)

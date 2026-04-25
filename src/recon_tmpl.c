@@ -4017,12 +4017,12 @@ void bytefn(dav2d_filter_sbrow_lr)(Dav2dFrameContext *const f, const int sby) {
         return;
     const int y = sby * f->sb_step * 4;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-    pixel *const sr_p[3] = {
-        f->lf.sr_p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
-        f->lf.sr_p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
-        f->lf.sr_p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
+    pixel *const p[3] = {
+        f->lf.p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
+        f->lf.p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
+        f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
-    bytefn(dav2d_lr_sbrow)(f, sr_p, sby);
+    bytefn(dav2d_lr_sbrow)(f, p, sby);
 }
 
 void bytefn(dav2d_filter_sbrow)(Dav2dFrameContext *const f, const int sby) {

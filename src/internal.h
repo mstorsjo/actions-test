@@ -360,7 +360,7 @@ struct Dav2dFrameContext {
         // in-loop filter per-frame state keeping
         uint8_t *start_of_tile_row;
         int start_of_tile_row_sz;
-        pixel *p[3], *sr_p[3];
+        pixel *p[3];
         int restore_planes; // enum LrRestorePlanes
     } lf;
 
