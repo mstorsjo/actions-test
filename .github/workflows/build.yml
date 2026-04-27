@@ -65,6 +65,7 @@ jobs:
           retention-days: 7
 
   linux-stage1:
+    if: false
     needs: [prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
@@ -101,7 +102,7 @@ jobs:
           retention-days: 7
 
   linux-profile:
-    needs: [prepare, linux-stage1]
+    needs: [prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
     steps:
@@ -109,11 +110,9 @@ jobs:
         run: |
           apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v8
-        with:
-          name: linux-stage1-ucrt-x86_64-toolchain
       - name: Unpack stage1 Clang
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-stage1-20260427-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           mv llvm-mingw* llvm-mingw-stage1
@@ -136,7 +135,7 @@ jobs:
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
-    needs: [prepare, linux-stage1, linux-profile]
+    needs: [prepare, linux-profile]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
     steps:
@@ -144,11 +143,9 @@ jobs:
         run: |
           apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v8
-        with:
-          name: linux-stage1-ucrt-x86_64-toolchain
       - name: Unpack stage1 Clang
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-stage1-20260427-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
@@ -184,7 +181,7 @@ jobs:
   # Crosscompile the toolchain for running on Linux on a different architecture, bundle the runtime
   # libraries that were built in the 'linux-stage1' step above.
   linux-cross-aarch64:
-    needs: [linux-stage1, linux-profile, prepare]
+    needs: [linux-profile, prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
     steps:
@@ -197,11 +194,9 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v8
-        with:
-          name: linux-stage1-ucrt-x86_64-toolchain
       - name: Unpack stage1 Clang
         run: |
+          curl -LO https://martin.st/temp/llvm-mingw-stage1-20260427-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
