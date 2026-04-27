@@ -315,7 +315,8 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
     c->cfl_ac[DAV2D_PIXEL_LAYOUT_I420 - 1] = BF(dav2d_ipred_cfl_ac_420, neon);
     c->cfl_ac[DAV2D_PIXEL_LAYOUT_I422 - 1] = BF(dav2d_ipred_cfl_ac_422, neon);
     c->cfl_ac[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_ipred_cfl_ac_444, neon);
-
+#endif
+#if ARCH_AARCH64 && BITDEPTH == 8
     c->pal_pred                  = BF(dav2d_pal_pred, neon);
 #endif
 }
