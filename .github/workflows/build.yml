@@ -67,7 +67,11 @@ jobs:
   linux-stage1:
     needs: [prepare]
     runs-on: ubuntu-22.04
+    container: ubuntu:22.04
     steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
       - uses: actions/checkout@v6
       - name: Build
         env:
@@ -99,7 +103,11 @@ jobs:
   linux-profile:
     needs: [prepare, linux-stage1]
     runs-on: ubuntu-22.04
+    container: ubuntu:22.04
     steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
@@ -130,7 +138,11 @@ jobs:
   linux:
     needs: [prepare, linux-stage1, linux-profile]
     runs-on: ubuntu-22.04
+    container: ubuntu:22.04
     steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
@@ -174,7 +186,11 @@ jobs:
   linux-cross-aarch64:
     needs: [linux-stage1, linux-profile, prepare]
     runs-on: ubuntu-22.04
+    container: ubuntu:22.04
     steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
