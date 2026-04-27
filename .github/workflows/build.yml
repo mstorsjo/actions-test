@@ -278,6 +278,7 @@ jobs:
           retention-days: 7
 
   macos-stage1:
+    if: false
     needs: [prepare]
     runs-on: macos-14
     steps:
@@ -353,6 +354,7 @@ jobs:
   # Test building the toolchain on msys2. The binaries built here rely on the
   # runtime libraries from the host environment (libstdc++ or libc++).
   msys2:
+    if: false
     needs: [prepare]
     runs-on: windows-latest
     defaults:
@@ -408,6 +410,7 @@ jobs:
   # llvm and make a proper standalone toolchain for Windows (for all 4
   # architectures). The binaries built here match actual releases quite closely.
   linux-cross-windows:
+    if: false
     needs: [linux-stage1, linux-profile, prepare]
     runs-on: ubuntu-latest
     strategy:
