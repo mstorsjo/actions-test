@@ -2561,12 +2561,10 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             }
         }
 
-        const pixel *top_sb_edge = NULL;
-        if (!(t->by & (f->sb_step - 1))) {
-            top_sb_edge = f->ipred_edge[0];
-            const int sby = t->by >> f->sb_shift;
-            top_sb_edge += f->sb256w * 256 * (sby - 1);
-        }
+        const pixel *const top_sb_edge = t->by & (f->sb_step - 1) ? NULL :
+            &f->prefilter_data[0][(f->prefilter_data_full_frame ?
+                                   t->by * 4 - 1 : ts->tiling.row) *
+                                  PXSTRIDE(f->cur.p.stride[0])];
         int apply_ibp = f->seq_hdr->ibp && tx != (enum RectTxfmSize) TX_4X4 &&
                         !mrl_idx;
         const int dip = b->dip - 1;
@@ -2766,9 +2764,13 @@ static void bawp(Dav2dTaskContext *const t,
         const int step = bw >> n_above_l2;
         assert(step > 0);
         const int start = step >> 1;
+        const pixel *const top = by & (f->sb_step - 1) ? &dst[-PXSTRIDE(stride)] :
+            &f->prefilter_data[plane][((f->prefilter_data_full_frame ?
+                                        by * 4 - 1 : ts->tiling.row) >> ss_ver) *
+                                      PXSTRIDE(stride) + (bx * 4 >> ss_hor)];
         for (int i = start; i < bw; i += step) {
             const int x = ref[i - PXSTRIDE(refp->p.stride[chroma])];
-            const int y = dst[i - PXSTRIDE(stride)];
+            const int y = top[i];
             sum_x += x;
             sum_y += y;
             sum_xy += x * y;
@@ -2875,12 +2877,10 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
             }
         }
     }
-    const pixel *top_sb_edge = NULL;
-    if (!(t->by & (f->sb_step - 1))) {
-        top_sb_edge = f->ipred_edge[plane];
-        const int sby = by >> f->sb_shift;
-        top_sb_edge += f->sb256w * 256 * (sby - 1) >> ss_hor;
-    }
+    const pixel *const top_sb_edge = by & (f->sb_step - 1) ? NULL :
+        &f->prefilter_data[plane][(f->prefilter_data_full_frame ?
+                                   (by * 4 >> ss_ver) - 1 : ts->tiling.row) *
+                                  PXSTRIDE(f->cur.p.stride[!!plane])];
     const int ssbw4 = bw4 >> ss_hor;
     const int ssbh4 = bh4 >> ss_ver;
     const int apply_ibp = f->seq_hdr->ibp && imax(ssbw4, ssbh4) > 1;
@@ -2916,7 +2916,6 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     const enum Dav2dPixelLayout layout = f->cur.p.p.layout - 1;
     const ptrdiff_t ystride = f->cur.p.stride[0];
     const ptrdiff_t cstride = f->cur.p.stride[1];
-    const int sby = t->cby >> f->sb_shift;
     const int sbsz = f->sb_step;
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
@@ -2930,23 +2929,23 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     pixel *const ysrc = ((pixel *) f->cur.p.data[0]) +
         (t->cby * PXSTRIDE(ystride) + t->cbx) * 4;
     pixel *const ytop_sb_edge = !is_top_sb_edge ? NULL :
-        f->ipred_edge[0] + f->sb256w * 256 * (sby - 1) + t->cbx * 4;
+        &f->prefilter_data[0][(f->prefilter_data_full_frame ?
+                               t->cby * 4 - 1 : ts->tiling.row) *
+                              PXSTRIDE(ystride) + t->cbx * 4];
 
     if (b->cfl_type < CFL_MHCCP) { // CFL EXPLICIT / IMPLICIT
         const ptrdiff_t off = (ssby * PXSTRIDE(cstride) + ssbx) * 4;
         pixel *const usrc = ((pixel *) f->cur.p.data[1]) + off;
         pixel *const vsrc = ((pixel *) f->cur.p.data[2]) + off;
 
-        const ptrdiff_t sboff = (sby - 1) * f->sb256w * 256 >> ss_hor;
-        pixel *const u_top_sb_edge = f->ipred_edge[1] + sboff + ssbx * 4;
-        pixel *const v_top_sb_edge = f->ipred_edge[2] + sboff + ssbx * 4;
-
         pixel *const ytop = is_top_sb_edge ?
             ytop_sb_edge : ysrc - (1 + ss_ver) * PXSTRIDE(ystride);
+        const ptrdiff_t top_off = f->prefilter_data_full_frame ?
+            off - PXSTRIDE(cstride) : ts->tiling.row * PXSTRIDE(cstride) + ssbx * 4;
         pixel *const utop = is_top_sb_edge ?
-            u_top_sb_edge : usrc - PXSTRIDE(cstride);
+            &f->prefilter_data[1][top_off] : usrc - PXSTRIDE(cstride);
         pixel *const vtop = is_top_sb_edge ?
-            v_top_sb_edge : vsrc - PXSTRIDE(cstride);
+            &f->prefilter_data[2][top_off] : vsrc - PXSTRIDE(cstride);
 
         pixel *const ptrs[6] = { ytop, utop, vtop, ysrc, usrc, vsrc };
 
@@ -3038,8 +3037,10 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             int alpha[3] = { 0 };
             pixel *chroma = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
-            const pixel *const ctop_sb_edge = is_top_sb_edge ? f->ipred_edge[pl] +
-                ((sby - 1) * f->sb256w * 256 >> ss_hor) + ssbx * 4 : NULL;
+            const pixel *const ctop_sb_edge = is_top_sb_edge ?
+                &f->prefilter_data[pl][(f->prefilter_data_full_frame ?
+                                        4 * ssby - 1 : ts->tiling.row) *
+                                       PXSTRIDE(cstride) + ssbx * 4] : NULL;
 
             if (has_top || has_left) {
                 dsp->ipred.cfl_calc_alphas(alpha, chroma, ctop_sb_edge, cstride,
@@ -3797,14 +3798,13 @@ chroma: {}
                 if (intra && b->uv_mode != CFL_PRED) {
                     // intra prediction
                     pixel *const edge = bitfn(t->scratch.edge) + 128;
-                    const pixel *top_sb_edge = NULL;
                     // We're skipping upsampling y here as this condition is
                     // only true when y is 0.
-                    if (!((t->cby + y) & (sbsz - 1))) {
-                        top_sb_edge = f->ipred_edge[1 + pl];
-                        const int sby = t->cby >> f->sb_shift;
-                        top_sb_edge += (sby - 1) * f->sb256w * 256 >> ss_hor;
-                    }
+                    const pixel *const top_sb_edge = (t->cby + y) & (sbsz - 1) ? NULL :
+                        &f->prefilter_data[1 + pl][(f->prefilter_data_full_frame ?
+                                                    (t->cby * 4 - 1) >> ss_ver :
+                                                    ts->tiling.row) *
+                                                   PXSTRIDE(f->cur.p.stride[1])];
 
                     int n_tr = 0, n_bl = 0;
                     if (t->cby + (y << ss_ver) > ts->tiling.row_start && ctw < 64) {
@@ -4034,30 +4034,52 @@ void bytefn(dav2d_filter_sbrow)(Dav2dFrameContext *const f, const int sby) {
         bytefn(dav2d_filter_sbrow_lr)(f, sby);
 }
 
-void bytefn(dav2d_backup_ipred_edge)(Dav2dTaskContext *const t) {
+void bytefn(dav2d_backup_prefilter_data)(Dav2dTaskContext *const t) {
     const Dav2dFrameContext *const f = t->f;
+    assert (f->c->n_tc > 1);
     Dav2dTileState *const ts = t->ts;
-    if (t->by + f->sb_step >= ts->tiling.row_end) return;
-    const int sby = t->by >> f->sb_shift;
-    const int sby_off = f->sb256w * 256 * sby;
-    const int x_off = ts->tiling.col_start;
+    const int y_end = imin(ts->tiling.row_end, t->by + f->sb_step) * 4;
+    const int x_off = ts->tiling.col_start * 4, sz = ts->tiling.col_end * 4 - x_off;
+    const int ss_ver = f->ss_ver, ss_hor = f->ss_hor;
+    const int uv_y_end = y_end >> ss_ver, uv_x_off = x_off >> ss_hor, uv_sz = sz >> ss_hor;
+    if (f->frame_hdr->allow_intrabc) {
+        // make a complete copy of block reconstruction. The original data will
+        // be used as prefilter-data for intrabc and intra prediction, and the
+        // copy will be used for postfilter and output to the application/user.
+        for (int y = t->by * 4; y < y_end; y++) {
+            const ptrdiff_t off = y * PXSTRIDE(f->cur.p.stride[0]) + x_off;
+            pixel_copy(&f->lf.p[0][off],
+                       &((const pixel *)f->cur.p.data[0])[off], sz);
+        }
 
-    const pixel *const y =
-        ((const pixel *) f->cur.p.data[0]) + x_off * 4 +
-                    ((t->by + f->sb_step) * 4 - 1) * PXSTRIDE(f->cur.p.stride[0]);
-    pixel_copy(&f->ipred_edge[0][sby_off + x_off * 4], y,
-               4 * (ts->tiling.col_end - x_off));
+        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+            for (int y = t->by * 4 >> ss_ver; y < uv_y_end; y++) {
+                const ptrdiff_t off = y * PXSTRIDE(f->cur.p.stride[1]) + uv_x_off;
+                for (int pl = 1; pl <= 2; pl++)
+                    pixel_copy(&f->lf.p[pl][off],
+                               &((const pixel *)f->cur.p.data[pl])[off], uv_sz);
+            }
+        }
+    } else {
+        if (t->by + f->sb_step >= ts->tiling.row_end) return;
 
-    if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
-        const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-        const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
-
-        const ptrdiff_t uv_off = (x_off * 4 >> ss_hor) +
-            (((t->by + f->sb_step) * 4 >> ss_ver) - 1) * PXSTRIDE(f->cur.p.stride[1]);
-        for (int pl = 1; pl <= 2; pl++)
-            pixel_copy(&f->ipred_edge[pl][(sby_off + x_off * 4) >> ss_hor],
-                       &((const pixel *) f->cur.p.data[pl])[uv_off],
-                       4 * (ts->tiling.col_end - x_off) >> ss_hor);
+        // make a copy of the final line in the tile-sbrow, which can be used for
+        // intra prediction. The original buffer will be for postfilter and output
+        // to the application/user.
+        const ptrdiff_t off1 = ((t->by + f->sb_step) * 4 - 1) *
+                               PXSTRIDE(f->cur.p.stride[0]) + x_off;
+        const ptrdiff_t off2 = ts->tiling.row * PXSTRIDE(f->cur.p.stride[0]) + x_off;
+        pixel_copy(&f->prefilter_data[0][off2],
+                   &((const pixel *)f->cur.p.data[0])[off1], sz);
+        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+            const ptrdiff_t uv_off1 = (((t->by + f->sb_step) * 4 >> ss_ver) - 1) *
+                                      PXSTRIDE(f->cur.p.stride[1]) + uv_x_off;
+            const ptrdiff_t uv_off2 =
+                ts->tiling.row * PXSTRIDE(f->cur.p.stride[1]) + uv_x_off;
+            for (int pl = 1; pl <= 2; pl++)
+                pixel_copy(&f->prefilter_data[pl][uv_off2],
+                           &((const pixel *)f->cur.p.data[pl])[uv_off1], uv_sz);
+        }
     }
 }
 

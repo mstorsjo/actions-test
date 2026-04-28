@@ -41,9 +41,9 @@ typedef decl_recon_b_fn(*recon_b_fn);
 void (name)(Dav2dFrameContext *f, int sby)
 typedef decl_filter_sbrow_fn(*filter_sbrow_fn);
 
-#define decl_backup_ipred_edge_fn(name) \
+#define decl_backup_prefilter_data_fn(name) \
 void (name)(Dav2dTaskContext *t)
-typedef decl_backup_ipred_edge_fn(*backup_ipred_edge_fn);
+typedef decl_backup_prefilter_data_fn(*backup_prefilter_data_fn);
 
 #define decl_read_coef_blocks_fn(name) \
 int (name)(Dav2dTaskContext *t, DB_ONLY(int depth) \
@@ -73,8 +73,8 @@ void dav2d_filter_sbrow_cdef_16bpc(Dav2dTaskContext *tc, int sby);
 decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_8bpc);
 decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_16bpc);
 
-decl_backup_ipred_edge_fn(dav2d_backup_ipred_edge_8bpc);
-decl_backup_ipred_edge_fn(dav2d_backup_ipred_edge_16bpc);
+decl_backup_prefilter_data_fn(dav2d_backup_prefilter_data_8bpc);
+decl_backup_prefilter_data_fn(dav2d_backup_prefilter_data_16bpc);
 
 decl_read_coef_blocks_fn(dav2d_read_coef_blocks_8bpc);
 decl_read_coef_blocks_fn(dav2d_read_coef_blocks_16bpc);

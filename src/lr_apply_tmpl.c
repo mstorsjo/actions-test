@@ -131,7 +131,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     while (y + stripe_h <= row_h) {
         if (chroma) {
             wiener_params.single.luma =
-                &((pixel *) f->cur.p.data[0])[(x << ss_hor) + (y << ss_ver) * PXSTRIDE(lstride)];
+                &((pixel *) f->lf.p[0])[(x << ss_hor) + (y << ss_ver) * PXSTRIDE(lstride)];
             wiener_params.single.luma_top = llpf;
             wiener_params.single.luma_bottom = llpf + 6 * PXSTRIDE(lstride);
         }

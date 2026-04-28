@@ -697,7 +697,8 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         dav2d_free(f->task_thread.tasks);
         dav2d_free(f->task_thread.tile_tasks[0]);
         dav2d_free_aligned(f->ts);
-        dav2d_free_aligned(f->ipred_edge[0]);
+        if (f->prefilter_data_sz)
+            dav2d_free_aligned(f->prefilter_data[0]);
         dav2d_free(f->a);
         dav2d_free(f->tile);
         dav2d_free(f->lf.mask);

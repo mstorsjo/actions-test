@@ -290,14 +290,15 @@ struct Dav2dFrameContext {
         filter_sbrow_fn filter_sbrow_deblock_rows;
         void (*filter_sbrow_cdef)(Dav2dTaskContext *tc, int sby);
         filter_sbrow_fn filter_sbrow_lr;
-        backup_ipred_edge_fn backup_ipred_edge;
+        backup_prefilter_data_fn backup_prefilter_data;
         read_coef_blocks_fn read_coef_blocks;
         copy_pal_block_fn copy_pal_block_y;
         read_pal_plane_fn read_pal_plane;
     } bd_fn;
 
-    int ipred_edge_sz;
-    pixel *ipred_edge[3];
+    size_t prefilter_data_sz;
+    pixel *prefilter_data[3];
+    int prefilter_data_full_frame;
     ptrdiff_t b4_stride;
     int bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
     int ss_ver, ss_hor;

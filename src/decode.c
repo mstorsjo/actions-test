@@ -4509,8 +4509,8 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                                        t->by >> 1, (t->by + sb_step) >> 1);
             }
         }
-        if (t->task_thread.pass & PASS_RECON)
-            f->bd_fn.backup_ipred_edge(t);
+        if (t->task_thread.pass & PASS_RECON && c->n_tc > 1)
+            f->bd_fn.backup_prefilter_data(t);
         return 0;
     }
     reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), 0);
@@ -4621,8 +4621,8 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     }
 
     // backup pre-loopfilter pixels for intra prediction of the next sbrow
-    if (t->task_thread.pass & PASS_RECON)
-        f->bd_fn.backup_ipred_edge(t);
+    if (t->task_thread.pass & PASS_RECON && c->n_tc > 1)
+        f->bd_fn.backup_prefilter_data(t);
 
     // backup t->a/l.tx_lpf_y/uv at tile boundaries to use them to "fix"
     // up the initial value in neighbour tiles when running the loopfilter
@@ -4946,25 +4946,40 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->lf.gdf_ref_dst_idx = ref_dst_idx;
     }
 
-    const int plane_mul = 1 + (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400 ?
-                               0 : 2 >> f->ss_hor);
-    const int ipred_edge_plane_sz = f->sbh * f->sb256w * 256 << hbd;
-    const int ipred_edge_sz = ipred_edge_plane_sz * plane_mul;
-    if (ipred_edge_sz != f->ipred_edge_sz) {
-        dav2d_free_aligned(f->ipred_edge[0]);
-        uint8_t *ptr = f->ipred_edge[0] =
-            dav2d_alloc_aligned(ALLOC_IPRED, ipred_edge_sz, 64);
-        if (!ptr) {
-            f->ipred_edge_sz = 0;
-            goto error;
+    size_t prefilter_data_size_y, prefilter_data_size_uv;
+    if (c->n_tc == 1) {
+        prefilter_data_size_y = prefilter_data_size_uv = 0;
+        f->prefilter_data_full_frame = 1;
+    } else if (f->frame_hdr->allow_intrabc) {
+        const int bh_align7 = (f->bh + 7) & ~7;
+        prefilter_data_size_y = f->cur.p.stride[0] * bh_align7 * 4;
+        const int bh_align15 = (f->bh + 15) & ~15;
+        prefilter_data_size_uv = f->cur.p.stride[1] * bh_align15 * 4 >> f->ss_ver;
+        f->prefilter_data_full_frame = 1;
+    } else {
+        prefilter_data_size_y = f->cur.p.stride[0] * f->frame_hdr->tiling.t.rows;
+        prefilter_data_size_uv = f->cur.p.stride[1] * f->frame_hdr->tiling.t.rows;
+        f->prefilter_data_full_frame = 0;
+    }
+    const size_t prefilter_data_sz = prefilter_data_size_y + 2 * prefilter_data_size_uv;
+    if (prefilter_data_sz > f->prefilter_data_sz) {
+        if (f->prefilter_data_sz) // otherwise it's a pointer into f->cur
+            dav2d_free_aligned(f->prefilter_data[0]);
+        if (prefilter_data_sz) {
+            uint8_t *ptr = f->prefilter_data[0] =
+                dav2d_alloc_aligned(ALLOC_IPRED, prefilter_data_sz, 64);
+            if (!ptr) {
+                f->prefilter_data_sz = 0;
+                goto error;
+            }
+            if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+                ptr += prefilter_data_size_y;
+                f->prefilter_data[1] = ptr;
+                ptr += prefilter_data_size_uv;
+                f->prefilter_data[2] = ptr;
+            }
         }
-        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
-            ptr += ipred_edge_plane_sz;
-            f->ipred_edge[1] = ptr;
-            ptr += ipred_edge_plane_sz >> f->ss_hor;
-            f->ipred_edge[2] = ptr;
-        }
-        f->ipred_edge_sz = ipred_edge_sz;
+        f->prefilter_data_sz = prefilter_data_sz;
     }
 
     const int re_sz = f->sb256h * f->frame_hdr->tiling.t.cols;
@@ -5008,6 +5023,15 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     f->lf.p[0] = f->cur.p.data[0];
     f->lf.p[1] = f->cur.p.data[has_chroma ? 1 : 0];
     f->lf.p[2] = f->cur.p.data[has_chroma ? 2 : 0];
+    if (c->n_tc == 1) {
+        f->prefilter_data[0] = f->cur.p.data[0];
+        f->prefilter_data[1] = f->cur.p.data[1];
+        f->prefilter_data[2] = f->cur.p.data[2];
+    } else if (f->frame_hdr->allow_intrabc) {
+        f->cur.p.data[0] = f->prefilter_data[0];
+        f->cur.p.data[1] = f->prefilter_data[1];
+        f->cur.p.data[2] = f->prefilter_data[2];
+    }
 
     if (c->n_tc > 1) {
         for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)
@@ -5364,7 +5388,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         f->bd_fn.filter_sbrow_deblock_rows = dav2d_filter_sbrow_deblock_rows_##bd##bpc; \
         f->bd_fn.filter_sbrow_cdef = dav2d_filter_sbrow_cdef_##bd##bpc; \
         f->bd_fn.filter_sbrow_lr = dav2d_filter_sbrow_lr_##bd##bpc; \
-        f->bd_fn.backup_ipred_edge = dav2d_backup_ipred_edge_##bd##bpc; \
+        f->bd_fn.backup_prefilter_data = dav2d_backup_prefilter_data_##bd##bpc; \
         f->bd_fn.read_coef_blocks = dav2d_read_coef_blocks_##bd##bpc; \
         f->bd_fn.copy_pal_block_y = dav2d_copy_pal_block_y_##bd##bpc; \
         f->bd_fn.read_pal_plane = dav2d_read_pal_plane_##bd##bpc
