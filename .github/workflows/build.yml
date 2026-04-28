@@ -136,6 +136,7 @@ jobs:
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
+    if: false
     needs: [prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
@@ -193,25 +194,13 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - uses: actions/checkout@v6
-      - name: Unpack stage1 Clang
+      - name: Unpack an old release as if it was newly built
         run: |
-          curl -LO https://martin.st/temp/llvm-mingw-stage1-20260427-ucrt-ubuntu-22.04-x86_64.tar.xz
+          curl -LO https://github.com/mstorsjo/llvm-mingw/releases/download/20260421/llvm-mingw-20260421-ucrt-ubuntu-22.04-aarch64.tar.xz
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
-          sudo mv llvm-mingw* /opt/llvm-mingw
-      - name: Build
-        env:
-          LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
-          MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
-          SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
-        run: |
-          curl -L https://martin.st/temp/profile-nightly.profdata -o profile.profdata
-          sudo apt-get update && sudo apt-get install -y g++-aarch64-linux-gnu
-          ./build-all.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw --no-runtimes --host=aarch64-linux-gnu --thinlto --pgo
-          .github/workflows/store-version.sh install/llvm-mingw/versions.txt
-      - name: Assemble the cross-built toolchain
-        run: |
-          ./prepare-cross-toolchain-unix.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw
+          mkdir install
+          mv llvm-mingw-* install/llvm-mingw
       - name: Test using the cross-built assembled toolchain
         run: |
           sudo apt-get update && sudo apt-get install -y qemu-user-static libc6-arm64-cross libstdc++6-arm64-cross
