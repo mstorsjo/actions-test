@@ -68,7 +68,7 @@ jobs:
   linux-stage1:
     needs: [prepare]
     runs-on: ubuntu-22.04
-    container: ubuntu:22.04
+    container: ubuntu:20.04
     steps:
       - name: Install prerequisites
         run: |
@@ -104,7 +104,7 @@ jobs:
   linux-profile:
     needs: [prepare, linux-stage1]
     runs-on: ubuntu-22.04
-    container: ubuntu:22.04
+    container: ubuntu:20.04
     steps:
       - name: Install prerequisites
         run: |
@@ -139,7 +139,7 @@ jobs:
   linux:
     needs: [prepare, linux-stage1, linux-profile]
     runs-on: ubuntu-22.04
-    container: ubuntu:22.04
+    container: ubuntu:20.04
     steps:
       - name: Install prerequisites
         run: |
@@ -187,7 +187,7 @@ jobs:
   linux-cross-aarch64:
     needs: [linux-stage1, linux-profile, prepare]
     runs-on: ubuntu-22.04
-    container: ubuntu:22.04
+    container: ubuntu:20.04
     steps:
       - name: Install prerequisites
         run: |
