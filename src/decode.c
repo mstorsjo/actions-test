@@ -5182,11 +5182,11 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
     for (int i = 0; i < 7; i++) {
         if (f->refp[i].p.frame_hdr) {
             if (!retval && c->n_fc > 1 && c->strict_std_compliance &&
-                atomic_load(&f->refp[i].progress[1]) == FRAME_ERROR)
+                atomic_load(&f->refp[i].progress[2]) == FRAME_ERROR)
             {
                 retval = DAV2D_ERR(EINVAL);
                 atomic_store(&f->task_thread.error, 1);
-                atomic_store(&f->cur.progress[1], FRAME_ERROR);
+                atomic_store(&f->cur.progress[2], FRAME_ERROR);
             }
             dav2d_thread_picture_unref(&f->refp[i]);
         }
@@ -5321,7 +5321,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_data_props_copy(&c->cached_error_props, &out_delayed->p.m);
             dav2d_thread_picture_unref(out_delayed);
         } else if (out_delayed->p.data[0]) {
-            const unsigned progress = atomic_load_explicit(&out_delayed->progress[1],
+            const unsigned progress = atomic_load_explicit(&out_delayed->progress[2],
                                                            memory_order_relaxed);
             if ((out_delayed->visible || c->output_invisible_frames) &&
                 progress != FRAME_ERROR)

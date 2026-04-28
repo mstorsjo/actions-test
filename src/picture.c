@@ -121,7 +121,7 @@ static int picture_alloc(Dav2dContext *const c,
     }
     assert(bpc > 0 && bpc <= 16);
 
-    size_t extra = c->n_fc > 1 ? sizeof(atomic_int) * 2 : 0;
+    size_t extra = c->n_fc > 1 ? sizeof(atomic_int) * 3 : 0;
     struct pic_ctx_context *pic_ctx = dav2d_mem_pool_pop(c->pic_ctx_pool, extra +
                                                          sizeof(struct pic_ctx_context));
     if (!pic_ctx)
@@ -224,6 +224,7 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     if (c->n_fc > 1) {
         atomic_init(&p->progress[0], 0);
         atomic_init(&p->progress[1], 0);
+        atomic_init(&p->progress[2], 0);
     }
     return res;
 }

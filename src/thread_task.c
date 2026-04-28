@@ -254,8 +254,7 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
 
     Dav2dTask *t = &tasks[0];
     t->sby = 0;
-    t->recon_progress = !is_entropy_pass && (has_deblock || has_cdef || has_lr) ?
-        f->frame_hdr->tiling.t.row_start_sb[1] : 1;
+    t->recon_progress = 1;
     t->deblock_progress = 0;
     t->type = is_entropy_pass ? DAV2D_TASK_TYPE_ENTROPY_PROGRESS :
               has_deblock ? DAV2D_TASK_TYPE_DEBLOCK_COLS :
@@ -396,7 +395,6 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
     const int n_passes = f->c->task_thread.n_passes;
     const int pass = t->type == DAV2D_TASK_TYPE_TILE_RECONSTRUCTION ?
         n_passes - 1 : t->type != DAV2D_TASK_TYPE_TILE_ENTROPY;
-    const int tp = t->type == DAV2D_TASK_TYPE_TILE_ENTROPY;
     const int tile_idx = (int)(t - f->task_thread.tile_tasks[pass]);
     Dav2dTileState *const ts = &f->ts[tile_idx];
     const int p1 = atomic_load(&ts->progress[pass]);
@@ -434,7 +432,7 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
                 if (max == INT_MIN) continue;
                 lowest = iclip(max, 1, f->refp[n].p.p.h);
             }
-            const unsigned p3 = atomic_load(&f->refp[n].progress[!tp]);
+            const unsigned p3 = atomic_load(&f->refp[n].progress[!!pass * 2]);
             if (p3 < lowest) return 1;
             atomic_fetch_or(&f->task_thread.error, p3 == FRAME_ERROR);
         }
@@ -445,7 +443,7 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
 static inline int get_frame_progress(const Dav2dContext *const c,
                                      const Dav2dFrameContext *const f)
 {
-    unsigned frame_prog = c->n_fc > 1 ? atomic_load(&f->cur.progress[1]) : 0;
+    unsigned frame_prog = c->n_fc > 1 ? atomic_load(&f->cur.progress[2]) : 0;
     if (frame_prog >= FRAME_ERROR)
         return f->sbh - 1;
     int idx = frame_prog >> (f->sb_shift + 7);
@@ -467,6 +465,7 @@ static inline void abort_frame(Dav2dFrameContext *const f, const int error) {
     atomic_store(&f->task_thread.done[1], 1);
     atomic_store(&f->cur.progress[0], FRAME_ERROR);
     atomic_store(&f->cur.progress[1], FRAME_ERROR);
+    atomic_store(&f->cur.progress[2], FRAME_ERROR);
     dav2d_decode_frame_exit(f, error);
     f->n_tile_data = 0;
     pthread_cond_signal(&f->task_thread.cond);
@@ -648,18 +647,21 @@ void *dav2d_worker_task(void *data) {
                         if (p2 < t->recon_progress) goto next;
                         atomic_fetch_or(&f->task_thread.error, p2 == TILE_ERROR);
                     }
+                    if (t->type != DAV2D_TASK_TYPE_ENTROPY_PROGRESS && c->n_fc > 1) {
+                        atomic_store(&f->cur.progress[1],
+                                     atomic_load(&f->task_thread.error) ?
+                                         FRAME_ERROR : t->recon_progress);
+                    }
                     if (t->sby + 1 < f->sbh) {
                         // add sby+1 to list to replace this one
                         Dav2dTask *next_t = &t[1];
                         *next_t = *t;
                         next_t->sby++;
                         const int ntr = f->frame_thread.next_tile_row[p] + 1;
-                        int start = f->frame_hdr->tiling.t.row_start_sb[ntr];
-                        if (next_t->sby == start) {
+                        const int start = f->frame_hdr->tiling.t.row_start_sb[ntr];
+                        if (next_t->sby == start)
                             f->frame_thread.next_tile_row[p] = ntr;
-                            start = f->frame_hdr->tiling.t.row_start_sb[ntr + 1];
-                        }
-                        next_t->recon_progress = start; //next_t->sby + 1;
+                        next_t->recon_progress = next_t->sby + 1;
                         insert_task(f, next_t, 0);
                     }
                     goto found;
@@ -771,7 +773,7 @@ void *dav2d_worker_task(void *data) {
                         atomic_fetch_sub(&f->task_thread.task_counter,
                                          f->frame_hdr->tiling.t.cols *
                                          f->frame_hdr->tiling.t.rows + f->sbh);
-                        atomic_store(&f->cur.progress[p - 1], FRAME_ERROR);
+                        atomic_store(&f->cur.progress[p], FRAME_ERROR);
                         if (p == 2 && atomic_load(&f->task_thread.done[1])) {
                             assert(!atomic_load(&f->task_thread.task_counter));
                             dav2d_decode_frame_exit(f, DAV2D_ERR(ENOMEM));
@@ -981,7 +983,7 @@ void *dav2d_worker_task(void *data) {
         error = atomic_load(&f->task_thread.error);
         const unsigned y = sby + 1 == sbh ? UINT_MAX : (unsigned)(sby + 1) * sbsz;
         if (c->n_fc > 1 && f->cur.p.data[0] /* upon flush, this can be free'ed already */)
-            atomic_store(&f->cur.progress[1], error ? FRAME_ERROR : y);
+            atomic_store(&f->cur.progress[2], error ? FRAME_ERROR : y);
         pthread_mutex_unlock(&f->task_thread.lock);
         if (sby + 1 == sbh)
             atomic_store(&f->task_thread.done[0], 1);

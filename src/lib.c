@@ -429,7 +429,7 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
     // frame-threading completion condition
     struct OutputQueue *const q = &c->dpb[c->dpb_out];
     unsigned progress = c->n_fc == 1 ? UINT_MAX :
-        atomic_load_explicit(&q->p.progress[1], memory_order_relaxed);
+        atomic_load_explicit(&q->p.progress[2], memory_order_relaxed);
     if (c->drain && c->n_fc > 1) {
         pthread_mutex_lock(&c->task_thread.lock);
         while (progress != FRAME_ERROR && progress != UINT_MAX) {
@@ -441,7 +441,7 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
                 pthread_cond_wait(&f->task_thread.cond,
                                   &c->task_thread.lock);
             }
-            progress = atomic_load_explicit(&q->p.progress[1], memory_order_relaxed);
+            progress = atomic_load_explicit(&q->p.progress[2], memory_order_relaxed);
         }
         pthread_mutex_unlock(&c->task_thread.lock);
     }
@@ -460,7 +460,7 @@ static int output_picture_ready(Dav2dContext *const c) {
     if (c->dpb_out == c->dpb_in) return 0;
     struct OutputQueue *const q = &c->dpb[c->dpb_out];
     const unsigned progress = c->n_fc == 1 ? UINT_MAX :
-        atomic_load_explicit(&q->p.progress[1], memory_order_relaxed);
+        atomic_load_explicit(&q->p.progress[2], memory_order_relaxed);
     return progress == FRAME_ERROR || progress == UINT_MAX;
 }
 

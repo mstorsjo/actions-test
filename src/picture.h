@@ -57,8 +57,9 @@ typedef struct Dav2dThreadPicture {
     // mechanism.
     int showable;
     enum PictureFlags flags;
-    // [0] block data (including segmentation map and motion vectors)
-    // [1] pixel data
+    // [0] block data (segmentation map and ccso values)
+    // [1] motion vectors
+    // [2] pixel data
     atomic_uint *progress;
 } Dav2dThreadPicture;
 
