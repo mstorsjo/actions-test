@@ -188,11 +188,6 @@ jobs:
       - name: Install prerequisites
         run: |
           apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
-      - name: Install Docker
-        run: |
-          apt-get update && apt-get install -y docker.io
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
       - uses: actions/checkout@v6
       - name: Unpack an old release as if it was newly built
         run: |
