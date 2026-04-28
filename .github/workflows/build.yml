@@ -102,6 +102,7 @@ jobs:
           retention-days: 7
 
   linux-profile:
+    if: false
     needs: [prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
@@ -135,7 +136,7 @@ jobs:
 
   # Build a cross compiler for Linux, targeting Windows.
   linux:
-    needs: [prepare, linux-profile]
+    needs: [prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
     steps:
@@ -149,9 +150,6 @@ jobs:
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
-      - uses: actions/download-artifact@v8
-        with:
-          name: profile
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -159,6 +157,7 @@ jobs:
           SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
           BUILD_DATE: ${{needs.prepare.outputs.BUILD_DATE}}
         run: |
+          curl -L https://martin.st/temp/profile-nightly.profdata -o profile.profdata
           # Skip dynamic library dependencies that might make it harder to
           # run the binaries on other distros (and that have little use within
           # llvm-mingw).
@@ -181,7 +180,7 @@ jobs:
   # Crosscompile the toolchain for running on Linux on a different architecture, bundle the runtime
   # libraries that were built in the 'linux-stage1' step above.
   linux-cross-aarch64:
-    needs: [linux-profile, prepare]
+    needs: [prepare]
     runs-on: ubuntu-22.04
     container: ubuntu:22.04
     steps:
@@ -200,15 +199,13 @@ jobs:
           tar -Jxf llvm-mingw-*.tar.xz
           rm llvm-mingw-*.tar.xz
           sudo mv llvm-mingw* /opt/llvm-mingw
-      - uses: actions/download-artifact@v8
-        with:
-          name: profile
       - name: Build
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
           MINGW_W64_VERSION: ${{needs.prepare.outputs.MINGW_W64_VERSION}}
           SOURCE_DATE_EPOCH: ${{needs.prepare.outputs.COMMIT_DATE_UNIX}}
         run: |
+          curl -L https://martin.st/temp/profile-nightly.profdata -o profile.profdata
           sudo apt-get update && sudo apt-get install -y g++-aarch64-linux-gnu
           ./build-all.sh /opt/llvm-mingw $(pwd)/install/llvm-mingw --no-runtimes --host=aarch64-linux-gnu --thinlto --pgo
           .github/workflows/store-version.sh install/llvm-mingw/versions.txt
