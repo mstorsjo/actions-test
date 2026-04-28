@@ -46,34 +46,66 @@
 // 64 / 2 + 1
 #define GRADIENT_BUF_STRIDE (33)
 
-static const int8_t wiener_ns_config_y[32][2] = {
-    { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
-    { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 },
-    { 1, 1 }, { -1, -1 }, { -1, 1 }, { 1, -1 },
-    { 2, 1 }, { -2, -1 }, { 2, -1 }, { -2, 1 },
-    { 1, 2 }, { -1, -2 }, { 1, -2 }, { -1, 2 },
-    { 3, 0 }, { -3, 0 }, { 0, 3 }, { 0, -3 },
-    { 4, 0 }, { -4, 0 }, { 0, 4 }, { 0, -4 },
-    { 3, 3 }, { -3, -3 }, { 3, -3 }, { -3, 3 }
+//         C
+//   E     A     F
+//       6 2 7
+//     8 4 0 5 9
+// D B 3 1   1 3 B D
+//     9 5 0 4 8
+//       7 2 6
+//   F     A     E
+//         C
+static const int8_t wiener_ns_config_y[16][2] = {
+    { 1, 0 }, { 0, 1 }, { 2, 0 }, { 0, 2 },
+    { 1, 1 }, { -1, 1 }, { 2, 1 }, { 2, -1 },
+    { 1, 2 }, { 1, -2 }, { 3, 0 }, { 0, 3 },
+    { 4, 0 }, { 0, 4 }, { 3, 3 }, { 3, -3 },
 };
 
+//     4
+//   2 0 3
+// 5 1   1 5
+//   3 0 2
+//     4
 static const int8_t wiener_ns_config_uv[6][2] = {
     { 1, 0 }, { 0, 1 }, { 1, 1 }, { -1, 1 }, { 2, 0 }, { 0, 2 },
 };
 
-static const int8_t wiener_ns_config_uv_from_y[12][3] = {
+//     9
+//   5 1 6
+// B 3   2 A
+//   7 0 4
+//     8
+static const int8_t wiener_ns_config_uv_from_y[12][2] = {
     { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, -1 },
     { -1, 1 }, { 1, -1 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 },
 };
 
-static const int8_t pc_wiener_config[25][2] = {
-    {  1,  0 }, { -1,  0 }, {  0,  1 }, {  0, -1 }, {  2,  0 },
-    { -2,  0 }, {  0,  2 }, {  0, -2 }, {  1,  1 }, { -1, -1 },
-    { -1,  1 }, {  1, -1 }, {  2,  1 }, { -2, -1 }, {  2, -1 },
-    { -2,  1 }, {  1,  2 }, { -1, -2 }, {  1, -2 }, { -1,  2 },
-    {  3,  0 }, { -3,  0 }, {  0,  3 }, {  0, -3 }, {  0,  0 }
+//       A
+//     6 2 7
+//   8 4 0 5 9
+// B 3 1 C 1 3 B
+//   9 5 0 4 8
+//     7 2 6
+//       A
+static const int8_t pc_wiener_config[12][2] = {
+    {  1,  0 }, {  0,  1 }, {  2,  0 }, {  0,  2 }, {  1,  1 }, { -1,  1 },
+    {  2,  1 }, {  2, -1 }, {  1,  2 }, {  1, -2 }, {  3,  0 }, {  0,  3 },
 };
 
+//           0
+//           1
+//           2
+//           3
+//         4 5 6
+//       7 8 9 A B
+// C D E F G   G F E D C
+//       B A 9 8 7
+//         6 5 4
+//           3
+//           2
+//           1
+//           0
 static const int8_t gdf_coords[18][2] = {
     { 6,  0 }, { 5,  0 }, { 4,  0 }, { 3,  0 }, { 2,  1 }, { 2,  0 },
     { 2, -1 }, { 1,  2 }, { 1,  1 }, { 1,  0 }, { 1, -1 }, { 1, -2 },
@@ -274,13 +306,13 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
             for (int x = bx * 4; x < bx * 4 + 4; x++) {
                 const int m = ptrs[4][x];
                 int s = m << 7;
-                for (int i = 0; i < 32; i++) {
+                for (int i = 0; i < 16; i++) {
                     const int dy = wiener_ns_config_y[i][0];
                     const int dx = wiener_ns_config_y[i][1];
-                    const int diff = ptrs[4 + dy][x + dx] - m;
-                    s += diff * filter[i >> 1];
+                    const int diff = ptrs[4 + dy][x + dx] +
+                        ptrs[4 - dy][x - dx] - 2 * m;
+                    s += diff * filter[i];
                 }
-                // TODO: chroma: if (plane > 0) {...}
                 const int v = (s + 64) >> 7;
                 p[x] = iclip_pixel(v);
             }
@@ -589,11 +621,12 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                     for (int x = bx << 2; x < (bx << 2) + 4; x++) {
                         const int m = ptrs[4][x];
                         int s = m << 7;
-                        for (int i = 0; i < 32; i++) {
+                        for (int i = 0; i < 16; i++) {
                             const int dy = wiener_ns_config_y[i][0];
                             const int dx = wiener_ns_config_y[i][1];
-                            const int diff = ptrs[4 + dy][x + dx] - m;
-                            s += diff * filter[i >> 1];
+                            const int diff = ptrs[4 + dy][x + dx] +
+                                ptrs[4 - dy][x - dx] - 2 * m;
+                            s += diff * filter[i];
                         }
                         const int v = (s + 64) >> 7;
                         p[x] = iclip_pixel(v);
@@ -601,11 +634,12 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                 } else {
                     const int16_t *filter = filters_pretrained[classes[bx]];
                     for (int x = bx << 2; x < (bx << 2) + 4; x++) {
-                        int s = 0;
-                        for (int i = 0; i < 25; i++) {
+                        int s = ptrs[4][x] * filter[12];
+                        for (int i = 0; i < 12; i++) {
                             const int dy = pc_wiener_config[i][0];
                             const int dx = pc_wiener_config[i][1];
-                            s += ptrs[4 + dy][x + dx] * filter[i >> 1];
+                            s += filter[i] *
+                                (ptrs[4 + dy][x + dx] + ptrs[4 - dy][x - dx]);
                         }
                         const int v = (s + 64) >> 7;
                         p[x] = iclip_pixel(v);
