@@ -72,6 +72,17 @@ jobs:
       - name: Install prerequisites
         run: |
           apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
+      - name: Install a newer version of CMake
+        run: |
+          # Manually install a newer version of CMake; this is needed since
+          # building LLVM requires CMake 3.20, while Ubuntu 20.04 ships with
+          # 3.16.3.
+          curl -LO https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-Linux-$(uname -m).tar.gz
+          tar -zxf cmake-*.tar.gz
+          rm cmake-*.tar.gz
+          sudo mkdir -p /opt
+          sudo mv cmake-* /opt/cmake
+          echo /opt/cmake/bin >> $GITHUB_PATH
       - uses: actions/checkout@v6
       - name: Build
         env:
@@ -108,6 +119,17 @@ jobs:
       - name: Install prerequisites
         run: |
           apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
+      - name: Install a newer version of CMake
+        run: |
+          # Manually install a newer version of CMake; this is needed since
+          # building LLVM requires CMake 3.20, while Ubuntu 20.04 ships with
+          # 3.16.3.
+          curl -LO https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-Linux-$(uname -m).tar.gz
+          tar -zxf cmake-*.tar.gz
+          rm cmake-*.tar.gz
+          sudo mkdir -p /opt
+          sudo mv cmake-* /opt/cmake
+          echo /opt/cmake/bin >> $GITHUB_PATH
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
@@ -143,6 +165,17 @@ jobs:
       - name: Install prerequisites
         run: |
           apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y git build-essential cmake ninja-build python3 sudo curl zip unzip
+      - name: Install a newer version of CMake
+        run: |
+          # Manually install a newer version of CMake; this is needed since
+          # building LLVM requires CMake 3.20, while Ubuntu 20.04 ships with
+          # 3.16.3.
+          curl -LO https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-Linux-$(uname -m).tar.gz
+          tar -zxf cmake-*.tar.gz
+          rm cmake-*.tar.gz
+          sudo mkdir -p /opt
+          sudo mv cmake-* /opt/cmake
+          echo /opt/cmake/bin >> $GITHUB_PATH
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
@@ -196,6 +229,17 @@ jobs:
           apt-get update && apt-get install -y docker.io
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+      - name: Install a newer version of CMake
+        run: |
+          # Manually install a newer version of CMake; this is needed since
+          # building LLVM requires CMake 3.20, while Ubuntu 20.04 ships with
+          # 3.16.3.
+          curl -LO https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-Linux-$(uname -m).tar.gz
+          tar -zxf cmake-*.tar.gz
+          rm cmake-*.tar.gz
+          sudo mkdir -p /opt
+          sudo mv cmake-* /opt/cmake
+          echo /opt/cmake/bin >> $GITHUB_PATH
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
