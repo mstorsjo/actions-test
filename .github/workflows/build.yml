@@ -183,7 +183,7 @@ jobs:
   linux-cross-aarch64:
     needs: [prepare]
     runs-on: ubuntu-22.04
-    container: ubuntu:22.04
+    container: ghcr.io/catthehacker/ubuntu:act-22.04
     steps:
       - name: Install prerequisites
         run: |
