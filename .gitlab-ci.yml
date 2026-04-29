@@ -119,6 +119,7 @@ build-debian-avx512:
         - ninja -C build
         - cd build
         - time meson test -v --suite checkasm
+        - time ../tests/check-md5.sh tools/dav2d
 
 test-win64:
     extends: .debian-amd64-common
