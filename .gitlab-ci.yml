@@ -105,7 +105,7 @@ build-debian:
         - ninja -C build
         - |
           echo "[CI] Running AVM vs DAV2D MD5 regression test"
-          time tests/check-md5.sh build/tools/dav2d
+          time tests/test-md5.sh build/tools/dav2d
 
 build-debian-avx512:
     extends: .debian-amd64-common
@@ -119,7 +119,7 @@ build-debian-avx512:
         - ninja -C build
         - cd build
         - time meson test -v --suite checkasm
-        - time ../tests/check-md5.sh tools/dav2d
+        - time ../tests/test-md5.sh tools/dav2d
 
 test-win64:
     extends: .debian-amd64-common
@@ -140,7 +140,7 @@ build-debian-aarch64:
                             -Dtrim_dsp=false
         - ninja -C build
         - meson test -v -C build
-        - time tests/check-md5.sh build/tools/dav2d
+        - time tests/test-md5.sh build/tools/dav2d
 
 build-debian-armv7:
     extends: .debian-armv7-common
@@ -149,4 +149,4 @@ build-debian-armv7:
                             -Dtrim_dsp=false
         - ninja -C build
         - meson test -v -C build
-        - time tests/check-md5.sh build/tools/dav2d
+        - time tests/test-md5.sh build/tools/dav2d
