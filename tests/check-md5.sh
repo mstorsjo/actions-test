@@ -13,7 +13,9 @@ SRC_PATH="$(dirname "$0")/.."
 for file in "$SRC_PATH"/media/*.obu; do
     base="$(basename "$file")"
     a_md5=$(cat "$file.md5")
-    d_md5=$("$DAV2D" -i "$file" -o - --threads=1 --quiet --muxer=md5 --filmgrain=1)
+    "$DAV2D" -i "$file" -o tmp.md5 --threads=1 --quiet --muxer=md5 --filmgrain=1
+    d_md5=$(cat tmp.md5)
+    rm -f tmp.md5
     if [[ "$a_md5" == "$d_md5" ]]; then
         echo $base "[OK] md5:$a_md5"
     else
