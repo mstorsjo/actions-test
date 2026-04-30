@@ -1,6 +1,7 @@
 # dav2d
 
 **dav2d** is an **AV2** cross-platform **d**ecoder, open-source, and focused on speed and correctness.
+It is based on our popular **dav1d** decoder.
 
 It is now battle-tested and production-ready and can be used everywhere.
 
@@ -21,6 +22,8 @@ In the future, this project will host simple tools or simple wrappings.
 **dav2d** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
 
 The reasoning behind this decision is the same as for libvorbis, see [RMS on vorbis](https://lwn.net/2001/0301/a/rms-ov-license.php3).
+
+Please note that the license does not grant you any patents rights from AOM.
 
 # Roadmap
 

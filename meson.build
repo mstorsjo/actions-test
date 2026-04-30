@@ -1,4 +1,4 @@
-# Copyright © 2018-2024, VideoLAN and dav2d authors
+# Copyright © 2018-2026, VideoLAN and dav2d authors
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
