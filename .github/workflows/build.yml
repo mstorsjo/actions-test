@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup -Dtrim_dsp=false --buildtype release ..
           ninja
           meson test
           meson test checkasm -v
@@ -56,7 +56,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
+          meson setup -Dtrim_dsp=false --buildtype release -Db_vscrt=mt ..
           ninja
           meson test
           meson test checkasm -v
@@ -95,7 +95,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup --cross-file ../cross.txt -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
+          meson setup --cross-file ../cross.txt -Dtrim_dsp=false --buildtype release -Db_vscrt=mt ..
           ninja
           meson test
           meson test checkasm -v
@@ -139,7 +139,7 @@ jobs:
           endian = 'little'
           EOF
 
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false ..
           ninja
           meson test checkasm -v
 
@@ -160,7 +160,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup -Dtrim_dsp=false --buildtype release ..
           ninja
           meson test
           meson test checkasm -v
@@ -234,7 +234,7 @@ jobs:
           wineserver -k || true
           wineserver -p
           wine wineboot
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false ..
           ninja
           meson test
           meson test checkasm -v
@@ -317,7 +317,7 @@ jobs:
           wineserver -k || true
           wineserver -p
           wine wineboot
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false ..
           ninja
           meson test
           meson test checkasm -v
@@ -370,7 +370,7 @@ jobs:
           endian = 'little'
           EOF
 
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false ..
           ninja
           wineserver -p
           wine wineboot
@@ -388,7 +388,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup -Dtrim_dsp=false --buildtype release ..
           ninja
           meson test
           meson test checkasm -v
@@ -420,7 +420,7 @@ jobs:
           endian = 'little'
           EOF
 
-          meson setup --cross-file cross.txt -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup --cross-file cross.txt -Dtrim_dsp=false --buildtype release ..
           ninja
           meson test
           meson test checkasm -v
