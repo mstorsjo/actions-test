@@ -23,15 +23,11 @@ jobs:
         with:
           arch: ${{matrix.arch}}
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and test
         run: |
           mkdir build
           cd build
-          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup -Dtrim_dsp=false --buildtype release --werror ..
           ninja
           meson test
           meson test checkasm -v
@@ -47,10 +43,6 @@ jobs:
         with:
           arch: arm64
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Checkout gas-preprocessor
         uses: actions/checkout@v6
         with:
@@ -64,7 +56,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
+          meson setup -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
           ninja
           meson test
           meson test checkasm -v
@@ -80,10 +72,6 @@ jobs:
         with:
           arch: arm64
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Create cross file
         shell: bash
         run: |
@@ -107,7 +95,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          meson setup --cross-file ../cross.txt -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
+          meson setup --cross-file ../cross.txt -Dtrim_dsp=false --buildtype release --werror -Db_vscrt=mt ..
           ninja
           meson test
           meson test checkasm -v
@@ -168,15 +156,11 @@ jobs:
         run: |
           brew install meson nasm
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and run all tests
         run: |
           mkdir build
           cd build
-          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup -Dtrim_dsp=false --buildtype release --werror ..
           ninja
           meson test
           meson test checkasm -v
@@ -211,10 +195,6 @@ jobs:
           repository: ffmpeg/gas-preprocessor
           ref: 7380ac24e1cd23a5e6d76c6af083d8fc5ab9e943
           path: gas-preprocessor
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and test
         run: |
           mkdir build
@@ -254,7 +234,7 @@ jobs:
           wineserver -k || true
           wineserver -p
           wine wineboot
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false -Dtestdata_tests=true --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
           ninja
           meson test
           meson test checkasm -v
@@ -295,10 +275,6 @@ jobs:
               sudo ln -s /usr/bin/lld /usr/bin/lld-link
           fi
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and test
         run: |
           BIN=/opt/msvc/bin/${{matrix.arch}} . /opt/msvc/msvcenv-native.sh
@@ -341,7 +317,7 @@ jobs:
           wineserver -k || true
           wineserver -p
           wine wineboot
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false -Dtestdata_tests=true --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
           ninja
           meson test
           meson test checkasm -v
@@ -367,10 +343,6 @@ jobs:
           rm llvm-mingw-*.tar.xz
           mv llvm-mingw-* /opt/llvm-mingw
           echo /opt/llvm-mingw/bin >> $GITHUB_PATH
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and test checkasm
         run: |
           mkdir build
@@ -398,7 +370,7 @@ jobs:
           endian = 'little'
           EOF
 
-          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false -Dtestdata_tests=true --werror ..
+          meson setup --cross-file cross.txt --buildtype release -Dtrim_dsp=false --werror ..
           ninja
           wineserver -p
           wine wineboot
@@ -412,15 +384,11 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install meson
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and run all tests
         run: |
           mkdir build
           cd build
-          meson setup -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup -Dtrim_dsp=false --buildtype release --werror ..
           ninja
           meson test
           meson test checkasm -v
@@ -433,10 +401,6 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt-get update && sudo apt-get install meson g++-arm-linux-gnueabihf libc6:armhf libstdc++6:armhf
       - uses: actions/checkout@v6
-      - name: Checkout test data
-        run: |
-          cd tests
-          git clone https://code.videolan.org/videolan/dav1d-test-data.git
       - name: Build and run all tests
         run: |
           mkdir build
@@ -456,7 +420,7 @@ jobs:
           endian = 'little'
           EOF
 
-          meson setup --cross-file cross.txt -Dtestdata_tests=true -Dtrim_dsp=false --buildtype release --werror ..
+          meson setup --cross-file cross.txt -Dtrim_dsp=false --buildtype release --werror ..
           ninja
           meson test
           meson test checkasm -v
