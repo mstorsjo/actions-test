@@ -106,28 +106,38 @@ COLD void checkasm_init_x86(void)
 {
     CpuidRegisters r;
 
+    fprintf(stderr, "checkasm_init_x86\n");
     checkasm_cpu_cpuid(&r, 0, 0);
     const uint32_t max_leaf = r.eax;
-    if (max_leaf < 13)
+    if (max_leaf < 13) {
+        fprintf(stderr, "max_leaf %d\n", max_leaf);
         return;
+    }
 
     checkasm_cpu_cpuid(&r, 1, 0);
-    if (~r.ecx & 0x18000000 /* OSXSAVE/AVX */)
+    if (~r.ecx & 0x18000000 /* OSXSAVE/AVX */) {
+        fprintf(stderr, "OSXSAE/AVX missing\n");
         return;
+    }
 
     checkasm_cpu_cpuid(&r, 13, 1);
-    if (!(r.eax & 0x04)) /* XCR1 not supported */
+    if (!(r.eax & 0x04)) { /* XCR1 not supported */
+        fprintf(stderr, "XCR1 not supported\n");
         return;
+    }
 
     const uint64_t xcr1 = checkasm_cpu_xgetbv(1);
-    if (xcr1 & 0x04) /* always-dirty ymm state */
+    if (xcr1 & 0x04) { /* always-dirty ymm state */
+        fprintf(stderr, "always-dirty ymm state\n");
         return;
+    }
 
 #if ARCH_X86_32 && defined(_WIN32)
     /* x86_32 processes on Windows can spuriously get the dirty ymm bit set
      * while running; skip checking this aspect. */
 #else
     checkasm_check_vzeroupper = 1;
+    fprintf(stderr, "checkasm_check_vzeroupper = 1;\n");
 #endif
 }
 
