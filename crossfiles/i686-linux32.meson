@@ -3,6 +3,7 @@ c = 'gcc'
 cpp = 'g++'
 ar = 'ar'
 strip = 'strip'
+nasm = 'nasm'
 
 [host_machine]
 system = 'linux'
