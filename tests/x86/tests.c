@@ -8,6 +8,50 @@
 /* Re-use helpers from main checkasm library */
 #include "src/cpu.h"
 
+typedef void (*op_fill_func)(uint8_t *block /* align width (8 or 16) */,
+                             uint8_t value, ptrdiff_t line_size, int h);
+
+void selftest_fill_block_tab_16_sse2(uint8_t *block, uint8_t value, ptrdiff_t line_size, int h);
+void selftest_fill_block_tab_8_sse2(uint8_t *block, uint8_t value, ptrdiff_t line_size, int h);
+void selftest_fill_block_tab_16_avx2(uint8_t *block, uint8_t value, ptrdiff_t line_size, int h);
+void selftest_fill_block_tab_8_avx2(uint8_t *block, uint8_t value, ptrdiff_t line_size, int h);
+
+static void fill_block_tab_c(uint8_t *block, uint8_t value, ptrdiff_t line_size, int h) {}
+
+static op_fill_func get_fill_block(void)
+{
+    const uint64_t flags = checkasm_get_cpu_flags();
+    if (flags & SELFTEST_CPU_FLAG_AVX2)
+        return selftest_fill_block_tab_8_avx2;
+    if (flags & SELFTEST_CPU_FLAG_SSE2)
+        return selftest_fill_block_tab_8_sse2;
+    return fill_block_tab_c;
+}
+
+static void check_fill(void) {
+    CHECKASM_ALIGN(uint8_t buf0_16[16 * 16]);
+    CHECKASM_ALIGN(uint8_t buf1_16[16 * 16]);
+
+    for (int t = 1; t < 2; ++t) {
+        uint8_t *buf0 = buf0_16 + t * /* force 8 byte alignment */ 8;
+        uint8_t *buf1 = buf1_16 + t * /* force 8 byte alignment */ 8;
+        int n = 16 - 8 * t;
+        declare_func(void, uint8_t *block, uint8_t value,
+                     ptrdiff_t line_size, int h);
+        if (check_func(get_fill_block(), "blockdsp.fill_block_tab[%d]", t)) {
+            uint8_t value = 42;
+            memset(buf0, 0, sizeof(*buf0) * n * n);
+            memset(buf1, 0, sizeof(*buf1) * n * n);
+            call_ref(buf0, value, n, n);
+            call_new(buf1, value, n, n);
+//            if (memcmp(buf0, buf1, sizeof(*buf0) * n * n))
+//                fail();
+            bench_new(buf0, value, n, n);
+        }
+    }
+    checkasm_report("fill");
+}
+
 uint64_t selftest_get_cpu_flags_x86(void)
 {
     uint64_t       flags = SELFTEST_CPU_FLAG_X86;
@@ -200,6 +244,8 @@ static void test_copy_emms(copy_func fun, const char *name)
 
 void selftest_check_x86(void)
 {
+    check_fill();
+
     selftest_test_copy(get_copy_x86(), "copy", 1);
     test_copy_emms(get_copy_noemms_mmx(), "copy_noemms");
     check_stack_alignment();

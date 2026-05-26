@@ -111,3 +111,70 @@ copy_mm _novzeroupper
 ; AVX512 functions
 INIT_YMM avx512
 copy_mm
+
+;-----------------------------------------
+; void ff_fill_block_tab_%1(uint8_t *block, uint8_t value,
+;                           ptrdiff_t line_size, int h);
+;-----------------------------------------
+%macro SPLATW 2-3 0
+%if cpuflag(avx2) && %3 == 0
+    vpbroadcastw %1, %2
+%elif mmsize == 16
+    pshuflw    %1, %2, (%3)*0x55
+    punpcklqdq %1, %1
+%elif cpuflag(mmxext)
+    pshufw     %1, %2, (%3)*0x55
+%else
+    %ifnidn %1, %2
+        mova       %1, %2
+    %endif
+    %if %3 & 2
+        punpckhwd  %1, %1
+    %else
+        punpcklwd  %1, %1
+    %endif
+    %if %3 & 1
+        punpckhwd  %1, %1
+    %else
+        punpcklwd  %1, %1
+    %endif
+%endif
+%endmacro
+
+%macro SPLATB_REG 3
+%if cpuflag(ssse3)
+    movd      %1, %2d
+    pshufb    %1, %3
+%else
+    movd      %1, %2d
+    punpcklbw %1, %1
+    SPLATW    %1, %1, 0
+%endif
+%endmacro
+
+%macro FILL_BLOCK_TAB 2
+cglobal fill_block_tab_%1, 4, 5, 1, block, value, stride, h, stride3
+    lea stride3q, [strideq + strideq * 2]
+%if cpuflag(avx2)
+    movd m0, valued
+    vpbroadcastb m0, m0
+%else
+    SPLATB_REG m0, value, x
+%endif
+.loop:
+    mov%2 [blockq], m0
+    mov%2 [blockq + strideq], m0
+    mov%2 [blockq + strideq * 2], m0
+    mov%2 [blockq + stride3q], m0
+    lea blockq, [blockq + strideq * 4]
+    sub hd, 4
+    jg .loop
+    RET
+%endmacro
+
+INIT_XMM sse2
+FILL_BLOCK_TAB 8, q
+FILL_BLOCK_TAB 16, a
+INIT_XMM avx2
+FILL_BLOCK_TAB 8, q
+FILL_BLOCK_TAB 16, a
