@@ -16,3 +16,9 @@ jobs:
           ./winpf2.exe
           ./cpuname-aarch64.exe
           ./pac-test.exe
+          curl -LO https://martin.st/temp/pac-test/hello-exception-aarch64-pac-16.exe
+          ./hello-exception-aarch64-pac-16.exe
+          curl -LO https://martin.st/temp/pac-test/hello-exception-aarch64-pac-18.exe
+          ./hello-exception-aarch64-pac-18.exe
+          curl -LO https://martin.st/temp/pac-test/hello-exception-aarch64-pac-19.exe
+          ./hello-exception-aarch64-pac-19.exe
