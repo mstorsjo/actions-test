@@ -12,5 +12,7 @@ jobs:
         run: |
           curl -LO https://martin.st/temp/winpf2.exe
           curl -LO https://martin.st/temp/cpuname-aarch64.exe
+          curl -LO https://martin.st/temp/pac-test/pac-test.exe
           ./winpf2.exe
           ./cpuname-aarch64.exe
+          ./pac-test.exe
