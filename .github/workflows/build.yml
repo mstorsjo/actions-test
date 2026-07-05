@@ -24,3 +24,9 @@ jobs:
           ./hello-exception-aarch64-pac-18.exe
           curl -LO https://martin.st/temp/pac-test/hello-exception-aarch64-pac-19.exe
           ./hello-exception-aarch64-pac-19.exe
+      - name: Inspect python
+        shell: cmd
+        run: |
+          echo %PATH%
+          where python3
+          where python
