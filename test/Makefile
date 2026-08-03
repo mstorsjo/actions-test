@@ -20,10 +20,15 @@ vpath %.idl $(SRC_PATH)
 vpath %.rc $(SRC_PATH)
 
 ifneq ($(filter %-mingw32, $(MAKE_HOST)),)
-    # If we're running as mingw32-make, we're executing everything in
-    # cmd.exe, so adapt/filter out things that require a POSIX shell.
-    CMD = 1
     NATIVE = 1
+endif
+
+ifeq ($(wildcard $(SHELL)),)
+    # If $(SHELL) doesn't point at an existing file, we're running as
+    # mingw32-make with no sh.exe found, and using cmd.exe as shell.
+    # Thus adapt/filter out things that require a POSIX shell, and use
+    # cmd.exe builtins.
+    CMD = 1
     TOUCH_TARGET =
     RM_F = del
 else
@@ -69,8 +74,8 @@ TESTS_C_LINK_DLL = autoimport-main
 TESTS_C_NO_BUILTIN = crt-test
 TESTS_C_ANSI_STDIO = crt-test
 TESTS_C_AS_CPP = crt-test
-TESTS_CPP = hello-cpp global-terminate tlstest-main longjmp-cleanup
-TESTS_CPP_EXCEPTIONS = hello-exception exception-locale exception-reduced
+TESTS_CPP = hello-cpp global-terminate tlstest-main longjmp-cleanup atomic-load-sizes
+TESTS_CPP_EXCEPTIONS = hello-exception exception-locale exception-reduced exception-catch-ptr-ref
 TESTS_CPP_STATIC = hello-exception
 TESTS_CPP_DLL = tlstest-lib throwcatch-lib
 TESTS_CPP_LINK_DLL = throwcatch-main
@@ -80,7 +85,9 @@ TESTS_FORTIFY = bufferoverflow crt-test
 ifneq ($(HAVE_ASAN),)
     TESTS_ASAN = stacksmash
 endif
-TESTS_UBSAN = ubsan
+ifneq ($(HAVE_UBSAN),)
+    TESTS_UBSAN = ubsan
+endif
 ifneq ($(HAVE_OPENMP),)
     TESTS_OMP = hello-omp
 endif
@@ -94,7 +101,7 @@ ifneq ($(HAVE_CFGUARD),)
     TESTS_CFGUARD = cfguard-test
     TESTS_ASAN_CFGUARD = $(TESTS_ASAN)
 endif
-TESTS_ATOMIC = atomic-helpers
+TESTS_ATOMIC = atomic-helpers atomic-load-store
 
 TARGETS_C = $(addsuffix $(EXEEXT), $(TESTS_C))
 TARGETS_C_DLL = $(addsuffix $(DLLEXT), $(TESTS_C_DLL))

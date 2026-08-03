@@ -27,14 +27,21 @@ export PATH=$PREFIX/bin:$PATH
 : ${CORES:=$(nproc 2>/dev/null)}
 : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
 : ${CORES:=4}
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 MAKE=make
 if command -v gmake >/dev/null; then
     MAKE=gmake
 fi
+if [ "$(uname)" = "Windows_NT" ]; then
+    # In busybox, prefer our mingw32-make. The plain "make" may be busybox's
+    # primitive make (although in our builds of busybox, we disable that),
+    # and "gmake" can be a different build from e.g. Strawberry Perl further
+    # back in PATH.
+    MAKE=mingw32-make
+fi
 
-case $(uname -s) in
+case $(uname) in
 Darwin)
     ;;
 *)
@@ -107,6 +114,10 @@ set_native() {
         if [ -n "$winbuild" ] && [ "$winbuild" -ge 22000 ]; then
             # Since Windows 11, x86_64 binaries can also be emulated.
             RUN_X86_64=true
+            # arm64ec can also be executed (as it is part of being able to
+            # execute x86_64).
+            RUN_ARM64EC=true
+            NATIVE_ARM64EC=1
         fi
         if [ -n "$winbuild" ] && [ "$winbuild" -lt 26100 ]; then
             # Since Windows 11 24H2 armv7 binaries can no longer be
@@ -115,6 +126,16 @@ set_native() {
             # of it, like on Apple Silicon macs.)
             NATIVE_ARMV7=1
             RUN_ARMV7=true
+        fi
+
+        if [ -z "$IS_UCRT" ]; then
+            # If targeting msvcrt.dll, skip executing the x86 binaries
+            # emulated. They do run, but statically linked mingw math
+            # functions fail some tests, when running emulated; those functions
+            # rely on 80 bit long doubles actually having more precision than
+            # 64 bit doubles.
+            unset RUN_I686
+            unset RUN_X86_64
         fi
         ;;
     esac
@@ -142,9 +163,22 @@ if [ -z "$RUN_X86_64" ] && [ -z "$RUN_I686" ] && [ -z "$RUN_ARMV7" ] && [ -z "$R
             set_native x86_64
         fi
         ;;
+    Windows_NT) # Busybox
+        case $(uname -m) in
+        i386|i686|x86_64)
+            # Assume that any current x86 machine is capable of running 64 bit
+            # binaries.
+            set_native x86_64
+            ;;
+        armv7|aarch64)
+            # Busybox uname -v prints the plain build number, like "22000".
+            set_native aarch64 "$(uname -v)"
+            ;;
+        esac
+        ;;
     Linux)
         if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then
-            # On WSL, inspect the architecture.
+            # On WSL, inspect the architecture and build number.
             winbuild="$(PATH=$PATH:/mnt/c/Windows/System32 cmd.exe /c ver 2>/dev/null | cut -s -d . -f 3)"
             set_native "$(uname -m)" "$winbuild"
         elif command -v wine >/dev/null; then
@@ -174,6 +208,8 @@ fi
 
 for arch in $ARCHS; do
     unset HAVE_ASAN
+    HAVE_UBSAN=1
+    HAVE_OPENMP=1
     case $arch in
     i686)
         RUN="$RUN_I686"
@@ -201,6 +237,12 @@ for arch in $ARCHS; do
         COPY="$COPY_AARCH64"
         NATIVE="$NATIVE_AARCH64"
         ;;
+    arm64ec)
+        unset HAVE_UBSAN
+        RUN="$RUN_ARM64EC"
+        COPY="$COPY_ARM64EC"
+        NATIVE="$NATIVE_ARM64EC"
+        ;;
     esac
 
     TARGET=all
@@ -219,8 +261,8 @@ for arch in $ARCHS; do
     [ -z "$CLEAN" ] || rm -rf $TEST_DIR
     mkdir -p $TEST_DIR
     cd $TEST_DIR
-    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_ASAN=$HAVE_ASAN NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin clean
-    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_ASAN=$HAVE_ASAN NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin RUN="$RUN" $COPYARG $MAKEOPTS -j$CORES $TARGET
+    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_ASAN=$HAVE_ASAN HAVE_UBSAN=$HAVE_UBSAN HAVE_OPENMP=$HAVE_OPENMP NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin clean
+    $MAKE -f ../Makefile ARCH=$arch HAVE_UWP=$HAVE_UWP HAVE_CFGUARD=$HAVE_CFGUARD HAVE_ASAN=$HAVE_ASAN HAVE_UBSAN=$HAVE_UBSAN HAVE_OPENMP=$HAVE_OPENMP NATIVE=$NATIVE RUNTIMES_SRC=$PREFIX/$arch-w64-mingw32/bin RUN="$RUN" $COPYARG $MAKEOPTS -j$CORES $TARGET
     cd ..
 done
 echo All tests succeeded

@@ -42,7 +42,7 @@ fi
 mkdir -p "$PREFIX"
 PREFIX="$(cd "$PREFIX" && pwd)"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 : ${TARGET_OSES:=${TOOLCHAIN_TARGET_OSES-mingw32 mingw32uwp}}
 
 if [ -n "$HOST" ] && [ -z "$CC" ]; then
@@ -126,6 +126,8 @@ cp wrappers/*-wrapper.sh "$PREFIX/bin"
 cp wrappers/mingw32-common.cfg $PREFIX/bin
 for arch in $ARCHS; do
     cp wrappers/$arch-w64-windows-gnu.cfg $PREFIX/bin
+    # Also accept `--target=$arch-pc-windows-gnu` style arg
+    ln -sf $arch-w64-windows-gnu.cfg $PREFIX/bin/$arch-pc-windows-gnu.cfg
 done
 if [ -n "$HOST" ] && [ -n "$EXEEXT" ]; then
     # TODO: If building natively on msys, pick up the default HOST value from there.

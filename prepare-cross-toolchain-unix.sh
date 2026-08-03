@@ -23,7 +23,7 @@ fi
 SRC="$1"
 DEST="$2"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 CLANG_RESOURCE_DIR="$("$SRC/bin/clang" --print-resource-dir)"
 CLANG_VERSION=$(basename "$CLANG_RESOURCE_DIR")
@@ -43,6 +43,11 @@ CLANG_VERSION=$(basename "$CLANG_RESOURCE_DIR")
 # copy the individual include subdirectories that are missing.
 rm -rf $DEST/lib/clang/$CLANG_VERSION
 cp -a $CLANG_RESOURCE_DIR $DEST/lib/clang/$CLANG_VERSION
+
+# Remove the native Linux/macOS runtimes which aren't needed in
+# the final distribution.
+rm -rf $DEST/lib/clang/*/lib/darwin
+rm -rf $DEST/lib/clang/*/lib/linux
 
 # Copy all arch-specific subdirectories plus the "generic" one, as is.
 for arch in generic $ARCHS; do

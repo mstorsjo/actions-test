@@ -40,13 +40,16 @@ while [ $# -gt 0 ]; do
     elif [ "$1" = "--disable-cfguard" ]; then
         CFGUARD_CFLAGS=
         ENABLE_CFGUARD=
+    elif [ "$1" = "--native" ]; then
+        NATIVE=1
+        SRC_DIR=..
     else
         PREFIX="$1"
     fi
     shift
 done
 if [ -z "$PREFIX" ]; then
-    echo "$0 [--build-sanitizers] [--enable-cfguard|--disable-cfguard] dest"
+    echo "$0 [--build-sanitizers] [--enable-cfguard|--disable-cfguard] [--native] dest"
     exit 1
 fi
 if [ -n "$SANITIZERS" ] && [ -n "$ENABLE_CFGUARD" ]; then
@@ -57,10 +60,9 @@ mkdir -p "$PREFIX"
 PREFIX="$(cd "$PREFIX" && pwd)"
 export PATH="$PREFIX/bin:$PATH"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
-ANY_ARCH=$(echo $ARCHS | awk '{print $1}')
-CLANG_RESOURCE_DIR="$("$PREFIX/bin/$ANY_ARCH-w64-mingw32-clang" --print-resource-dir)"
+CLANG_RESOURCE_DIR="$("$PREFIX/bin/clang" --print-resource-dir)"
 
 if [ ! -d llvm-project/compiler-rt ] || [ -n "$SYNC" ]; then
     CHECKOUT_ONLY=1 ./build-llvm.sh
@@ -80,6 +82,18 @@ else
     esac
 fi
 
+cat<<EOF > is-ucrt.c
+#include <corecrt.h>
+#if !defined(_UCRT)
+#error not ucrt
+#endif
+EOF
+ANY_ARCH=$(echo $ARCHS | awk '{print $1}')
+if $ANY_ARCH-w64-mingw32-gcc$TOOLEXT -E is-ucrt.c > /dev/null 2>&1; then
+    IS_UCRT=1
+fi
+rm -f is-ucrt.c
+
 cd llvm-project/compiler-rt
 
 INSTALL_PREFIX="$CLANG_RESOURCE_DIR"
@@ -91,6 +105,34 @@ if [ -h "$CLANG_RESOURCE_DIR/include" ]; then
     INSTALL_PREFIX="$WORKDIR/install"
 fi
 
+if [ -n "$NATIVE" ]; then
+    [ -z "$CLEAN" ] || rm -rf build-native
+    mkdir -p build-native
+    cd build-native
+    [ -n "$NO_RECONF" ] || rm -rf CMake*
+    cmake \
+        ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$CLANG_RESOURCE_DIR" \
+        -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_CXX_COMPILER=clang++ \
+        -DLLVM_CONFIG_PATH="" \
+        -DCMAKE_FIND_ROOT_PATH=$PREFIX \
+        -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+        -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+        -DCOMPILER_RT_USE_LIBCXX=OFF \
+        $SRC_DIR
+    cmake --build . ${CORES:+-j${CORES}}
+    cmake --install . --prefix "$INSTALL_PREFIX"
+
+    if [ "$INSTALL_PREFIX" != "$CLANG_RESOURCE_DIR" ]; then
+        # symlink to system headers - skip copy
+        rm -rf "$INSTALL_PREFIX/include"
+
+        cp -r "$INSTALL_PREFIX/." $CLANG_RESOURCE_DIR
+    fi
+    exit 0
+fi
 
 for arch in $ARCHS; do
     [ -z "$CLEAN" ] || rm -rf build-$arch$BUILD_SUFFIX
@@ -132,19 +174,26 @@ for arch in $ARCHS; do
     cmake --install . --prefix "$INSTALL_PREFIX"
     mkdir -p "$PREFIX/$arch-w64-mingw32/bin"
     if [ -n "$SANITIZERS" ]; then
-        case $arch in
-        aarch64)
-            # asan doesn't work on aarch64 or armv7; make this clear by omitting
-            # the installed files altogether.
-            rm -f "$INSTALL_PREFIX/lib/windows/libclang_rt.asan"*aarch64*
-            ;;
-        armv7)
-            rm -f "$INSTALL_PREFIX/lib/windows/libclang_rt.asan"*arm*
-            ;;
-        *)
-            mv "$INSTALL_PREFIX/lib/windows/"*.dll "$PREFIX/$arch-w64-mingw32/bin"
-            ;;
-        esac
+        if [ -z "$IS_UCRT" ]; then
+            # For msvcrt builds, remove the asan files; asan doesn't work
+            # properly on top of msvcrt, only on top of UCRT. Make this clear
+            # by omitting the installed files altogether.
+            rm -f "$INSTALL_PREFIX/lib/windows/libclang_rt.asan"*
+        else
+            case $arch in
+            aarch64)
+                # asan doesn't work on aarch64 or armv7; make this clear by omitting
+                # the installed files altogether.
+                rm -f "$INSTALL_PREFIX/lib/windows/libclang_rt.asan"*aarch64*
+                ;;
+            armv7)
+                rm -f "$INSTALL_PREFIX/lib/windows/libclang_rt.asan"*arm*
+                ;;
+            *)
+                mv "$INSTALL_PREFIX/lib/windows/"*.dll "$PREFIX/$arch-w64-mingw32/bin"
+                ;;
+            esac
+        fi
     fi
     cd ..
 done

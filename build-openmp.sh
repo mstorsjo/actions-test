@@ -42,13 +42,13 @@ PREFIX="$(cd "$PREFIX" && pwd)"
 
 export PATH="$PREFIX/bin:$PATH"
 
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 if [ ! -d llvm-project/openmp ] || [ -n "$SYNC" ]; then
     CHECKOUT_ONLY=1 ./build-llvm.sh
 fi
 
-cd llvm-project/openmp
+cd llvm-project/runtimes
 
 if command -v ninja >/dev/null; then
     CMAKE_GENERATOR="Ninja"
@@ -70,15 +70,11 @@ for arch in $ARCHS; do
     x86_64)
         CMAKEFLAGS="$CMAKEFLAGS -DLIBOMP_ASMFLAGS=-m64"
         ;;
-    arm64ec)
-        # Not yet supported
-        continue
-        ;;
     esac
 
-    [ -z "$CLEAN" ] || rm -rf build-$arch
-    mkdir -p build-$arch
-    cd build-$arch
+    [ -z "$CLEAN" ] || rm -rf build-openmp-$arch
+    mkdir -p build-openmp-$arch
+    cd build-openmp-$arch
     [ -n "$NO_RECONF" ] || rm -rf CMake*
 
     cmake \
@@ -92,6 +88,7 @@ for arch in $ARCHS; do
         -DCMAKE_SYSTEM_NAME=Windows \
         -DCMAKE_AR="$PREFIX/bin/llvm-ar" \
         -DCMAKE_RANLIB="$PREFIX/bin/llvm-ranlib" \
+        -DLLVM_ENABLE_RUNTIMES="openmp" \
         -DLIBOMP_ENABLE_SHARED=TRUE \
         -DCMAKE_C_FLAGS_INIT="$CFGUARD_CFLAGS" \
         -DCMAKE_CXX_FLAGS_INIT="$CFGUARD_CFLAGS" \

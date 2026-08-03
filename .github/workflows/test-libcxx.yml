@@ -14,22 +14,23 @@ on:
         options:
         - push
         - schedule
+  schedule:
+    - cron: '30 13 * * 0' # 13:30 UTC on Sundays
 
 jobs:
   prepare:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
+    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/llvm-mingw')
     runs-on: ubuntu-latest
     outputs:
       LLVM_VERSION: ${{steps.get-parameters.outputs.LLVM_VERSION}}
     steps:
       - name: Download build parameters
-        uses: dawidd6/action-download-artifact@v10
+        uses: dawidd6/action-download-artifact@v19
         with:
-          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
-          ref: ${{github.event_name == 'schedule' && 'master' || inputs.ref}}
-          event: ${{github.event_name == 'schedule' && 'schedule' || inputs.pipeline_type}}
+          ref: ${{github.event_name == 'workflow_dispatch' && inputs.ref || 'master'}}
+          event: ${{github.event_name == 'workflow_dispatch' && inputs.pipeline_type || 'schedule'}}
           name: parameters
       - name: Get build parameters
         id: get-parameters
@@ -38,7 +39,6 @@ jobs:
           cat $GITHUB_OUTPUT
 
   test-libcxx:
-    if: (github.event_name != 'schedule') || (github.repository == 'mstorsjo/actions-test')
     needs: [prepare]
     strategy:
       fail-fast: false
@@ -46,21 +46,16 @@ jobs:
         include:
           - { arch: x86_64,  target_arch: i686    }
           - { arch: x86_64,  target_arch: x86_64  }
-          - { arch: aarch64, target_arch: armv7   }
           - { arch: aarch64, target_arch: aarch64 }
     runs-on: ${{startsWith(matrix.arch, 'a') && 'windows-11-arm' || 'windows-latest'}}
     steps:
-      - name: Install dependencies
-        run: |
-          choco install ninja
       - name: Download toolchain
-        uses: dawidd6/action-download-artifact@v10
+        uses: dawidd6/action-download-artifact@v19
         with:
-          repo: mstorsjo/llvm-mingw
           workflow: build.yml
           workflow_conclusion: success
-          ref: ${{github.event_name == 'schedule' && 'master' || inputs.ref}}
-          event: ${{github.event_name == 'schedule' && 'schedule' || inputs.pipeline_type}}
+          ref: ${{github.event_name == 'workflow_dispatch' && inputs.ref || 'master'}}
+          event: ${{github.event_name == 'workflow_dispatch' && inputs.pipeline_type || 'schedule'}}
           name: windows-ucrt-${{matrix.arch}}-toolchain
       - name: Unpack toolchain
         run: |
@@ -70,7 +65,7 @@ jobs:
           echo "c:\llvm-mingw\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "c:\llvm-mingw\python\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
           echo "PYTHON_EXE=c:/llvm-mingw/python/bin/python3.exe" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Checkout llvm-project
         env:
           LLVM_VERSION: ${{needs.prepare.outputs.LLVM_VERSION}}
@@ -90,7 +85,6 @@ jobs:
             -DLIBCXX_CXX_ABI=libcxxabi `
             -DCMAKE_C_COMPILER=${{matrix.target_arch}}-w64-mingw32-clang `
             -DCMAKE_CXX_COMPILER=${{matrix.target_arch}}-w64-mingw32-clang++ `
-            -DCMAKE_CXX_COMPILER_TARGET=${{matrix.target_arch}}-w64-windows-gnu `
             -DLIBCXXABI_ENABLE_SHARED=NO `
             -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=YES `
             -DLIBCXX_USE_COMPILER_RT=YES `

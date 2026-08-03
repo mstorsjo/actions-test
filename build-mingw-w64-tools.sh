@@ -56,7 +56,7 @@ fi
 : ${CORES:=$(nproc 2>/dev/null)}
 : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
 : ${CORES:=4}
-: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64}}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 : ${TARGET_OSES:=${TOOLCHAIN_TARGET_OSES-mingw32 mingw32uwp}}
 
 if [ -n "$HOST" ]; then
@@ -114,7 +114,7 @@ cd build${CROSS_NAME}
 $MAKE -j$CORES
 $MAKE install-strip
 mkdir -p "$PREFIX/share/gendef"
-install -m644 ../COPYING "$PREFIX/share/gendef"
+install -m644 ../COPYING "$PREFIX/share/gendef/COPYING.txt"
 cd ../../widl
 [ -z "$CLEAN" ] || rm -rf build${CROSS_NAME}
 mkdir -p build${CROSS_NAME}
@@ -123,7 +123,7 @@ cd build${CROSS_NAME}
 $MAKE -j$CORES
 $MAKE install-strip
 mkdir -p "$PREFIX/share/widl"
-install -m644 ../../../COPYING "$PREFIX/share/widl"
+install -m644 ../../../COPYING "$PREFIX/share/widl/COPYING.txt"
 cd ..
 cd "$PREFIX/bin"
 # The build above produced $ANY_ARCH-w64-mingw32-widl, add symlinks to it

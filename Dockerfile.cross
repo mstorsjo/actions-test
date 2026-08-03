@@ -49,7 +49,7 @@ RUN ./build-lldb-mi.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST
 COPY strip-llvm.sh .
 RUN ./strip-llvm.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST
 
-ARG TOOLCHAIN_ARCHS="i686 x86_64 armv7 aarch64"
+ARG TOOLCHAIN_ARCHS="i686 x86_64 armv7 aarch64 arm64ec"
 
 COPY build-mingw-w64.sh build-mingw-w64-tools.sh ./
 RUN ./build-mingw-w64-tools.sh $CROSS_TOOLCHAIN_PREFIX --skip-include-triplet-prefix --host=$HOST
@@ -63,6 +63,16 @@ RUN ./prepare-cross-toolchain.sh $TOOLCHAIN_PREFIX $CROSS_TOOLCHAIN_PREFIX $CROS
 
 COPY build-make.sh .
 RUN ./build-make.sh $CROSS_TOOLCHAIN_PREFIX --host=$HOST
+
+ARG WITH_BUSYBOX
+
+COPY build-busybox.sh .
+RUN if [ -n "$WITH_BUSYBOX" ]; then \
+        ./build-busybox.sh $CROSS_TOOLCHAIN_PREFIX/busybox --host=$HOST && \
+        cp $CROSS_TOOLCHAIN_PREFIX/bin/mingw32-make.exe $CROSS_TOOLCHAIN_PREFIX/busybox/bin/make.exe && \
+        mkdir -p $CROSS_TOOLCHAIN_PREFIX/busybox/share && \
+        cp -a $CROSS_TOOLCHAIN_PREFIX/share/make $CROSS_TOOLCHAIN_PREFIX/busybox/share; \
+    fi
 
 ARG TAG
 RUN ln -s $CROSS_TOOLCHAIN_PREFIX llvm-mingw-$TAG$CROSS_ARCH && \

@@ -16,7 +16,8 @@
 
 set -e
 
-: ${LLVM_VERSION:=llvmorg-20.1.6}
+: ${LLVM_REPOSITORY:=https://github.com/llvm/llvm-project.git}
+: ${LLVM_VERSION:=llvmorg-23.1.0-rc2}
 ASSERTS=OFF
 unset HOST
 BUILDDIR="build"
@@ -24,6 +25,7 @@ LINK_DYLIB=ON
 ASSERTSSUFFIX=""
 LLDB=ON
 CLANG_TOOLS_EXTRA=ON
+INSTRUMENTED=OFF
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -35,9 +37,12 @@ while [ $# -gt 0 ]; do
         ASSERTS=ON
         ASSERTSSUFFIX="-asserts"
         ;;
-    --stage2)
-        STAGE2=1
-        BUILDDIR="$BUILDDIR-stage2"
+    --with-clang)
+        WITH_CLANG=1
+        BUILDDIR="$BUILDDIR-withclang"
+        ;;
+    --use-linker=*)
+        USE_LINKER="${1#*=}"
         ;;
     --thinlto)
         LTO="thin"
@@ -68,7 +73,33 @@ while [ $# -gt 0 ]; do
     --no-llvm-tool-reuse)
         NO_LLVM_TOOL_REUSE=1
         ;;
+    --macos-native-tools)
+        MACOS_NATIVE_TOOLS=1
+        unset CLEAN
+        ;;
+    --instrumented|--instrumented=*)
+        INSTRUMENTED="${1#--instrumented}"
+        INSTRUMENTED="${INSTRUMENTED#=}"
+        INSTRUMENTED="${INSTRUMENTED:-Frontend}"
+        : ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
+        # A fixed BUILDDIR is set at the end for this case.
+        ;;
+    --pgo|--pgo=*)
+        LLVM_PROFDATA_FILE="${1#--pgo}"
+        LLVM_PROFDATA_FILE="${LLVM_PROFDATA_FILE#=}"
+        LLVM_PROFDATA_FILE="${LLVM_PROFDATA_FILE:-profile.profdata}"
+        if [ ! -e "$LLVM_PROFDATA_FILE" ]; then
+            echo Profile \"$LLVM_PROFDATA_FILE\" not found
+            exit 1
+        fi
+        LLVM_PROFDATA_FILE="$(cd "$(dirname "$LLVM_PROFDATA_FILE")" && pwd)/$(basename "$LLVM_PROFDATA_FILE")"
+        BUILDDIR="$BUILDDIR-pgo"
+        ;;
     *)
+        if [ -n "$PREFIX" ]; then
+            echo Unrecognized parameter $1
+            exit 1
+        fi
         PREFIX="$1"
         ;;
     esac
@@ -77,19 +108,21 @@ done
 BUILDDIR="$BUILDDIR$ASSERTSSUFFIX"
 if [ -z "$CHECKOUT_ONLY" ]; then
     if [ -z "$PREFIX" ]; then
-        echo $0 [--enable-asserts] [--stage2] [--thinlto] [--lto] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] dest
+        echo $0 [--enable-asserts] [--with-clang] [--use-linker=linker] [--thinlto] [--lto] [--instrumented[=type]] [--pgo[=profile]] [--disable-dylib] [--full-llvm] [--with-python] [--disable-lldb] [--disable-clang-tools-extra] [--host=triple] [--no-llvm-tool-reuse] [--macos-native-tools] dest
         exit 1
     fi
 
-    mkdir -p "$PREFIX"
-    PREFIX="$(cd "$PREFIX" && pwd)"
+    if [ "$INSTRUMENTED" = "OFF" ]; then
+        mkdir -p "$PREFIX"
+        PREFIX="$(cd "$PREFIX" && pwd)"
+    fi
 fi
 
 if [ ! -d llvm-project ]; then
     mkdir llvm-project
     cd llvm-project
     git init
-    git remote add origin https://github.com/llvm/llvm-project.git
+    git remote add origin "${LLVM_REPOSITORY}"
     cd ..
     CHECKOUT=1
 fi
@@ -157,9 +190,22 @@ CMAKEFLAGS="$LLVM_CMAKEFLAGS"
 
 if [ -n "$HOST" ]; then
     ARCH="${HOST%%-*}"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
-    CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
+
+    if [ -n "$WITH_CLANG" ]; then
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=clang"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=clang++"
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=${USE_LINKER:-lld}"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_ASM_COMPILER_TARGET=$HOST"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER_TARGET=$HOST"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER_TARGET=$HOST"
+        if command -v $HOST-strip >/dev/null; then
+            CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_STRIP=$(command -v $HOST-strip)"
+        fi
+    else
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=$HOST-gcc"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=$HOST-g++"
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
+    fi
     case $HOST in
     *-mingw32)
         CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_SYSTEM_NAME=Windows"
@@ -202,9 +248,7 @@ if [ -n "$HOST" ]; then
     BUILDDIR=$BUILDDIR-$HOST
 
     if [ -n "$WITH_PYTHON" ] && [ -n "$TARGET_WINDOWS" ]; then
-        # The python3-config script requires executing with bash. It outputs
-        # an extra trailing space, which the extra 'echo' layer gets rid of.
-        EXT_SUFFIX="$(echo $(bash $PREFIX/python/bin/python3-config --extension-suffix))"
+        EXT_SUFFIX="$(python3 $PREFIX/python/bin/python3-config --extension-suffix)"
         PYTHON_RELATIVE_PATH="$(cd "$PREFIX" && echo python/lib/python*/site-packages)"
         PYTHON_INCLUDE_DIR="$(echo $PREFIX/python/include/python*)"
         PYTHON_LIB="$(echo $PREFIX/python/lib/libpython3.*.dll.a)"
@@ -220,17 +264,19 @@ if [ -n "$HOST" ]; then
         CMAKEFLAGS="$CMAKEFLAGS -DPython3_INCLUDE_DIRS=$PYTHON_INCLUDE_DIR"
         CMAKEFLAGS="$CMAKEFLAGS -DPython3_LIBRARIES=$PYTHON_LIB"
     fi
-elif [ -n "$STAGE2" ]; then
-    # Build using an earlier built and installed clang in the target directory
-    export PATH="$PREFIX/bin:$PATH"
+elif [ -n "$WITH_CLANG" ]; then
+    # Build using clang and lld (from $PATH), rather than the system default
+    # tools.
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER=clang"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER=clang++"
-    CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=lld"
+    CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=${USE_LINKER:-lld}"
 else
     # Native compilation with the system default compiler.
 
     # Use a faster linker, if available.
-    if command -v ld.lld >/dev/null; then
+    if [ -n "$USE_LINKER" ]; then
+        CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=$USE_LINKER"
+    elif command -v ld.lld >/dev/null; then
         CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=lld"
     elif command -v ld.gold >/dev/null; then
         CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_LINKER=gold"
@@ -240,6 +286,13 @@ fi
 if [ -n "$COMPILER_LAUNCHER" ]; then
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_C_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
     CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_CXX_COMPILER_LAUNCHER=$COMPILER_LAUNCHER"
+    # Make the LLVM build system set options for forcing relative paths
+    # within the files, e.g. for source file references within assert
+    # messages. This on its own isn't enough for making the cache reusable
+    # across different worktrees though; one also needs to set the ccache
+    # base_dir (CCACHE_BASEDIR) option. When setting that ccache option, this
+    # option here doesn't really have any effect either, except for debug info.
+    CMAKEFLAGS="$CMAKEFLAGS -DLLVM_USE_RELATIVE_PATHS_IN_FILES=ON"
 fi
 
 if [ -n "$LTO" ]; then
@@ -282,6 +335,25 @@ if [ -z "$HOST" ] && [ "$(uname)" = "Darwin" ]; then
         # This silences a cmake warning.
         CMAKEFLAGS="$CMAKEFLAGS -DLLDB_USE_SYSTEM_DEBUGSERVER=ON"
     fi
+    if [ -n "$WITH_CLANG" ] && [ -n "$LTO" ]; then
+        # If doing LTO, we need to make sure other related tools are used.
+        # CMAKE_LIBTOOL is not a standard cmake tool, but an LLVM specific
+        # thing. It defaults to looking up the tool with xcrun rather than
+        # looking in paths first.
+        # If building for multiple architectures at once
+        # (CMAKE_OSX_ARCHITECTURES), we also need to provide a tool named
+        # "lipo" in the PATH (this is invoked by Clang directly, so we can't
+        # specify it here unless we pass in the option "-fuse-lipo="). If
+        # the LLVM CMake build wasn't using libtool, we would also need to
+        # specify LLVM_AR and LLVM_RANLIB.
+        CMAKEFLAGS="$CMAKEFLAGS -DCMAKE_LIBTOOL=$(command -v llvm-libtool-darwin)"
+    fi
+fi
+
+if [ "$INSTRUMENTED" != "OFF" ]; then
+    # For instrumented build, use a hardcoded builddir that we can
+    # locate, and don't install the built files.
+    BUILDDIR="build-instrumented"
 fi
 
 TOOLCHAIN_ONLY=ON
@@ -302,6 +374,24 @@ fi
 [ -z "$CLEAN" ] || rm -rf $BUILDDIR
 mkdir -p $BUILDDIR
 cd $BUILDDIR
+
+if [ -n "$MACOS_NATIVE_TOOLS" ]; then
+    # Build tools needed for targeting macOS with LTO.
+    #
+    # The install-<tool>(-stripped) targets are unavailable for
+    # tools that are excluded due to LLVM_INSTALL_TOOLCHAIN_ONLY=ON and
+    # LLVM_TOOLCHAIN_TOOLS, so install those manually.
+    cmake --build . --target llvm-lipo --target llvm-libtool-darwin
+    # Install ld64.lld, required for -fuse-ld=lld
+    cmake --install . --strip --component lld
+    # Install llvm-libtool-darwin and lipo, needed for building with LTO.
+    # See the comment further above for more details about this.
+    cp bin/llvm-lipo bin/llvm-libtool-darwin $PREFIX/bin
+    strip $PREFIX/bin/llvm-lipo $PREFIX/bin/llvm-libtool-darwin
+    ln -sf llvm-lipo $PREFIX/bin/lipo
+    exit 0
+fi
+
 [ -n "$NO_RECONF" ] || rm -rf CMake*
 cmake \
     ${CMAKE_GENERATOR+-G} "$CMAKE_GENERATOR" \
@@ -309,15 +399,25 @@ cmake \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=$ASSERTS \
     -DLLVM_ENABLE_PROJECTS="$PROJECTS" \
+    -DLLVM_ENABLE_BINDINGS=OFF \
     -DLLVM_TARGETS_TO_BUILD="ARM;AArch64;X86;NVPTX" \
     -DLLVM_INSTALL_TOOLCHAIN_ONLY=$TOOLCHAIN_ONLY \
     -DLLVM_LINK_LLVM_DYLIB=$LINK_DYLIB \
     -DLLVM_TOOLCHAIN_TOOLS="llvm-ar;llvm-ranlib;llvm-objdump;llvm-rc;llvm-cvtres;llvm-nm;llvm-strings;llvm-readobj;llvm-dlltool;llvm-pdbutil;llvm-objcopy;llvm-strip;llvm-cov;llvm-profdata;llvm-addr2line;llvm-symbolizer;llvm-windres;llvm-ml;llvm-readelf;llvm-size;llvm-cxxfilt;llvm-lib" \
     ${HOST+-DLLVM_HOST_TRIPLE=$HOST} \
+    -DLLVM_BUILD_INSTRUMENTED=$INSTRUMENTED \
+    ${LLVM_PROFILE_DATA_DIR+-DLLVM_PROFILE_DATA_DIR=$LLVM_PROFILE_DATA_DIR} \
+    ${LLVM_PROFDATA_FILE+-DLLVM_PROFDATA_FILE=$LLVM_PROFDATA_FILE} \
     $CMAKEFLAGS \
     ..
 
-cmake --build . ${CORES:+-j${CORES}}
-cmake --install . --strip
+if [ "$INSTRUMENTED" != "OFF" ]; then
+    # For instrumented builds, don't install the built files (so $PREFIX
+    # is entirely unused).
+    cmake --build . ${CORES:+-j${CORES}} --target clang --target lld
+else
+    cmake --build . ${CORES:+-j${CORES}}
+    cmake --install . --strip
 
-cp ../LICENSE.TXT $PREFIX
+    cp ../LICENSE.TXT $PREFIX
+fi

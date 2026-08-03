@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2018 Martin Storsjo
+# Copyright (c) 2025 Martin Storsjo
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -16,32 +16,29 @@
 
 set -e
 
-unset HOST
+: ${SQLITE_VERSION:=3490200}
+: ${SQLITE_YEAR:=2025}
 
-: ${MAKE_VERSION:=4.4.1}
+: ${LLVM_PROFILE_DATA_DIR:=/tmp/llvm-profile}
+: ${LLVM_PROFDATA_FILE:=profile.profdata}
 
-while [ $# -gt 0 ]; do
-    case "$1" in
-    --host=*)
-        HOST="${1#*=}"
-        ;;
-    *)
-        PREFIX="$1"
-        ;;
-    esac
-    shift
-done
-if [ -z "$PREFIX" ]; then
-    echo $0 [--host=triple] dest
+if [ $# -lt 2 ]; then
+    echo $0 build stage1
     exit 1
 fi
-
-mkdir -p "$PREFIX"
+PREFIX="$1"
+STAGE1="$2"
 PREFIX="$(cd "$PREFIX" && pwd)"
+
+MAKE=make
+if command -v gmake >/dev/null; then
+    MAKE=gmake
+fi
 
 : ${CORES:=$(nproc 2>/dev/null)}
 : ${CORES:=$(sysctl -n hw.ncpu 2>/dev/null)}
 : ${CORES:=4}
+: ${ARCHS:=${TOOLCHAIN_ARCHS-i686 x86_64 armv7 aarch64 arm64ec}}
 
 download() {
     if command -v curl >/dev/null; then
@@ -51,25 +48,17 @@ download() {
     fi
 }
 
-if [ ! -d make-$MAKE_VERSION ]; then
-    if [ ! -e make-$MAKE_VERSION.tar.gz ]; then
-        download https://ftpmirror.gnu.org/gnu/make/make-$MAKE_VERSION.tar.gz
-    fi
-    tar -zxf make-$MAKE_VERSION.tar.gz
+SQLITE=sqlite-amalgamation-$SQLITE_VERSION
+if [ ! -d $SQLITE ]; then
+    download https://sqlite.org/$SQLITE_YEAR/sqlite-amalgamation-$SQLITE_VERSION.zip
+    unzip sqlite-amalgamation-$SQLITE_VERSION.zip
 fi
 
-cd make-$MAKE_VERSION
+rm -rf "$LLVM_PROFILE_DATA_DIR"
+export ARCHS
+$MAKE -f pgo-training.make PREFIX=$PREFIX STAGE1=$STAGE1 SQLITE=$SQLITE clean
+$MAKE -f pgo-training.make PREFIX=$PREFIX STAGE1=$STAGE1 SQLITE=$SQLITE -j$CORES
 
-if [ -n "$HOST" ]; then
-    CONFIGFLAGS="$CONFIGFLAGS --host=$HOST"
-    CROSS_NAME=-$HOST
-fi
-
-[ -z "$CLEAN" ] || rm -rf build$CROSS_NAME
-mkdir -p build$CROSS_NAME
-cd build$CROSS_NAME
-../configure --prefix="$PREFIX" $CONFIGFLAGS --program-prefix=mingw32- --enable-job-server LDFLAGS="-Wl,-s"
-make -j$CORES
-make install-binPROGRAMS
-mkdir -p "$PREFIX/share/make"
-install -m644 ../COPYING "$PREFIX/share/make/COPYING.txt"
+rm -f "$LLVM_PROFDATA_FILE"
+$STAGE1/bin/llvm-profdata merge -output "$LLVM_PROFDATA_FILE" $LLVM_PROFILE_DATA_DIR/*.profraw
+rm -rf "$LLVM_PROFILE_DATA_DIR"
