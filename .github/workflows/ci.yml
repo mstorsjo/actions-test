@@ -77,6 +77,10 @@ jobs:
           ./autogen.sh
           ./configure --enable-example
           make -j$(sysctl -n hw.ncpu) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror -Wno-deprecated-declarations"
+      - name: Run tests
+        run: |
+          brew install ffmpeg
+          ./test/run-test.sh
 
   macos-cmake:
     runs-on: macos-latest
@@ -87,6 +91,11 @@ jobs:
         run: |
           cmake . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_PROGRAMS=YES -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror -Wno-deprecated-declarations"
           cmake --build build
+      - name: Run tests
+        run: |
+          brew install ffmpeg
+          cd build
+          ../test/run-test.sh
 
   mingw-cross-autotools:
     runs-on: ubuntu-latest
