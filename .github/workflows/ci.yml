@@ -3,7 +3,13 @@ on: [push, pull_request]
 
 jobs:
   linux-autotools:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
@@ -18,7 +24,13 @@ jobs:
           ./test/run-test.sh
 
   linux-cmake:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
