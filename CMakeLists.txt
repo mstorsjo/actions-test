@@ -500,6 +500,50 @@ else()
   target_compile_options(fdk-aac PRIVATE -fno-exceptions -fno-rtti)
 endif()
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+function(set_symbol_list target symbols)
+  if (APPLE)
+    set(export_file "${target}.exports")
+    add_custom_command(OUTPUT ${export_file}
+      COMMAND sed -e "s/^/_/" < ${symbols} > ${export_file}
+      DEPENDS ${symbols}
+      VERBATIM
+      COMMENT "Creating export file for ${target}")
+    set_property(TARGET ${target} APPEND_STRING PROPERTY
+                 LINK_FLAGS " -Wl,-exported_symbols_list,\"${CMAKE_CURRENT_BINARY_DIR}/${export_file}\"")
+    set_property(TARGET ${target} APPEND_STRING PROPERTY
+                 LINK_DEPENDS "${export_file}")
+    add_custom_target(${target}_exports DEPENDS ${export_file})
+    add_dependencies(${target} ${target}_exports)
+  elseif(WIN32)
+    # TODO: Generate .def file on the fly
+  elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    # TODO: Linking test to see if -Wl,--version-script works?
+    set(export_file "${target}.ver")
+    add_custom_command(OUTPUT ${export_file}
+      COMMAND "${Python3_EXECUTABLE}" "-c"
+      "import sys; \
+       print('{ global:'); \
+       lines = [l.rstrip() for l in sys.stdin] + ['local: *;']; \
+       print(';\\n'.join(lines) + '\\n};');"
+      < ${symbols} > ${export_file}
+      DEPENDS ${symbols}
+      VERBATIM
+      COMMENT "Creating export file for ${target}")
+    set_property(TARGET ${target} APPEND_STRING PROPERTY
+                 LINK_FLAGS " -Wl,--version-script,\"${CMAKE_CURRENT_BINARY_DIR}/${export_file}\"")
+    set_property(TARGET ${target} APPEND_STRING PROPERTY
+                 LINK_DEPENDS "${export_file}")
+    add_custom_target(${target}_exports DEPENDS ${export_file})
+    add_dependencies(${target} ${target}_exports)
+  endif()
+endfunction()
+
+if(BUILD_SHARED_LIBS AND NOT WIN32)
+    set_symbol_list(fdk-aac ${CMAKE_SOURCE_DIR}/fdk-aac.sym)
+endif()
+
 ### Set proper name for MinGW or Cygwin DLL
 
 if((MINGW OR CYGWIN) AND BUILD_SHARED_LIBS)
