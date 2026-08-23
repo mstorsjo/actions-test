@@ -114,23 +114,53 @@ compare_library() {
         get_dllname() {
             $TRIPLE-dlltool --identify $1
         }
+        get_exports() {
+            if command -v llvm-readobj > /dev/null; then
+                llvm-readobj --coff-exports $1 | grep Name: | awk '{print $2}'
+            elif $TRIPLE-objdump -p $1 | grep -q "Ordinal\/Name Pointer"; then
+                # GNU objdump
+                $TRIPLE-objdump -p $1 | sed -n -e '/Ordinal\/Name Pointer/,/^$/p' | sed '1d;$d' | sed 's/^.*\] *//'
+            elif $TRIPLE-objdump -p $1 | grep -q "Export Table"; then
+                # llvm-objdump
+                $TRIPLE-objdump -p $1 | sed -n '/Export Table:/,$p;' | tail -n +5 | awk '{print $3}'
+            else
+                echo No suitable tool for inspecting DLL exports found
+                exit 1
+            fi
+        }
+
         SONAME_AUTOTOOLS=$(get_dllname install-autotools-mingw/lib/$lib.dll.a)
         SONAME_CMAKE=$(get_dllname install-cmake-mingw/lib/$lib.dll.a)
         SONAME_MESON=$(get_dllname install-meson-mingw/lib/$lib.dll.a)
+        get_exports install-autotools-mingw/bin/$lib*.dll | sort > exports-autotools
+        get_exports install-cmake-mingw/bin/$lib*.dll | sort > exports-cmake
+        get_exports install-meson-mingw/bin/$lib*.dll | sort > exports-meson
     elif [ "$(uname)" = "Darwin" ]; then
         get_soname() {
             basename $(otool -D $1 | tail -1)
         }
+        get_exports() {
+            nm -g -U -j $1
+        }
         SONAME_AUTOTOOLS=$(get_soname install-autotools/lib/$lib.dylib)
         SONAME_CMAKE=$(get_soname install-cmake/lib/$lib.dylib)
         SONAME_MESON=$(get_soname install-meson/lib/$lib.dylib)
+        get_exports install-autotools/lib/$lib.dylib | sort > exports-autotools
+        get_exports install-cmake/lib/$lib.dylib | sort > exports-cmake
+        get_exports install-meson/lib/$lib.dylib | sort > exports-meson
     else
         get_soname() {
             readelf -d $1 | grep SONAME | sed -e 's/.*soname: //' -e 's/^\[//' -e 's/\]$//'
         }
+        get_exports() {
+            nm -g -U -j $1
+        }
         SONAME_AUTOTOOLS=$(get_soname install-autotools/lib/$lib.so)
         SONAME_CMAKE=$(get_soname install-cmake/lib/$lib.so)
         SONAME_MESON=$(get_soname install-meson/lib/$lib.so)
+        get_exports install-autotools/lib/$lib.so | sort > exports-autotools
+        get_exports install-cmake/lib/$lib.so | sort > exports-cmake
+        get_exports install-meson/lib/$lib.so | sort > exports-meson
     fi
     
     if [ "$SONAME_AUTOTOOLS" != "$SONAME_CMAKE" ]; then
@@ -139,6 +169,14 @@ compare_library() {
     fi
     if [ "$SONAME_AUTOTOOLS" != "$SONAME_MESON" ]; then
         echo For $lib, autotools SONAME $SONAME_AUTOTOOLS differs from Meson $SONAME_MESON
+        exit 1
+    fi
+    if ! diff -u exports-autotools exports-cmake; then
+        echo For $lib, autotools and CMake exports differ
+        exit 1
+    fi
+    if ! diff -u exports-autotools exports-meson; then
+        echo For $lib, autotools and Meson exports differ
         exit 1
     fi
 }
