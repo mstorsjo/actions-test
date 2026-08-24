@@ -265,7 +265,6 @@ EXTRA_DIST = \
     $(top_srcdir)/OWNERS \
     $(top_srcdir)/Android.bp \
     $(top_srcdir)/fdk-aac/meson* \
-    $(top_srcdir)/fdk-aac.def \
     $(top_srcdir)/fdk-aac.sym \
     $(top_srcdir)/fdk-aac-config.cmake.in \
     $(top_srcdir)/documentation/*.pdf \

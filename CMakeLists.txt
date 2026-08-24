@@ -450,10 +450,6 @@ set(libfdk_aac_SOURCES
     ${SBRDEC_SRC} ${SBRENC_SRC}
     ${PCMUTILS_SRC} ${FDK_SRC} ${SYS_SRC})
 
-if(WIN32 AND BUILD_SHARED_LIBS)
-  set(libfdk_aac_SOURCES ${libfdk_aac_SOURCES} fdk-aac.def)
-endif()
-
 ## Create Library target. Actually fdk-aac is enough, but we also create
 ## FDK-AAC::fdk-aac for consistence with config-file package.
 
@@ -517,7 +513,32 @@ function(set_symbol_list target symbols)
     add_custom_target(${target}_exports DEPENDS ${export_file})
     add_dependencies(${target} ${target}_exports)
   elseif(WIN32)
-    # TODO: Generate .def file on the fly
+    set(export_file "${target}.def")
+    add_custom_command(OUTPUT ${export_file}
+      COMMAND "${Python3_EXECUTABLE}" "-c"
+      "import sys; \
+       print('EXPORTS'); \
+       print(''.join(sys.stdin.readlines()))"
+      < ${symbols} > ${export_file}
+      DEPENDS ${symbols}
+      VERBATIM
+      COMMENT "Creating export file for ${target}")
+    if (MSVC)
+      # cl.exe or clang-cl
+      set_property(TARGET ${target} APPEND PROPERTY
+                   LINK_OPTIONS "LINKER:-def:${CMAKE_CURRENT_BINARY_DIR}/${export_file}")
+    elseif(CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+      # clang in msvc mode, calling a link.exe style linker
+      set_property(TARGET ${target} APPEND PROPERTY
+                   LINK_OPTIONS "-Wl,-def:${CMAKE_CURRENT_BINARY_DIR}/${export_file}")
+    elseif(MINGW OR CYGWIN)
+      set_property(TARGET ${target} APPEND PROPERTY
+                   LINK_OPTIONS "${CMAKE_CURRENT_BINARY_DIR}/${export_file}")
+    endif()
+    set_property(TARGET ${target} APPEND_STRING PROPERTY
+                 LINK_DEPENDS "${export_file}")
+    add_custom_target(${target}_exports DEPENDS ${export_file})
+    add_dependencies(${target} ${target}_exports)
   elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     # TODO: Linking test to see if -Wl,--version-script works?
     set(export_file "${target}.ver")
@@ -540,7 +561,7 @@ function(set_symbol_list target symbols)
   endif()
 endfunction()
 
-if(BUILD_SHARED_LIBS AND NOT WIN32)
+if(BUILD_SHARED_LIBS)
     set_symbol_list(fdk-aac ${CMAKE_SOURCE_DIR}/fdk-aac.sym)
 endif()
 
