@@ -391,6 +391,41 @@ if get_option('remove-date')
   extra_args += '-DSUPPRESS_BUILD_DATE_INFO'
 endif
 
+link_args = []
+
+python3 = import('python').find_installation()
+
+if (host_machine.system() in ['darwin', 'ios', 'tvos', 'os/2'])
+    f = configure_file(
+        command: [python3, '-c', 'import sys; print(sys.argv[1])', '_main'],
+        output: 'test-main.exports',
+        capture: true)
+    if cc.has_link_argument('-Wl,-exported_symbols_list,' + f.full_path())
+        f = configure_file(
+            command: ['sed', '-e', 's/^/_/', meson.current_source_dir() + '/fdk-aac.sym'],
+            output: 'fdk-aac.exports',
+            capture: true)
+        link_args += ['-Wl,-exported_symbols_list,' + f.full_path()]
+    endif
+elif host_machine.system() != 'windows'
+    f = configure_file(
+        command: [python3, '-c', 'import sys; print(sys.argv[1])', '{global:main; local:*; };'],
+        output: 'test-main.ver',
+        capture: true)
+    if cc.has_link_argument('-Wl,--version-script=' + f.full_path())
+        f = configure_file(
+            command: [python3, '-c',
+              'f = open(\'' + meson.current_source_dir() + '/fdk-aac.sym\');' +
+              'print(\'{ global:\');' +
+              'lines = [l.rstrip() for l in f] + [\'local: *;\'];' +
+              'print(\';\\n\'.join(lines) + \'\\n};\');'
+            ],
+            output: 'fdk-aac.ver',
+            capture: true)
+        link_args += ['-Wl,--version-script=' + f.full_path()]
+    endif
+endif
+
 fdk_aac = library(
   'fdk-aac',
   fdk_aac_src,
@@ -399,6 +434,7 @@ fdk_aac = library(
   install: true,
   cpp_args: cc.get_supported_arguments('-fno-exceptions', '-fno-rtti') + extra_args,
   c_args: extra_args,
+  link_args: link_args,
   vs_module_defs: 'fdk-aac.def',
   version: '2.0.3',
 )
