@@ -386,7 +386,7 @@ m_dep = cc.find_library(
   required: false,
 )
 
-extra_args = ['-Dfdk_aac_EXPORTS']
+extra_args = []
 if get_option('remove-date')
   extra_args += '-DSUPPRESS_BUILD_DATE_INFO'
 endif
