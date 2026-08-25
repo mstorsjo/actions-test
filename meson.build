@@ -401,12 +401,12 @@ if (host_machine.system() in ['darwin', 'ios', 'tvos', 'os/2'])
         command: [python3, '-c', 'import sys; print(sys.argv[1])', '_main'],
         output: 'test-main.exports',
         capture: true)
-    if cc.has_link_argument('-Wl,-exported_symbols_list,' + f.full_path())
+    if cc.has_link_argument('-Wl,-exported_symbols_list,' + meson.current_build_dir() + '/@0@'.format(f))
         f = configure_file(
             command: ['sed', '-e', 's/^/_/', meson.current_source_dir() + '/fdk-aac.sym'],
             output: 'fdk-aac.exports',
             capture: true)
-        link_args += ['-Wl,-exported_symbols_list,' + f.full_path()]
+        link_args += ['-Wl,-exported_symbols_list,' + meson.current_build_dir() + '/@0@'.format(f)]
     endif
 elif host_machine.system() == 'windows'
     f = configure_file(
@@ -423,7 +423,7 @@ else
         command: [python3, '-c', 'import sys; print(sys.argv[1])', '{global:main; local:*; };'],
         output: 'test-main.ver',
         capture: true)
-    if cc.has_link_argument('-Wl,--version-script=' + f.full_path())
+    if cc.has_link_argument('-Wl,--version-script=' + meson.current_build_dir() + '/@0@'.format(f))
         f = configure_file(
             command: [python3, '-c',
               'f = open(\'' + meson.current_source_dir() + '/fdk-aac.sym\');' +
@@ -433,7 +433,7 @@ else
             ],
             output: 'fdk-aac.ver',
             capture: true)
-        link_args += ['-Wl,--version-script=' + f.full_path()]
+        link_args += ['-Wl,--version-script=' + meson.current_build_dir() + '/@0@'.format(f)]
     endif
 endif
 
