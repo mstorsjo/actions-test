@@ -394,6 +394,7 @@ endif
 link_args = []
 
 python3 = import('python').find_installation()
+kwargs = {}
 
 if (host_machine.system() in ['darwin', 'ios', 'tvos', 'os/2'])
     f = configure_file(
@@ -407,7 +408,17 @@ if (host_machine.system() in ['darwin', 'ios', 'tvos', 'os/2'])
             capture: true)
         link_args += ['-Wl,-exported_symbols_list,' + f.full_path()]
     endif
-elif host_machine.system() != 'windows'
+elif host_machine.system() == 'windows'
+    f = configure_file(
+        command: [python3, '-c',
+          'f = open(\'' + meson.current_source_dir() + '/fdk-aac.sym\');' +
+          'print(\'EXPORTS\');' +
+          'print(f.read())'
+        ],
+        output: 'fdk-aac.def',
+        capture: true)
+    kwargs += {'vs_module_defs': f}
+else
     f = configure_file(
         command: [python3, '-c', 'import sys; print(sys.argv[1])', '{global:main; local:*; };'],
         output: 'test-main.ver',
@@ -435,8 +446,8 @@ fdk_aac = library(
   cpp_args: cc.get_supported_arguments('-fno-exceptions', '-fno-rtti') + extra_args,
   c_args: extra_args,
   link_args: link_args,
-  vs_module_defs: 'fdk-aac.def',
   version: '2.0.3',
+  kwargs: kwargs,
 )
 
 fdk_aac_dep = declare_dependency(
