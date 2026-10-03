@@ -8,7 +8,9 @@ jobs:
       matrix:
         runner:
           - ubuntu-latest
+          - ubuntu-26.04
           - ubuntu-24.04-arm
+          - ubuntu-26.04-arm
     runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
@@ -29,7 +31,9 @@ jobs:
       matrix:
         runner:
           - ubuntu-latest
+          - ubuntu-26.04
           - ubuntu-24.04-arm
+          - ubuntu-26.04-arm
     runs-on: ${{matrix.runner}}
     steps:
       - name: Checkout sources
