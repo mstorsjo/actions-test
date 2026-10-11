@@ -6,19 +6,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner:
-          - ubuntu-latest
-          - ubuntu-24.04-arm
+        include:
+          - { runner: ubuntu-latest }
+          - { runner: ubuntu-latest, packages: 'g++-multilib', params: 'CC="gcc -m32" CXX="g++ -m32"' }
+          - { runner: ubuntu-24.04-arm }
+          - { runner: ubuntu-24.04-arm, packages: 'g++-arm-linux-gnueabihf libstdc++6:armhf', params: '--host=arm-linux-gnueabihf', dpkg_archs: 'armhf' }
     runs-on: ${{matrix.runner}}
     steps:
+      - name: Install prerequisites
+        if: ${{matrix.dpkg_archs != ''}}
+        run: |
+          sudo dpkg --add-architecture ${{matrix.dpkg_archs}}
+      - name: Install prerequisites
+        if: ${{matrix.packages != ''}}
+        run: |
+          sudo apt-get update && sudo apt-get install ${{matrix.packages}}
       - name: Checkout sources
         uses: actions/checkout@v6
       - name: Build
         run: |
           ./autogen.sh
-          ./configure --enable-example
+          ./configure --enable-example ${{matrix.params}}
           make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
       - name: Run tests
+        if: ${{matrix.params == ''}}
         run: |
           sudo apt-get update && sudo apt-get install --no-install-recommends ffmpeg
           ./test/run-test.sh
