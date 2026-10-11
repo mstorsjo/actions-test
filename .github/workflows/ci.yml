@@ -195,6 +195,14 @@ jobs:
 
   llvm-mingw:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - i686
+          - x86_64
+          - armv7
+          - aarch64
     steps:
       - name: Install llvm-mingw
         run: |
@@ -208,7 +216,7 @@ jobs:
       - name: Build fdk-aac
         run: |
           ./autogen.sh
-          ./configure --host=aarch64-w64-mingw32 --enable-example
+          ./configure --host=${{matrix.arch}}-w64-mingw32 --enable-example
           make -j$(nproc) CFLAGS="-g -O2 -Werror" CXXFLAGS="-g -O2 -Werror"
 
   linux-ffmpeg:
