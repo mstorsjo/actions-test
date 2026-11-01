@@ -9,11 +9,12 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - macos-14
           - macos-15
           - macos-15-intel
-          - macos-latest
           - macos-26
+          - macos-26-intel
+          - xcode-27
+          - macos-latest
     runs-on: ${{matrix.runner}}
     steps:
       - name: Inspect the SDK
